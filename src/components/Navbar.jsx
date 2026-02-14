@@ -48,16 +48,12 @@ export default function Navbar() {
         <div className="flex justify-between h-16">
           {/* Logo */}
           <div className="flex items-center gap-8">
-            <Link to="/dashboard" className="flex items-center gap-3 group">
-              <div className="w-9 h-9 rounded-xl flex items-center justify-center transition-transform group-hover:scale-105 bg-green-600">
-                <svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
-                    d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" />
-                </svg>
-              </div>
-              <span className="text-lg font-bold text-gray-900 tracking-tight">
-                NOWI<span className="text-green-600">.</span>ERP
-              </span>
+            <Link to="/dashboard" className="flex items-center group">
+              <img
+                src="https://cdn.shopify.com/s/files/1/0960/8970/2695/files/logo-bg-removed_x320.png?v=1763554807"
+                alt="Logo"
+                className="h-10 w-auto transition-transform group-hover:scale-105"
+              />
             </Link>
 
             {/* Navigation Links */}

@@ -37,16 +37,11 @@ export default function Login() {
       <div className="relative z-10 w-full max-w-md mx-4">
         {/* Logo/Brand Section */}
         <div className="text-center mb-8">
-          <div className="inline-flex items-center justify-center w-16 h-16 rounded-2xl mb-4 bg-green-600"
-            style={{ boxShadow: '0 4px 20px rgba(34, 197, 94, 0.3)' }}>
-            <svg className="w-8 h-8 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
-                d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" />
-            </svg>
-          </div>
-          <h1 className="text-3xl font-bold text-gray-900 tracking-tight">
-            NOWI<span className="text-green-600">.</span>ERP
-          </h1>
+          <img
+            src="https://cdn.shopify.com/s/files/1/0960/8970/2695/files/logo-bg-removed_x320.png?v=1763554807"
+            alt="Logo"
+            className="h-20 w-auto mx-auto mb-4"
+          />
           <p className="text-gray-500 mt-2 text-sm tracking-wide">
             Production Tracking System
           </p>
@@ -125,7 +120,7 @@ export default function Login() {
 
         {/* Footer */}
         <p className="text-center text-gray-400 text-xs mt-6">
-          NOWI Production Management
+          Production Management System
         </p>
       </div>
     </div>
