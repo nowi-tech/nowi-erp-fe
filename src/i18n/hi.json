@@ -13,15 +13,53 @@
     "no": "नहीं",
     "error": "कुछ गड़बड़ हो गई",
     "retry": "पुनः प्रयास करें",
-    "noInternet": "इंटरनेट नहीं — कृपया पुनः कनेक्ट करें"
+    "noInternet": "इंटरनेट नहीं — कृपया पुनः कनेक्ट करें",
+    "comingSoon": "जल्द आ रहा है"
   },
   "auth": {
+    "title": "साइन इन",
+    "subtitle": "उत्पादन ट्रैकिंग सिस्टम",
     "mobileLabel": "मोबाइल नंबर",
     "mobilePlaceholder": "+91…",
+    "mobileHelp": "देश कोड शामिल करें, जैसे +919876543210",
     "sendOtp": "OTP भेजें",
-    "otpLabel": "OTP",
-    "verifyOtp": "OTP सत्यापित करें",
-    "loggingIn": "लॉगिन हो रहा है…"
+    "sendingOtp": "भेजा जा रहा है…",
+    "otpLabel": "OTP दर्ज करें",
+    "otpHelp": "{{mobile}} पर WhatsApp के ज़रिए भेजा गया",
+    "verifyOtp": "सत्यापित करें और साइन इन",
+    "loggingIn": "साइन इन हो रहा है…",
+    "resendOtp": "OTP दोबारा भेजें",
+    "resendIn": "{{seconds}} सेकंड में दोबारा भेजें",
+    "changeMobile": "नंबर बदलें",
+    "errors": {
+      "invalidMobile": "अमान्य मोबाइल नंबर। E.164 प्रारूप का उपयोग करें (जैसे +919876543210)।",
+      "rateLimit": "बहुत अधिक अनुरोध। कृपया कुछ देर बाद पुनः प्रयास करें।",
+      "wrongOtp": "गलत OTP। कृपया पुनः प्रयास करें।",
+      "generic": "साइन इन नहीं हो सका। कृपया पुनः प्रयास करें।"
+    }
+  },
+  "nav": {
+    "home": "होम",
+    "lots": "लॉट्स",
+    "profile": "प्रोफ़ाइल",
+    "dashboard": "डैशबोर्ड",
+    "vendors": "विक्रेता",
+    "skus": "SKU",
+    "users": "उपयोगकर्ता",
+    "settings": "सेटिंग्स"
+  },
+  "roles": {
+    "admin": "एडमिन",
+    "stitching_master": "सिलाई",
+    "finishing_master": "फिनिशिंग",
+    "data_manager": "डेटा",
+    "viewer": "व्यूअर"
+  },
+  "shell": {
+    "adminHome": "एडमिन होम — जल्द आ रहा है",
+    "stitchingHome": "सिलाई फ़्लोर — जल्द आ रहा है",
+    "finishingHome": "फिनिशिंग फ़्लोर — जल्द आ रहा है",
+    "dataHome": "डेटा कंसोल — जल्द आ रहा है"
   },
   "stitching": {
     "title": "सिलाई",

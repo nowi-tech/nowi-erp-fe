@@ -13,15 +13,53 @@
     "no": "No",
     "error": "Something went wrong",
     "retry": "Retry",
-    "noInternet": "No internet — please reconnect"
+    "noInternet": "No internet — please reconnect",
+    "comingSoon": "Coming soon"
   },
   "auth": {
+    "title": "Sign in",
+    "subtitle": "Production Tracking System",
     "mobileLabel": "Mobile number",
     "mobilePlaceholder": "+91…",
+    "mobileHelp": "Include country code, e.g. +919876543210",
     "sendOtp": "Send OTP",
-    "otpLabel": "OTP",
-    "verifyOtp": "Verify OTP",
-    "loggingIn": "Logging in…"
+    "sendingOtp": "Sending…",
+    "otpLabel": "Enter OTP",
+    "otpHelp": "Sent via WhatsApp to {{mobile}}",
+    "verifyOtp": "Verify & Sign in",
+    "loggingIn": "Signing in…",
+    "resendOtp": "Resend OTP",
+    "resendIn": "Resend in {{seconds}}s",
+    "changeMobile": "Change number",
+    "errors": {
+      "invalidMobile": "Invalid mobile number. Use E.164 format (e.g. +919876543210).",
+      "rateLimit": "Too many requests. Please wait before retrying.",
+      "wrongOtp": "Wrong OTP. Please try again.",
+      "generic": "Could not sign in. Please try again."
+    }
+  },
+  "nav": {
+    "home": "Home",
+    "lots": "Lots",
+    "profile": "Profile",
+    "dashboard": "Dashboard",
+    "vendors": "Vendors",
+    "skus": "SKUs",
+    "users": "Users",
+    "settings": "Settings"
+  },
+  "roles": {
+    "admin": "Admin",
+    "stitching_master": "Stitching",
+    "finishing_master": "Finishing",
+    "data_manager": "Data",
+    "viewer": "Viewer"
+  },
+  "shell": {
+    "adminHome": "Admin home — coming soon",
+    "stitchingHome": "Stitching floor — coming soon",
+    "finishingHome": "Finishing floor — coming soon",
+    "dataHome": "Data console — coming soon"
   },
   "stitching": {
     "title": "Stitching",
