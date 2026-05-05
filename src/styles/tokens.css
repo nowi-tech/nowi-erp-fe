@@ -1,0 +1,41 @@
+/* Design tokens — shared across density contexts */
+:root {
+  /* Colors (shadcn-aligned, Tailwind v4 friendly) */
+  --color-background: #ffffff;
+  --color-foreground: #0f172a;
+  --color-muted: #f1f5f9;
+  --color-muted-foreground: #64748b;
+  --color-border: #e2e8f0;
+  --color-input: #e2e8f0;
+  --color-ring: #0f172a;
+
+  --color-primary: #0f172a;
+  --color-primary-foreground: #ffffff;
+
+  --color-secondary: #f1f5f9;
+  --color-secondary-foreground: #0f172a;
+
+  --color-destructive: #dc2626;
+  --color-destructive-foreground: #ffffff;
+
+  --color-success: #16a34a;
+  --color-warning: #d97706;
+  --color-info: #2563eb;
+
+  /* Typography */
+  --font-sans: 'Inter', system-ui, -apple-system, sans-serif;
+  --font-hi: 'Noto Sans Devanagari', 'Inter', system-ui, sans-serif;
+  --font-mono: ui-monospace, SFMono-Regular, monospace;
+
+  /* Radii */
+  --radius-sm: 0.25rem;
+  --radius-md: 0.5rem;
+  --radius-lg: 0.75rem;
+
+  /* Density-driven defaults (overridden by .density-*) */
+  --density-control-height: 2.5rem;
+  --density-tap-target: 2.75rem;
+  --density-font-base: 1rem;
+  --density-font-sm: 0.875rem;
+  --density-spacing-unit: 0.25rem;
+}

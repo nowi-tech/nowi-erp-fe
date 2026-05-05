@@ -1,0 +1,39 @@
+{
+  "common": {
+    "appName": "NOWI ERP",
+    "loading": "Loading…",
+    "save": "Save",
+    "cancel": "Cancel",
+    "confirm": "Confirm",
+    "delete": "Delete",
+    "back": "Back",
+    "submit": "Submit",
+    "logout": "Logout",
+    "yes": "Yes",
+    "no": "No",
+    "error": "Something went wrong",
+    "retry": "Retry",
+    "noInternet": "No internet — please reconnect"
+  },
+  "auth": {
+    "mobileLabel": "Mobile number",
+    "mobilePlaceholder": "+91…",
+    "sendOtp": "Send OTP",
+    "otpLabel": "OTP",
+    "verifyOtp": "Verify OTP",
+    "loggingIn": "Logging in…"
+  },
+  "stitching": {
+    "title": "Stitching",
+    "receiveFromKotty": "Receive from Kotty",
+    "qtyIn": "Qty In",
+    "qtyOut": "Qty Out",
+    "reworkBacklog": "Rework backlog"
+  },
+  "finishing": {
+    "title": "Finishing",
+    "markRework": "Mark rework",
+    "reason": "Reason",
+    "generateChallan": "Generate challan"
+  }
+}

@@ -1,0 +1,39 @@
+{
+  "common": {
+    "appName": "NOWI ERP",
+    "loading": "लोड हो रहा है…",
+    "save": "सहेजें",
+    "cancel": "रद्द करें",
+    "confirm": "पुष्टि करें",
+    "delete": "हटाएँ",
+    "back": "वापस",
+    "submit": "जमा करें",
+    "logout": "लॉगआउट",
+    "yes": "हाँ",
+    "no": "नहीं",
+    "error": "कुछ गड़बड़ हो गई",
+    "retry": "पुनः प्रयास करें",
+    "noInternet": "इंटरनेट नहीं — कृपया पुनः कनेक्ट करें"
+  },
+  "auth": {
+    "mobileLabel": "मोबाइल नंबर",
+    "mobilePlaceholder": "+91…",
+    "sendOtp": "OTP भेजें",
+    "otpLabel": "OTP",
+    "verifyOtp": "OTP सत्यापित करें",
+    "loggingIn": "लॉगिन हो रहा है…"
+  },
+  "stitching": {
+    "title": "सिलाई",
+    "receiveFromKotty": "Kotty से प्राप्त करें",
+    "qtyIn": "मात्रा अंदर",
+    "qtyOut": "मात्रा बाहर",
+    "reworkBacklog": "रीवर्क बैकलॉग"
+  },
+  "finishing": {
+    "title": "फिनिशिंग",
+    "markRework": "रीवर्क के लिए चिह्नित करें",
+    "reason": "कारण",
+    "generateChallan": "चालान बनाएँ"
+  }
+}
