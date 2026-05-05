@@ -13,8 +13,14 @@
     "no": "नहीं",
     "error": "कुछ गड़बड़ हो गई",
     "retry": "पुनः प्रयास करें",
+    "close": "बंद करें",
+    "open": "खोलें",
     "noInternet": "इंटरनेट नहीं — कृपया पुनः कनेक्ट करें",
-    "comingSoon": "जल्द आ रहा है"
+    "comingSoon": "जल्द आ रहा है",
+    "featureUnavailable": "यह सुविधा अभी सर्वर पर उपलब्ध नहीं है।",
+    "noopDevHint": "(डेव मोड — असली अपलोड नहीं)",
+    "saving": "सहेजा जा रहा है…",
+    "language": "भाषा"
   },
   "auth": {
     "title": "साइन इन",
@@ -63,15 +69,79 @@
   },
   "stitching": {
     "title": "सिलाई",
-    "receiveFromKotty": "Kotty से प्राप्त करें",
-    "qtyIn": "मात्रा अंदर",
-    "qtyOut": "मात्रा बाहर",
-    "reworkBacklog": "रीवर्क बैकलॉग"
+    "queue": "आज की कतार",
+    "empty": "सिलाई के लिए कोई लॉट नहीं।",
+    "openLot": "खोलें",
+    "lotNo": "लॉट",
+    "vendor": "विक्रेता",
+    "vendorLot": "विक्रेता लॉट",
+    "status": "स्थिति",
+    "totals": "कुल",
+    "receiveFromKotty": {
+      "fab": "Kotty से प्राप्त करें",
+      "title": "Kotty से प्राप्त करें",
+      "vendor": "विक्रेता",
+      "challanNo": "चालान नंबर",
+      "lotNo": "लॉट नंबर",
+      "vendorLotNo": "विक्रेता लॉट नंबर (वैकल्पिक)",
+      "sizeMatrix": "साइज़ मैट्रिक्स",
+      "notes": "टिप्पणी (वैकल्पिक)",
+      "addLot": "+ एक और लॉट जोड़ें",
+      "removeLot": "लॉट हटाएँ",
+      "confirmTitle": "प्राप्ति की पुष्टि करें",
+      "totalUnits": "कुल {{total}} यूनिट प्राप्त करें?",
+      "successToast": "इनबाउंड दर्ज किया गया",
+      "errorToast": "इनबाउंड दर्ज नहीं हो सका"
+    },
+    "lot": {
+      "title": "सिलाई पर प्राप्त करें",
+      "available": "उपलब्ध",
+      "forward": "आगे भेजें",
+      "submit": "अगले चरण को भेजें",
+      "confirmTitle": "आगे भेजने की पुष्टि करें",
+      "confirmBody": "{{total}} यूनिट अगले चरण को भेजें?",
+      "nothingLeft": "आगे भेजने के लिए कुछ नहीं बचा।",
+      "successToast": "आगे भेज दिया गया",
+      "loadError": "लॉट लोड नहीं हो सका"
+    }
   },
   "finishing": {
     "title": "फिनिशिंग",
+    "queue": "आज की कतार",
+    "empty": "फिनिशिंग के लिए कोई लॉट नहीं।",
+    "openLot": "खोलें",
     "markRework": "रीवर्क के लिए चिह्नित करें",
-    "reason": "कारण",
+    "reworkQty": "रीवर्क मात्रा",
+    "reworkReason": "कारण",
+    "reasons": {
+      "stitchingDefect": "सिलाई दोष",
+      "printDefect": "प्रिंट दोष",
+      "wrongSize": "गलत साइज़",
+      "looseThreads": "ढीले धागे",
+      "other": "अन्य"
+    },
+    "otherReasonLabel": "समस्या लिखें",
+    "addPhoto": "फ़ोटो जोड़ें",
+    "photoAdded": "फ़ोटो संलग्न",
+    "lot": {
+      "title": "फिनिशिंग पर प्राप्त करें",
+      "submit": "जमा करें",
+      "confirmTitle": "पुष्टि करें",
+      "confirmForward": "{{forward}} आगे भेजें",
+      "confirmRework": "{{rework}} रीवर्क",
+      "confirmReasonPrefix": "कारण:"
+    },
     "generateChallan": "चालान बनाएँ"
+  },
+  "admin": {
+    "today": "आज",
+    "openLocator": "लोकेटर खोलें",
+    "lotsByStatus": "स्थिति के अनुसार लॉट्स",
+    "totalOrders": "कुल ऑर्डर"
+  },
+  "profile": {
+    "title": "प्रोफ़ाइल",
+    "languageLabel": "भाषा",
+    "logout": "लॉगआउट"
   }
 }
