@@ -17,8 +17,8 @@ export async function verifyOtp(
 }
 
 export async function me(): Promise<User> {
-  const res = await apiClient.get<{ user: User }>('/api/auth/me');
-  return res.data.user;
+  const res = await apiClient.get<User>('/api/auth/me');
+  return res.data;
 }
 
 export async function logout(): Promise<void> {
