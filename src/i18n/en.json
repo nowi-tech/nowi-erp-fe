@@ -20,14 +20,20 @@
     "featureUnavailable": "This feature is not yet available on the server.",
     "noopDevHint": "(noop dev mode)",
     "saving": "Saving…",
-    "language": "Language"
+    "language": "Language",
+    "more": "More",
+    "filters": "Filters",
+    "filtersActive": "{{count}} active",
+    "showFilters": "Show filters",
+    "hideFilters": "Hide filters",
+    "clearAll": "Clear all"
   },
   "auth": {
     "title": "Sign in",
     "subtitle": "Production Tracking System",
     "mobileLabel": "Mobile number",
-    "mobilePlaceholder": "+91…",
-    "mobileHelp": "Include country code, e.g. +919876543210",
+    "mobilePlaceholder": "9876543210",
+    "mobileHelp": "Enter your 10-digit mobile number",
     "sendOtp": "Send OTP",
     "sendingOtp": "Sending…",
     "otpLabel": "Enter OTP",
@@ -38,7 +44,7 @@
     "resendIn": "Resend in {{seconds}}s",
     "changeMobile": "Change number",
     "errors": {
-      "invalidMobile": "Invalid mobile number. Use E.164 format (e.g. +919876543210).",
+      "invalidMobile": "Enter a valid 10-digit mobile number.",
       "rateLimit": "Too many requests. Please wait before retrying.",
       "wrongOtp": "Wrong OTP. Please try again.",
       "generic": "Could not sign in. Please try again."
@@ -318,6 +324,40 @@
       "skus": "SKUs",
       "users": "Users",
       "settings": "Settings"
+    },
+    "users": {
+      "title": "Users",
+      "subtitle": "Manage who can sign in and what they can do.",
+      "add": "Add user",
+      "search": "Search by name or mobile",
+      "empty": "No users yet. Add your first one to get started.",
+      "columns": {
+        "name": "Name",
+        "mobile": "Mobile",
+        "role": "Role",
+        "status": "Status",
+        "actions": ""
+      },
+      "active": "Active",
+      "inactive": "Inactive",
+      "deactivate": "Deactivate",
+      "activate": "Activate",
+      "form": {
+        "createTitle": "Add user",
+        "editTitle": "Edit user",
+        "name": "Full name",
+        "mobile": "Mobile (10 digits)",
+        "mobileImmutable": "Mobile cannot be changed after creation",
+        "role": "Role",
+        "trainingMode": "Training mode (writes test data only)",
+        "save": "Save",
+        "cancel": "Cancel"
+      },
+      "errors": {
+        "duplicate": "A user with this mobile number already exists.",
+        "generic": "Could not save user. Please try again."
+      },
+      "deactivateConfirm": "Deactivate {{name}}? They will no longer be able to sign in."
     }
   },
   "profile": {

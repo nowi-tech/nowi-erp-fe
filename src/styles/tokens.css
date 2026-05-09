@@ -1,31 +1,47 @@
-/* Design tokens — shared across density contexts */
+/* Design tokens — NOWI brand palette
+   Primary navy is sampled from the wordmark; surfaces are warm cream
+   so the ERP feels like the brand, not a generic SaaS dashboard. */
 :root {
-  /* Colors (shadcn-aligned, Tailwind v4 friendly) */
-  --color-background: #ffffff;
-  --color-foreground: #0f172a;
-  --color-muted: #f1f5f9;
-  --color-muted-foreground: #64748b;
-  --color-border: #e2e8f0;
-  --color-input: #e2e8f0;
-  --color-ring: #0f172a;
+  /* Surfaces */
+  --color-background: #fbfaf6;     /* warm cream — page bg */
+  --color-surface: #ffffff;        /* cards / sheets sit on top */
+  --color-foreground: #14213d;     /* navy from logo */
+  --color-muted: #f1eee5;          /* cream-tinted muted */
+  --color-muted-foreground: #5b6478;
+  --color-border: #e6e1d3;         /* warm border */
+  --color-input: #d8d2c2;
+  --color-ring: #14213d;
 
-  --color-primary: #0f172a;
-  --color-primary-foreground: #ffffff;
+  /* Primary (the navy) */
+  --color-primary: #14213d;
+  --color-primary-foreground: #fbfaf6;
+  --color-primary-hover: #1d2d50;
 
-  --color-secondary: #f1f5f9;
-  --color-secondary-foreground: #0f172a;
+  /* Accent — antique gold for highlights / hovers / brand chips */
+  --color-accent: #b08a4f;
+  --color-accent-foreground: #14213d;
 
-  --color-destructive: #dc2626;
+  --color-secondary: #f1eee5;
+  --color-secondary-foreground: #14213d;
+
+  --color-destructive: #b3261e;
   --color-destructive-foreground: #ffffff;
 
-  --color-success: #16a34a;
-  --color-warning: #d97706;
-  --color-info: #2563eb;
+  --color-success: #2f6f4f;
+  --color-warning: #b07c1f;
+  --color-info: #325c8a;
 
-  /* Typography */
+  /* Typography
+     `--font-serif` is the brand voice (matches the NØWI wordmark) and
+     is used sparingly for page titles, hero text and the wordmark itself. */
   --font-sans: 'Inter', system-ui, -apple-system, sans-serif;
+  --font-serif: 'Cormorant Garamond', 'Playfair Display', Georgia, 'Times New Roman', serif;
   --font-hi: 'Noto Sans Devanagari', 'Inter', system-ui, sans-serif;
   --font-mono: ui-monospace, SFMono-Regular, monospace;
+
+  /* Elevation */
+  --shadow-card: 0 1px 2px rgba(20, 33, 61, 0.04), 0 1px 1px rgba(20, 33, 61, 0.03);
+  --shadow-pop:  0 12px 32px -12px rgba(20, 33, 61, 0.18), 0 4px 12px -4px rgba(20, 33, 61, 0.08);
 
   /* Radii */
   --radius-sm: 0.25rem;

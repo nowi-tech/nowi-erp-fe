@@ -1,22 +1,23 @@
 import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { NavLink, Outlet } from 'react-router-dom';
+import { NavLink, Outlet, useLocation } from 'react-router-dom';
 import {
   LayoutDashboard,
   Users,
-  Package,
-  Settings,
   Truck,
   Search,
   ChevronDown,
   LogOut,
   Database,
   FlaskConical,
+  MoreHorizontal,
+  X,
 } from 'lucide-react';
 import { useAuth } from '@/context/auth';
 import { useToast } from '@/components/ui/toast';
 import { Badge } from '@/components/ui/badge';
 import LanguageToggle from '@/components/LanguageToggle';
+import Logo from '@/components/Logo';
 import { cn } from '@/lib/utils';
 import type { UserRole } from '@/api/types';
 
@@ -29,58 +30,19 @@ interface NavItem {
 }
 
 const NAV_ITEMS: NavItem[] = [
-  {
-    to: '/admin',
-    end: true,
-    icon: <LayoutDashboard size={18} />,
-    labelKey: 'admin.nav.dashboard',
-    roles: ['admin', 'viewer'],
-  },
-  {
-    to: '/admin/locator',
-    icon: <Search size={18} />,
-    labelKey: 'admin.nav.locator',
-    roles: ['admin', 'viewer'],
-  },
-  {
-    to: '/admin/dispatches',
-    icon: <Truck size={18} />,
-    labelKey: 'admin.nav.dispatches',
-    roles: ['admin', 'viewer'],
-  },
-  {
-    to: '/data',
-    icon: <Database size={18} />,
-    labelKey: 'admin.nav.masterData',
-    roles: ['data_manager'],
-  },
-  {
-    to: '/admin/vendors',
-    icon: <Truck size={18} />,
-    labelKey: 'admin.nav.vendors',
-    roles: ['admin', 'viewer', 'data_manager'],
-  },
-  {
-    to: '/admin/skus',
-    icon: <Package size={18} />,
-    labelKey: 'admin.nav.skus',
-    roles: ['admin', 'viewer', 'data_manager'],
-  },
-  {
-    to: '/admin/users',
-    icon: <Users size={18} />,
-    labelKey: 'admin.nav.users',
-    roles: ['admin'],
-  },
-  {
-    to: '/admin/settings',
-    icon: <Settings size={18} />,
-    labelKey: 'admin.nav.settings',
-    roles: ['admin'],
-  },
+  { to: '/admin', end: true, icon: <LayoutDashboard size={20} />, labelKey: 'admin.nav.dashboard', roles: ['admin', 'viewer'] },
+  { to: '/admin/locator', icon: <Search size={20} />, labelKey: 'admin.nav.locator', roles: ['admin', 'viewer'] },
+  { to: '/admin/dispatches', icon: <Truck size={20} />, labelKey: 'admin.nav.dispatches', roles: ['admin', 'viewer'] },
+  { to: '/data', icon: <Database size={20} />, labelKey: 'admin.nav.masterData', roles: ['data_manager'] },
+  { to: '/admin/users', icon: <Users size={20} />, labelKey: 'admin.nav.users', roles: ['admin'] },
+  // TODO: build — surface once admin Vendors / SKUs / Settings pages exist.
+  // { to: '/admin/vendors', icon: <Truck size={20} />, labelKey: 'admin.nav.vendors', roles: ['admin', 'viewer', 'data_manager'] },
+  // { to: '/admin/skus', icon: <Package size={20} />, labelKey: 'admin.nav.skus', roles: ['admin', 'viewer', 'data_manager'] },
+  // { to: '/admin/settings', icon: <Settings size={20} />, labelKey: 'admin.nav.settings', roles: ['admin'] },
 ];
 
 const TEST_DATA_KEY = 'nowi.showTestData';
+const PRIMARY_BOTTOM_COUNT = 3;
 
 function TrainingModeToggle() {
   const { t } = useTranslation();
@@ -108,7 +70,7 @@ function TrainingModeToggle() {
       type="button"
       onClick={onToggle}
       className={cn(
-        'flex items-center gap-2 px-2 py-1 rounded-[var(--radius-sm)] text-xs border',
+        'flex items-center gap-2 px-2 py-1 rounded-[var(--radius-sm)] text-xs border transition-colors',
         on
           ? 'border-[var(--color-primary)] bg-[var(--color-primary)] text-[var(--color-primary-foreground)]'
           : 'border-[var(--color-border)] text-[var(--color-muted-foreground)] hover:bg-[var(--color-muted)]',
@@ -116,7 +78,7 @@ function TrainingModeToggle() {
       aria-pressed={on}
     >
       <FlaskConical size={14} />
-      <span>{t('admin.testData.label')}</span>
+      <span className="hidden sm:inline">{t('admin.testData.label')}</span>
       <span
         aria-hidden
         className={cn(
@@ -139,19 +101,30 @@ export default function AdminShell() {
   const { t } = useTranslation();
   const { user, logout } = useAuth();
   const [menuOpen, setMenuOpen] = useState(false);
+  const [moreOpen, setMoreOpen] = useState(false);
+  const location = useLocation();
 
   const role: UserRole | undefined = user?.role;
   const visibleNav = NAV_ITEMS.filter((it) =>
     role ? it.roles.includes(role) : false,
   );
 
+  const primary = visibleNav.slice(0, PRIMARY_BOTTOM_COUNT);
+  const overflow = visibleNav.slice(PRIMARY_BOTTOM_COUNT);
+
+  useEffect(() => {
+    setMenuOpen(false);
+    setMoreOpen(false);
+  }, [location.pathname]);
+
   return (
     <div className="density-compact min-h-screen flex bg-[var(--color-background)] text-[var(--color-foreground)]">
-      <aside className="w-56 shrink-0 border-r border-[var(--color-border)] flex flex-col">
-        <div className="px-4 py-4 font-semibold border-b border-[var(--color-border)]">
-          {t('common.appName')}
+      {/* Desktop sidebar */}
+      <aside className="hidden lg:flex w-60 shrink-0 border-r border-[var(--color-border)] flex-col bg-[var(--color-surface)]">
+        <div className="px-5 py-5 border-b border-[var(--color-border)]">
+          <Logo size="md" />
         </div>
-        <nav className="flex-1 p-2 space-y-1">
+        <nav className="flex-1 p-3 space-y-1">
           {visibleNav.map((item) => (
             <NavLink
               key={item.to}
@@ -159,9 +132,9 @@ export default function AdminShell() {
               end={item.end}
               className={({ isActive }) =>
                 cn(
-                  'w-full flex items-center gap-2 px-3 py-2 rounded-[var(--radius-sm)] text-left text-sm',
+                  'w-full flex items-center gap-3 px-3 py-2.5 rounded-[var(--radius-md)] text-sm transition-colors',
                   isActive
-                    ? 'bg-[var(--color-muted)] text-[var(--color-foreground)] font-medium'
+                    ? 'bg-[var(--color-primary)] text-[var(--color-primary-foreground)] font-medium'
                     : 'text-[var(--color-muted-foreground)] hover:bg-[var(--color-muted)] hover:text-[var(--color-foreground)]',
                 )
               }
@@ -171,23 +144,33 @@ export default function AdminShell() {
             </NavLink>
           ))}
         </nav>
+        <div className="p-3 border-t border-[var(--color-border)] text-xs text-[var(--color-muted-foreground)]">
+          {user?.name} · {user && t(`roles.${user.role}` as const)}
+        </div>
       </aside>
 
+      {/* Main column */}
       <div className="flex-1 flex flex-col min-w-0">
-        <header className="flex items-center justify-between border-b border-[var(--color-border)] px-4 py-2">
-          <div className="flex items-center gap-2">
-            <span className="font-semibold text-sm">{t('common.appName')}</span>
-            {user && <Badge variant="secondary">{t(`roles.${user.role}` as const)}</Badge>}
+        <header className="sticky top-0 z-20 flex items-center justify-between border-b border-[var(--color-border)] bg-[var(--color-surface)]/95 backdrop-blur px-3 sm:px-5 h-14">
+          <div className="flex items-center gap-3 min-w-0">
+            <div className="lg:hidden">
+              <Logo size="sm" />
+            </div>
+            {user && (
+              <Badge variant="secondary" className="hidden sm:inline-flex">
+                {t(`roles.${user.role}` as const)}
+              </Badge>
+            )}
           </div>
-          <div className="flex items-center gap-3 relative">
+          <div className="flex items-center gap-2 sm:gap-3 relative">
             {role === 'admin' && <TrainingModeToggle />}
             <LanguageToggle />
             <button
               type="button"
               onClick={() => setMenuOpen((v) => !v)}
-              className="flex items-center gap-1 px-2 py-1 rounded-[var(--radius-sm)] hover:bg-[var(--color-muted)] text-sm"
+              className="hidden sm:flex items-center gap-1 px-2 py-1 rounded-[var(--radius-sm)] hover:bg-[var(--color-muted)] text-sm"
             >
-              <span>{user?.name ?? '—'}</span>
+              <span className="max-w-[10ch] truncate">{user?.name ?? '—'}</span>
               <ChevronDown size={14} />
             </button>
             <button
@@ -197,10 +180,13 @@ export default function AdminShell() {
               aria-label={t('common.logout')}
             >
               <LogOut size={14} />
-              <span className="hidden sm:inline">{t('common.logout')}</span>
+              <span className="hidden md:inline">{t('common.logout')}</span>
             </button>
             {menuOpen && (
-              <div className="absolute right-0 top-full mt-1 w-40 rounded-[var(--radius-md)] border border-[var(--color-border)] bg-[var(--color-background)] shadow-md z-10">
+              <div className="absolute right-0 top-full mt-2 w-44 rounded-[var(--radius-md)] border border-[var(--color-border)] bg-[var(--color-surface)] shadow-[var(--shadow-pop)] z-30 overflow-hidden">
+                <div className="px-3 py-2 text-xs text-[var(--color-muted-foreground)] border-b border-[var(--color-border)]">
+                  {user && t(`roles.${user.role}` as const)}
+                </div>
                 <button
                   type="button"
                   onClick={() => {
@@ -216,9 +202,118 @@ export default function AdminShell() {
             )}
           </div>
         </header>
-        <main className="flex-1 overflow-auto p-6">
+
+        <main className="flex-1 overflow-auto p-4 sm:p-6 lg:p-8 max-w-[1400px] w-full mx-auto pb-[calc(4rem+env(safe-area-inset-bottom))] lg:pb-8">
           <Outlet />
         </main>
+
+        {/* Mobile bottom nav */}
+        <nav
+          className="lg:hidden fixed bottom-0 inset-x-0 z-30 bg-[var(--color-surface)]/95 backdrop-blur border-t border-[var(--color-border)] pb-[env(safe-area-inset-bottom)]"
+          aria-label="Primary"
+        >
+          <div className="flex items-stretch justify-around h-16">
+            {primary.map((item) => (
+              <NavLink
+                key={item.to}
+                to={item.to}
+                end={item.end}
+                className={({ isActive }) =>
+                  cn(
+                    'flex-1 flex flex-col items-center justify-center gap-0.5 text-[11px] transition-colors',
+                    isActive
+                      ? 'text-[var(--color-primary)]'
+                      : 'text-[var(--color-muted-foreground)]',
+                  )
+                }
+              >
+                {({ isActive }) => (
+                  <>
+                    <span
+                      className={cn(
+                        'flex items-center justify-center h-7 w-12 rounded-full transition-colors',
+                        isActive && 'bg-[var(--color-primary)]/10',
+                      )}
+                    >
+                      {item.icon}
+                    </span>
+                    <span className="leading-none">{t(item.labelKey)}</span>
+                  </>
+                )}
+              </NavLink>
+            ))}
+            {overflow.length > 0 && (
+              <button
+                type="button"
+                onClick={() => setMoreOpen(true)}
+                className={cn(
+                  'flex-1 flex flex-col items-center justify-center gap-0.5 text-[11px]',
+                  moreOpen
+                    ? 'text-[var(--color-primary)]'
+                    : 'text-[var(--color-muted-foreground)]',
+                )}
+                aria-haspopup="menu"
+                aria-expanded={moreOpen}
+              >
+                <span className="flex items-center justify-center h-7 w-12 rounded-full">
+                  <MoreHorizontal size={20} />
+                </span>
+                <span className="leading-none">{t('common.more')}</span>
+              </button>
+            )}
+          </div>
+        </nav>
+
+        {/* Mobile "More" sheet */}
+        {moreOpen && (
+          <div className="lg:hidden fixed inset-0 z-40">
+            <div
+              className="absolute inset-0 bg-[var(--color-foreground)]/40"
+              onClick={() => setMoreOpen(false)}
+              aria-hidden
+            />
+            <div
+              role="dialog"
+              aria-modal="true"
+              className="absolute inset-x-0 bottom-0 rounded-t-[var(--radius-lg)] bg-[var(--color-surface)] shadow-[var(--shadow-pop)] pb-[env(safe-area-inset-bottom)] animate-in slide-in-from-bottom"
+            >
+              <div className="flex items-center justify-between px-4 pt-3 pb-2">
+                <span className="text-sm font-medium text-[var(--color-muted-foreground)]">
+                  {t('common.more')}
+                </span>
+                <button
+                  type="button"
+                  onClick={() => setMoreOpen(false)}
+                  className="p-1.5 rounded-[var(--radius-sm)] hover:bg-[var(--color-muted)]"
+                  aria-label="Close"
+                >
+                  <X size={18} />
+                </button>
+              </div>
+              <div className="grid grid-cols-3 gap-1 px-3 pb-4">
+                {overflow.map((item) => (
+                  <NavLink
+                    key={item.to}
+                    to={item.to}
+                    end={item.end}
+                    onClick={() => setMoreOpen(false)}
+                    className={({ isActive }) =>
+                      cn(
+                        'flex flex-col items-center gap-1.5 p-3 rounded-[var(--radius-md)] text-xs text-center',
+                        isActive
+                          ? 'bg-[var(--color-primary)]/10 text-[var(--color-primary)]'
+                          : 'text-[var(--color-muted-foreground)] hover:bg-[var(--color-muted)]',
+                      )
+                    }
+                  >
+                    {item.icon}
+                    <span>{t(item.labelKey)}</span>
+                  </NavLink>
+                ))}
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );

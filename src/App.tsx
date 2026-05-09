@@ -1,10 +1,9 @@
 import { lazy, Suspense, type ReactNode } from 'react';
-import { useTranslation } from 'react-i18next';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider } from './context/auth';
 import { ToastProvider } from './components/ui/toast';
 import ProtectedRoute from './components/ProtectedRouteV2';
-import PlaceholderSection from './components/PlaceholderSection';
+// import PlaceholderSection from './components/PlaceholderSection'; // TODO: re-enable when commented stub routes return
 import PwaInstallPrompt from './components/PwaInstallPrompt';
 import Onboarding from './components/Onboarding';
 
@@ -26,6 +25,7 @@ const FinishingReceiveLot = lazy(
   () => import('./pages/finishing/FinishingReceiveLot'),
 );
 const DataHome = lazy(() => import('./pages/data/DataHome'));
+const UsersPage = lazy(() => import('./pages/admin/Users'));
 
 function PageSkeleton() {
   return (
@@ -39,10 +39,10 @@ function S({ children }: { children: ReactNode }) {
   return <Suspense fallback={<PageSkeleton />}>{children}</Suspense>;
 }
 
-function AdminPlaceholder({ titleKey }: { titleKey: string }) {
-  const { t } = useTranslation();
-  return <PlaceholderSection title={t(titleKey)} />;
-}
+// function AdminPlaceholder({ titleKey }: { titleKey: string }) {
+//   const { t } = useTranslation();
+//   return <PlaceholderSection title={t(titleKey)} />;
+// }
 
 function App() {
   return (
@@ -114,6 +114,17 @@ function App() {
                 }
               />
               <Route
+                path="users"
+                element={
+                  <S>
+                    <UsersPage />
+                  </S>
+                }
+              />
+              {/* TODO: build — admin Vendors, SKUs and Settings pages.
+                  Routes intentionally hidden so the menu doesn't surface stubs.
+                  Master-data CRUD lives under /data for the data_manager role.
+              <Route
                 path="vendors"
                 element={<AdminPlaceholder titleKey="admin.placeholder.vendors" />}
               />
@@ -122,13 +133,10 @@ function App() {
                 element={<AdminPlaceholder titleKey="admin.placeholder.skus" />}
               />
               <Route
-                path="users"
-                element={<AdminPlaceholder titleKey="admin.placeholder.users" />}
-              />
-              <Route
                 path="settings"
                 element={<AdminPlaceholder titleKey="admin.placeholder.settings" />}
               />
+              */}
             </Route>
 
             <Route

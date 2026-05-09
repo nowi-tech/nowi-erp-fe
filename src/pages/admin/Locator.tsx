@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { Card, CardContent } from '@/components/ui/card';
+import CollapsibleFilters from '@/components/CollapsibleFilters';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -186,8 +187,19 @@ export default function Locator() {
         </Button>
       </div>
 
-      <Card>
-        <CardContent className="pt-4 grid gap-3 md:grid-cols-4">
+      <CollapsibleFilters
+        activeCount={
+          (current.vendorId ? 1 : 0) +
+          (current.stageId ? 1 : 0) +
+          (current.warehouseId ? 1 : 0) +
+          (current.status ? 1 : 0) +
+          (current.origin && current.origin !== 'ALL' ? 1 : 0) +
+          (current.sku ? 1 : 0) +
+          (current.from ? 1 : 0) +
+          (current.to ? 1 : 0)
+        }
+        onClear={() => setSearchParams(new URLSearchParams())}
+      >
           <div>
             <Label>{t('admin.locator.filters.vendor')}</Label>
             <Select
@@ -282,8 +294,7 @@ export default function Locator() {
               onChange={(e) => updateParam('to', e.target.value || undefined)}
             />
           </div>
-        </CardContent>
-      </Card>
+      </CollapsibleFilters>
 
       <Card>
         <CardContent className="pt-4">

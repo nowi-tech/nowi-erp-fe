@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { Card, CardContent } from '@/components/ui/card';
+import CollapsibleFilters from '@/components/CollapsibleFilters';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -132,8 +133,15 @@ export default function Dispatches() {
         <h1 className="text-lg font-semibold">{t('admin.dispatches.title')}</h1>
       </div>
 
-      <Card>
-        <CardContent className="pt-4 grid gap-3 md:grid-cols-4">
+      <CollapsibleFilters
+        activeCount={
+          (current.status ? 1 : 0) +
+          (current.destWarehouseId ? 1 : 0) +
+          (current.from ? 1 : 0) +
+          (current.to ? 1 : 0)
+        }
+        onClear={() => setSearchParams(new URLSearchParams())}
+      >
           <div>
             <Label>{t('admin.dispatches.filters.status')}</Label>
             <Select
@@ -180,8 +188,7 @@ export default function Dispatches() {
               onChange={(e) => updateParam('to', e.target.value || undefined)}
             />
           </div>
-        </CardContent>
-      </Card>
+      </CollapsibleFilters>
 
       <Card>
         <CardContent className="pt-4">

@@ -14,6 +14,11 @@ body.lang-hi,
   font-family: var(--font-hi);
 }
 
+/* Lighter placeholders globally — keep the muted color but knock the alpha down */
+::placeholder {
+  opacity: 0.5;
+}
+
 /* Floor app default density */
 .density-comfortable button,
 .density-comfortable input,

@@ -1,9 +1,9 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Dialog } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { useAuth } from '@/context/auth';
-import { updateOnboardedAt } from '@/api/users';
+import { markOnboarded } from '@/api/users';
 import type { UserRole } from '@/api/types';
 
 const ROLES_WITH_SLIDES: readonly UserRole[] = [
@@ -18,11 +18,45 @@ function isOnboardingRole(role: UserRole): boolean {
   return (ROLES_WITH_SLIDES as readonly UserRole[]).includes(role);
 }
 
+const localKey = (userId: number | string) => `nowi.onboarded.${userId}`;
+
+function isLocallyOnboarded(userId: number | string): boolean {
+  try {
+    return localStorage.getItem(localKey(userId)) === '1';
+  } catch {
+    return false;
+  }
+}
+
+function markLocallyOnboarded(userId: number | string): void {
+  try {
+    localStorage.setItem(localKey(userId), '1');
+  } catch {
+    // private mode / quota — fine, server-side is the real source of truth
+  }
+}
+
 export default function Onboarding() {
   const { t } = useTranslation();
   const { user, updateUser } = useAuth();
   const [step, setStep] = useState(0);
   const [busy, setBusy] = useState(false);
+  // Local copy so we hide the modal immediately when the user completes /
+  // skips, even before the BE round-trip resolves.
+  const [dismissed, setDismissed] = useState<boolean>(() =>
+    user ? isLocallyOnboarded(user.id) : true,
+  );
+
+  // If the auth user changes (login/logout), reset the dismissed flag based
+  // on that new user's local mark.
+  useEffect(() => {
+    if (!user) {
+      setDismissed(true);
+      return;
+    }
+    setDismissed(isLocallyOnboarded(user.id) || Boolean(user.onboardedAt));
+    setStep(0);
+  }, [user?.id, user?.onboardedAt, user]);
 
   const slides = useMemo(() => {
     if (!user) return [] as { title: string; body: string }[];
@@ -33,68 +67,42 @@ export default function Onboarding() {
     }));
   }, [t, user]);
 
-  if (!user || user.onboardedAt) return null;
+  if (!user || dismissed || user.onboardedAt) return null;
 
   const total = slides.length;
   const isLast = step === total - 1;
+  const current = slides[step];
 
   const finish = async () => {
     if (busy) return;
+    // Hide immediately and persist locally so the modal can never re-loop
+    // — even if the server call is slow or fails.
+    markLocallyOnboarded(user.id);
+    setDismissed(true);
+    updateUser({ onboardedAt: new Date().toISOString() });
     setBusy(true);
     try {
-      await updateOnboardedAt(user.id);
+      await markOnboarded();
     } catch {
-      // best-effort: still mark locally so we don't loop the user.
+      // best-effort; local mark already protects against loops
     } finally {
-      updateUser({ onboardedAt: new Date().toISOString() });
       setBusy(false);
     }
   };
 
+  const goNext = () => {
+    if (isLast) void finish();
+    else setStep((s) => Math.min(total - 1, s + 1));
+  };
+  const goPrev = () => setStep((s) => Math.max(0, s - 1));
+
   return (
-    <Dialog
-      open
-      onClose={() => {
-        // Block backdrop close — user must explicitly Skip or Done.
-      }}
-      title={slides[step]?.title}
-      footer={
-        <div className="flex w-full items-center justify-between gap-2">
-          <Button
-            type="button"
-            variant="ghost"
-            onClick={() => void finish()}
-            disabled={busy}
-          >
-            {t('onboarding.skip')}
-          </Button>
-          <div className="flex items-center gap-2">
-            <Button
-              type="button"
-              variant="outline"
-              onClick={() => setStep((s) => Math.max(0, s - 1))}
-              disabled={step === 0 || busy}
-            >
-              {t('onboarding.prev')}
-            </Button>
-            {isLast ? (
-              <Button type="button" onClick={() => void finish()} disabled={busy}>
-                {t('onboarding.done')}
-              </Button>
-            ) : (
-              <Button type="button" onClick={() => setStep((s) => s + 1)} disabled={busy}>
-                {t('onboarding.next')}
-              </Button>
-            )}
-          </div>
-        </div>
-      }
-    >
-      <div className="space-y-3">
-        <p className="text-sm text-[var(--color-foreground)] whitespace-pre-line">
-          {slides[step]?.body}
+    <Dialog open onClose={() => void finish()} title={current?.title}>
+      <div className="flex flex-col gap-4">
+        <p className="text-sm text-[var(--color-foreground)] whitespace-pre-line min-h-[5rem]">
+          {current?.body}
         </p>
-        <div className="flex items-center justify-center gap-1.5 pt-2">
+        <div className="flex items-center justify-center gap-1.5">
           {slides.map((_, i) => (
             <span
               key={i}
@@ -102,11 +110,38 @@ export default function Onboarding() {
               className={
                 'h-1.5 rounded-full transition-all ' +
                 (i === step
-                  ? 'w-6 bg-[var(--color-foreground)]'
-                  : 'w-1.5 bg-[var(--color-muted)]')
+                  ? 'w-6 bg-[var(--color-primary)]'
+                  : 'w-1.5 bg-[var(--color-border)]')
               }
             />
           ))}
+        </div>
+        <div className="flex items-center justify-between gap-2 pt-2 border-t border-[var(--color-border)] -mx-4 px-4 -mb-4 pb-4">
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            onClick={() => void finish()}
+            disabled={busy}
+          >
+            {t('onboarding.skip')}
+          </Button>
+          <div className="flex items-center gap-2">
+            {step > 0 && (
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={goPrev}
+                disabled={busy}
+              >
+                {t('onboarding.prev')}
+              </Button>
+            )}
+            <Button type="button" size="sm" onClick={goNext} disabled={busy}>
+              {isLast ? t('onboarding.done') : t('onboarding.next')}
+            </Button>
+          </div>
         </div>
       </div>
     </Dialog>

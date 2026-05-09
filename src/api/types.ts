@@ -13,6 +13,8 @@ export interface User {
   role: UserRole;
   isTrainingMode: boolean;
   onboardedAt?: string | null;
+  mobileNumber?: string;
+  isActive?: boolean;
 }
 
 export interface VerifyOtpResponse {

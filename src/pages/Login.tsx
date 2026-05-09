@@ -1,4 +1,11 @@
-import { useEffect, useRef, useState, type FormEvent } from 'react';
+import {
+  useEffect,
+  useRef,
+  useState,
+  type FormEvent,
+  type ClipboardEvent,
+  type KeyboardEvent,
+} from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { useAuth } from '@/context/auth';
@@ -15,11 +22,113 @@ import {
   CardDescription,
 } from '@/components/ui/card';
 import LanguageToggle from '@/components/LanguageToggle';
+import Logo from '@/components/Logo';
 
-const E164 = /^\+[1-9]\d{6,14}$/;
+const TEN_DIGITS = /^\d{10}$/;
 const RESEND_SECONDS = 30;
 
+function toE164(tenDigit: string): string {
+  return `+91${tenDigit}`;
+}
+
 type Step = 'mobile' | 'otp';
+
+const OTP_LENGTH = 6;
+
+function OtpInput({
+  value,
+  onChange,
+  onComplete,
+  autoFocus,
+  disabled,
+}: {
+  value: string;
+  onChange: (v: string) => void;
+  onComplete?: (v: string) => void;
+  autoFocus?: boolean;
+  disabled?: boolean;
+}) {
+  const refs = useRef<Array<HTMLInputElement | null>>([]);
+  const digits = Array.from({ length: OTP_LENGTH }, (_, i) => value[i] ?? '');
+
+  useEffect(() => {
+    if (autoFocus) refs.current[0]?.focus();
+  }, [autoFocus]);
+
+  function set(next: string) {
+    const clean = next.replace(/\D/g, '').slice(0, OTP_LENGTH);
+    onChange(clean);
+    if (clean.length === OTP_LENGTH) onComplete?.(clean);
+  }
+
+  function handleChange(i: number, raw: string) {
+    const c = raw.replace(/\D/g, '');
+    if (!c) return;
+    if (c.length > 1) {
+      // user typed/pasted multiple digits into one box
+      const next = (value.slice(0, i) + c + value.slice(i + c.length)).slice(0, OTP_LENGTH);
+      set(next);
+      const focusIndex = Math.min(i + c.length, OTP_LENGTH - 1);
+      refs.current[focusIndex]?.focus();
+      return;
+    }
+    const next = (value.slice(0, i) + c + value.slice(i + 1)).slice(0, OTP_LENGTH);
+    set(next);
+    if (i < OTP_LENGTH - 1) refs.current[i + 1]?.focus();
+  }
+
+  function handleKey(i: number, e: KeyboardEvent<HTMLInputElement>) {
+    if (e.key === 'Backspace') {
+      if (digits[i]) {
+        const next = value.slice(0, i) + value.slice(i + 1);
+        set(next);
+      } else if (i > 0) {
+        const next = value.slice(0, i - 1) + value.slice(i);
+        set(next);
+        refs.current[i - 1]?.focus();
+      }
+      e.preventDefault();
+    } else if (e.key === 'ArrowLeft' && i > 0) {
+      refs.current[i - 1]?.focus();
+      e.preventDefault();
+    } else if (e.key === 'ArrowRight' && i < OTP_LENGTH - 1) {
+      refs.current[i + 1]?.focus();
+      e.preventDefault();
+    }
+  }
+
+  function handlePaste(e: ClipboardEvent<HTMLInputElement>) {
+    const txt = e.clipboardData.getData('text');
+    if (!/\d/.test(txt)) return;
+    e.preventDefault();
+    set(txt);
+    refs.current[Math.min(txt.replace(/\D/g, '').length, OTP_LENGTH) - 1]?.focus();
+  }
+
+  return (
+    <div className="flex justify-between gap-2" onPaste={handlePaste}>
+      {digits.map((d, i) => (
+        <input
+          key={i}
+          ref={(el) => {
+            refs.current[i] = el;
+          }}
+          type="text"
+          inputMode="numeric"
+          autoComplete={i === 0 ? 'one-time-code' : 'off'}
+          maxLength={1}
+          value={d}
+          disabled={disabled}
+          onChange={(e) => handleChange(i, e.target.value)}
+          onKeyDown={(e) => handleKey(i, e)}
+          onFocus={(e) => e.currentTarget.select()}
+          aria-label={`OTP digit ${i + 1}`}
+          className="h-14 w-12 rounded-[var(--radius-md)] border border-[var(--color-input)] bg-[var(--color-background)] text-center text-2xl font-semibold tabular-nums tracking-tight text-[var(--color-foreground)] outline-none transition focus:border-[var(--color-primary)] focus:ring-2 focus:ring-[var(--color-primary)]/30 disabled:opacity-50"
+        />
+      ))}
+    </div>
+  );
+}
 
 interface ApiErrorShape {
   response?: { status?: number; data?: { error?: string; message?: string } };
@@ -43,7 +152,6 @@ export default function Login() {
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [cooldown, setCooldown] = useState(0);
-  const otpRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     if (isAuthenticated) navigate('/', { replace: true });
@@ -55,20 +163,16 @@ export default function Login() {
     return () => window.clearInterval(id);
   }, [cooldown]);
 
-  useEffect(() => {
-    if (step === 'otp') otpRef.current?.focus();
-  }, [step]);
-
-  async function handleSendOtp(e: FormEvent) {
+async function handleSendOtp(e: FormEvent) {
     e.preventDefault();
     setError(null);
-    if (!E164.test(mobile)) {
+    if (!TEN_DIGITS.test(mobile)) {
       setError(t('auth.errors.invalidMobile'));
       return;
     }
     setSubmitting(true);
     try {
-      await requestOtp(mobile);
+      await requestOtp(toE164(mobile));
       setStep('otp');
       setCooldown(RESEND_SECONDS);
     } catch (err) {
@@ -86,7 +190,7 @@ export default function Login() {
     setError(null);
     setSubmitting(true);
     try {
-      await requestOtp(mobile);
+      await requestOtp(toE164(mobile));
       setCooldown(RESEND_SECONDS);
     } catch (err) {
       const status = getApiStatus(err);
@@ -100,13 +204,13 @@ export default function Login() {
   async function handleVerify(e: FormEvent) {
     e.preventDefault();
     setError(null);
-    if (!/^\d{4,8}$/.test(otp)) {
+    if (!/^\d{6}$/.test(otp)) {
       setError(t('auth.errors.wrongOtp'));
       return;
     }
     setSubmitting(true);
     try {
-      const { token, user } = await verifyOtp(mobile, otp);
+      const { token, user } = await verifyOtp(toE164(mobile), otp);
       login(token, user);
       navigate('/', { replace: true });
     } catch (err) {
@@ -120,24 +224,55 @@ export default function Login() {
   }
 
   return (
-    <div className="density-comfortable min-h-screen flex items-center justify-center bg-[var(--color-muted)] px-4">
-      <div className="absolute top-4 right-4">
-        <LanguageToggle />
-      </div>
-      <div className="w-full max-w-md">
-        <div className="text-center mb-6">
-          <h1 className="text-2xl font-bold text-[var(--color-foreground)]">
-            {t('common.appName')}
-          </h1>
-          <p className="text-[var(--color-muted-foreground)] mt-1">{t('auth.subtitle')}</p>
+    <div className="density-comfortable min-h-screen grid grid-cols-1 lg:grid-cols-[1.1fr_1fr] bg-[var(--color-background)]">
+      {/* Brand panel — full bleed on desktop, hero strip on mobile */}
+      <div className="relative bg-[var(--color-primary)] text-[var(--color-primary-foreground)] overflow-hidden">
+        {/* subtle decorative ring, echoes the Ø in the wordmark */}
+        <div
+          aria-hidden
+          className="pointer-events-none absolute -bottom-32 -right-32 h-[420px] w-[420px] rounded-full border border-[var(--color-accent)]/30"
+        />
+        <div
+          aria-hidden
+          className="pointer-events-none absolute -top-24 -left-24 h-[260px] w-[260px] rounded-full border border-white/10"
+        />
+        <div className="relative h-full flex flex-col justify-between p-8 lg:p-14 min-h-[180px] lg:min-h-screen">
+          <Logo size="lg" className="invert brightness-200" />
+          <div className="hidden lg:block max-w-md">
+            <p className="font-serif text-4xl leading-tight">
+              From cut to dispatch — every stitch accounted for.
+            </p>
+            <p className="mt-4 text-sm text-white/70">
+              Production tracking for the NOWI floor.
+            </p>
+          </div>
+          <div className="hidden lg:block text-xs text-white/50">
+            © {new Date().getFullYear()} NOWI
+          </div>
         </div>
+      </div>
+
+      {/* Form panel */}
+      <div className="relative flex items-center justify-center px-5 py-10 lg:py-0">
+        <div className="absolute top-4 right-4">
+          <LanguageToggle />
+        </div>
+        <div className="w-full max-w-sm">
+          <div className="mb-8">
+            <h1 className="font-serif text-3xl text-[var(--color-foreground)]">
+              {t('auth.title')}
+            </h1>
+            <p className="mt-1 text-sm text-[var(--color-muted-foreground)]">
+              {t('auth.subtitle')}
+            </p>
+          </div>
 
         <Card>
           <CardHeader>
             <CardTitle>{t('auth.title')}</CardTitle>
             {step === 'otp' && (
               <CardDescription>
-                {t('auth.otpHelp', { mobile })}
+                {t('auth.otpHelp', { mobile: toE164(mobile) })}
               </CardDescription>
             )}
           </CardHeader>
@@ -155,18 +290,27 @@ export default function Login() {
                 )}
                 <div>
                   <Label htmlFor="mobile">{t('auth.mobileLabel')}</Label>
-                  <Input
-                    id="mobile"
-                    name="mobile"
-                    type="tel"
-                    autoComplete="tel"
-                    inputMode="tel"
-                    placeholder={t('auth.mobilePlaceholder')}
-                    value={mobile}
-                    onChange={(e) => setMobile(e.target.value.trim())}
-                    required
-                    autoFocus
-                  />
+                  <div className="flex items-stretch gap-2">
+                    <span className="inline-flex items-center rounded-[var(--radius-md)] border border-[var(--color-input)] bg-[var(--color-muted)] px-3 text-sm text-[var(--color-muted-foreground)]">
+                      +91
+                    </span>
+                    <Input
+                      id="mobile"
+                      name="mobile"
+                      type="tel"
+                      autoComplete="tel"
+                      inputMode="numeric"
+                      pattern="[0-9]*"
+                      maxLength={10}
+                      placeholder={t('auth.mobilePlaceholder')}
+                      value={mobile}
+                      onChange={(e) =>
+                        setMobile(e.target.value.replace(/\D/g, '').slice(0, 10))
+                      }
+                      required
+                      autoFocus
+                    />
+                  </div>
                   <p className="mt-1 text-xs text-[var(--color-muted-foreground)]">
                     {t('auth.mobileHelp')}
                   </p>
@@ -190,19 +334,12 @@ export default function Login() {
                   </div>
                 )}
                 <div>
-                  <Label htmlFor="otp">{t('auth.otpLabel')}</Label>
-                  <Input
-                    id="otp"
-                    name="otp"
-                    type="text"
-                    inputMode="numeric"
-                    autoComplete="one-time-code"
-                    pattern="[0-9]*"
-                    maxLength={8}
+                  <Label className="mb-2 block text-center">{t('auth.otpLabel')}</Label>
+                  <OtpInput
                     value={otp}
-                    onChange={(e) => setOtp(e.target.value.replace(/\D/g, ''))}
-                    required
-                    ref={otpRef}
+                    onChange={setOtp}
+                    autoFocus
+                    disabled={submitting}
                   />
                 </div>
                 <div className="flex items-center justify-between text-sm">
@@ -237,6 +374,7 @@ export default function Login() {
             </form>
           )}
         </Card>
+        </div>
       </div>
     </div>
   );
