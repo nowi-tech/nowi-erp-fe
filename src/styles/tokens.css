@@ -31,12 +31,10 @@
   --color-warning: #b07c1f;
   --color-info: #325c8a;
 
-  /* Typography
-     `--font-serif` is the brand voice (matches the NØWI wordmark) and
-     is used sparingly for page titles, hero text and the wordmark itself. */
-  --font-sans: 'Inter', system-ui, -apple-system, sans-serif;
-  --font-serif: 'Cormorant Garamond', 'Playfair Display', Georgia, 'Times New Roman', serif;
-  --font-hi: 'Noto Sans Devanagari', 'Inter', system-ui, sans-serif;
+  /* Typography */
+  --font-sans: 'Plus Jakarta Sans', system-ui, -apple-system, sans-serif;
+  --font-serif: 'Plus Jakarta Sans', system-ui, -apple-system, sans-serif;
+  --font-hi: 'Noto Sans Devanagari', 'Plus Jakarta Sans', system-ui, sans-serif;
   --font-mono: ui-monospace, SFMono-Regular, monospace;
 
   /* Elevation */

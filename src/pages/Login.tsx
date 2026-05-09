@@ -226,27 +226,30 @@ async function handleSendOtp(e: FormEvent) {
   return (
     <div className="density-comfortable min-h-screen grid grid-cols-1 lg:grid-cols-[1.1fr_1fr] bg-[var(--color-background)]">
       {/* Brand panel — full bleed on desktop, hero strip on mobile */}
-      <div className="relative bg-[var(--color-primary)] text-[var(--color-primary-foreground)] overflow-hidden">
-        {/* subtle decorative ring, echoes the Ø in the wordmark */}
+      <div className="relative overflow-hidden border-b border-white/10 bg-[var(--color-primary)] text-[var(--color-primary-foreground)] lg:border-b-0">
         <div
           aria-hidden
-          className="pointer-events-none absolute -bottom-32 -right-32 h-[420px] w-[420px] rounded-full border border-[var(--color-accent)]/30"
+          className="pointer-events-none absolute -left-28 top-[-4.5rem] h-64 w-64 rounded-full bg-white/10 blur-3xl"
         />
         <div
           aria-hidden
-          className="pointer-events-none absolute -top-24 -left-24 h-[260px] w-[260px] rounded-full border border-white/10"
+          className="pointer-events-none absolute -bottom-36 right-[-4.5rem] h-80 w-80 rounded-full bg-[var(--color-accent)]/20 blur-3xl"
         />
-        <div className="relative h-full flex flex-col justify-between p-8 lg:p-14 min-h-[180px] lg:min-h-screen">
-          <Logo size="lg" className="invert brightness-200" />
-          <div className="hidden lg:block max-w-md">
-            <p className="font-serif text-4xl leading-tight">
+        <div className="relative flex h-full min-h-[220px] flex-col justify-between p-6 sm:p-8 lg:min-h-screen lg:p-14">
+          <div className="inline-flex items-center px-4 py-3 shadow-2xl w-fit rounded-2xl bg-white/95 ring-1 ring-black/5 backdrop-blur-sm">
+            <Logo size="xl" />
+          </div>
+
+          <div className="max-w-md pt-6 lg:pt-0">
+            <p className="font-serif text-2xl leading-tight sm:text-3xl lg:text-4xl">
               From cut to dispatch — every stitch accounted for.
             </p>
-            <p className="mt-4 text-sm text-white/70">
+            <p className="mt-3 text-sm text-white/80 lg:mt-4">
               Production tracking for the NOWI floor.
             </p>
           </div>
-          <div className="hidden lg:block text-xs text-white/50">
+
+          <div className="pt-6 text-xs text-white/60 lg:pt-0">
             © {new Date().getFullYear()} NOWI
           </div>
         </div>
@@ -260,120 +263,132 @@ async function handleSendOtp(e: FormEvent) {
         <div className="w-full max-w-sm">
           <div className="mb-8">
             <h1 className="font-serif text-3xl text-[var(--color-foreground)]">
-              {t('auth.title')}
+              {t("auth.title")}
             </h1>
             <p className="mt-1 text-sm text-[var(--color-muted-foreground)]">
-              {t('auth.subtitle')}
+              {t("auth.subtitle")}
             </p>
           </div>
 
-        <Card>
-          <CardHeader>
-            <CardTitle>{t('auth.title')}</CardTitle>
-            {step === 'otp' && (
-              <CardDescription>
-                {t('auth.otpHelp', { mobile: toE164(mobile) })}
-              </CardDescription>
-            )}
-          </CardHeader>
+          <Card>
+            <CardHeader>
+              <CardTitle>{t("auth.title")}</CardTitle>
+              {step === "otp" && (
+                <CardDescription>
+                  {t("auth.otpHelp", { mobile: toE164(mobile) })}
+                </CardDescription>
+              )}
+            </CardHeader>
 
-          {step === 'mobile' ? (
-            <form onSubmit={handleSendOtp}>
-              <CardContent className="space-y-4">
-                {error && (
-                  <div
-                    role="alert"
-                    className="rounded-[var(--radius-md)] border border-[var(--color-destructive)] bg-[var(--color-destructive)]/10 px-3 py-2 text-sm text-[var(--color-destructive)]"
-                  >
-                    {error}
+            {step === "mobile" ? (
+              <form onSubmit={handleSendOtp}>
+                <CardContent className="space-y-4">
+                  {error && (
+                    <div
+                      role="alert"
+                      className="rounded-[var(--radius-md)] border border-[var(--color-destructive)] bg-[var(--color-destructive)]/10 px-3 py-2 text-sm text-[var(--color-destructive)]"
+                    >
+                      {error}
+                    </div>
+                  )}
+                  <div>
+                    <Label htmlFor="mobile">{t("auth.mobileLabel")}</Label>
+                    <div className="flex items-stretch gap-2">
+                      <span className="inline-flex items-center rounded-[var(--radius-md)] border border-[var(--color-input)] bg-[var(--color-muted)] px-3 text-sm text-[var(--color-muted-foreground)]">
+                        +91
+                      </span>
+                      <Input
+                        id="mobile"
+                        name="mobile"
+                        type="tel"
+                        autoComplete="tel"
+                        inputMode="numeric"
+                        pattern="[0-9]*"
+                        maxLength={10}
+                        placeholder={t("auth.mobilePlaceholder")}
+                        value={mobile}
+                        onChange={(e) =>
+                          setMobile(
+                            e.target.value.replace(/\D/g, "").slice(0, 10),
+                          )
+                        }
+                        required
+                        autoFocus
+                      />
+                    </div>
+                    <p className="mt-1 text-xs text-[var(--color-muted-foreground)]">
+                      {t("auth.mobileHelp")}
+                    </p>
                   </div>
-                )}
-                <div>
-                  <Label htmlFor="mobile">{t('auth.mobileLabel')}</Label>
-                  <div className="flex items-stretch gap-2">
-                    <span className="inline-flex items-center rounded-[var(--radius-md)] border border-[var(--color-input)] bg-[var(--color-muted)] px-3 text-sm text-[var(--color-muted-foreground)]">
-                      +91
-                    </span>
-                    <Input
-                      id="mobile"
-                      name="mobile"
-                      type="tel"
-                      autoComplete="tel"
-                      inputMode="numeric"
-                      pattern="[0-9]*"
-                      maxLength={10}
-                      placeholder={t('auth.mobilePlaceholder')}
-                      value={mobile}
-                      onChange={(e) =>
-                        setMobile(e.target.value.replace(/\D/g, '').slice(0, 10))
-                      }
-                      required
+                </CardContent>
+                <CardFooter>
+                  <Button
+                    type="submit"
+                    disabled={submitting}
+                    className="w-full"
+                  >
+                    {submitting ? t("auth.sendingOtp") : t("auth.sendOtp")}
+                  </Button>
+                </CardFooter>
+              </form>
+            ) : (
+              <form onSubmit={handleVerify}>
+                <CardContent className="space-y-4">
+                  {error && (
+                    <div
+                      role="alert"
+                      className="rounded-[var(--radius-md)] border border-[var(--color-destructive)] bg-[var(--color-destructive)]/10 px-3 py-2 text-sm text-[var(--color-destructive)]"
+                    >
+                      {error}
+                    </div>
+                  )}
+                  <div>
+                    <Label className="block mb-2 text-center">
+                      {t("auth.otpLabel")}
+                    </Label>
+                    <OtpInput
+                      value={otp}
+                      onChange={setOtp}
                       autoFocus
+                      disabled={submitting}
                     />
                   </div>
-                  <p className="mt-1 text-xs text-[var(--color-muted-foreground)]">
-                    {t('auth.mobileHelp')}
-                  </p>
-                </div>
-              </CardContent>
-              <CardFooter>
-                <Button type="submit" disabled={submitting} className="w-full">
-                  {submitting ? t('auth.sendingOtp') : t('auth.sendOtp')}
-                </Button>
-              </CardFooter>
-            </form>
-          ) : (
-            <form onSubmit={handleVerify}>
-              <CardContent className="space-y-4">
-                {error && (
-                  <div
-                    role="alert"
-                    className="rounded-[var(--radius-md)] border border-[var(--color-destructive)] bg-[var(--color-destructive)]/10 px-3 py-2 text-sm text-[var(--color-destructive)]"
-                  >
-                    {error}
+                  <div className="flex items-center justify-between text-sm">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setStep("mobile");
+                        setOtp("");
+                        setError(null);
+                      }}
+                      className="text-[var(--color-muted-foreground)] hover:text-[var(--color-foreground)] underline-offset-4 hover:underline"
+                    >
+                      {t("auth.changeMobile")}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handleResend}
+                      disabled={cooldown > 0 || submitting}
+                      className="text-[var(--color-primary)] disabled:text-[var(--color-muted-foreground)] disabled:cursor-not-allowed underline-offset-4 hover:underline"
+                    >
+                      {cooldown > 0
+                        ? t("auth.resendIn", { seconds: cooldown })
+                        : t("auth.resendOtp")}
+                    </button>
                   </div>
-                )}
-                <div>
-                  <Label className="mb-2 block text-center">{t('auth.otpLabel')}</Label>
-                  <OtpInput
-                    value={otp}
-                    onChange={setOtp}
-                    autoFocus
+                </CardContent>
+                <CardFooter>
+                  <Button
+                    type="submit"
                     disabled={submitting}
-                  />
-                </div>
-                <div className="flex items-center justify-between text-sm">
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setStep('mobile');
-                      setOtp('');
-                      setError(null);
-                    }}
-                    className="text-[var(--color-muted-foreground)] hover:text-[var(--color-foreground)] underline-offset-4 hover:underline"
+                    className="w-full"
                   >
-                    {t('auth.changeMobile')}
-                  </button>
-                  <button
-                    type="button"
-                    onClick={handleResend}
-                    disabled={cooldown > 0 || submitting}
-                    className="text-[var(--color-primary)] disabled:text-[var(--color-muted-foreground)] disabled:cursor-not-allowed underline-offset-4 hover:underline"
-                  >
-                    {cooldown > 0
-                      ? t('auth.resendIn', { seconds: cooldown })
-                      : t('auth.resendOtp')}
-                  </button>
-                </div>
-              </CardContent>
-              <CardFooter>
-                <Button type="submit" disabled={submitting} className="w-full">
-                  {submitting ? t('auth.loggingIn') : t('auth.verifyOtp')}
-                </Button>
-              </CardFooter>
-            </form>
-          )}
-        </Card>
+                    {submitting ? t("auth.loggingIn") : t("auth.verifyOtp")}
+                  </Button>
+                </CardFooter>
+              </form>
+            )}
+          </Card>
         </div>
       </div>
     </div>
