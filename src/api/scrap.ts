@@ -1,12 +1,6 @@
 import { apiClient } from './apiClient';
 import type { CreateScrapPayload, ScrapEvent } from './types';
-import { FeatureUnavailableError } from './receipts';
-
-function is404(err: unknown): boolean {
-  if (typeof err !== 'object' || err === null) return false;
-  const r = (err as { response?: { status?: number } }).response;
-  return r?.status === 404;
-}
+import { FeatureUnavailableError, is404 } from './_errors';
 
 export async function createScrap(payload: CreateScrapPayload): Promise<ScrapEvent | null> {
   try {

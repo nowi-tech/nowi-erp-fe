@@ -137,7 +137,90 @@
     "today": "आज",
     "openLocator": "लोकेटर खोलें",
     "lotsByStatus": "स्थिति के अनुसार लॉट्स",
-    "totalOrders": "कुल ऑर्डर"
+    "totalOrders": "कुल ऑर्डर",
+    "nav": {
+      "dashboard": "डैशबोर्ड",
+      "locator": "लोकेटर",
+      "vendors": "विक्रेता",
+      "skus": "SKU",
+      "users": "उपयोगकर्ता",
+      "settings": "सेटिंग्स"
+    },
+    "locator": {
+      "title": "उत्पाद लोकेटर",
+      "exportXlsx": "Excel में निर्यात करें",
+      "loading": "लोड हो रहा है…",
+      "emptyResults": "कोई परिणाम नहीं मिला।",
+      "totalCount": "{{start}}–{{end}} / {{total}}",
+      "prev": "पिछला",
+      "next": "अगला",
+      "filters": {
+        "vendor": "विक्रेता",
+        "stage": "चरण",
+        "warehouse": "गोदाम",
+        "status": "स्थिति",
+        "origin": "मूल",
+        "sku": "SKU",
+        "dateFrom": "से",
+        "dateTo": "तक",
+        "all": "सभी",
+        "search": "खोजें…"
+      },
+      "columns": {
+        "sku": "SKU",
+        "base": "बेस",
+        "size": "साइज़",
+        "origin": "मूल",
+        "inbound": "इनबाउंड",
+        "stitching": "सिलाई",
+        "finishing": "फिनिशिंग",
+        "dispatched": "डिस्पैच",
+        "lots": "लॉट्स",
+        "open": "खोलें"
+      }
+    },
+    "skuDetail": {
+      "title": "SKU विवरण",
+      "lots": "लॉट्स",
+      "lotNo": "लॉट नंबर",
+      "order": "ऑर्डर",
+      "orderStatus": "ऑर्डर स्थिति",
+      "recentReceipts": "हाल की प्राप्तियाँ",
+      "openLot": "लॉट खोलें",
+      "qtyIn": "प्राप्त मात्रा",
+      "stitchingAvail": "सिलाई उपलब्ध",
+      "finishingAvail": "फिनिशिंग उपलब्ध",
+      "scrapped": "स्क्रैप",
+      "openRework": "खुला रीवर्क",
+      "totals": {
+        "inbound": "इनबाउंड",
+        "stitching": "सिलाई",
+        "finishing": "फिनिशिंग",
+        "dispatched": "डिस्पैच",
+        "scrapped": "स्क्रैप",
+        "reworking": "रीवर्किंग"
+      }
+    },
+    "dashboard": {
+      "throughput": "थ्रूपुट",
+      "finished": "पूर्ण",
+      "dispatched": "डिस्पैच",
+      "last7d": "7 दिन",
+      "last30d": "30 दिन",
+      "reworkRate": "रीवर्क दर",
+      "overall": "कुल",
+      "topSkus": "शीर्ष SKU",
+      "cycleTime": "चक्र समय",
+      "avgDays": "औसत दिन",
+      "distribution": "वितरण",
+      "openLocator": "लोकेटर खोलें"
+    },
+    "placeholder": {
+      "vendors": "विक्रेता",
+      "skus": "SKU",
+      "users": "उपयोगकर्ता",
+      "settings": "सेटिंग्स"
+    }
   },
   "profile": {
     "title": "प्रोफ़ाइल",

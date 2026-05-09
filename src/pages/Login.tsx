@@ -17,7 +17,7 @@ import {
 import LanguageToggle from '@/components/LanguageToggle';
 
 const E164 = /^\+[1-9]\d{6,14}$/;
-const RESEND_SECONDS = 60;
+const RESEND_SECONDS = 30;
 
 type Step = 'mobile' | 'otp';
 

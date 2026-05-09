@@ -1,27 +1,41 @@
-import { useState, type ReactNode } from 'react';
+import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { LayoutDashboard, Users, Package, Settings, Truck, ChevronDown, LogOut } from 'lucide-react';
+import { NavLink, Outlet } from 'react-router-dom';
+import {
+  LayoutDashboard,
+  Users,
+  Package,
+  Settings,
+  Truck,
+  Search,
+  ChevronDown,
+  LogOut,
+} from 'lucide-react';
 import { useAuth } from '@/context/auth';
 import { Badge } from '@/components/ui/badge';
 import LanguageToggle from '@/components/LanguageToggle';
 import { cn } from '@/lib/utils';
 
-interface AdminShellProps {
-  children: ReactNode;
+interface NavItem {
+  to: string;
+  end?: boolean;
+  icon: React.ReactNode;
+  labelKey: string;
 }
 
-export default function AdminShell({ children }: AdminShellProps) {
+const NAV_ITEMS: NavItem[] = [
+  { to: '/admin', end: true, icon: <LayoutDashboard size={18} />, labelKey: 'admin.nav.dashboard' },
+  { to: '/admin/locator', icon: <Search size={18} />, labelKey: 'admin.nav.locator' },
+  { to: '/admin/vendors', icon: <Truck size={18} />, labelKey: 'admin.nav.vendors' },
+  { to: '/admin/skus', icon: <Package size={18} />, labelKey: 'admin.nav.skus' },
+  { to: '/admin/users', icon: <Users size={18} />, labelKey: 'admin.nav.users' },
+  { to: '/admin/settings', icon: <Settings size={18} />, labelKey: 'admin.nav.settings' },
+];
+
+export default function AdminShell() {
   const { t } = useTranslation();
   const { user, logout } = useAuth();
   const [menuOpen, setMenuOpen] = useState(false);
-
-  const navItems = [
-    { icon: <LayoutDashboard size={18} />, label: t('nav.dashboard') },
-    { icon: <Truck size={18} />, label: t('nav.vendors') },
-    { icon: <Package size={18} />, label: t('nav.skus') },
-    { icon: <Users size={18} />, label: t('nav.users') },
-    { icon: <Settings size={18} />, label: t('nav.settings') },
-  ];
 
   return (
     <div className="density-compact min-h-screen flex bg-[var(--color-background)] text-[var(--color-foreground)]">
@@ -30,18 +44,23 @@ export default function AdminShell({ children }: AdminShellProps) {
           {t('common.appName')}
         </div>
         <nav className="flex-1 p-2 space-y-1">
-          {navItems.map((item, i) => (
-            <button
-              key={i}
-              type="button"
-              className={cn(
-                'w-full flex items-center gap-2 px-3 py-2 rounded-[var(--radius-sm)] text-left',
-                'text-[var(--color-muted-foreground)] hover:bg-[var(--color-muted)] hover:text-[var(--color-foreground)]',
-              )}
+          {NAV_ITEMS.map((item) => (
+            <NavLink
+              key={item.to}
+              to={item.to}
+              end={item.end}
+              className={({ isActive }) =>
+                cn(
+                  'w-full flex items-center gap-2 px-3 py-2 rounded-[var(--radius-sm)] text-left text-sm',
+                  isActive
+                    ? 'bg-[var(--color-muted)] text-[var(--color-foreground)] font-medium'
+                    : 'text-[var(--color-muted-foreground)] hover:bg-[var(--color-muted)] hover:text-[var(--color-foreground)]',
+                )
+              }
             >
               {item.icon}
-              <span className="text-sm">{item.label}</span>
-            </button>
+              <span>{t(item.labelKey)}</span>
+            </NavLink>
           ))}
         </nav>
       </aside>
@@ -49,6 +68,7 @@ export default function AdminShell({ children }: AdminShellProps) {
       <div className="flex-1 flex flex-col min-w-0">
         <header className="flex items-center justify-between border-b border-[var(--color-border)] px-4 py-2">
           <div className="flex items-center gap-2">
+            <span className="font-semibold text-sm">{t('common.appName')}</span>
             {user && <Badge variant="secondary">{t(`roles.${user.role}` as const)}</Badge>}
           </div>
           <div className="flex items-center gap-3 relative">
@@ -60,6 +80,15 @@ export default function AdminShell({ children }: AdminShellProps) {
             >
               <span>{user?.name ?? '—'}</span>
               <ChevronDown size={14} />
+            </button>
+            <button
+              type="button"
+              onClick={() => void logout()}
+              className="flex items-center gap-1 px-2 py-1 rounded-[var(--radius-sm)] hover:bg-[var(--color-muted)] text-sm text-[var(--color-muted-foreground)]"
+              aria-label={t('common.logout')}
+            >
+              <LogOut size={14} />
+              <span className="hidden sm:inline">{t('common.logout')}</span>
             </button>
             {menuOpen && (
               <div className="absolute right-0 top-full mt-1 w-40 rounded-[var(--radius-md)] border border-[var(--color-border)] bg-[var(--color-background)] shadow-md z-10">
@@ -78,7 +107,9 @@ export default function AdminShell({ children }: AdminShellProps) {
             )}
           </div>
         </header>
-        <main className="flex-1 overflow-auto p-6">{children}</main>
+        <main className="flex-1 overflow-auto p-6">
+          <Outlet />
+        </main>
       </div>
     </div>
   );

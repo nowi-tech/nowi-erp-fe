@@ -1,12 +1,11 @@
 import { useTranslation } from 'react-i18next';
-import AdminShell from '@/components/layout/AdminShell';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 
 export default function DataHome() {
   const { t } = useTranslation();
   return (
-    <AdminShell>
-      <Card>
+    <div className="density-compact min-h-screen p-6 bg-[var(--color-background)] text-[var(--color-foreground)]">
+      <Card className="max-w-xl">
         <CardHeader>
           <CardTitle>{t('nav.skus')}</CardTitle>
         </CardHeader>
@@ -14,6 +13,6 @@ export default function DataHome() {
           <p className="text-[var(--color-muted-foreground)]">{t('shell.dataHome')}</p>
         </CardContent>
       </Card>
-    </AdminShell>
+    </div>
   );
 }

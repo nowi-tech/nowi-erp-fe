@@ -1,13 +1,18 @@
 import { lazy, Suspense, type ReactNode } from 'react';
+import { useTranslation } from 'react-i18next';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider } from './context/auth';
 import { ToastProvider } from './components/ui/toast';
 import ProtectedRoute from './components/ProtectedRouteV2';
+import PlaceholderSection from './components/PlaceholderSection';
 
 import Login from './pages/Login';
 import Dashboard from './pages/Dashboard';
 
+const AdminShell = lazy(() => import('./components/layout/AdminShell'));
 const AdminHome = lazy(() => import('./pages/admin/AdminHome'));
+const Locator = lazy(() => import('./pages/admin/Locator'));
+const SkuDetail = lazy(() => import('./pages/admin/SkuDetail'));
 const StitchingHome = lazy(() => import('./pages/stitching/StitchingHome'));
 const StitchingReceiveLot = lazy(
   () => import('./pages/stitching/StitchingReceiveLot'),
@@ -30,6 +35,11 @@ function S({ children }: { children: ReactNode }) {
   return <Suspense fallback={<PageSkeleton />}>{children}</Suspense>;
 }
 
+function AdminPlaceholder({ titleKey }: { titleKey: string }) {
+  const { t } = useTranslation();
+  return <PlaceholderSection title={t(titleKey)} />;
+}
+
 function App() {
   return (
     <AuthProvider>
@@ -48,15 +58,57 @@ function App() {
             />
 
             <Route
-              path="/admin/*"
+              path="/admin"
               element={
                 <ProtectedRoute allowedRoles={['admin', 'viewer']}>
                   <S>
-                    <AdminHome />
+                    <AdminShell />
                   </S>
                 </ProtectedRoute>
               }
-            />
+            >
+              <Route
+                index
+                element={
+                  <S>
+                    <AdminHome />
+                  </S>
+                }
+              />
+              <Route
+                path="locator"
+                element={
+                  <S>
+                    <Locator />
+                  </S>
+                }
+              />
+              <Route
+                path="locator/sku/:sku"
+                element={
+                  <S>
+                    <SkuDetail />
+                  </S>
+                }
+              />
+              <Route
+                path="vendors"
+                element={<AdminPlaceholder titleKey="admin.placeholder.vendors" />}
+              />
+              <Route
+                path="skus"
+                element={<AdminPlaceholder titleKey="admin.placeholder.skus" />}
+              />
+              <Route
+                path="users"
+                element={<AdminPlaceholder titleKey="admin.placeholder.users" />}
+              />
+              <Route
+                path="settings"
+                element={<AdminPlaceholder titleKey="admin.placeholder.settings" />}
+              />
+            </Route>
+
             <Route
               path="/stitching"
               element={

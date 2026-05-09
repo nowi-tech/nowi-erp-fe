@@ -137,7 +137,90 @@
     "today": "Today",
     "openLocator": "Open locator",
     "lotsByStatus": "Lots by status",
-    "totalOrders": "Total orders"
+    "totalOrders": "Total orders",
+    "nav": {
+      "dashboard": "Dashboard",
+      "locator": "Locator",
+      "vendors": "Vendors",
+      "skus": "SKUs",
+      "users": "Users",
+      "settings": "Settings"
+    },
+    "locator": {
+      "title": "Product Locator",
+      "exportXlsx": "Export to Excel",
+      "loading": "Loading…",
+      "emptyResults": "No matching results.",
+      "totalCount": "{{start}}–{{end}} of {{total}}",
+      "prev": "Previous",
+      "next": "Next",
+      "filters": {
+        "vendor": "Vendor",
+        "stage": "Stage",
+        "warehouse": "Warehouse",
+        "status": "Status",
+        "origin": "Origin",
+        "sku": "SKU",
+        "dateFrom": "From",
+        "dateTo": "To",
+        "all": "All",
+        "search": "Search…"
+      },
+      "columns": {
+        "sku": "SKU",
+        "base": "Base",
+        "size": "Size",
+        "origin": "Origin",
+        "inbound": "Inbound",
+        "stitching": "Stitching",
+        "finishing": "Finishing",
+        "dispatched": "Dispatched",
+        "lots": "Lots",
+        "open": "Open"
+      }
+    },
+    "skuDetail": {
+      "title": "SKU detail",
+      "lots": "Lots",
+      "lotNo": "Lot No",
+      "order": "Order",
+      "orderStatus": "Order status",
+      "recentReceipts": "Recent receipts",
+      "openLot": "Open lot",
+      "qtyIn": "Qty in",
+      "stitchingAvail": "Stitching avail",
+      "finishingAvail": "Finishing avail",
+      "scrapped": "Scrapped",
+      "openRework": "Open rework",
+      "totals": {
+        "inbound": "Inbound",
+        "stitching": "Stitching",
+        "finishing": "Finishing",
+        "dispatched": "Dispatched",
+        "scrapped": "Scrapped",
+        "reworking": "Reworking"
+      }
+    },
+    "dashboard": {
+      "throughput": "Throughput",
+      "finished": "Finished",
+      "dispatched": "Dispatched",
+      "last7d": "7d",
+      "last30d": "30d",
+      "reworkRate": "Rework rate",
+      "overall": "Overall",
+      "topSkus": "Top SKUs",
+      "cycleTime": "Cycle time",
+      "avgDays": "Avg days",
+      "distribution": "Distribution",
+      "openLocator": "Open locator"
+    },
+    "placeholder": {
+      "vendors": "Vendors",
+      "skus": "SKUs",
+      "users": "Users",
+      "settings": "Settings"
+    }
   },
   "profile": {
     "title": "Profile",
