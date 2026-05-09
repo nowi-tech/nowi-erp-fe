@@ -6,6 +6,7 @@ import { ToastProvider } from './components/ui/toast';
 import ProtectedRoute from './components/ProtectedRouteV2';
 import PlaceholderSection from './components/PlaceholderSection';
 import PwaInstallPrompt from './components/PwaInstallPrompt';
+import Onboarding from './components/Onboarding';
 
 import Login from './pages/Login';
 import Dashboard from './pages/Dashboard';
@@ -48,6 +49,7 @@ function App() {
     <AuthProvider>
       <ToastProvider>
         <PwaInstallPrompt />
+        <Onboarding />
         <BrowserRouter>
           <Routes>
             <Route path="/login" element={<Login />} />
@@ -64,7 +66,7 @@ function App() {
             <Route
               path="/admin"
               element={
-                <ProtectedRoute allowedRoles={['admin', 'viewer']}>
+                <ProtectedRoute allowedRoles={['admin', 'viewer', 'data_manager']}>
                   <S>
                     <AdminShell />
                   </S>
@@ -174,11 +176,20 @@ function App() {
               element={
                 <ProtectedRoute allowedRoles={['data_manager', 'admin', 'viewer']}>
                   <S>
-                    <DataHome />
+                    <AdminShell />
                   </S>
                 </ProtectedRoute>
               }
-            />
+            >
+              <Route
+                index
+                element={
+                  <S>
+                    <DataHome />
+                  </S>
+                }
+              />
+            </Route>
 
             <Route path="/dashboard" element={<Navigate to="/" replace />} />
             <Route path="*" element={<Navigate to="/" replace />} />

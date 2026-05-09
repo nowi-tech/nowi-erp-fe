@@ -12,6 +12,10 @@ apiClient.interceptors.request.use((config) => {
   if (token) {
     config.headers.Authorization = `Bearer ${token}`;
   }
+  // Admin "training mode" toggle — when enabled, BE reveals test rows.
+  if (localStorage.getItem('nowi.showTestData') === '1') {
+    config.headers['x-show-test-data'] = '1';
+  }
   return config;
 });
 

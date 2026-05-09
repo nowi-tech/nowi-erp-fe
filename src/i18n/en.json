@@ -156,7 +156,13 @@
       "vendors": "Vendors",
       "skus": "SKUs",
       "users": "Users",
-      "settings": "Settings"
+      "settings": "Settings",
+      "masterData": "Master data"
+    },
+    "testData": {
+      "label": "Show test data",
+      "toastOn": "Now showing test data",
+      "toastOff": "Hiding test data"
     },
     "dispatches": {
       "title": "Dispatches",
@@ -318,6 +324,92 @@
     "title": "Profile",
     "languageLabel": "Language",
     "logout": "Logout"
+  },
+  "data": {
+    "title": "Master data",
+    "subtitle": "Manage vendors, SKUs and the data the floor sees.",
+    "cards": {
+      "vendorsBody": "Brands and external partners that ship lots in.",
+      "skusBody": "SKU catalog used across cutting, stitching and finishing.",
+      "usersBody": "Operators, masters and viewers.",
+      "settingsBody": "Stages, warehouses and platform settings."
+    }
+  },
+  "onboarding": {
+    "prev": "Back",
+    "next": "Next",
+    "skip": "Skip",
+    "done": "Done",
+    "stitching_master": {
+      "slide1": {
+        "title": "Welcome to NOWI ERP",
+        "body": "Track every lot from cutting to dispatch — right from your phone."
+      },
+      "slide2": {
+        "title": "Receive from Kotty",
+        "body": "Tap the green button on the queue screen to open the Receive form. Pick the vendor, enter the challan number, then the size matrix for each lot."
+      },
+      "slide3": {
+        "title": "Forward to finishing",
+        "body": "Open a lot from your queue, enter the quantity per size you have stitched, and forward it to finishing."
+      }
+    },
+    "finishing_master": {
+      "slide1": {
+        "title": "Welcome to NOWI ERP",
+        "body": "Track every lot through finishing and dispatch."
+      },
+      "slide2": {
+        "title": "Receive and mark rework",
+        "body": "Open a lot, enter what you received from stitching. Use Mark rework to flag defective pieces with a reason and photo."
+      },
+      "slide3": {
+        "title": "Generate dispatch challan",
+        "body": "When a lot is ready, pick the destination warehouse and generate a dispatch challan in one tap."
+      }
+    },
+    "admin": {
+      "slide1": {
+        "title": "Welcome to NOWI ERP",
+        "body": "You have full visibility across cutting, stitching, finishing and dispatch."
+      },
+      "slide2": {
+        "title": "Locator and filters",
+        "body": "Use the Locator to find any SKU, lot or order. Filter by vendor, stage, status or date range."
+      },
+      "slide3": {
+        "title": "Dispatch reconciliation",
+        "body": "Reconcile dispatches against GRN events. Edit received quantities with an audit trail when needed."
+      }
+    },
+    "data_manager": {
+      "slide1": {
+        "title": "Welcome to NOWI ERP",
+        "body": "Keep master data clean — vendors, SKUs, and the data the floor depends on."
+      },
+      "slide2": {
+        "title": "Vendors and SKUs",
+        "body": "Add or edit vendors and SKUs from the side menu. Changes show up on the floor immediately."
+      },
+      "slide3": {
+        "title": "Where the floor sees this",
+        "body": "Vendors appear in the Receive-from-Kotty form. SKUs appear on every lot, dispatch and locator row."
+      }
+    },
+    "viewer": {
+      "slide1": {
+        "title": "Welcome to NOWI ERP",
+        "body": "Read-only access to lots, dispatches and floor activity."
+      },
+      "slide2": {
+        "title": "Locator overview",
+        "body": "Use the Locator to drill into any SKU and see where its inventory currently sits."
+      },
+      "slide3": {
+        "title": "Alerts and reports",
+        "body": "Watch the dashboard for throughput, rework and cycle-time signals across the floor."
+      }
+    }
   },
   "pwa": {
     "installTitle": "Install NOWI ERP",
