@@ -201,16 +201,15 @@ async function handleSendOtp(e: FormEvent) {
     }
   }
 
-  async function handleVerify(e: FormEvent) {
-    e.preventDefault();
+  async function verifyOtpCode(code: string) {
     setError(null);
-    if (!/^\d{6}$/.test(otp)) {
+    if (!/^\d{6}$/.test(code)) {
       setError(t('auth.errors.wrongOtp'));
       return;
     }
     setSubmitting(true);
     try {
-      const { token, user } = await verifyOtp(toE164(mobile), otp);
+      const { token, user } = await verifyOtp(toE164(mobile), code);
       login(token, user);
       navigate('/', { replace: true });
     } catch (err) {
@@ -221,6 +220,16 @@ async function handleSendOtp(e: FormEvent) {
     } finally {
       setSubmitting(false);
     }
+  }
+
+  async function handleVerify(e: FormEvent) {
+    e.preventDefault();
+    await verifyOtpCode(otp);
+  }
+
+  async function handleOtpComplete(completedOtp: string) {
+    if (step !== 'otp' || submitting) return;
+    await verifyOtpCode(completedOtp);
   }
 
   return (
@@ -349,6 +358,7 @@ async function handleSendOtp(e: FormEvent) {
                     <OtpInput
                       value={otp}
                       onChange={setOtp}
+                      onComplete={handleOtpComplete}
                       autoFocus
                       disabled={submitting}
                     />
