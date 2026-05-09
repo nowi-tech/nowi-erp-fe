@@ -5,6 +5,7 @@ import { AuthProvider } from './context/auth';
 import { ToastProvider } from './components/ui/toast';
 import ProtectedRoute from './components/ProtectedRouteV2';
 import PlaceholderSection from './components/PlaceholderSection';
+import PwaInstallPrompt from './components/PwaInstallPrompt';
 
 import Login from './pages/Login';
 import Dashboard from './pages/Dashboard';
@@ -13,6 +14,8 @@ const AdminShell = lazy(() => import('./components/layout/AdminShell'));
 const AdminHome = lazy(() => import('./pages/admin/AdminHome'));
 const Locator = lazy(() => import('./pages/admin/Locator'));
 const SkuDetail = lazy(() => import('./pages/admin/SkuDetail'));
+const Dispatches = lazy(() => import('./pages/admin/Dispatches'));
+const DispatchDetail = lazy(() => import('./pages/admin/DispatchDetail'));
 const StitchingHome = lazy(() => import('./pages/stitching/StitchingHome'));
 const StitchingReceiveLot = lazy(
   () => import('./pages/stitching/StitchingReceiveLot'),
@@ -44,6 +47,7 @@ function App() {
   return (
     <AuthProvider>
       <ToastProvider>
+        <PwaInstallPrompt />
         <BrowserRouter>
           <Routes>
             <Route path="/login" element={<Login />} />
@@ -88,6 +92,22 @@ function App() {
                 element={
                   <S>
                     <SkuDetail />
+                  </S>
+                }
+              />
+              <Route
+                path="dispatches"
+                element={
+                  <S>
+                    <Dispatches />
+                  </S>
+                }
+              />
+              <Route
+                path="dispatches/:id"
+                element={
+                  <S>
+                    <DispatchDetail />
                   </S>
                 }
               />

@@ -131,7 +131,18 @@
       "confirmRework": "{{rework}} to rework",
       "confirmReasonPrefix": "Reason:"
     },
-    "generateChallan": "Generate challan"
+    "generateChallan": "Generate challan",
+    "dispatch": {
+      "generateChallan": "Generate dispatch challan",
+      "destinationWarehouse": "Destination warehouse",
+      "selectWarehouse": "Select a warehouse…",
+      "shipQty": "Ship qty",
+      "shipQtyHint": "units to dispatch",
+      "noItems": "Enter at least one quantity to ship.",
+      "confirmTitle": "Send dispatch?",
+      "confirmBody": "Send {{total}} units of {{sku}} to {{warehouse}}?",
+      "successToast": "Challan #{{dispatchNo}} created"
+    }
   },
   "admin": {
     "today": "Today",
@@ -141,10 +152,91 @@
     "nav": {
       "dashboard": "Dashboard",
       "locator": "Locator",
+      "dispatches": "Dispatches",
       "vendors": "Vendors",
       "skus": "SKUs",
       "users": "Users",
       "settings": "Settings"
+    },
+    "dispatches": {
+      "title": "Dispatches",
+      "empty": "No dispatches found.",
+      "totalCount": "{{start}}–{{end}} of {{total}}",
+      "prev": "Previous",
+      "next": "Next",
+      "filters": {
+        "status": "Status",
+        "warehouse": "Warehouse",
+        "dateFrom": "From",
+        "dateTo": "To",
+        "all": "All"
+      },
+      "columns": {
+        "dispatchNo": "Dispatch #",
+        "dispatchedAt": "Dispatched at",
+        "warehouse": "Warehouse",
+        "syncMode": "Sync mode",
+        "status": "Status",
+        "items": "Items",
+        "totalQty": "Total qty"
+      },
+      "syncMode": {
+        "easyecom": "EasyEcom",
+        "manual_pdf": "Manual PDF"
+      },
+      "status": {
+        "draft": "Draft",
+        "awaiting_confirmation": "Awaiting confirmation",
+        "synced": "Synced",
+        "manual_pdf": "Manual PDF",
+        "awaiting_grn": "Awaiting GRN",
+        "grn_received": "GRN received",
+        "grn_mismatch": "GRN mismatch",
+        "sync_failed": "Sync failed",
+        "closed": "Closed",
+        "closed_with_adjustment": "Closed (adjusted)"
+      }
+    },
+    "dispatchDetail": {
+      "warehouse": "Warehouse",
+      "dispatchedAt": "Dispatched at",
+      "syncMode": "Sync mode",
+      "order": "Order",
+      "items": "Items",
+      "noItems": "No items on this dispatch.",
+      "mismatchYes": "Mismatch",
+      "editQty": "Edit qty",
+      "retrySync": "Retry sync",
+      "retryQueued": "Retry queued",
+      "grnEvents": "GRN events",
+      "noGrnEvents": "No GRN events received yet.",
+      "syncQueue": "Sync queue",
+      "syncAttempts": "Attempts",
+      "noSyncEntries": "No sync attempts yet.",
+      "cols": {
+        "lot": "Lot",
+        "sku": "SKU",
+        "size": "Size",
+        "qtySent": "Qty sent",
+        "qtyReceived": "Qty received",
+        "mismatch": "Mismatch",
+        "lastEdit": "Last edit"
+      },
+      "editDialog": {
+        "title": "Edit received qty",
+        "qty": "Quantity",
+        "reason": "Reason",
+        "note": "Note (optional)",
+        "confirmHint": "This change will be recorded in the audit log.",
+        "success": "Quantity updated",
+        "reasons": {
+          "shortShipment": "Short shipment",
+          "lostInTransit": "Lost in transit",
+          "damagedInTransit": "Damaged in transit",
+          "countingError": "Counting error",
+          "other": "Other"
+        }
+      }
     },
     "locator": {
       "title": "Product Locator",
@@ -226,5 +318,11 @@
     "title": "Profile",
     "languageLabel": "Language",
     "logout": "Logout"
+  },
+  "pwa": {
+    "installTitle": "Install NOWI ERP",
+    "installBody": "Add the app to your home screen for faster access on the floor.",
+    "installButton": "Install app",
+    "dismissButton": "Not now"
   }
 }

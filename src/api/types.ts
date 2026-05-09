@@ -342,3 +342,105 @@ export interface CycleTimeResponse {
   bySku: CycleTimeSkuRow[];
   distribution: CycleTimeBucket[];
 }
+
+// ─── Dispatches ───────────────────────────────────────────────────────────
+
+export type DispatchStatus =
+  | 'draft'
+  | 'awaiting_confirmation'
+  | 'synced'
+  | 'manual_pdf'
+  | 'awaiting_grn'
+  | 'grn_received'
+  | 'grn_mismatch'
+  | 'sync_failed'
+  | 'closed'
+  | 'closed_with_adjustment';
+
+export type DispatchSyncMode = 'easyecom' | 'manual_pdf';
+
+export interface DispatchItem {
+  id: string;
+  dispatchId: string;
+  lotId: string;
+  lotNo?: string | null;
+  sku: string;
+  sizeLabel: string;
+  qtySent: number;
+  qtyReceived?: number | null;
+  mismatch?: boolean;
+  lastEditAt?: string | null;
+  lastEditBy?: string | null;
+  lastEditReason?: string | null;
+}
+
+export interface DispatchGrnEvent {
+  id: string;
+  dispatchId: string;
+  receivedAt: string;
+  payload: unknown;
+}
+
+export interface DispatchSyncQueueEntry {
+  id: string;
+  dispatchId: string;
+  attempts: number;
+  lastError?: string | null;
+  lastAttemptAt?: string | null;
+  status?: string | null;
+}
+
+export interface Dispatch {
+  id: string;
+  dispatchNo: string;
+  orderId: string;
+  destWarehouseId: string;
+  destWarehouse?: { id: string; name: string; code?: string | null } | null;
+  status: DispatchStatus;
+  syncMode: DispatchSyncMode;
+  dispatchedAt: string;
+  itemsCount?: number;
+  totalQtySent?: number;
+}
+
+export interface DispatchDetail extends Dispatch {
+  order?: Order | null;
+  items: DispatchItem[];
+  grnEvents: DispatchGrnEvent[];
+  syncQueue: DispatchSyncQueueEntry[];
+}
+
+export interface CreateDispatchItemInput {
+  lotId: string;
+  sku: string;
+  sizeLabel: string;
+  qty: number;
+}
+
+export interface CreateDispatchPayload {
+  orderId: string;
+  destWarehouseId: string;
+  items: CreateDispatchItemInput[];
+  syncMode?: DispatchSyncMode;
+}
+
+export interface ListDispatchesParams {
+  orderId?: string;
+  destWarehouseId?: string;
+  status?: DispatchStatus | string;
+  from?: string;
+  to?: string;
+  skip?: number;
+  take?: number;
+}
+
+export interface ListDispatchesResponse {
+  rows: Dispatch[];
+  page: { skip: number; take: number; total: number };
+}
+
+export interface EditDispatchItemPayload {
+  qty: number;
+  reason: string;
+  note?: string;
+}

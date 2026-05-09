@@ -16,7 +16,15 @@ import { getAvailability, getLot } from '@/api/lots';
 import { createReceipts, FeatureUnavailableError } from '@/api/receipts';
 import { openRework } from '@/api/rework';
 import { requestUploadUrl } from '@/api/storage';
-import type { Lot, SizeMatrix } from '@/api/types';
+import { createDispatch } from '@/api/dispatches';
+import { listWarehouses } from '@/api/filters';
+import { useAuth } from '@/context/auth';
+import type {
+  CreateDispatchItemInput,
+  FilterOption,
+  Lot,
+  SizeMatrix,
+} from '@/api/types';
 
 const STAGE_ID_FINISHING = 2;
 
@@ -57,6 +65,7 @@ export default function FinishingReceiveLot() {
   const navigate = useNavigate();
   const toast = useToast();
 
+  const { user } = useAuth();
   const [lot, setLot] = useState<Lot | null>(null);
   const [available, setAvailable] = useState<SizeMatrix>({});
   const [rows, setRows] = useState<Record<string, RowState>>({});
@@ -64,6 +73,15 @@ export default function FinishingReceiveLot() {
   const [submitting, setSubmitting] = useState(false);
   const [confirmOpen, setConfirmOpen] = useState(false);
   const cancelRef = useRef<HTMLButtonElement>(null);
+
+  // Dispatch challan state.
+  const [warehouses, setWarehouses] = useState<FilterOption[]>([]);
+  const [destWarehouseId, setDestWarehouseId] = useState<string>('');
+  const [shipQty, setShipQty] = useState<Record<string, number>>({});
+  const [dispatchConfirmOpen, setDispatchConfirmOpen] = useState(false);
+  const [dispatching, setDispatching] = useState(false);
+  const [dispatchError, setDispatchError] = useState<string | null>(null);
+  const dispatchCancelRef = useRef<HTMLButtonElement>(null);
 
   const refresh = useCallback(async () => {
     setLoading(true);
@@ -93,6 +111,10 @@ export default function FinishingReceiveLot() {
   useEffect(() => {
     void refresh();
   }, [refresh]);
+
+  useEffect(() => {
+    listWarehouses().then(setWarehouses).catch(() => undefined);
+  }, []);
 
   const sizes = useMemo(() => Object.keys(available ?? {}), [available]);
 
@@ -189,6 +211,11 @@ export default function FinishingReceiveLot() {
         });
       }
       toast.show(t('stitching.lot.successToast'), 'success');
+      try {
+        localStorage.setItem('nowi.firstReceiptDoneAt', new Date().toISOString());
+      } catch {
+        // ignore quota / storage errors
+      }
       setConfirmOpen(false);
       await refresh();
     } catch (err) {
@@ -206,6 +233,67 @@ export default function FinishingReceiveLot() {
   const firstReworkRow = Object.values(rows).find(
     (r) => r.reworkOpen && r.reworkQty > 0,
   );
+
+  // ── Dispatch challan helpers ────────────────────────────────────────────
+  const dispatchSizes = useMemo(() => Object.keys(available ?? {}), [available]);
+  const dispatchTotal = useMemo(
+    () => Object.values(shipQty).reduce((a, b) => a + (Number(b) || 0), 0),
+    [shipQty],
+  );
+  const canDispatchSubmit =
+    !!lot && !!destWarehouseId && dispatchTotal > 0 && !dispatching;
+
+  function setShip(size: string, raw: string) {
+    const v = Math.max(0, parseInt(raw, 10) || 0);
+    setShipQty((prev) => ({ ...prev, [size]: v }));
+  }
+
+  async function doDispatch() {
+    if (!lot || !destWarehouseId) return;
+    setDispatching(true);
+    setDispatchError(null);
+    try {
+      const items: CreateDispatchItemInput[] = dispatchSizes
+        .map((s) => ({
+          lotId: lot.id,
+          sku: lot.sku,
+          sizeLabel: s,
+          qty: Number(shipQty[s] ?? 0),
+        }))
+        .filter((i) => i.qty > 0);
+      if (items.length === 0) {
+        setDispatchError(t('finishing.dispatch.noItems'));
+        setDispatching(false);
+        return;
+      }
+      const dispatch = await createDispatch({
+        orderId: lot.orderId,
+        destWarehouseId,
+        items,
+      });
+      toast.show(
+        t('finishing.dispatch.successToast', { dispatchNo: dispatch.dispatchNo }),
+        'success',
+      );
+      setDispatchConfirmOpen(false);
+      setShipQty({});
+      if (user?.role === 'admin') {
+        navigate(`/admin/dispatches/${dispatch.id}`);
+      }
+    } catch (err) {
+      if (err instanceof FeatureUnavailableError) {
+        toast.show(t('common.featureUnavailable'), 'info');
+      } else {
+        const e = err as { response?: { data?: { error?: string } }; message?: string };
+        const msg = e.response?.data?.error ?? e.message ?? t('common.error');
+        setDispatchError(msg);
+      }
+    } finally {
+      setDispatching(false);
+    }
+  }
+
+  const destWarehouse = warehouses.find((w) => w.id === destWarehouseId);
 
   return (
     <FloorShell title={t('finishing.lot.title')}>
@@ -376,9 +464,100 @@ export default function FinishingReceiveLot() {
                 )}
               </CardContent>
             </Card>
+            <Card>
+              <CardHeader>
+                <CardTitle>{t('finishing.dispatch.generateChallan')}</CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-3">
+                <div>
+                  <Label>{t('finishing.dispatch.destinationWarehouse')}</Label>
+                  <Select
+                    value={destWarehouseId}
+                    onChange={(e) => setDestWarehouseId(e.target.value)}
+                  >
+                    <option value="">
+                      {t('finishing.dispatch.selectWarehouse')}
+                    </option>
+                    {warehouses.map((w) => (
+                      <option key={w.id} value={w.id}>
+                        {w.name}
+                      </option>
+                    ))}
+                  </Select>
+                </div>
+
+                {dispatchSizes.map((size) => (
+                  <div
+                    key={`ship-${size}`}
+                    className="flex items-center justify-between gap-3"
+                  >
+                    <div className="min-w-0">
+                      <span className="font-medium">{size}</span>
+                      <span className="ml-2 text-xs text-[var(--color-muted-foreground)]">
+                        {t('finishing.dispatch.shipQtyHint')}
+                      </span>
+                    </div>
+                    <Input
+                      type="number"
+                      inputMode="numeric"
+                      min={0}
+                      value={shipQty[size] ?? 0}
+                      onChange={(e) => setShip(size, e.target.value)}
+                      className="w-24 text-center"
+                    />
+                  </div>
+                ))}
+
+                {dispatchError && (
+                  <p className="text-sm text-[var(--color-destructive)]">
+                    {dispatchError}
+                  </p>
+                )}
+
+                <Button
+                  size="lg"
+                  variant="outline"
+                  className="w-full"
+                  onClick={() => setDispatchConfirmOpen(true)}
+                  disabled={!canDispatchSubmit}
+                >
+                  {t('finishing.dispatch.generateChallan')}
+                </Button>
+              </CardContent>
+            </Card>
           </>
         ) : null}
       </div>
+
+      <Dialog
+        open={dispatchConfirmOpen}
+        onClose={() => setDispatchConfirmOpen(false)}
+        title={t('finishing.dispatch.confirmTitle')}
+        initialFocusRef={dispatchCancelRef}
+        footer={
+          <>
+            <Button
+              ref={dispatchCancelRef}
+              variant="outline"
+              onClick={() => setDispatchConfirmOpen(false)}
+              disabled={dispatching}
+            >
+              {t('common.cancel')}
+            </Button>
+            <Button onClick={() => void doDispatch()} disabled={dispatching}>
+              {dispatching ? t('common.saving') : t('common.confirm')}
+            </Button>
+          </>
+        }
+      >
+        <p>
+          {t('finishing.dispatch.confirmBody', {
+            total: dispatchTotal,
+            sku: lot?.sku ?? '',
+            warehouse: destWarehouse?.name ?? '',
+          })}
+        </p>
+      </Dialog>
 
       <Dialog
         open={confirmOpen}

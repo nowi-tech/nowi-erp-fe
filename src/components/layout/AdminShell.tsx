@@ -26,6 +26,7 @@ interface NavItem {
 const NAV_ITEMS: NavItem[] = [
   { to: '/admin', end: true, icon: <LayoutDashboard size={18} />, labelKey: 'admin.nav.dashboard' },
   { to: '/admin/locator', icon: <Search size={18} />, labelKey: 'admin.nav.locator' },
+  { to: '/admin/dispatches', icon: <Truck size={18} />, labelKey: 'admin.nav.dispatches' },
   { to: '/admin/vendors', icon: <Truck size={18} />, labelKey: 'admin.nav.vendors' },
   { to: '/admin/skus', icon: <Package size={18} />, labelKey: 'admin.nav.skus' },
   { to: '/admin/users', icon: <Users size={18} />, labelKey: 'admin.nav.users' },

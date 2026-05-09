@@ -131,7 +131,18 @@
       "confirmRework": "{{rework}} रीवर्क",
       "confirmReasonPrefix": "कारण:"
     },
-    "generateChallan": "चालान बनाएँ"
+    "generateChallan": "चालान बनाएँ",
+    "dispatch": {
+      "generateChallan": "डिस्पैच चालान बनाएँ",
+      "destinationWarehouse": "गंतव्य गोदाम",
+      "selectWarehouse": "गोदाम चुनें…",
+      "shipQty": "भेजने की मात्रा",
+      "shipQtyHint": "भेजी जाने वाली यूनिट",
+      "noItems": "भेजने के लिए कम से कम एक मात्रा दर्ज करें।",
+      "confirmTitle": "डिस्पैच भेजें?",
+      "confirmBody": "{{sku}} की {{total}} यूनिट {{warehouse}} को भेजें?",
+      "successToast": "चालान #{{dispatchNo}} बना"
+    }
   },
   "admin": {
     "today": "आज",
@@ -141,10 +152,91 @@
     "nav": {
       "dashboard": "डैशबोर्ड",
       "locator": "लोकेटर",
+      "dispatches": "डिस्पैच",
       "vendors": "विक्रेता",
       "skus": "SKU",
       "users": "उपयोगकर्ता",
       "settings": "सेटिंग्स"
+    },
+    "dispatches": {
+      "title": "डिस्पैच",
+      "empty": "कोई डिस्पैच नहीं मिला।",
+      "totalCount": "{{start}}–{{end}} / {{total}}",
+      "prev": "पिछला",
+      "next": "अगला",
+      "filters": {
+        "status": "स्थिति",
+        "warehouse": "गोदाम",
+        "dateFrom": "से",
+        "dateTo": "तक",
+        "all": "सभी"
+      },
+      "columns": {
+        "dispatchNo": "डिस्पैच #",
+        "dispatchedAt": "डिस्पैच समय",
+        "warehouse": "गोदाम",
+        "syncMode": "सिंक मोड",
+        "status": "स्थिति",
+        "items": "आइटम",
+        "totalQty": "कुल मात्रा"
+      },
+      "syncMode": {
+        "easyecom": "EasyEcom",
+        "manual_pdf": "मैनुअल PDF"
+      },
+      "status": {
+        "draft": "ड्राफ्ट",
+        "awaiting_confirmation": "पुष्टि की प्रतीक्षा",
+        "synced": "सिंक हुआ",
+        "manual_pdf": "मैनुअल PDF",
+        "awaiting_grn": "GRN की प्रतीक्षा",
+        "grn_received": "GRN प्राप्त",
+        "grn_mismatch": "GRN बेमेल",
+        "sync_failed": "सिंक विफल",
+        "closed": "बंद",
+        "closed_with_adjustment": "बंद (समायोजित)"
+      }
+    },
+    "dispatchDetail": {
+      "warehouse": "गोदाम",
+      "dispatchedAt": "डिस्पैच समय",
+      "syncMode": "सिंक मोड",
+      "order": "ऑर्डर",
+      "items": "आइटम",
+      "noItems": "इस डिस्पैच में कोई आइटम नहीं।",
+      "mismatchYes": "बेमेल",
+      "editQty": "मात्रा बदलें",
+      "retrySync": "सिंक पुनः करें",
+      "retryQueued": "पुनः प्रयास कतार में",
+      "grnEvents": "GRN इवेंट",
+      "noGrnEvents": "अब तक कोई GRN इवेंट नहीं।",
+      "syncQueue": "सिंक कतार",
+      "syncAttempts": "प्रयास",
+      "noSyncEntries": "अब तक कोई सिंक प्रयास नहीं।",
+      "cols": {
+        "lot": "लॉट",
+        "sku": "SKU",
+        "size": "साइज़",
+        "qtySent": "भेजी मात्रा",
+        "qtyReceived": "प्राप्त मात्रा",
+        "mismatch": "बेमेल",
+        "lastEdit": "अंतिम बदलाव"
+      },
+      "editDialog": {
+        "title": "प्राप्त मात्रा बदलें",
+        "qty": "मात्रा",
+        "reason": "कारण",
+        "note": "टिप्पणी (वैकल्पिक)",
+        "confirmHint": "यह बदलाव ऑडिट लॉग में दर्ज होगा।",
+        "success": "मात्रा अपडेट हुई",
+        "reasons": {
+          "shortShipment": "कम शिपमेंट",
+          "lostInTransit": "रास्ते में खोया",
+          "damagedInTransit": "रास्ते में क्षतिग्रस्त",
+          "countingError": "गिनती त्रुटि",
+          "other": "अन्य"
+        }
+      }
     },
     "locator": {
       "title": "उत्पाद लोकेटर",
@@ -226,5 +318,11 @@
     "title": "प्रोफ़ाइल",
     "languageLabel": "भाषा",
     "logout": "लॉगआउट"
+  },
+  "pwa": {
+    "installTitle": "NOWI ERP इंस्टॉल करें",
+    "installBody": "तेज़ पहुँच के लिए ऐप को होम स्क्रीन पर जोड़ें।",
+    "installButton": "ऐप इंस्टॉल करें",
+    "dismissButton": "अभी नहीं"
   }
 }

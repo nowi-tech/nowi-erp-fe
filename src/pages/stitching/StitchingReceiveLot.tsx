@@ -88,6 +88,11 @@ export default function StitchingReceiveLot() {
         receipts,
       });
       toast.show(t('stitching.lot.successToast'), 'success');
+      try {
+        localStorage.setItem('nowi.firstReceiptDoneAt', new Date().toISOString());
+      } catch {
+        // ignore quota / storage errors
+      }
       setConfirmOpen(false);
       await refresh();
     } catch (err) {
