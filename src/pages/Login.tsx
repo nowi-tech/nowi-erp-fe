@@ -234,31 +234,33 @@ async function handleSendOtp(e: FormEvent) {
 
   return (
     <div className="density-comfortable min-h-screen grid grid-cols-1 lg:grid-cols-[1.1fr_1fr] bg-[var(--color-background)]">
-      {/* Brand panel — full bleed on desktop, hero strip on mobile */}
+      {/* Brand panel — full bleed on desktop, compact logo strip on mobile */}
       <div className="relative overflow-hidden border-b border-white/10 bg-[var(--color-primary)] text-[var(--color-primary-foreground)] lg:border-b-0">
+        {/* Decorative blurs only on desktop — keep mobile clean */}
         <div
           aria-hidden
-          className="pointer-events-none absolute -left-28 top-[-4.5rem] h-64 w-64 rounded-full bg-white/10 blur-3xl"
+          className="pointer-events-none absolute -left-28 top-[-4.5rem] hidden h-64 w-64 rounded-full bg-white/10 blur-3xl lg:block"
         />
         <div
           aria-hidden
-          className="pointer-events-none absolute -bottom-36 right-[-4.5rem] h-80 w-80 rounded-full bg-[var(--color-accent)]/20 blur-3xl"
+          className="pointer-events-none absolute -bottom-36 right-[-4.5rem] hidden h-80 w-80 rounded-full bg-[var(--color-accent)]/20 blur-3xl lg:block"
         />
-        <div className="relative flex h-full min-h-[220px] flex-col justify-between p-6 sm:p-8 lg:min-h-screen lg:p-14">
-          <div className="inline-flex items-center px-4 py-3 shadow-2xl w-fit rounded-2xl bg-white/95 ring-1 ring-black/5 backdrop-blur-sm">
+        <div className="relative flex flex-col items-center justify-between gap-0 p-4 lg:h-full lg:min-h-screen lg:items-start lg:gap-8 lg:p-14">
+          <div className="inline-flex items-center rounded-2xl bg-white/95 px-4 py-3 shadow-2xl ring-1 ring-black/5 backdrop-blur-sm w-fit">
             <Logo size="xl" />
           </div>
 
-          <div className="max-w-md pt-6 lg:pt-0">
+          {/* Tagline + copyright are desktop-only */}
+          <div className="hidden max-w-md lg:block">
             <p className="font-serif text-2xl leading-tight sm:text-3xl lg:text-4xl">
               From cut to dispatch — every stitch accounted for.
             </p>
-            <p className="mt-3 text-sm text-white/80 lg:mt-4">
+            <p className="mt-4 text-sm text-white/80">
               Production tracking for the NOWI floor.
             </p>
           </div>
 
-          <div className="pt-6 text-xs text-white/60 lg:pt-0">
+          <div className="hidden text-xs text-white/60 lg:block">
             © {new Date().getFullYear()} NOWI
           </div>
         </div>

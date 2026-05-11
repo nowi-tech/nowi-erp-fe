@@ -1,10 +1,13 @@
 import * as React from 'react';
 import { cn } from '@/lib/utils';
 
-export type LabelProps = React.LabelHTMLAttributes<HTMLLabelElement>;
+export interface LabelProps extends React.LabelHTMLAttributes<HTMLLabelElement> {
+  /** Renders a red asterisk after the label text. */
+  required?: boolean;
+}
 
 const Label = React.forwardRef<HTMLLabelElement, LabelProps>(
-  ({ className, ...props }, ref) => (
+  ({ className, required, children, ...props }, ref) => (
     <label
       ref={ref}
       className={cn(
@@ -12,7 +15,17 @@ const Label = React.forwardRef<HTMLLabelElement, LabelProps>(
         className,
       )}
       {...props}
-    />
+    >
+      {children}
+      {required && (
+        <span
+          aria-hidden="true"
+          className="ml-0.5 text-[var(--color-destructive)]"
+        >
+          *
+        </span>
+      )}
+    </label>
   ),
 );
 Label.displayName = 'Label';
