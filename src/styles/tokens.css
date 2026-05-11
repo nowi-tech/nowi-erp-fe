@@ -1,52 +1,95 @@
-/* Design tokens — NOWI brand palette
-   Primary navy is sampled from the wordmark; surfaces are warm cream
-   so the ERP feels like the brand, not a generic SaaS dashboard. */
+/* Design tokens — NOWI ERP
+   Palette: Editorial Bold (cobalt / vermilion / marigold) on a Plain
+   off-white surface. Mapped from the Claude Design "Stage system v2" handoff. */
 :root {
-  /* Surfaces */
-  --color-background: #fbfaf6;     /* warm cream — page bg */
+  /* ── Surfaces ── */
+  --color-background: #f4f4f3;     /* plain off-white, lets ink colors punch */
+  --color-background-2: #ebebe9;   /* slightly darker surface (sidebar, etc.) */
   --color-surface: #ffffff;        /* cards / sheets sit on top */
-  --color-foreground: #14213d;     /* navy from logo */
-  --color-muted: #f1eee5;          /* cream-tinted muted */
-  --color-muted-foreground: #5b6478;
-  --color-border: #e6e1d3;         /* warm border */
-  --color-input: #d8d2c2;
-  --color-ring: #14213d;
+  --color-surface-2: #f9f9f8;      /* table head, subtle row alt */
 
-  /* Primary (the navy) */
-  --color-primary: #14213d;
-  --color-primary-foreground: #fbfaf6;
-  --color-primary-hover: #1d2d50;
+  --color-foreground: #14213a;     /* ink */
+  --color-foreground-2: #2d3a55;   /* secondary ink */
+  --color-foreground-3: #4d5670;   /* nav text */
+  --color-muted: #f1f1ef;          /* hover tint, muted backgrounds */
+  --color-muted-foreground: #6c7589;
+  --color-muted-foreground-2: #99a0b1;
+  --color-border: #e2e2df;
+  --color-border-strong: #d0d0cc;
+  --color-input: #d0d0cc;
+  --color-ring: #14213a;
 
-  /* Accent — antique gold for highlights / hovers / brand chips */
-  --color-accent: #b08a4f;
-  --color-accent-foreground: #14213d;
+  /* ── Primary (ink, used for primary buttons / focus) ── */
+  --color-primary: #14213a;
+  --color-primary-foreground: #f4f4f3;
+  --color-primary-hover: #0a1428;
 
-  --color-secondary: #f1eee5;
-  --color-secondary-foreground: #14213d;
+  /* Accent — kept for brand chips / occasional callouts */
+  --color-accent: #c79224;            /* same as dispatch — marigold */
+  --color-accent-foreground: #14213a;
 
-  --color-destructive: #b3261e;
+  --color-secondary: #ebebe9;
+  --color-secondary-foreground: #14213a;
+
+  /* ── Semantic status colors ── */
+  --color-destructive: #b04b3a;
+  --color-destructive-bg: #f3d8d1;
   --color-destructive-foreground: #ffffff;
+  --color-success: #5d8a5f;
+  --color-success-bg: #dfe9da;
+  --color-warning: #b08438;
+  --color-warning-bg: #f2e6cd;
+  --color-info: #4f7a9c;
+  --color-info-bg: #dbe5ed;
 
-  --color-success: #2f6f4f;
-  --color-warning: #b07c1f;
-  --color-info: #325c8a;
+  /* ── Stage tokens — Editorial Bold ──
+     Each stage has 4 tokens: accent (line/icon), ink (text on tinted bg),
+     bg (tinted surface), border (subtle hairline on tinted surface). */
+  --stage-stitch-acc: #2747a8;     /* cobalt */
+  --stage-stitch-ink: #1a2e6b;
+  --stage-stitch-bg:  #dfe5f4;
+  --stage-stitch-bd:  #b3c0e2;
 
-  /* Typography */
-  --font-sans: 'Plus Jakarta Sans', system-ui, -apple-system, sans-serif;
-  --font-serif: 'Plus Jakarta Sans', system-ui, -apple-system, sans-serif;
-  --font-hi: 'Noto Sans Devanagari', 'Plus Jakarta Sans', system-ui, sans-serif;
-  --font-mono: ui-monospace, SFMono-Regular, monospace;
+  --stage-finish-acc: #c4452e;     /* vermilion */
+  --stage-finish-ink: #7e2818;
+  --stage-finish-bg:  #f8dad0;
+  --stage-finish-bd:  #ecb29f;
 
-  /* Elevation */
-  --shadow-card: 0 1px 2px rgba(20, 33, 61, 0.04), 0 1px 1px rgba(20, 33, 61, 0.03);
-  --shadow-pop:  0 12px 32px -12px rgba(20, 33, 61, 0.18), 0 4px 12px -4px rgba(20, 33, 61, 0.08);
+  --stage-disp-acc:   #c79224;     /* marigold */
+  --stage-disp-ink:   #7e5a10;
+  --stage-disp-bg:    #f6e6c0;
+  --stage-disp-bd:    #e5c884;
 
-  /* Radii */
+  /* Anomaly / state tokens (re-using the semantic palette under stage-style names) */
+  --status-ready-acc:   #5d8a5f;
+  --status-ready-bg:    #dfe9da;
+  --status-ready-ink:   #355a37;
+  --status-rework-acc:  #b08438;
+  --status-rework-bg:   #f2e6cd;
+  --status-rework-ink:  #6e5320;
+  --status-stuck-acc:   #b04b3a;
+  --status-stuck-bg:    #f3d8d1;
+  --status-stuck-ink:   #722e22;
+  --status-transit-acc: #4f7a9c;
+  --status-transit-bg:  #dbe5ed;
+  --status-transit-ink: #2a4f6e;
+
+  /* ── Typography ── */
+  --font-sans:  'Plus Jakarta Sans', 'IBM Plex Sans', system-ui, -apple-system, sans-serif;
+  --font-serif: 'Lora', 'Plus Jakarta Sans', Georgia, 'Times New Roman', serif;
+  --font-hi:    'Noto Sans Devanagari', 'Plus Jakarta Sans', system-ui, sans-serif;
+  --font-mono:  'IBM Plex Mono', ui-monospace, SFMono-Regular, monospace;
+
+  /* ── Elevation ── */
+  --shadow-card: 0 1px 0 rgba(20, 33, 58, 0.04);
+  --shadow-pop:  0 12px 32px -16px rgba(20, 33, 58, 0.18), 0 1px 0 rgba(20, 33, 58, 0.04);
+
+  /* ── Radii ── */
   --radius-sm: 0.25rem;
   --radius-md: 0.5rem;
-  --radius-lg: 0.75rem;
+  --radius-lg: 0.875rem;
 
-  /* Density-driven defaults (overridden by .density-*) */
+  /* ── Density-driven defaults (overridden by .density-*) ── */
   --density-control-height: 2.5rem;
   --density-tap-target: 2.75rem;
   --density-font-base: 1rem;

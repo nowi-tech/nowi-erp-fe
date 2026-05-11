@@ -13,7 +13,7 @@ import { useToast } from '@/components/ui/toast';
 import { useAuth } from '@/context/auth';
 import { editItemQty, getDispatch, retrySync } from '@/api/dispatches';
 import { FeatureUnavailableError } from '@/api/_errors';
-import { statusBadgeVariant } from './Dispatches';
+import { dispatchStatusVariant } from '@/lib/statusBadge';
 import type { DispatchDetail as DispatchDetailT, DispatchItem } from '@/api/types';
 
 const EDIT_REASONS = [
@@ -156,7 +156,7 @@ export default function DispatchDetail() {
             <CardHeader>
               <CardTitle className="flex items-center gap-2 flex-wrap">
                 <span className="font-mono">{data.dispatchNo}</span>
-                <Badge variant={statusBadgeVariant(data.status)}>
+                <Badge variant={dispatchStatusVariant(data.status)} dot>
                   {t(`admin.dispatches.status.${data.status}`)}
                 </Badge>
                 {showRetry && canEdit && (

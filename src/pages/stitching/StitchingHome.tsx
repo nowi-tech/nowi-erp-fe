@@ -87,21 +87,28 @@ export default function StitchingHome() {
               {lots.map((lot) => (
                 <li
                   key={lot.id}
-                  className="flex items-center justify-between gap-3 rounded-[var(--radius-md)] border border-[var(--color-border)] p-3"
+                  className="flex items-center justify-between gap-3 rounded-[var(--radius-md)] border border-[var(--color-border)] border-l-[3px] border-l-[var(--stage-stitch-acc)] p-3 hover:bg-[var(--stage-stitch-bg)]/40 transition-colors"
                 >
                   <div className="min-w-0">
-                    <div className="font-medium truncate">
-                      {t('stitching.lotNo')} {lot.lotNo}
+                    <div className="font-serif text-lg leading-snug truncate">
+                      <span className="text-[var(--color-muted-foreground)] text-sm font-sans uppercase tracking-wider mr-2">
+                        {t('stitching.lotNo')}
+                      </span>
+                      {lot.lotNo}
                     </div>
                     <div className="text-sm text-[var(--color-muted-foreground)] truncate">
                       {lot.vendor?.name ?? lot.vendorId}
-                      {lot.vendorLotNo ? ` • ${lot.vendorLotNo}` : ''} • {totalUnits(lot.qtyIn)} u
+                      {lot.vendorLotNo ? ` • ${lot.vendorLotNo}` : ''} •{' '}
+                      <span className="tabular-nums">{totalUnits(lot.qtyIn)} u</span>
                     </div>
-                    {lot.order?.status && (
-                      <Badge variant="outline" className="mt-1">
-                        {lot.order.status}
+                    <div className="mt-1.5 flex items-center gap-2">
+                      <Badge variant="stitch" dot>
+                        {t('stitching.title')}
                       </Badge>
-                    )}
+                      {lot.order?.status && (
+                        <Badge variant="outline">{lot.order.status}</Badge>
+                      )}
+                    </div>
                   </div>
                   <Button
                     size="lg"

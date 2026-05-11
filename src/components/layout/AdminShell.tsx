@@ -20,20 +20,31 @@ import Logo from '@/components/Logo';
 import { cn } from '@/lib/utils';
 import type { UserRole } from '@/api/types';
 
+type NavStage = 'ink' | 'stitch' | 'finish' | 'disp';
+
 interface NavItem {
   to: string;
   end?: boolean;
   icon: React.ReactNode;
   labelKey: string;
   roles: UserRole[];
+  /** Drives the active-state accent color. Defaults to ink (primary). */
+  stage?: NavStage;
 }
 
+const STAGE_VARS: Record<NavStage, { acc: string; bg: string }> = {
+  ink:    { acc: 'var(--color-primary)',       bg: 'color-mix(in oklab, var(--color-primary) 12%, transparent)' },
+  stitch: { acc: 'var(--stage-stitch-acc)',    bg: 'color-mix(in oklab, var(--stage-stitch-acc) 12%, transparent)' },
+  finish: { acc: 'var(--stage-finish-acc)',    bg: 'color-mix(in oklab, var(--stage-finish-acc) 12%, transparent)' },
+  disp:   { acc: 'var(--stage-disp-acc)',      bg: 'color-mix(in oklab, var(--stage-disp-acc) 12%, transparent)' },
+};
+
 const NAV_ITEMS: NavItem[] = [
-  { to: '/admin', end: true, icon: <LayoutDashboard size={20} />, labelKey: 'admin.nav.dashboard', roles: ['admin', 'viewer'] },
-  { to: '/admin/locator', icon: <Search size={20} />, labelKey: 'admin.nav.locator', roles: ['admin', 'viewer'] },
-  { to: '/admin/dispatches', icon: <Truck size={20} />, labelKey: 'admin.nav.dispatches', roles: ['admin', 'viewer'] },
-  { to: '/data', icon: <Database size={20} />, labelKey: 'admin.nav.masterData', roles: ['data_manager'] },
-  { to: '/admin/users', icon: <Users size={20} />, labelKey: 'admin.nav.users', roles: ['admin'] },
+  { to: '/admin', end: true, icon: <LayoutDashboard size={20} />, labelKey: 'admin.nav.dashboard', roles: ['admin', 'viewer'], stage: 'ink' },
+  { to: '/admin/locator', icon: <Search size={20} />, labelKey: 'admin.nav.locator', roles: ['admin', 'viewer'], stage: 'ink' },
+  { to: '/admin/dispatches', icon: <Truck size={20} />, labelKey: 'admin.nav.dispatches', roles: ['admin', 'viewer'], stage: 'disp' },
+  { to: '/data', icon: <Database size={20} />, labelKey: 'admin.nav.masterData', roles: ['data_manager'], stage: 'ink' },
+  { to: '/admin/users', icon: <Users size={20} />, labelKey: 'admin.nav.users', roles: ['admin'], stage: 'ink' },
   // TODO: build — surface once admin Vendors / SKUs / Settings pages exist.
   // { to: '/admin/vendors', icon: <Truck size={20} />, labelKey: 'admin.nav.vendors', roles: ['admin', 'viewer', 'data_manager'] },
   // { to: '/admin/skus', icon: <Package size={20} />, labelKey: 'admin.nav.skus', roles: ['admin', 'viewer', 'data_manager'] },
@@ -118,7 +129,7 @@ export default function AdminShell() {
   return (
     <div className="density-compact min-h-screen flex bg-[var(--color-background)] text-[var(--color-foreground)]">
       {/* Desktop sidebar */}
-      <aside className="hidden lg:flex w-60 shrink-0 border-r border-[var(--color-border)] flex-col bg-[var(--color-surface)]">
+      <aside className="hidden lg:flex w-60 shrink-0 border-r border-[var(--color-border)] flex-col bg-[var(--color-background-2)]">
         <Link
           to={homePath}
           aria-label={t('common.appName')}
@@ -127,24 +138,43 @@ export default function AdminShell() {
           <Logo size="md" />
         </Link>
         <nav className="flex-1 p-3 space-y-1">
-          {visibleNav.map((item) => (
-            <NavLink
-              key={item.to}
-              to={item.to}
-              end={item.end}
-              className={({ isActive }) =>
-                cn(
-                  'w-full flex items-center gap-3 px-3 py-2.5 rounded-[var(--radius-md)] text-sm transition-colors',
-                  isActive
-                    ? 'bg-[var(--color-primary)] text-[var(--color-primary-foreground)] font-medium'
-                    : 'text-[var(--color-muted-foreground)] hover:bg-[var(--color-muted)] hover:text-[var(--color-foreground)]',
-                )
-              }
-            >
-              {item.icon}
-              <span>{t(item.labelKey)}</span>
-            </NavLink>
-          ))}
+          {visibleNav.map((item) => {
+            const stage: NavStage = item.stage ?? 'ink';
+            const stageVars = STAGE_VARS[stage];
+            return (
+              <NavLink
+                key={item.to}
+                to={item.to}
+                end={item.end}
+                style={{ ['--nav-acc' as string]: stageVars.acc, ['--nav-bg' as string]: stageVars.bg }}
+                className={({ isActive }) =>
+                  cn(
+                    'relative w-full flex items-center gap-3 pl-4 pr-3 py-2.5 rounded-[var(--radius-md)] text-sm transition-colors',
+                    'before:absolute before:left-1 before:top-2 before:bottom-2 before:w-[3px] before:rounded-full before:bg-[var(--nav-acc)] before:transition-opacity',
+                    isActive
+                      ? 'bg-[var(--nav-bg)] text-[var(--color-foreground)] font-medium before:opacity-100'
+                      : 'text-[var(--color-foreground-3)] hover:bg-[var(--color-muted)] hover:text-[var(--color-foreground)] before:opacity-0',
+                  )
+                }
+              >
+                {({ isActive }) => (
+                  <>
+                    <span
+                      className={cn(
+                        'shrink-0 transition-colors',
+                        isActive
+                          ? 'text-[var(--nav-acc)]'
+                          : 'text-[var(--color-muted-foreground-2)]',
+                      )}
+                    >
+                      {item.icon}
+                    </span>
+                    <span>{t(item.labelKey)}</span>
+                  </>
+                )}
+              </NavLink>
+            );
+          })}
         </nav>
         <div className="p-3 border-t border-[var(--color-border)] text-xs text-[var(--color-muted-foreground)]">
           {user?.name} · {user && t(`roles.${user.role}` as const)}

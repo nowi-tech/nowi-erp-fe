@@ -1,16 +1,44 @@
 import * as React from 'react';
 import { cn } from '@/lib/utils';
 
-const Card = React.forwardRef<HTMLDivElement, React.HTMLAttributes<HTMLDivElement>>(
-  ({ className, ...props }, ref) => (
+export type CardStage = 'stitch' | 'finish' | 'disp' | 'ready' | 'rework' | 'stuck';
+
+const STAGE_ACCENTS: Record<CardStage, string> = {
+  stitch: 'var(--stage-stitch-acc)',
+  finish: 'var(--stage-finish-acc)',
+  disp: 'var(--stage-disp-acc)',
+  ready: 'var(--status-ready-acc)',
+  rework: 'var(--status-rework-acc)',
+  stuck: 'var(--status-stuck-acc)',
+};
+
+export interface CardProps extends React.HTMLAttributes<HTMLDivElement> {
+  /**
+   * Adds a 3px coloured left rail using the stage / status palette.
+   * Matches the Stage system v2 KPI/card pattern.
+   */
+  stage?: CardStage;
+}
+
+const Card = React.forwardRef<HTMLDivElement, CardProps>(
+  ({ className, stage, style, children, ...props }, ref) => (
     <div
       ref={ref}
+      style={
+        stage
+          ? { ...style, ['--card-acc' as string]: STAGE_ACCENTS[stage] }
+          : style
+      }
       className={cn(
-        'rounded-[var(--radius-lg)] border border-[var(--color-border)] bg-[var(--color-surface)] text-[var(--color-foreground)] shadow-[var(--shadow-card)]',
+        'relative rounded-[var(--radius-lg)] border border-[var(--color-border)] bg-[var(--color-surface)] text-[var(--color-foreground)] shadow-[var(--shadow-card)] overflow-hidden',
+        stage &&
+          'before:absolute before:left-0 before:top-3.5 before:bottom-3.5 before:w-[3px] before:rounded-r-full before:bg-[var(--card-acc)]',
         className,
       )}
       {...props}
-    />
+    >
+      {children}
+    </div>
   ),
 );
 Card.displayName = 'Card';

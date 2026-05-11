@@ -6,6 +6,8 @@ import { Button } from '@/components/ui/button';
 import Sparkline from '@/components/Sparkline';
 import { useToast } from '@/components/ui/toast';
 import { listOrders } from '@/api/orders';
+import { orderStatusVariant } from '@/lib/statusBadge';
+import { Badge } from '@/components/ui/badge';
 import { getThroughput, getReworkRate, getCycleTime } from '@/api/dashboard';
 import { FeatureUnavailableError } from '@/api/_errors';
 import type {
@@ -111,7 +113,7 @@ export default function AdminHome() {
     <div className="space-y-4 max-w-5xl">
       <div className="grid gap-4 md:grid-cols-3">
         {/* Throughput */}
-        <Card>
+        <Card stage="finish">
           <CardHeader className="flex flex-row items-center justify-between gap-2">
             <CardTitle>{t('admin.dashboard.throughput')}</CardTitle>
             <div className="flex gap-1">
@@ -141,16 +143,20 @@ export default function AdminHome() {
                     <div className="text-xs text-[var(--color-muted-foreground)]">
                       {t('admin.dashboard.finished')}
                     </div>
-                    <div className="text-3xl font-semibold">{throughput.finishedUnits}</div>
+                    <div className="font-serif text-3xl font-semibold tabular-nums">
+                      {throughput.finishedUnits}
+                    </div>
                   </div>
                   <div>
                     <div className="text-xs text-[var(--color-muted-foreground)]">
                       {t('admin.dashboard.dispatched')}
                     </div>
-                    <div className="text-3xl font-semibold">{throughput.dispatchedUnits}</div>
+                    <div className="font-serif text-3xl font-semibold tabular-nums">
+                      {throughput.dispatchedUnits}
+                    </div>
                   </div>
                 </div>
-                <div className="text-[var(--color-primary)]">
+                <div className="text-[var(--stage-finish-acc)]">
                   <Sparkline data={sparkData} width={220} height={36} />
                 </div>
               </div>
@@ -159,7 +165,7 @@ export default function AdminHome() {
         </Card>
 
         {/* Rework rate */}
-        <Card>
+        <Card stage="rework">
           <CardHeader>
             <CardTitle>{t('admin.dashboard.reworkRate')}</CardTitle>
           </CardHeader>
@@ -172,7 +178,7 @@ export default function AdminHome() {
                   <div className="text-xs text-[var(--color-muted-foreground)]">
                     {t('admin.dashboard.overall')}
                   </div>
-                  <div className="text-3xl font-semibold">
+                  <div className="font-serif text-3xl font-semibold tabular-nums">
                     {rework.overall.ratePct.toFixed(1)}%
                   </div>
                 </div>
@@ -218,7 +224,9 @@ export default function AdminHome() {
                   <div className="text-xs text-[var(--color-muted-foreground)]">
                     {t('admin.dashboard.avgDays')}
                   </div>
-                  <div className="text-3xl font-semibold">{cycle.avgDays.toFixed(1)}</div>
+                  <div className="font-serif text-3xl font-semibold tabular-nums">
+                    {cycle.avgDays.toFixed(1)}
+                  </div>
                 </div>
                 <div>
                   <div className="text-xs text-[var(--color-muted-foreground)] mb-1">
@@ -263,14 +271,20 @@ export default function AdminHome() {
           ) : Object.keys(statusCounts).length === 0 ? (
             <p className="text-sm text-[var(--color-muted-foreground)]">—</p>
           ) : (
-            <ul className="text-sm grid gap-1 grid-cols-2 md:grid-cols-4">
+            <ul className="text-sm grid gap-2 grid-cols-2 md:grid-cols-4">
               {Object.entries(statusCounts).map(([status, n]) => (
                 <li
                   key={status}
-                  className="flex justify-between border border-[var(--color-border)] rounded-[var(--radius-sm)] px-2 py-1"
+                  className="flex items-center justify-between gap-2 border border-[var(--color-border)] rounded-[var(--radius-md)] px-2 py-1.5"
                 >
-                  <span className="text-[var(--color-muted-foreground)]">{status}</span>
-                  <span className="font-medium">{n}</span>
+                  <Badge
+                    variant={orderStatusVariant(status)}
+                    dot
+                    className="truncate"
+                  >
+                    {status}
+                  </Badge>
+                  <span className="font-serif text-lg tabular-nums">{n}</span>
                 </li>
               ))}
             </ul>

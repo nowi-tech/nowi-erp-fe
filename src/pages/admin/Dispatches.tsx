@@ -12,6 +12,7 @@ import { useToast } from '@/components/ui/toast';
 import { listDispatches } from '@/api/dispatches';
 import { listWarehouses } from '@/api/filters';
 import { FeatureUnavailableError } from '@/api/_errors';
+import { dispatchStatusVariant } from '@/lib/statusBadge';
 import type {
   Dispatch,
   DispatchStatus,
@@ -35,16 +36,8 @@ const STATUS_VALUES: DispatchStatus[] = [
   'closed_with_adjustment',
 ];
 
-export function statusBadgeVariant(
-  s: DispatchStatus,
-): 'default' | 'secondary' | 'outline' | 'success' | 'warning' | 'destructive' {
-  if (s === 'closed' || s === 'closed_with_adjustment' || s === 'grn_received') {
-    return 'success';
-  }
-  if (s === 'grn_mismatch' || s === 'sync_failed') return 'destructive';
-  if (s === 'synced' || s === 'awaiting_grn' || s === 'manual_pdf') return 'default';
-  return 'secondary';
-}
+// Status-variant mapping now lives in `@/lib/statusBadge` so every
+// dispatch / locator / dashboard surface stays in sync.
 
 function paramsFromUrl(sp: URLSearchParams): ListDispatchesParams {
   const get = (k: string) => sp.get(k) ?? undefined;
@@ -242,10 +235,15 @@ export default function Dispatches() {
                   data?.rows.map((r: Dispatch) => (
                     <tr
                       key={r.id}
-                      className="border-t border-[var(--color-border)] hover:bg-[var(--color-muted)] cursor-pointer"
+                      className="border-t border-[var(--color-border)] hover:bg-[var(--stage-disp-bg)]/40 cursor-pointer transition-colors"
                       onClick={() => navigate(`/admin/dispatches/${r.id}`)}
                     >
-                      <td className="px-3 py-2 font-mono text-xs">{r.dispatchNo}</td>
+                      <td
+                        className="px-3 py-2 font-mono text-xs"
+                        style={{ boxShadow: 'inset 3px 0 0 var(--stage-disp-acc)' }}
+                      >
+                        {r.dispatchNo}
+                      </td>
                       <td className="px-3 py-2">
                         {r.dispatchedAt
                           ? new Date(r.dispatchedAt).toLocaleString()
@@ -256,12 +254,16 @@ export default function Dispatches() {
                         {t(`admin.dispatches.syncMode.${r.syncMode}`)}
                       </td>
                       <td className="px-3 py-2">
-                        <Badge variant={statusBadgeVariant(r.status)}>
+                        <Badge variant={dispatchStatusVariant(r.status)} dot>
                           {t(`admin.dispatches.status.${r.status}`)}
                         </Badge>
                       </td>
-                      <td className="px-3 py-2 text-right">{r.itemsCount ?? '—'}</td>
-                      <td className="px-3 py-2 text-right">{r.totalQtySent ?? '—'}</td>
+                      <td className="px-3 py-2 text-right tabular-nums">
+                        {r.itemsCount ?? '—'}
+                      </td>
+                      <td className="px-3 py-2 text-right tabular-nums">
+                        {r.totalQtySent ?? '—'}
+                      </td>
                     </tr>
                   ))}
               </tbody>

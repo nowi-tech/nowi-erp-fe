@@ -3,6 +3,7 @@ import { useTranslation } from 'react-i18next';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { Card, CardContent } from '@/components/ui/card';
 import CollapsibleFilters from '@/components/CollapsibleFilters';
+import StageChips, { type StageChipKey } from '@/components/StageChips';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -187,6 +188,49 @@ export default function Locator() {
         </Button>
       </div>
 
+      {(() => {
+        const stageByCode = (code: string) =>
+          stages.find((s) => s.code === code || s.name?.toLowerCase() === code);
+        const activeChip: StageChipKey = current.status === 'stuck'
+          ? 'stuck'
+          : current.status === 'in_rework'
+            ? 'rework'
+            : stages.find((s) => String(s.id) === current.stageId)?.code === 'stitching'
+              ? 'stitch'
+              : stages.find((s) => String(s.id) === current.stageId)?.code === 'finishing'
+                ? 'finish'
+                : 'all';
+        return (
+          <StageChips
+            value={activeChip}
+            options={[
+              { key: 'all',    label: t('admin.locator.filters.all') },
+              { key: 'stitch', label: t('roles.stitching_master') },
+              { key: 'finish', label: t('roles.finishing_master') },
+              { key: 'rework', label: t('admin.locator.filters.rework' as const, { defaultValue: 'Rework' }) },
+              { key: 'stuck',  label: t('admin.locator.filters.stuck' as const, { defaultValue: 'Stuck' }) },
+            ]}
+            onChange={(k) => {
+              const next = new URLSearchParams(searchParams);
+              next.delete('stageId');
+              next.delete('status');
+              if (k === 'stitch') {
+                const s = stageByCode('stitching');
+                if (s) next.set('stageId', String(s.id));
+              } else if (k === 'finish') {
+                const s = stageByCode('finishing');
+                if (s) next.set('stageId', String(s.id));
+              } else if (k === 'rework') {
+                next.set('status', 'in_rework');
+              } else if (k === 'stuck') {
+                next.set('status', 'stuck');
+              }
+              setSearchParams(next, { replace: false });
+            }}
+          />
+        );
+      })()}
+
       <CollapsibleFilters
         activeCount={
           (current.vendorId ? 1 : 0) +
@@ -307,9 +351,15 @@ export default function Locator() {
                   <th className="text-left px-3 py-2">{t('admin.locator.columns.size')}</th>
                   <th className="text-left px-3 py-2">{t('admin.locator.columns.origin')}</th>
                   <th className="text-right px-3 py-2">{t('admin.locator.columns.inbound')}</th>
-                  <th className="text-right px-3 py-2">{t('admin.locator.columns.stitching')}</th>
-                  <th className="text-right px-3 py-2">{t('admin.locator.columns.finishing')}</th>
-                  <th className="text-right px-3 py-2">{t('admin.locator.columns.dispatched')}</th>
+                  <th className="text-right px-3 py-2 text-[var(--stage-stitch-acc)]">
+                    {t('admin.locator.columns.stitching')}
+                  </th>
+                  <th className="text-right px-3 py-2 text-[var(--stage-finish-acc)]">
+                    {t('admin.locator.columns.finishing')}
+                  </th>
+                  <th className="text-right px-3 py-2 text-[var(--stage-disp-acc)]">
+                    {t('admin.locator.columns.dispatched')}
+                  </th>
                   <th className="text-right px-3 py-2">{t('admin.locator.columns.lots')}</th>
                   <th className="px-3 py-2" />
                 </tr>
@@ -348,11 +398,17 @@ export default function Locator() {
                           {r.originVendor.code}
                         </Badge>
                       </td>
-                      <td className="px-3 py-2 text-right">{r.counts.inbound}</td>
-                      <td className="px-3 py-2 text-right">{r.counts.stitching}</td>
-                      <td className="px-3 py-2 text-right">{r.counts.finishing}</td>
-                      <td className="px-3 py-2 text-right">{r.counts.dispatched}</td>
-                      <td className="px-3 py-2 text-right">{r.lotsCount}</td>
+                      <td className="px-3 py-2 text-right tabular-nums">{r.counts.inbound}</td>
+                      <td className="px-3 py-2 text-right tabular-nums font-medium text-[var(--stage-stitch-ink)]">
+                        {r.counts.stitching}
+                      </td>
+                      <td className="px-3 py-2 text-right tabular-nums font-medium text-[var(--stage-finish-ink)]">
+                        {r.counts.finishing}
+                      </td>
+                      <td className="px-3 py-2 text-right tabular-nums font-medium text-[var(--stage-disp-ink)]">
+                        {r.counts.dispatched}
+                      </td>
+                      <td className="px-3 py-2 text-right tabular-nums">{r.lotsCount}</td>
                       <td className="px-3 py-2 text-right">
                         <span className="text-[var(--color-primary)] text-xs">
                           {t('admin.locator.columns.open')}

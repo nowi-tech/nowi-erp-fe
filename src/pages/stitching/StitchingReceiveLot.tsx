@@ -10,6 +10,7 @@ import { Dialog } from '@/components/ui/dialog';
 import { useToast } from '@/components/ui/toast';
 import { getAvailability, getLot } from '@/api/lots';
 import { createReceipts, FeatureUnavailableError } from '@/api/receipts';
+import { orderStatusVariant } from '@/lib/statusBadge';
 import type { Lot, SizeMatrix } from '@/api/types';
 
 const STAGE_ID_STITCHING = 1;
@@ -117,11 +118,24 @@ export default function StitchingReceiveLot() {
           <div className="h-32 animate-pulse rounded bg-[var(--color-muted)]" />
         ) : lot ? (
           <>
-            <Card>
+            <Card stage="stitch">
               <CardHeader>
-                <CardTitle>
-                  {t('stitching.lotNo')} {lot.lotNo}
+                <CardTitle className="font-serif text-2xl">
+                  <span className="text-[var(--color-muted-foreground)] text-xs uppercase tracking-wider mr-2 font-sans">
+                    {t('stitching.lotNo')}
+                  </span>
+                  {lot.lotNo}
                 </CardTitle>
+                <div className="mt-2 flex items-center gap-2">
+                  <Badge variant="stitch" dot>
+                    {t('stitching.title')}
+                  </Badge>
+                  {lot.order?.status && (
+                    <Badge variant={orderStatusVariant(lot.order.status)}>
+                      {lot.order.status}
+                    </Badge>
+                  )}
+                </div>
               </CardHeader>
               <CardContent className="space-y-1 text-sm">
                 <div>
@@ -141,8 +155,7 @@ export default function StitchingReceiveLot() {
                 {lot.order && (
                   <div className="flex items-center gap-2">
                     <span className="text-[var(--color-muted-foreground)]">Order:</span>
-                    <span>{lot.order.orderNo}</span>
-                    <Badge variant="outline">{lot.order.status}</Badge>
+                    <span className="font-mono">{lot.order.orderNo}</span>
                   </div>
                 )}
               </CardContent>

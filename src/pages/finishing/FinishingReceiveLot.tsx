@@ -18,6 +18,7 @@ import { openRework } from '@/api/rework';
 import { requestUploadUrl } from '@/api/storage';
 import { createDispatch } from '@/api/dispatches';
 import { listWarehouses } from '@/api/filters';
+import { orderStatusVariant } from '@/lib/statusBadge';
 import { useAuth } from '@/context/auth';
 import type {
   CreateDispatchItemInput,
@@ -306,11 +307,24 @@ export default function FinishingReceiveLot() {
           <div className="h-32 animate-pulse rounded bg-[var(--color-muted)]" />
         ) : lot ? (
           <>
-            <Card>
+            <Card stage="finish">
               <CardHeader>
-                <CardTitle>
-                  {t('stitching.lotNo')} {lot.lotNo}
+                <CardTitle className="font-serif text-2xl">
+                  <span className="text-[var(--color-muted-foreground)] text-xs uppercase tracking-wider mr-2 font-sans">
+                    {t('stitching.lotNo')}
+                  </span>
+                  {lot.lotNo}
                 </CardTitle>
+                <div className="mt-2 flex items-center gap-2">
+                  <Badge variant="finish" dot>
+                    {t('finishing.title')}
+                  </Badge>
+                  {lot.order?.status && (
+                    <Badge variant={orderStatusVariant(lot.order.status)}>
+                      {lot.order.status}
+                    </Badge>
+                  )}
+                </div>
               </CardHeader>
               <CardContent className="space-y-1 text-sm">
                 <div>
@@ -322,8 +336,7 @@ export default function FinishingReceiveLot() {
                 {lot.order && (
                   <div className="flex items-center gap-2">
                     <span className="text-[var(--color-muted-foreground)]">Order:</span>
-                    <span>{lot.order.orderNo}</span>
-                    <Badge variant="outline">{lot.order.status}</Badge>
+                    <span className="font-mono">{lot.order.orderNo}</span>
                   </div>
                 )}
               </CardContent>
