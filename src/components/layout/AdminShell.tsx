@@ -1,12 +1,11 @@
 import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { NavLink, Outlet, useLocation } from 'react-router-dom';
+import { Link, NavLink, Outlet, useLocation } from 'react-router-dom';
 import {
   LayoutDashboard,
   Users,
   Truck,
   Search,
-  ChevronDown,
   LogOut,
   Database,
   FlaskConical,
@@ -100,7 +99,6 @@ function TrainingModeToggle() {
 export default function AdminShell() {
   const { t } = useTranslation();
   const { user, logout } = useAuth();
-  const [menuOpen, setMenuOpen] = useState(false);
   const [moreOpen, setMoreOpen] = useState(false);
   const location = useLocation();
 
@@ -108,12 +106,12 @@ export default function AdminShell() {
   const visibleNav = NAV_ITEMS.filter((it) =>
     role ? it.roles.includes(role) : false,
   );
+  const homePath = role === 'data_manager' ? '/data' : '/admin';
 
   const primary = visibleNav.slice(0, PRIMARY_BOTTOM_COUNT);
   const overflow = visibleNav.slice(PRIMARY_BOTTOM_COUNT);
 
   useEffect(() => {
-    setMenuOpen(false);
     setMoreOpen(false);
   }, [location.pathname]);
 
@@ -121,9 +119,13 @@ export default function AdminShell() {
     <div className="density-compact min-h-screen flex bg-[var(--color-background)] text-[var(--color-foreground)]">
       {/* Desktop sidebar */}
       <aside className="hidden lg:flex w-60 shrink-0 border-r border-[var(--color-border)] flex-col bg-[var(--color-surface)]">
-        <div className="px-5 py-5 border-b border-[var(--color-border)]">
+        <Link
+          to={homePath}
+          aria-label={t('common.appName')}
+          className="px-5 py-5 border-b border-[var(--color-border)] block hover:bg-[var(--color-muted)] transition-colors"
+        >
           <Logo size="md" />
-        </div>
+        </Link>
         <nav className="flex-1 p-3 space-y-1">
           {visibleNav.map((item) => (
             <NavLink
@@ -151,55 +153,54 @@ export default function AdminShell() {
 
       {/* Main column */}
       <div className="flex-1 flex flex-col min-w-0">
-        <header className="sticky top-0 z-20 flex items-center justify-between border-b border-[var(--color-border)] bg-[var(--color-surface)]/95 backdrop-blur px-3 sm:px-5 h-14">
-          <div className="flex items-center gap-3 min-w-0">
-            <div className="lg:hidden">
-              <Logo size="sm" />
+        <header className="sticky top-0 z-20 border-b border-[var(--color-border)] bg-[var(--color-surface)]/95 backdrop-blur px-3 sm:px-5 h-14">
+          {/* Mobile: logo left, actions right */}
+          <div className="lg:hidden flex items-center justify-between h-full">
+            <Link
+              to={homePath}
+              aria-label={t('common.appName')}
+              className="p-1 -ml-1 rounded-[var(--radius-sm)] hover:bg-[var(--color-muted)]"
+            >
+              <Logo size="md" />
+            </Link>
+            <div className="flex items-center gap-1">
+              <LanguageToggle />
+              <button
+                type="button"
+                onClick={() => void logout()}
+                className="p-2 rounded-[var(--radius-sm)] hover:bg-[var(--color-muted)] text-[var(--color-muted-foreground)]"
+                aria-label={t('common.logout')}
+              >
+                <LogOut size={18} />
+              </button>
             </div>
-            {user && (
-              <Badge variant="secondary" className="hidden sm:inline-flex">
-                {t(`roles.${user.role}` as const)}
-              </Badge>
-            )}
           </div>
-          <div className="flex items-center gap-2 sm:gap-3 relative">
-            {role === 'admin' && <TrainingModeToggle />}
-            <LanguageToggle />
-            <button
-              type="button"
-              onClick={() => setMenuOpen((v) => !v)}
-              className="hidden sm:flex items-center gap-1 px-2 py-1 rounded-[var(--radius-sm)] hover:bg-[var(--color-muted)] text-sm"
-            >
-              <span className="max-w-[10ch] truncate">{user?.name ?? '—'}</span>
-              <ChevronDown size={14} />
-            </button>
-            <button
-              type="button"
-              onClick={() => void logout()}
-              className="flex items-center gap-1 px-2 py-1 rounded-[var(--radius-sm)] hover:bg-[var(--color-muted)] text-sm text-[var(--color-muted-foreground)]"
-              aria-label={t('common.logout')}
-            >
-              <LogOut size={14} />
-              <span className="hidden md:inline">{t('common.logout')}</span>
-            </button>
-            {menuOpen && (
-              <div className="absolute right-0 top-full mt-2 w-44 rounded-[var(--radius-md)] border border-[var(--color-border)] bg-[var(--color-surface)] shadow-[var(--shadow-pop)] z-30 overflow-hidden">
-                <div className="px-3 py-2 text-xs text-[var(--color-muted-foreground)] border-b border-[var(--color-border)]">
-                  {user && t(`roles.${user.role}` as const)}
-                </div>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setMenuOpen(false);
-                    void logout();
-                  }}
-                  className="w-full flex items-center gap-2 px-3 py-2 text-sm text-left hover:bg-[var(--color-muted)]"
-                >
-                  <LogOut size={14} />
-                  {t('common.logout')}
-                </button>
-              </div>
-            )}
+
+          {/* Desktop: logo lives in the sidebar; header carries identity + actions */}
+          <div className="hidden lg:flex items-center justify-between h-full">
+            <div className="flex items-center gap-3 min-w-0">
+              {user && (
+                <Badge variant="secondary">
+                  {t(`roles.${user.role}` as const)}
+                </Badge>
+              )}
+            </div>
+            <div className="flex items-center gap-3">
+              {role === 'admin' && <TrainingModeToggle />}
+              <LanguageToggle />
+              <span className="text-sm text-[var(--color-muted-foreground)] max-w-[14ch] truncate">
+                {user?.name}
+              </span>
+              <button
+                type="button"
+                onClick={() => void logout()}
+                className="flex items-center gap-1 px-2 py-1 rounded-[var(--radius-sm)] hover:bg-[var(--color-muted)] text-sm text-[var(--color-muted-foreground)]"
+                aria-label={t('common.logout')}
+              >
+                <LogOut size={14} />
+                <span>{t('common.logout')}</span>
+              </button>
+            </div>
           </div>
         </header>
 

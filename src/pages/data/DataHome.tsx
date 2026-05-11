@@ -1,11 +1,9 @@
 import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Link } from 'react-router-dom';
-import { Truck, Package, Users, Settings } from 'lucide-react';
+import { Users } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { listVendors } from '@/api/vendors';
-import { listSkus } from '@/api/skus';
 
 interface CardSpec {
   to: string;
@@ -17,31 +15,33 @@ interface CardSpec {
 
 const CARDS: CardSpec[] = [
   {
-    to: '/admin/vendors',
-    icon: <Truck size={18} />,
-    titleKey: 'admin.nav.vendors',
-    bodyKey: 'data.cards.vendorsBody',
-    loadCount: async () => (await listVendors()).length,
-  },
-  {
-    to: '/admin/skus',
-    icon: <Package size={18} />,
-    titleKey: 'admin.nav.skus',
-    bodyKey: 'data.cards.skusBody',
-    loadCount: async () => (await listSkus()).length,
-  },
-  {
     to: '/admin/users',
     icon: <Users size={18} />,
     titleKey: 'admin.nav.users',
     bodyKey: 'data.cards.usersBody',
   },
-  {
-    to: '/admin/settings',
-    icon: <Settings size={18} />,
-    titleKey: 'admin.nav.settings',
-    bodyKey: 'data.cards.settingsBody',
-  },
+  // TODO: build — Vendors / SKUs / Settings admin pages.
+  // Cards re-enabled once those routes ship in App.tsx.
+  // {
+  //   to: '/admin/vendors',
+  //   icon: <Truck size={18} />,
+  //   titleKey: 'admin.nav.vendors',
+  //   bodyKey: 'data.cards.vendorsBody',
+  //   loadCount: async () => (await listVendors()).length,
+  // },
+  // {
+  //   to: '/admin/skus',
+  //   icon: <Package size={18} />,
+  //   titleKey: 'admin.nav.skus',
+  //   bodyKey: 'data.cards.skusBody',
+  //   loadCount: async () => (await listSkus()).length,
+  // },
+  // {
+  //   to: '/admin/settings',
+  //   icon: <Settings size={18} />,
+  //   titleKey: 'admin.nav.settings',
+  //   bodyKey: 'data.cards.settingsBody',
+  // },
 ];
 
 function CountBadge({ load }: { load?: () => Promise<number> }) {
@@ -72,7 +72,9 @@ export default function DataHome() {
   return (
     <div className="space-y-4">
       <div>
-        <h1 className="text-xl font-semibold">{t('data.title')}</h1>
+        <h1 className="font-serif text-2xl text-[var(--color-foreground)]">
+          {t('data.title')}
+        </h1>
         <p className="text-sm text-[var(--color-muted-foreground)]">
           {t('data.subtitle')}
         </p>

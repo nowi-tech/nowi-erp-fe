@@ -7,9 +7,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { listLots } from '@/api/lots';
-import { useAuth } from '@/context/auth';
 import type { Lot, OrderStatus } from '@/api/types';
-import ReceiveFromKottyModal from './ReceiveFromKottyModal';
 
 function todayLabel(locale: string): string {
   return new Date().toLocaleDateString(locale, {
@@ -35,10 +33,8 @@ function totalUnits(matrix: Record<string, number> | null | undefined): number {
 export default function StitchingHome() {
   const { t, i18n } = useTranslation();
   const navigate = useNavigate();
-  const { user } = useAuth();
   const [lots, setLots] = useState<Lot[]>([]);
   const [loading, setLoading] = useState(true);
-  const [modalOpen, setModalOpen] = useState(false);
 
   const refresh = useCallback(async () => {
     setLoading(true);
@@ -58,13 +54,24 @@ export default function StitchingHome() {
 
   return (
     <FloorShell title={t('stitching.title')}>
-      <div className="mb-3 flex flex-col gap-0.5">
-        <span className="text-xs uppercase tracking-wide text-[var(--color-muted-foreground)]">
-          {todayLabel(i18n.language)}
-        </span>
-        <span className="text-sm font-medium">
-          {t('roles.stitching_master')} • {user?.name ?? ''}
-        </span>
+      <div className="mb-4 flex items-start justify-between gap-3 flex-wrap">
+        <div>
+          <h1 className="font-serif text-2xl text-[var(--color-foreground)]">
+            {t('stitching.title')}
+          </h1>
+          <p className="mt-1 text-xs uppercase tracking-wide text-[var(--color-muted-foreground)]">
+            {todayLabel(i18n.language)}
+          </p>
+        </div>
+        <Button
+          type="button"
+          size="lg"
+          className="hidden lg:inline-flex"
+          onClick={() => navigate('/stitching/receive')}
+        >
+          <Plus size={16} />
+          {t('stitching.receiveFromKotty.fab')}
+        </Button>
       </div>
       <Card>
         <CardHeader>
@@ -113,22 +120,12 @@ export default function StitchingHome() {
       <Button
         type="button"
         size="lg"
-        className="fixed right-4 bottom-24 shadow-lg"
-        onClick={() => setModalOpen(true)}
+        className="fixed right-4 bottom-24 shadow-lg lg:hidden"
+        onClick={() => navigate('/stitching/receive')}
       >
         <Plus size={18} />
         {t('stitching.receiveFromKotty.fab')}
       </Button>
-
-      {modalOpen && (
-        <ReceiveFromKottyModal
-          onClose={() => setModalOpen(false)}
-          onSuccess={() => {
-            setModalOpen(false);
-            void refresh();
-          }}
-        />
-      )}
     </FloorShell>
   );
 }

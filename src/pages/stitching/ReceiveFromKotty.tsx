@@ -1,6 +1,9 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Trash2 } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
+import { ArrowLeft, Trash2, Plus } from 'lucide-react';
+import FloorShell from '@/components/layout/FloorShell';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Dialog } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -31,14 +34,10 @@ function matrixTotal(m: SizeMatrix): number {
   return Object.values(m).reduce((a, b) => a + (Number(b) || 0), 0);
 }
 
-interface Props {
-  onClose: () => void;
-  onSuccess: () => void;
-}
-
-export default function ReceiveFromKottyModal({ onClose, onSuccess }: Props) {
+export default function ReceiveFromKottyPage() {
   const { t } = useTranslation();
   const toast = useToast();
+  const navigate = useNavigate();
 
   const [vendors, setVendors] = useState<Vendor[]>([]);
   const [vendorId, setVendorId] = useState<string>('');
@@ -59,7 +58,6 @@ export default function ReceiveFromKottyModal({ onClose, onSuccess }: Props) {
       .then((vs) => {
         if (cancelled) return;
         setVendors(vs);
-        // Default to Kotty vendor when present.
         const kotty =
           vs.find((v) => v.code?.toUpperCase() === 'KOTTY') ??
           vs.find((v) => v.consumptionApiEnabled) ??
@@ -95,7 +93,9 @@ export default function ReceiveFromKottyModal({ onClose, onSuccess }: Props) {
   }
 
   function updateLotNo(key: number, value: string) {
-    setRows((prev) => prev.map((r) => (r.key === key ? { ...r, lotNo: value } : r)));
+    setRows((prev) =>
+      prev.map((r) => (r.key === key ? { ...r, lotNo: value } : r)),
+    );
   }
 
   function addRow() {
@@ -124,7 +124,7 @@ export default function ReceiveFromKottyModal({ onClose, onSuccess }: Props) {
         lots,
       });
       toast.show(t('stitching.receiveFromKotty.successToast'), 'success');
-      onSuccess();
+      navigate('/stitching');
     } catch {
       toast.show(t('stitching.receiveFromKotty.errorToast'), 'error');
     } finally {
@@ -134,70 +134,97 @@ export default function ReceiveFromKottyModal({ onClose, onSuccess }: Props) {
   }
 
   return (
-    <>
-      <Dialog
-        open
-        onClose={onClose}
-        title={t('stitching.receiveFromKotty.title')}
-        footer={
-          <>
-            <Button variant="outline" onClick={onClose} disabled={submitting}>
-              {t('common.cancel')}
-            </Button>
-            <Button
-              onClick={() => setConfirmOpen(true)}
-              disabled={!canSubmit || submitting}
-            >
-              {t('common.submit')}
-            </Button>
-          </>
-        }
-      >
-        <div className="space-y-4">
-          <div>
-            <Label htmlFor="vendor">{t('stitching.receiveFromKotty.vendor')}</Label>
-            <Select
-              id="vendor"
-              value={vendorId}
-              onChange={(e) => setVendorId(e.target.value)}
-            >
-              <option value="" disabled>
-                —
-              </option>
-              {vendors.map((v) => (
-                <option key={v.id} value={v.id}>
-                  {v.name} ({v.code})
+    <FloorShell>
+      {/* Page heading + back */}
+      <div className="mb-4 flex items-center justify-between gap-2">
+        <Button variant="ghost" size="sm" onClick={() => navigate('/stitching')}>
+          <ArrowLeft size={16} />
+          {t('common.back')}
+        </Button>
+        <span className="text-sm text-[var(--color-muted-foreground)]">
+          {t('common.total')}: <span className="tabular-nums font-medium text-[var(--color-foreground)]">{grandTotal}</span>
+        </span>
+      </div>
+      <h1 className="font-serif text-2xl text-[var(--color-foreground)] mb-1">
+        {t('stitching.receiveFromKotty.title')}
+      </h1>
+      <p className="mb-5 text-sm text-[var(--color-muted-foreground)]">
+        {t('stitching.receiveFromKotty.subtitle', {
+          defaultValue: 'Capture the challan, then the per-size quantities for each lot.',
+        })}
+      </p>
+
+      {/* Form body — single column on mobile, two on desktop */}
+      <div className="grid lg:grid-cols-[1fr_2fr] gap-4 pb-32">
+        <Card>
+          <CardHeader>
+            <CardTitle>{t('stitching.receiveFromKotty.challanSection', { defaultValue: 'Challan' })}</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div>
+              <Label htmlFor="vendor">{t('stitching.receiveFromKotty.vendor')}</Label>
+              <Select
+                id="vendor"
+                value={vendorId}
+                onChange={(e) => setVendorId(e.target.value)}
+              >
+                <option value="" disabled>
+                  —
                 </option>
-              ))}
-            </Select>
-          </div>
+                {vendors.map((v) => (
+                  <option key={v.id} value={v.id}>
+                    {v.name} ({v.code})
+                  </option>
+                ))}
+              </Select>
+            </div>
 
-          <div>
-            <Label htmlFor="challanNo">{t('stitching.receiveFromKotty.challanNo')}</Label>
-            <Input
-              id="challanNo"
-              value={challanNo}
-              onChange={(e) => setChallanNo(e.target.value)}
-              autoFocus
-            />
-          </div>
+            <div>
+              <Label htmlFor="challanNo">
+                {t('stitching.receiveFromKotty.challanNo')}
+              </Label>
+              <Input
+                id="challanNo"
+                value={challanNo}
+                onChange={(e) => setChallanNo(e.target.value)}
+                autoFocus
+              />
+            </div>
 
-          <div>
-            <Label htmlFor="vendorLotNo">
-              {t('stitching.receiveFromKotty.vendorLotNo')}
-            </Label>
-            <Input
-              id="vendorLotNo"
-              value={vendorLotNo}
-              onChange={(e) => setVendorLotNo(e.target.value)}
-            />
-          </div>
+            <div>
+              <Label htmlFor="vendorLotNo">
+                {t('stitching.receiveFromKotty.vendorLotNo')}
+              </Label>
+              <Input
+                id="vendorLotNo"
+                value={vendorLotNo}
+                onChange={(e) => setVendorLotNo(e.target.value)}
+              />
+            </div>
 
-          <div className="space-y-3">
+            <div>
+              <Label htmlFor="notes">{t('stitching.receiveFromKotty.notes')}</Label>
+              <Textarea
+                id="notes"
+                value={notes}
+                onChange={(e) => setNotes(e.target.value)}
+                rows={3}
+              />
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle>
+              {t('stitching.receiveFromKotty.lotsSection', { defaultValue: 'Lots' })}
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-3">
             {rows.map((row, idx) => (
               <div
                 key={row.key}
-                className="rounded-[var(--radius-md)] border border-[var(--color-border)] p-3 space-y-2"
+                className="rounded-[var(--radius-md)] border border-[var(--color-border)] p-3 space-y-3"
               >
                 <div className="flex items-center justify-between">
                   <Label htmlFor={`lotNo-${row.key}`} className="mb-0">
@@ -208,7 +235,7 @@ export default function ReceiveFromKottyModal({ onClose, onSuccess }: Props) {
                       type="button"
                       onClick={() => removeRow(row.key)}
                       aria-label={t('stitching.receiveFromKotty.removeLot')}
-                      className="text-[var(--color-muted-foreground)] hover:text-[var(--color-destructive)]"
+                      className="text-[var(--color-muted-foreground)] hover:text-[var(--color-destructive)] p-1"
                     >
                       <Trash2 size={16} />
                     </button>
@@ -220,7 +247,9 @@ export default function ReceiveFromKottyModal({ onClose, onSuccess }: Props) {
                   onChange={(e) => updateLotNo(row.key, e.target.value)}
                 />
                 <div>
-                  <Label className="mb-1">{t('stitching.receiveFromKotty.sizeMatrix')}</Label>
+                  <Label className="mb-1">
+                    {t('stitching.receiveFromKotty.sizeMatrix')}
+                  </Label>
                   <div className="grid grid-cols-5 gap-2">
                     {SIZES.map((s) => (
                       <div key={s} className="flex flex-col">
@@ -237,27 +266,55 @@ export default function ReceiveFromKottyModal({ onClose, onSuccess }: Props) {
                     ))}
                   </div>
                   <div className="mt-1 text-right text-xs text-[var(--color-muted-foreground)]">
-                    Σ {matrixTotal(row.matrix)}
+                    {t('common.total')}:{' '}
+                    <span className="tabular-nums font-medium text-[var(--color-foreground)]">
+                      {matrixTotal(row.matrix)}
+                    </span>
                   </div>
                 </div>
               </div>
             ))}
-            <Button type="button" variant="outline" onClick={addRow} className="w-full">
+            <Button
+              type="button"
+              variant="outline"
+              onClick={addRow}
+              className="w-full"
+            >
+              <Plus size={16} />
               {t('stitching.receiveFromKotty.addLot')}
             </Button>
-          </div>
+          </CardContent>
+        </Card>
+      </div>
 
-          <div>
-            <Label htmlFor="notes">{t('stitching.receiveFromKotty.notes')}</Label>
-            <Textarea
-              id="notes"
-              value={notes}
-              onChange={(e) => setNotes(e.target.value)}
-              rows={2}
-            />
+      {/* Sticky save bar */}
+      <div className="fixed bottom-0 lg:bottom-auto lg:top-auto inset-x-0 lg:left-auto lg:right-6 lg:bottom-6 z-10 lg:z-30 border-t lg:border lg:rounded-[var(--radius-lg)] border-[var(--color-border)] bg-[var(--color-surface)]/95 backdrop-blur lg:shadow-[var(--shadow-pop)] pb-[env(safe-area-inset-bottom)] lg:pb-3 lg:pt-3 lg:px-4">
+        <div className="max-w-3xl lg:max-w-none mx-auto px-4 lg:px-0 py-3 lg:py-0 flex items-center justify-between gap-3">
+          <span className="text-sm text-[var(--color-muted-foreground)]">
+            {t('common.total')}:{' '}
+            <span className="tabular-nums font-medium text-[var(--color-foreground)]">
+              {grandTotal}
+            </span>{' '}
+            {t('common.units')}
+          </span>
+          <div className="flex items-center gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => navigate('/stitching')}
+              disabled={submitting}
+            >
+              {t('common.cancel')}
+            </Button>
+            <Button
+              onClick={() => setConfirmOpen(true)}
+              disabled={!canSubmit || submitting}
+            >
+              {t('common.submit')}
+            </Button>
           </div>
         </div>
-      </Dialog>
+      </div>
 
       <Dialog
         open={confirmOpen}
@@ -282,6 +339,6 @@ export default function ReceiveFromKottyModal({ onClose, onSuccess }: Props) {
       >
         <p>{t('stitching.receiveFromKotty.totalUnits', { total: grandTotal })}</p>
       </Dialog>
-    </>
+    </FloorShell>
   );
 }

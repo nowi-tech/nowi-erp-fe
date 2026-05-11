@@ -20,6 +20,9 @@ const StitchingHome = lazy(() => import('./pages/stitching/StitchingHome'));
 const StitchingReceiveLot = lazy(
   () => import('./pages/stitching/StitchingReceiveLot'),
 );
+const ReceiveFromKotty = lazy(
+  () => import('./pages/stitching/ReceiveFromKotty'),
+);
 const FinishingHome = lazy(() => import('./pages/finishing/FinishingHome'));
 const FinishingReceiveLot = lazy(
   () => import('./pages/finishing/FinishingReceiveLot'),
@@ -145,6 +148,16 @@ function App() {
                 <ProtectedRoute allowedRoles={['stitching_master', 'admin', 'viewer']}>
                   <S>
                     <StitchingHome />
+                  </S>
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/stitching/receive"
+              element={
+                <ProtectedRoute allowedRoles={['stitching_master', 'admin']}>
+                  <S>
+                    <ReceiveFromKotty />
                   </S>
                 </ProtectedRoute>
               }

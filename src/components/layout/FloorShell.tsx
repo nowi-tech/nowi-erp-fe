@@ -1,120 +1,111 @@
-import { useState, type ReactNode } from 'react';
+import { type ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
-import { useNavigate, useLocation } from 'react-router-dom';
-import { Home, Package, User as UserIcon, LogOut } from 'lucide-react';
+import { Link, NavLink, useNavigate, useLocation } from 'react-router-dom';
+import { Home, LogOut } from 'lucide-react';
 import { useAuth } from '@/context/auth';
-import { Badge } from '@/components/ui/badge';
-import { Button } from '@/components/ui/button';
 import LanguageToggle from '@/components/LanguageToggle';
+import Logo from '@/components/Logo';
 import { cn } from '@/lib/utils';
 
 interface FloorShellProps {
   children: ReactNode;
+  /** Kept for back-compat / accessibility; not rendered in the header anymore. */
   title?: string;
 }
 
-export default function FloorShell({ children, title }: FloorShellProps) {
+export default function FloorShell({ children }: FloorShellProps) {
   const { t } = useTranslation();
   const { user, logout } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
-  const [profileOpen, setProfileOpen] = useState(false);
 
   const role = user?.role;
   const homePath = role === 'finishing_master' ? '/finishing' : '/stitching';
-  const lotsPath = homePath; // floor "Lots" tab points at the same role-home for v1
 
   const isHome = location.pathname === homePath;
 
   return (
     <div className="density-comfortable min-h-screen flex flex-col bg-[var(--color-background)] text-[var(--color-foreground)]">
-      <header className="flex items-center justify-between gap-3 border-b border-[var(--color-border)] px-4 py-3">
-        <div className="flex items-center gap-2 min-w-0">
-          <span className="font-semibold truncate">{title ?? t('common.appName')}</span>
-          {user && (
-            <Badge variant="secondary" className="shrink-0">
-              {t(`roles.${user.role}` as const)}
-            </Badge>
-          )}
+      {/* ── MOBILE HEADER ── (logo left, lang right) */}
+      <header className="lg:hidden sticky top-0 z-20 border-b border-[var(--color-border)] bg-[var(--color-background)]/95 backdrop-blur px-3 h-14">
+        <div className="flex items-center justify-between h-full">
+          <Link
+            to={homePath}
+            aria-label={t('common.appName')}
+            className="p-1 -ml-1 rounded-[var(--radius-sm)] hover:bg-[var(--color-muted)]"
+          >
+            <Logo size="md" />
+          </Link>
+          <LanguageToggle />
         </div>
-        <LanguageToggle />
       </header>
 
-      <main className="flex-1 overflow-auto p-4 pb-24">{children}</main>
+      {/* ── DESKTOP HEADER ── (logo left, inline nav, identity + actions right) */}
+      <header className="hidden lg:flex sticky top-0 z-20 items-center border-b border-[var(--color-border)] bg-[var(--color-background)]/95 backdrop-blur px-6 h-16">
+        <div className="flex items-center gap-8 max-w-5xl w-full mx-auto">
+          <Link
+            to={homePath}
+            aria-label={t('common.appName')}
+            className="p-1 -ml-1 rounded-[var(--radius-sm)] hover:bg-[var(--color-muted)] shrink-0"
+          >
+            <Logo size="md" />
+          </Link>
+          <nav className="flex items-center gap-1" aria-label="primary">
+            <NavLink
+              to={homePath}
+              end
+              className={({ isActive }) =>
+                cn(
+                  'flex items-center gap-2 px-3 py-1.5 rounded-[var(--radius-md)] text-sm transition-colors',
+                  isActive
+                    ? 'bg-[var(--color-primary)] text-[var(--color-primary-foreground)] font-medium'
+                    : 'text-[var(--color-muted-foreground)] hover:bg-[var(--color-muted)] hover:text-[var(--color-foreground)]',
+                )
+              }
+            >
+              <Home size={16} />
+              <span>{t('nav.home')}</span>
+            </NavLink>
+          </nav>
+          <div className="ml-auto flex items-center gap-2">
+            <LanguageToggle />
+            <button
+              type="button"
+              onClick={() => void logout()}
+              className="flex items-center gap-1.5 px-2 py-1 rounded-[var(--radius-sm)] hover:bg-[var(--color-muted)] text-sm text-[var(--color-muted-foreground)]"
+              aria-label={t('common.logout')}
+              title={t('common.logout')}
+            >
+              <LogOut size={16} />
+              <span className="sr-only">{t('common.logout')}</span>
+            </button>
+          </div>
+        </div>
+      </header>
 
+      <main className="flex-1 overflow-auto p-4 sm:p-6 lg:p-8 pb-[calc(4rem+env(safe-area-inset-bottom))] lg:pb-8 max-w-3xl lg:max-w-5xl w-full mx-auto">
+        {children}
+      </main>
+
+      {/* ── MOBILE BOTTOM NAV ── (hidden on desktop; nav lives in the header) */}
       <nav
-        className="fixed bottom-0 inset-x-0 border-t border-[var(--color-border)] bg-[var(--color-background)] grid grid-cols-3"
+        className="lg:hidden fixed bottom-0 inset-x-0 border-t border-[var(--color-border)] bg-[var(--color-background)] pb-[env(safe-area-inset-bottom)]"
         aria-label="primary"
       >
-        <TabButton
-          icon={<Home size={22} />}
-          label={t('nav.home')}
-          active={isHome}
-          onClick={() => navigate(homePath)}
-        />
-        <TabButton
-          icon={<Package size={22} />}
-          label={t('nav.lots')}
-          onClick={() => navigate(lotsPath)}
-        />
-        <TabButton
-          icon={<UserIcon size={22} />}
-          label={t('nav.profile')}
-          onClick={() => setProfileOpen(true)}
-        />
-      </nav>
-
-      {profileOpen && (
-        <div
-          role="dialog"
-          aria-modal="true"
-          aria-label={t('profile.title')}
-          className="fixed inset-0 z-40 flex"
-          onClick={(e) => {
-            if (e.target === e.currentTarget) setProfileOpen(false);
-          }}
-        >
-          <div className="flex-1 bg-black/40" />
-          <aside className="w-72 max-w-[85vw] bg-[var(--color-background)] border-l border-[var(--color-border)] p-4 flex flex-col gap-4 shadow-xl">
-            <div className="flex items-center justify-between">
-              <span className="font-semibold">{t('profile.title')}</span>
-              <button
-                type="button"
-                onClick={() => setProfileOpen(false)}
-                className="text-sm text-[var(--color-muted-foreground)]"
-                aria-label={t('common.close')}
-              >
-                ✕
-              </button>
-            </div>
-            {user && (
-              <div className="text-sm">
-                <div className="font-medium">{user.name}</div>
-                <div className="text-[var(--color-muted-foreground)]">
-                  {t(`roles.${user.role}` as const)}
-                </div>
-              </div>
-            )}
-            <div>
-              <div className="mb-2 text-sm font-medium">{t('profile.languageLabel')}</div>
-              <LanguageToggle />
-            </div>
-            <div className="mt-auto">
-              <Button
-                variant="outline"
-                className="w-full"
-                onClick={() => {
-                  setProfileOpen(false);
-                  void logout();
-                }}
-              >
-                <LogOut size={16} />
-                {t('profile.logout')}
-              </Button>
-            </div>
-          </aside>
+        <div className="grid grid-cols-2 max-w-3xl mx-auto">
+          <TabButton
+            icon={<Home size={22} />}
+            label={t('nav.home')}
+            active={isHome}
+            onClick={() => navigate(homePath)}
+          />
+          <TabButton
+            icon={<LogOut size={22} />}
+            label={t('common.logout')}
+            onClick={() => void logout()}
+          />
         </div>
-      )}
+      </nav>
     </div>
   );
 }

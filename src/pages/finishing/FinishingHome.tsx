@@ -6,7 +6,6 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { listLots } from '@/api/lots';
-import { useAuth } from '@/context/auth';
 import type { Lot, OrderStatus } from '@/api/types';
 
 const FINISHING_QUEUE_STATUSES: OrderStatus[] = [
@@ -37,7 +36,6 @@ function todayLabel(locale: string): string {
 export default function FinishingHome() {
   const { t, i18n } = useTranslation();
   const navigate = useNavigate();
-  const { user } = useAuth();
   const [lots, setLots] = useState<Lot[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -59,13 +57,13 @@ export default function FinishingHome() {
 
   return (
     <FloorShell title={t('finishing.title')}>
-      <div className="mb-3 flex flex-col gap-0.5">
-        <span className="text-xs uppercase tracking-wide text-[var(--color-muted-foreground)]">
+      <div className="mb-4">
+        <h1 className="font-serif text-2xl text-[var(--color-foreground)]">
+          {t('finishing.title')}
+        </h1>
+        <p className="mt-1 text-xs uppercase tracking-wide text-[var(--color-muted-foreground)]">
           {todayLabel(i18n.language)}
-        </span>
-        <span className="text-sm font-medium">
-          {t('roles.finishing_master')} • {user?.name ?? ''}
-        </span>
+        </p>
       </div>
       <Card>
         <CardHeader>

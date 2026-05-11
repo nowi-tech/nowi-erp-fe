@@ -21,6 +21,8 @@
     "noopDevHint": "(डेव मोड — असली अपलोड नहीं)",
     "saving": "सहेजा जा रहा है…",
     "language": "भाषा",
+    "total": "कुल",
+    "units": "यूनिट",
     "more": "और",
     "filters": "फ़िल्टर",
     "filtersActive": "{{count}} सक्रिय",
@@ -86,6 +88,9 @@
     "receiveFromKotty": {
       "fab": "Kotty से माल लें",
       "title": "Kotty से माल लें",
+      "subtitle": "पहले चालान भरें, फिर हर लॉट के लिए साइज़-वार मात्रा।",
+      "challanSection": "चालान",
+      "lotsSection": "लॉट्स",
       "vendor": "विक्रेता",
       "challanNo": "चालान नंबर",
       "lotNo": "लॉट नंबर",
