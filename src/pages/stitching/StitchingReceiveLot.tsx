@@ -87,6 +87,13 @@ export default function StitchingReceiveLot() {
     return Array.from(keys);
   }, [available, lot]);
 
+  // First size with availability > 0 — gets autofocus so the floor
+  // master can start typing immediately on lot open.
+  const firstFocusSize = useMemo(
+    () => sizes.find((s) => (available?.[s] ?? 0) > 0) ?? null,
+    [sizes, available],
+  );
+
   const total = totalOf(qty);
   const allZero =
     sizes.length > 0 && sizes.every((s) => (available?.[s] ?? 0) === 0);
@@ -278,6 +285,7 @@ export default function StitchingReceiveLot() {
                             onChange={(e) => setSize(size, e.target.value)}
                             className="w-24 text-center"
                             disabled={max === 0}
+                            autoFocus={size === firstFocusSize}
                           />
                           <button
                             type="button"

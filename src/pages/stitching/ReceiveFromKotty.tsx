@@ -302,25 +302,39 @@ export default function ReceiveFromKottyPage() {
             <CardTitle>{t('stitching.receiveFromKotty.challanSection', { defaultValue: 'Challan' })}</CardTitle>
           </CardHeader>
           <CardContent className="px-4 pb-4 space-y-3">
+            {/* Vendor picker collapses to a static label when only one
+                active vendor exists — saves a select on the most
+                common path. */}
             <div>
               <Label htmlFor="vendor" required>
                 {t('stitching.receiveFromKotty.vendor')}
               </Label>
-              <Select
-                id="vendor"
-                value={vendorId}
-                onChange={(e) => setVendorId(e.target.value)}
-                required
-              >
-                <option value="" disabled>
-                  —
-                </option>
-                {vendors.map((v) => (
-                  <option key={v.id} value={v.id}>
-                    {v.name} ({v.code})
+              {vendors.length <= 1 ? (
+                <div className="flex items-center h-[var(--density-control-height)] px-3 rounded-[var(--radius-md)] border border-[var(--color-border)] bg-[var(--color-muted)]/40 text-sm">
+                  {vendors[0]?.name ?? '—'}
+                  {vendors[0]?.code && (
+                    <span className="ml-2 text-[var(--color-muted-foreground)] font-mono text-xs">
+                      ({vendors[0].code})
+                    </span>
+                  )}
+                </div>
+              ) : (
+                <Select
+                  id="vendor"
+                  value={vendorId}
+                  onChange={(e) => setVendorId(e.target.value)}
+                  required
+                >
+                  <option value="" disabled>
+                    —
                   </option>
-                ))}
-              </Select>
+                  {vendors.map((v) => (
+                    <option key={v.id} value={v.id}>
+                      {v.name} ({v.code})
+                    </option>
+                  ))}
+                </Select>
+              )}
             </div>
 
             <div>
