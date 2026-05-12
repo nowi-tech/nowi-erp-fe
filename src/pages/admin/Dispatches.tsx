@@ -235,13 +235,10 @@ export default function Dispatches() {
                   data?.rows.map((r: Dispatch) => (
                     <tr
                       key={r.id}
-                      className="border-t border-[var(--color-border)] hover:bg-[var(--stage-disp-bg)]/40 cursor-pointer transition-colors"
+                      className="border-t border-[var(--color-border)] hover:bg-[var(--color-muted)] cursor-pointer transition-colors"
                       onClick={() => navigate(`/admin/dispatches/${r.id}`)}
                     >
-                      <td
-                        className="px-3 py-2 font-mono text-xs"
-                        style={{ boxShadow: 'inset 3px 0 0 var(--stage-disp-acc)' }}
-                      >
+                      <td className="px-3 py-2 font-mono text-xs">
                         {r.dispatchNo}
                       </td>
                       <td className="px-3 py-2">
@@ -254,9 +251,18 @@ export default function Dispatches() {
                         {t(`admin.dispatches.syncMode.${r.syncMode}`)}
                       </td>
                       <td className="px-3 py-2">
-                        <Badge variant={dispatchStatusVariant(r.status)} dot>
-                          {t(`admin.dispatches.status.${r.status}`)}
-                        </Badge>
+                        {(() => {
+                          const v = dispatchStatusVariant(r.status);
+                          // Show a dot only when the variant is an anomaly
+                          // (the helper now returns 'stuck' for mismatch/failed
+                          // and 'outline' for everything else).
+                          const showDot = v !== 'outline';
+                          return (
+                            <Badge variant={v} dot={showDot}>
+                              {t(`admin.dispatches.status.${r.status}`)}
+                            </Badge>
+                          );
+                        })()}
                       </td>
                       <td className="px-3 py-2 text-right tabular-nums">
                         {r.itemsCount ?? '—'}

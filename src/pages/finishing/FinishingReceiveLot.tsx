@@ -315,16 +315,13 @@ export default function FinishingReceiveLot() {
                   </span>
                   {lot.lotNo}
                 </CardTitle>
-                <div className="mt-2 flex items-center gap-2">
-                  <Badge variant="finish" dot>
-                    {t('finishing.title')}
-                  </Badge>
-                  {lot.order?.status && (
-                    <Badge variant={orderStatusVariant(lot.order.status)}>
+                {(lot.order?.status === 'in_rework' || lot.order?.status === 'stuck') && (
+                  <div className="mt-2">
+                    <Badge variant={orderStatusVariant(lot.order.status)} dot>
                       {lot.order.status}
                     </Badge>
-                  )}
-                </div>
+                  </div>
+                )}
               </CardHeader>
               <CardContent className="space-y-1 text-sm">
                 <div>

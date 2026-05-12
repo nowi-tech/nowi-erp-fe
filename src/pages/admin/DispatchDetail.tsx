@@ -156,9 +156,14 @@ export default function DispatchDetail() {
             <CardHeader>
               <CardTitle className="flex items-center gap-2 flex-wrap">
                 <span className="font-mono">{data.dispatchNo}</span>
-                <Badge variant={dispatchStatusVariant(data.status)} dot>
-                  {t(`admin.dispatches.status.${data.status}`)}
-                </Badge>
+                {(() => {
+                  const v = dispatchStatusVariant(data.status);
+                  return (
+                    <Badge variant={v} dot={v !== 'outline'}>
+                      {t(`admin.dispatches.status.${data.status}`)}
+                    </Badge>
+                  );
+                })()}
                 {showRetry && canEdit && (
                   <Button
                     size="sm"

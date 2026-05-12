@@ -5,6 +5,7 @@ import FloorShell from '@/components/layout/FloorShell';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
+import LotProgress from '@/components/LotProgress';
 import { listLots } from '@/api/lots';
 import type { Lot, OrderStatus } from '@/api/types';
 
@@ -93,12 +94,22 @@ export default function FinishingHome() {
                       {lot.vendorLotNo ? ` • ${lot.vendorLotNo}` : ''} •{' '}
                       <span className="tabular-nums">{totalUnits(lot.qtyIn)} u</span>
                     </div>
-                    <div className="mt-1.5 flex items-center gap-2">
-                      <Badge variant="finish" dot>
-                        {t('finishing.title')}
-                      </Badge>
-                      {lot.order?.status && (
-                        <Badge variant="outline">{lot.order.status}</Badge>
+                    <div className="mt-1.5 flex items-center gap-2 flex-wrap">
+                      <LotProgress
+                        status={lot.order?.status}
+                        anomaly={
+                          lot.order?.status === 'in_rework'
+                            ? 'rework'
+                            : lot.order?.status === 'stuck'
+                              ? 'stuck'
+                              : undefined
+                        }
+                      />
+                      {(lot.order?.status === 'in_rework' ||
+                        lot.order?.status === 'stuck') && (
+                        <Badge variant={lot.order.status === 'stuck' ? 'stuck' : 'rework'} dot>
+                          {lot.order.status === 'stuck' ? 'Stuck' : 'Rework'}
+                        </Badge>
                       )}
                     </div>
                   </div>

@@ -9,6 +9,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select } from '@/components/ui/select';
 import { Badge } from '@/components/ui/badge';
+import { Drawer } from '@/components/ui/drawer';
 import { useToast } from '@/components/ui/toast';
 import { useDebounced } from '@/lib/useDebounced';
 import {
@@ -26,6 +27,7 @@ import type {
   FilterStatus,
   LocatorParams,
   LocatorResponse,
+  LocatorRow,
 } from '@/api/types';
 
 const PAGE_SIZE = 25;
@@ -74,6 +76,7 @@ export default function Locator() {
   const [data, setData] = useState<LocatorResponse | null>(null);
   const [loading, setLoading] = useState(false);
   const [exporting, setExporting] = useState(false);
+  const [previewRow, setPreviewRow] = useState<LocatorRow | null>(null);
 
   // Load filter lists once.
   useEffect(() => {
@@ -351,13 +354,13 @@ export default function Locator() {
                   <th className="text-left px-3 py-2">{t('admin.locator.columns.size')}</th>
                   <th className="text-left px-3 py-2">{t('admin.locator.columns.origin')}</th>
                   <th className="text-right px-3 py-2">{t('admin.locator.columns.inbound')}</th>
-                  <th className="text-right px-3 py-2 text-[var(--stage-stitch-acc)]">
+                  <th className="text-right px-3 py-2">
                     {t('admin.locator.columns.stitching')}
                   </th>
-                  <th className="text-right px-3 py-2 text-[var(--stage-finish-acc)]">
+                  <th className="text-right px-3 py-2">
                     {t('admin.locator.columns.finishing')}
                   </th>
-                  <th className="text-right px-3 py-2 text-[var(--stage-disp-acc)]">
+                  <th className="text-right px-3 py-2">
                     {t('admin.locator.columns.dispatched')}
                   </th>
                   <th className="text-right px-3 py-2">{t('admin.locator.columns.lots')}</th>
@@ -388,7 +391,7 @@ export default function Locator() {
                     <tr
                       key={r.sku}
                       className="border-t border-[var(--color-border)] hover:bg-[var(--color-muted)] cursor-pointer"
-                      onClick={() => navigate(`/admin/locator/sku/${encodeURIComponent(r.sku)}`)}
+                      onClick={() => setPreviewRow(r)}
                     >
                       <td className="px-3 py-2 font-mono text-xs">{r.sku}</td>
                       <td className="px-3 py-2">{r.baseCode}</td>
@@ -399,15 +402,9 @@ export default function Locator() {
                         </Badge>
                       </td>
                       <td className="px-3 py-2 text-right tabular-nums">{r.counts.inbound}</td>
-                      <td className="px-3 py-2 text-right tabular-nums font-medium text-[var(--stage-stitch-ink)]">
-                        {r.counts.stitching}
-                      </td>
-                      <td className="px-3 py-2 text-right tabular-nums font-medium text-[var(--stage-finish-ink)]">
-                        {r.counts.finishing}
-                      </td>
-                      <td className="px-3 py-2 text-right tabular-nums font-medium text-[var(--stage-disp-ink)]">
-                        {r.counts.dispatched}
-                      </td>
+                      <td className="px-3 py-2 text-right tabular-nums">{r.counts.stitching}</td>
+                      <td className="px-3 py-2 text-right tabular-nums">{r.counts.finishing}</td>
+                      <td className="px-3 py-2 text-right tabular-nums">{r.counts.dispatched}</td>
                       <td className="px-3 py-2 text-right tabular-nums">{r.lotsCount}</td>
                       <td className="px-3 py-2 text-right">
                         <span className="text-[var(--color-primary)] text-xs">
@@ -443,6 +440,123 @@ export default function Locator() {
           </div>
         </CardContent>
       </Card>
+
+      <Drawer
+        open={previewRow !== null}
+        onClose={() => setPreviewRow(null)}
+        accent={
+          previewRow
+            ? previewRow.counts.dispatched > 0
+              ? 'disp'
+              : previewRow.counts.finishing > 0
+                ? 'finish'
+                : previewRow.counts.stitching > 0
+                  ? 'stitch'
+                  : 'ink'
+            : 'ink'
+        }
+        title={previewRow?.sku}
+        subtitle={
+          previewRow
+            ? `${previewRow.baseCode} · ${previewRow.sizeLabel}`
+            : undefined
+        }
+        headerAction={
+          previewRow ? (
+            <Badge variant="outline" className="font-mono text-[11px]">
+              {previewRow.originVendor.code}
+            </Badge>
+          ) : null
+        }
+        footer={
+          previewRow ? (
+            <div className="flex items-center justify-between gap-2">
+              <span className="text-xs text-[var(--color-muted-foreground)]">
+                {t('admin.locator.columns.lots')}:{' '}
+                <span className="font-serif text-base tabular-nums text-[var(--color-foreground)]">
+                  {previewRow.lotsCount}
+                </span>
+              </span>
+              <Button
+                onClick={() =>
+                  navigate(
+                    `/admin/locator/sku/${encodeURIComponent(previewRow.sku)}`,
+                  )
+                }
+              >
+                {t('admin.locator.columns.open')}
+              </Button>
+            </div>
+          ) : null
+        }
+      >
+        {previewRow && (
+          <div className="space-y-5">
+            {/* Counts grid */}
+            <div className="grid grid-cols-2 gap-3">
+              <CountTile
+                label={t('admin.locator.columns.inbound')}
+                value={previewRow.counts.inbound}
+              />
+              <CountTile
+                label={t('admin.locator.columns.stitching')}
+                value={previewRow.counts.stitching}
+                tint="var(--stage-stitch-bg)"
+                ink="var(--stage-stitch-ink)"
+              />
+              <CountTile
+                label={t('admin.locator.columns.finishing')}
+                value={previewRow.counts.finishing}
+                tint="var(--stage-finish-bg)"
+                ink="var(--stage-finish-ink)"
+              />
+              <CountTile
+                label={t('admin.locator.columns.dispatched')}
+                value={previewRow.counts.dispatched}
+                tint="var(--stage-disp-bg)"
+                ink="var(--stage-disp-ink)"
+              />
+            </div>
+
+            {/* Origin */}
+            <div>
+              <div className="font-mono text-[10.5px] uppercase tracking-wider text-[var(--color-muted-foreground)] mb-1">
+                {t('admin.locator.columns.origin')}
+              </div>
+              <div className="text-sm">{previewRow.originVendor.code}</div>
+            </div>
+          </div>
+        )}
+      </Drawer>
+    </div>
+  );
+}
+
+function CountTile({
+  label,
+  value,
+  tint,
+  ink,
+}: {
+  label: string;
+  value: number;
+  tint?: string;
+  ink?: string;
+}) {
+  return (
+    <div
+      className="rounded-[var(--radius-md)] border border-[var(--color-border)] px-3 py-2"
+      style={{ background: tint }}
+    >
+      <div className="font-mono text-[10.5px] uppercase tracking-wider text-[var(--color-muted-foreground)]">
+        {label}
+      </div>
+      <div
+        className="font-serif text-2xl font-semibold tabular-nums leading-tight"
+        style={{ color: ink }}
+      >
+        {value}
+      </div>
     </div>
   );
 }

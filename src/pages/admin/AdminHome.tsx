@@ -1,17 +1,19 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Link } from 'react-router-dom';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Link, useNavigate } from 'react-router-dom';
+import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import Sparkline from '@/components/Sparkline';
 import { useToast } from '@/components/ui/toast';
+import { Drawer } from '@/components/ui/drawer';
 import { listOrders } from '@/api/orders';
-import { orderStatusVariant } from '@/lib/statusBadge';
+import { getLocator } from '@/api/locator';
 import { Badge } from '@/components/ui/badge';
-import { getThroughput, getReworkRate, getCycleTime } from '@/api/dashboard';
+import KpiTile from '@/components/KpiTile';
+import { getThroughput, getReworkRate } from '@/api/dashboard';
 import { FeatureUnavailableError } from '@/api/_errors';
 import type {
-  CycleTimeResponse,
+  LocatorResponse,
+  LocatorRow,
   Order,
   OrderStatus,
   ReworkRateResponse,
@@ -23,11 +25,13 @@ type Days = 7 | 30;
 export default function AdminHome() {
   const { t } = useTranslation();
   const toast = useToast();
-  const [throughputDays, setThroughputDays] = useState<Days>(7);
+  const navigate = useNavigate();
+  const throughputDays: Days = 7;
   const [throughput, setThroughput] = useState<ThroughputResponse | null>(null);
   const [rework, setRework] = useState<ReworkRateResponse | null>(null);
-  const [cycle, setCycle] = useState<CycleTimeResponse | null>(null);
   const [orders, setOrders] = useState<Order[] | null>(null);
+  const [locator, setLocator] = useState<LocatorResponse | null>(null);
+  const [previewSku, setPreviewSku] = useState<LocatorRow | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -66,23 +70,20 @@ export default function AdminHome() {
           byStage: [],
         });
       });
-    getCycleTime(30)
-      .then((d) => {
-        if (!cancelled) setCycle(d);
-      })
-      .catch((err: unknown) => {
-        if (cancelled) return;
-        if (err instanceof FeatureUnavailableError) {
-          toast.show(t('common.featureUnavailable'), 'info');
-        }
-        setCycle({ avgDays: 0, bySku: [], distribution: [] });
-      });
     listOrders()
       .then((o) => {
         if (!cancelled) setOrders(o);
       })
       .catch(() => {
         if (!cancelled) setOrders([]);
+      });
+    // Top-of-list SKU rollup for the dashboard table
+    getLocator({ take: 12 })
+      .then((r) => {
+        if (!cancelled) setLocator(r);
+      })
+      .catch(() => {
+        if (!cancelled) setLocator({ rows: [], page: { skip: 0, take: 12, total: 0 } });
       });
     return () => {
       cancelled = true;
@@ -99,198 +100,312 @@ export default function AdminHome() {
   }, [orders]);
 
   const sparkData = throughput?.trend.map((p) => p.finished) ?? [];
-  const since = useMemo(() => {
-    const d = new Date();
-    d.setDate(d.getDate() - 30);
-    return d.toISOString().slice(0, 10);
-  }, []);
-  const distMax = useMemo(() => {
-    if (!cycle) return 0;
-    return cycle.distribution.reduce((m, b) => Math.max(m, b.count), 0);
-  }, [cycle]);
+
+  // ── Cross-stage KPI derivations ──────────────────────────────
+  const inStitching = statusCounts.in_stitching ?? 0;
+  const inFinishing = statusCounts.in_finishing ?? 0;
+  const inRework = statusCounts.in_rework ?? 0;
+  const receiving = statusCounts.receiving ?? 0;
+  const dispatched = statusCounts.dispatched ?? 0;
+  const stuck = statusCounts.stuck ?? 0;
+  const activeTotal = inStitching + inFinishing + inRework + receiving;
 
   return (
-    <div className="space-y-4 max-w-5xl">
-      <div className="grid gap-4 md:grid-cols-3">
-        {/* Throughput */}
-        <Card stage="finish">
-          <CardHeader className="flex flex-row items-center justify-between gap-2">
-            <CardTitle>{t('admin.dashboard.throughput')}</CardTitle>
-            <div className="flex gap-1">
-              <Button
-                size="sm"
-                variant={throughputDays === 7 ? 'default' : 'outline'}
-                onClick={() => setThroughputDays(7)}
-              >
-                {t('admin.dashboard.last7d')}
-              </Button>
-              <Button
-                size="sm"
-                variant={throughputDays === 30 ? 'default' : 'outline'}
-                onClick={() => setThroughputDays(30)}
-              >
-                {t('admin.dashboard.last30d')}
-              </Button>
-            </div>
-          </CardHeader>
-          <CardContent>
-            {!throughput ? (
-              <div className="h-16 animate-pulse rounded bg-[var(--color-muted)]" />
-            ) : (
-              <div className="space-y-3">
-                <div className="grid grid-cols-2 gap-3">
-                  <div>
-                    <div className="text-xs text-[var(--color-muted-foreground)]">
-                      {t('admin.dashboard.finished')}
-                    </div>
-                    <div className="font-serif text-3xl font-semibold tabular-nums">
-                      {throughput.finishedUnits}
-                    </div>
-                  </div>
-                  <div>
-                    <div className="text-xs text-[var(--color-muted-foreground)]">
-                      {t('admin.dashboard.dispatched')}
-                    </div>
-                    <div className="font-serif text-3xl font-semibold tabular-nums">
-                      {throughput.dispatchedUnits}
-                    </div>
-                  </div>
-                </div>
-                <div className="text-[var(--stage-finish-acc)]">
-                  <Sparkline data={sparkData} width={220} height={36} />
-                </div>
-              </div>
-            )}
-          </CardContent>
-        </Card>
+    <div className="space-y-6 max-w-6xl">
+      {/* Page heading + cross-stage narrative */}
+      <header>
+        <h1 className="font-serif text-3xl font-semibold tracking-tight">
+          {t('admin.home.title', { defaultValue: 'Dashboard' })}
+        </h1>
+        <p className="mt-1 text-sm text-[var(--color-muted-foreground)]">
+          {orders === null ? (
+            <span className="inline-block h-4 w-72 animate-pulse rounded bg-[var(--color-muted)]" />
+          ) : (
+            <>
+              <b className="text-[var(--color-foreground-2)] font-medium tabular-nums">
+                {activeTotal}
+              </b>{' '}
+              {t('admin.home.activeLots', { defaultValue: 'active lots across stitching, finishing & dispatch' })}
+              {(stuck > 0 || inRework > 0) && (
+                <>
+                  {' · '}
+                  <b className="text-[var(--color-foreground-2)] font-medium tabular-nums">
+                    {stuck + inRework}
+                  </b>{' '}
+                  {t('admin.home.needAttention', { defaultValue: 'need attention' })}
+                </>
+              )}
+            </>
+          )}
+        </p>
+      </header>
 
-        {/* Rework rate */}
-        <Card stage="rework">
-          <CardHeader>
-            <CardTitle>{t('admin.dashboard.reworkRate')}</CardTitle>
-          </CardHeader>
-          <CardContent>
-            {!rework ? (
-              <div className="h-16 animate-pulse rounded bg-[var(--color-muted)]" />
-            ) : (
-              <div className="space-y-3">
-                <div>
-                  <div className="text-xs text-[var(--color-muted-foreground)]">
-                    {t('admin.dashboard.overall')}
-                  </div>
-                  <div className="font-serif text-3xl font-semibold tabular-nums">
-                    {rework.overall.ratePct.toFixed(1)}%
-                  </div>
-                </div>
-                <div>
-                  <div className="text-xs text-[var(--color-muted-foreground)] mb-1">
-                    {t('admin.dashboard.topSkus')}
-                  </div>
-                  <ul className="text-xs space-y-1">
-                    {rework.bySku.slice(0, 5).map((row) => (
-                      <li key={row.sku} className="flex justify-between gap-2">
-                        <Link
-                          to={`/admin/locator?sku=${encodeURIComponent(row.sku)}&from=${since}`}
-                          className="font-mono truncate text-[var(--color-primary)] hover:underline"
-                        >
-                          {row.sku}
-                        </Link>
-                        <span className="font-medium tabular-nums">
-                          {row.ratePct.toFixed(1)}%
-                        </span>
-                      </li>
-                    ))}
-                    {rework.bySku.length === 0 && (
-                      <li className="text-[var(--color-muted-foreground)]">—</li>
-                    )}
-                  </ul>
-                </div>
-              </div>
-            )}
-          </CardContent>
-        </Card>
-
-        {/* Cycle time */}
-        <Card>
-          <CardHeader>
-            <CardTitle>{t('admin.dashboard.cycleTime')}</CardTitle>
-          </CardHeader>
-          <CardContent>
-            {!cycle ? (
-              <div className="h-16 animate-pulse rounded bg-[var(--color-muted)]" />
-            ) : (
-              <div className="space-y-3">
-                <div>
-                  <div className="text-xs text-[var(--color-muted-foreground)]">
-                    {t('admin.dashboard.avgDays')}
-                  </div>
-                  <div className="font-serif text-3xl font-semibold tabular-nums">
-                    {cycle.avgDays.toFixed(1)}
-                  </div>
-                </div>
-                <div>
-                  <div className="text-xs text-[var(--color-muted-foreground)] mb-1">
-                    {t('admin.dashboard.distribution')}
-                  </div>
-                  <ul className="space-y-1 text-xs">
-                    {cycle.distribution.slice(0, 5).map((b) => {
-                      const pct = distMax === 0 ? 0 : (b.count / distMax) * 100;
-                      return (
-                        <li key={b.bucket} className="flex items-center gap-2">
-                          <span className="w-12 text-[var(--color-muted-foreground)]">
-                            {b.bucket}
-                          </span>
-                          <div className="flex-1 bg-[var(--color-muted)] h-2 rounded overflow-hidden">
-                            <div
-                              className="h-full bg-[var(--color-primary)]"
-                              style={{ width: `${pct}%` }}
-                            />
-                          </div>
-                          <span className="tabular-nums">{b.count}</span>
-                        </li>
-                      );
-                    })}
-                    {cycle.distribution.length === 0 && (
-                      <li className="text-[var(--color-muted-foreground)]">—</li>
-                    )}
-                  </ul>
-                </div>
-              </div>
-            )}
-          </CardContent>
-        </Card>
+      {/* KPI strip — only metrics where we actually have data */}
+      <div className="grid gap-3 grid-cols-2 lg:grid-cols-4">
+        <KpiTile
+          stage="stitch"
+          label={t('admin.home.kpi.inStitching', { defaultValue: 'In stitching' })}
+          value={inStitching}
+          unit={t('admin.home.kpi.lotsUnit', { defaultValue: 'lots' })}
+        />
+        <KpiTile
+          stage="finish"
+          label={t('admin.home.kpi.inFinishing', { defaultValue: 'In finishing' })}
+          value={inFinishing}
+          unit={t('admin.home.kpi.lotsUnit', { defaultValue: 'lots' })}
+        />
+        <KpiTile
+          stage="disp"
+          label={t('admin.home.kpi.throughput', { defaultValue: 'Throughput' })}
+          value={throughput ? throughput.dispatchedUnits : dispatched}
+          unit="u"
+          period={`${throughputDays}D`}
+          sparkPoints={sparkData}
+        />
+        {/* Rework rate hidden until we have ≥10 finishing-forward units —
+            below that the % is a misleading divide-by-tiny. */}
+        {rework && rework.overall.finishingForwardUnits >= 10 && (
+          <KpiTile
+            stage="accent"
+            label={t('admin.home.kpi.reworkRate', { defaultValue: 'Rework rate' })}
+            value={rework.overall.ratePct.toFixed(1)}
+            unit="%"
+            period="30D"
+            context={
+              rework.overall.reworkUnits > 0
+                ? t('admin.home.kpi.reworkUnits', {
+                    defaultValue: '{{n}} units',
+                    n: rework.overall.reworkUnits,
+                  })
+                : undefined
+            }
+          />
+        )}
+        {/* TODO: re-add Avg cycle KPI once we have completed lots
+            (currently /api/dashboard/cycle-time returns avgDays=0). */}
       </div>
 
-      <Card>
-        <CardHeader>
-          <CardTitle>{t('admin.lotsByStatus')}</CardTitle>
-        </CardHeader>
-        <CardContent>
-          {orders === null ? (
-            <div className="h-12 animate-pulse rounded bg-[var(--color-muted)]" />
-          ) : Object.keys(statusCounts).length === 0 ? (
-            <p className="text-sm text-[var(--color-muted-foreground)]">—</p>
-          ) : (
-            <ul className="text-sm grid gap-2 grid-cols-2 md:grid-cols-4">
-              {Object.entries(statusCounts).map(([status, n]) => (
-                <li
-                  key={status}
-                  className="flex items-center justify-between gap-2 border border-[var(--color-border)] rounded-[var(--radius-md)] px-2 py-1.5"
-                >
-                  <Badge
-                    variant={orderStatusVariant(status)}
-                    dot
-                    className="truncate"
-                  >
-                    {status}
-                  </Badge>
-                  <span className="font-serif text-lg tabular-nums">{n}</span>
-                </li>
-              ))}
-            </ul>
-          )}
-        </CardContent>
-      </Card>
+      {/* SKU table — per-SKU rollup across stages */}
+      <section className="space-y-3">
+        <div className="flex items-end justify-between gap-3 flex-wrap">
+          <div>
+            <h2 className="font-serif text-xl font-semibold leading-tight">
+              {t('admin.home.skuTable.title', { defaultValue: 'SKU visibility' })}
+            </h2>
+            <p className="text-xs text-[var(--color-muted-foreground)]">
+              {t('admin.home.skuTable.subtitle', {
+                defaultValue: 'Units in each stage, per SKU. Click a row for the size breakdown.',
+              })}
+            </p>
+          </div>
+          <Link
+            to="/admin/locator"
+            className="text-xs text-[var(--color-muted-foreground)] hover:text-[var(--color-foreground)] underline-offset-4 hover:underline"
+          >
+            {t('admin.home.openLocator', { defaultValue: 'Open locator →' })}
+          </Link>
+        </div>
+
+        <Card>
+          <CardContent className="p-0">
+            <div className="overflow-auto">
+              <table className="w-full text-sm border-collapse">
+                <thead className="bg-[var(--color-surface-2)] text-[var(--color-muted-foreground)]">
+                  <tr>
+                    <th className="text-left font-mono uppercase tracking-[0.12em] text-[10.5px] font-medium px-4 py-3">
+                      {t('admin.locator.columns.sku', { defaultValue: 'SKU' })}
+                    </th>
+                    <th className="text-left font-mono uppercase tracking-[0.12em] text-[10.5px] font-medium px-4 py-3 hidden md:table-cell">
+                      {t('admin.locator.columns.origin', { defaultValue: 'Origin' })}
+                    </th>
+                    <th className="text-right font-mono uppercase tracking-[0.12em] text-[10.5px] font-medium px-4 py-3">
+                      {t('admin.locator.columns.inbound', { defaultValue: 'Inbound' })}
+                    </th>
+                    <th className="text-right font-mono uppercase tracking-[0.12em] text-[10.5px] font-medium px-4 py-3">
+                      {t('admin.locator.columns.stitching', { defaultValue: 'Stitching' })}
+                    </th>
+                    <th className="text-right font-mono uppercase tracking-[0.12em] text-[10.5px] font-medium px-4 py-3">
+                      {t('admin.locator.columns.finishing', { defaultValue: 'Finishing' })}
+                    </th>
+                    <th className="text-right font-mono uppercase tracking-[0.12em] text-[10.5px] font-medium px-4 py-3">
+                      {t('admin.locator.columns.dispatched', { defaultValue: 'Dispatched' })}
+                    </th>
+                    <th className="text-right font-mono uppercase tracking-[0.12em] text-[10.5px] font-medium px-4 py-3">
+                      {t('admin.locator.columns.lots', { defaultValue: 'Lots' })}
+                    </th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {locator === null &&
+                    Array.from({ length: 5 }).map((_, i) => (
+                      <tr key={`s${i}`} className="border-t border-[var(--color-border)]">
+                        <td colSpan={7} className="px-4 py-3">
+                          <div className="h-4 animate-pulse rounded bg-[var(--color-muted)]" />
+                        </td>
+                      </tr>
+                    ))}
+                  {locator && locator.rows.length === 0 && (
+                    <tr>
+                      <td
+                        colSpan={7}
+                        className="px-4 py-8 text-center text-[var(--color-muted-foreground)]"
+                      >
+                        {t('admin.locator.emptyResults', { defaultValue: 'No SKUs to show.' })}
+                      </td>
+                    </tr>
+                  )}
+                  {locator?.rows.map((r) => (
+                    <tr
+                      key={r.sku}
+                      className="border-t border-[var(--color-border)] hover:bg-[var(--color-muted)] cursor-pointer transition-colors"
+                      onClick={() => setPreviewSku(r)}
+                    >
+                      <td className="px-4 py-3">
+                        <div className="font-mono text-xs text-[var(--color-foreground)]">
+                          {r.sku}
+                        </div>
+                        <div className="text-[11px] text-[var(--color-muted-foreground)] mt-0.5">
+                          {r.baseCode} · {r.sizeLabel}
+                        </div>
+                      </td>
+                      <td className="px-4 py-3 hidden md:table-cell font-mono text-[11px] text-[var(--color-muted-foreground)]">
+                        {r.originVendor?.code ?? '—'}
+                      </td>
+                      <td className="px-4 py-3 text-right tabular-nums">{r.counts.inbound}</td>
+                      <td className="px-4 py-3 text-right tabular-nums">{r.counts.stitching}</td>
+                      <td className="px-4 py-3 text-right tabular-nums">{r.counts.finishing}</td>
+                      <td className="px-4 py-3 text-right tabular-nums">{r.counts.dispatched}</td>
+                      <td className="px-4 py-3 text-right tabular-nums text-[var(--color-muted-foreground)]">
+                        {r.lotsCount}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            {locator && locator.page.total > locator.rows.length && (
+              <div className="px-4 py-3 text-xs text-[var(--color-muted-foreground)] border-t border-[var(--color-border)]">
+                {t('admin.home.skuTable.showing', {
+                  defaultValue: 'Showing top {{shown}} of {{n}} SKUs — open Locator for the full list.',
+                  shown: locator.rows.length,
+                  n: locator.page.total,
+                })}
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      </section>
+
+      {/* Bottom detail cards (Throughput / Rework / Cycle) were
+          folded into the KPI strip above. Drill into Locator for
+          the per-SKU breakdown. */}
+
+      {/* SKU quick-view drawer */}
+      <Drawer
+        open={previewSku !== null}
+        onClose={() => setPreviewSku(null)}
+        accent={
+          previewSku
+            ? previewSku.counts.dispatched > 0
+              ? 'disp'
+              : previewSku.counts.finishing > 0
+                ? 'finish'
+                : previewSku.counts.stitching > 0
+                  ? 'stitch'
+                  : 'ink'
+            : 'ink'
+        }
+        title={previewSku?.sku}
+        subtitle={
+          previewSku
+            ? `${previewSku.baseCode} · ${previewSku.sizeLabel}`
+            : undefined
+        }
+        headerAction={
+          previewSku ? (
+            <Badge variant="outline" className="font-mono text-[11px]">
+              {previewSku.originVendor?.code}
+            </Badge>
+          ) : null
+        }
+        footer={
+          previewSku ? (
+            <div className="flex items-center justify-between gap-2">
+              <span className="text-xs text-[var(--color-muted-foreground)]">
+                {t('admin.locator.columns.lots', { defaultValue: 'Lots' })}:{' '}
+                <span className="font-serif text-base tabular-nums text-[var(--color-foreground)]">
+                  {previewSku.lotsCount}
+                </span>
+              </span>
+              <Button
+                onClick={() =>
+                  navigate(
+                    `/admin/locator/sku/${encodeURIComponent(previewSku.sku)}`,
+                  )
+                }
+              >
+                {t('admin.locator.columns.open', { defaultValue: 'Open' })}
+              </Button>
+            </div>
+          ) : null
+        }
+      >
+        {previewSku && (
+          <div className="grid grid-cols-2 gap-3">
+            <SkuCountTile
+              label={t('admin.locator.columns.inbound', { defaultValue: 'Inbound' })}
+              value={previewSku.counts.inbound}
+            />
+            <SkuCountTile
+              label={t('admin.locator.columns.stitching', { defaultValue: 'Stitching' })}
+              value={previewSku.counts.stitching}
+              tint="var(--stage-stitch-bg)"
+              ink="var(--stage-stitch-ink)"
+            />
+            <SkuCountTile
+              label={t('admin.locator.columns.finishing', { defaultValue: 'Finishing' })}
+              value={previewSku.counts.finishing}
+              tint="var(--stage-finish-bg)"
+              ink="var(--stage-finish-ink)"
+            />
+            <SkuCountTile
+              label={t('admin.locator.columns.dispatched', { defaultValue: 'Dispatched' })}
+              value={previewSku.counts.dispatched}
+              tint="var(--stage-disp-bg)"
+              ink="var(--stage-disp-ink)"
+            />
+          </div>
+        )}
+      </Drawer>
+    </div>
+  );
+}
+
+function SkuCountTile({
+  label,
+  value,
+  tint,
+  ink,
+}: {
+  label: string;
+  value: number;
+  tint?: string;
+  ink?: string;
+}) {
+  return (
+    <div
+      className="rounded-[var(--radius-md)] border border-[var(--color-border)] px-3 py-2"
+      style={{ background: tint }}
+    >
+      <div className="font-mono text-[10.5px] uppercase tracking-wider text-[var(--color-muted-foreground)]">
+        {label}
+      </div>
+      <div
+        className="font-serif text-2xl font-semibold tabular-nums leading-tight"
+        style={{ color: ink }}
+      >
+        {value}
+      </div>
     </div>
   );
 }

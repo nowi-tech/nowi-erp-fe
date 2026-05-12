@@ -92,7 +92,7 @@
       "challanSection": "Challan",
       "lotsSection": "Styles",
       "vendor": "Vendor",
-      "challanNo": "Challan number",
+      "challanNo": "Vendor challan number",
       "lotNo": "Style ID",
       "vendorLotNo": "Vendor lot no",
       "sizeMatrix": "Size matrix",

@@ -16,23 +16,20 @@ export type StatusVariant =
   | 'transit'
   | 'outline';
 
+/**
+ * Trim policy: colour is reserved for **anomalies / things the user
+ * needs to act on**. Routine / healthy states render as plain outline
+ * pills so the page stays calm and the few coloured rows actually pop.
+ */
+
 export function orderStatusVariant(status: OrderStatus | string): StatusVariant {
   switch (status) {
-    case 'receiving':
-      return 'outline';
-    case 'in_stitching':
-      return 'stitch';
-    case 'in_finishing':
-      return 'finish';
     case 'in_rework':
       return 'rework';
-    case 'dispatched':
-      return 'disp';
-    case 'closed':
-    case 'closed_with_adjustment':
-      return 'ready';
     case 'stuck':
       return 'stuck';
+    // Everything else — receiving / in_stitching / in_finishing /
+    // dispatched / closed / closed_with_adjustment — is plain outline.
     default:
       return 'outline';
   }
@@ -42,21 +39,12 @@ export function dispatchStatusVariant(
   status: DispatchStatus | string,
 ): StatusVariant {
   switch (status) {
-    case 'draft':
-    case 'awaiting_confirmation':
-      return 'outline';
-    case 'synced':
-    case 'manual_pdf':
-      return 'disp';
-    case 'awaiting_grn':
-      return 'transit';
-    case 'grn_received':
-      return 'ready';
     case 'grn_mismatch':
     case 'sync_failed':
       return 'stuck';
-    case 'closed':
-      return 'ready';
+    // draft / awaiting_confirmation / synced / manual_pdf /
+    // awaiting_grn / grn_received / closed / closed_with_adjustment
+    // all render as plain outline.
     default:
       return 'outline';
   }

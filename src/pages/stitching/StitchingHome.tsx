@@ -6,6 +6,7 @@ import FloorShell from '@/components/layout/FloorShell';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
+import LotProgress from '@/components/LotProgress';
 import { listLots } from '@/api/lots';
 import type { Lot, OrderStatus } from '@/api/types';
 
@@ -101,12 +102,27 @@ export default function StitchingHome() {
                       {lot.vendorLotNo ? ` • ${lot.vendorLotNo}` : ''} •{' '}
                       <span className="tabular-nums">{totalUnits(lot.qtyIn)} u</span>
                     </div>
-                    <div className="mt-1.5 flex items-center gap-2">
-                      <Badge variant="stitch" dot>
-                        {t('stitching.title')}
-                      </Badge>
-                      {lot.order?.status && (
-                        <Badge variant="outline">{lot.order.status}</Badge>
+                    <div className="mt-1.5 flex items-center gap-2 flex-wrap">
+                      <LotProgress
+                        status={lot.order?.status}
+                        anomaly={
+                          lot.order?.status === 'in_rework'
+                            ? 'rework'
+                            : lot.order?.status === 'stuck'
+                              ? 'stuck'
+                              : undefined
+                        }
+                      />
+                      {/* Only show a status pill when it's an anomaly
+                          (in_rework / stuck). Routine statuses are implied
+                          by the page + the progress chart. */}
+                      {(lot.order?.status === 'in_rework' ||
+                        lot.order?.status === 'stuck') && (
+                        <Badge variant={lot.order.status === 'stuck' ? 'stuck' : 'rework'} dot>
+                          {lot.order.status === 'stuck'
+                            ? t('common.error' as const, { defaultValue: 'Stuck' })
+                            : t('admin.locator.filters.rework' as const, { defaultValue: 'Rework' })}
+                        </Badge>
                       )}
                     </div>
                   </div>
