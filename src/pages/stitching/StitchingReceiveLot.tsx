@@ -8,12 +8,12 @@ import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
 import { Dialog } from '@/components/ui/dialog';
 import { useToast } from '@/components/ui/toast';
+import { toast as sonnerToast } from 'sonner';
 import { getAvailability, getLot } from '@/api/lots';
 import { createReceipts, FeatureUnavailableError } from '@/api/receipts';
 import { orderStatusVariant } from '@/lib/statusBadge';
+import { useStageId } from '@/lib/useStageId';
 import type { Lot, SizeMatrix } from '@/api/types';
-
-const STAGE_ID_STITCHING = 1;
 
 function totalOf(m: SizeMatrix): number {
   return Object.values(m).reduce((a, b) => a + (Number(b) || 0), 0);
@@ -33,13 +33,18 @@ export default function StitchingReceiveLot() {
   const [confirmOpen, setConfirmOpen] = useState(false);
   const cancelRef = useRef<HTMLButtonElement>(null);
 
+  // Resolve the "stitching" stage id at runtime instead of hardcoding 1
+  // — survives seed reorders / future stage additions.
+  const stageId = useStageId('stitching');
+
   const refresh = useCallback(async () => {
+    if (stageId === null) return;
     setLoading(true);
     try {
       const [lotRes, avail] = await Promise.all([
         getLot(lotId),
-        getAvailability(lotId, STAGE_ID_STITCHING).catch(() => ({
-          stageId: STAGE_ID_STITCHING,
+        getAvailability(lotId, stageId).catch(() => ({
+          stageId,
           available: {} as SizeMatrix,
         })),
       ]);
@@ -51,7 +56,7 @@ export default function StitchingReceiveLot() {
     } finally {
       setLoading(false);
     }
-  }, [lotId, toast, t]);
+  }, [lotId, stageId, toast, t]);
 
   useEffect(() => {
     void refresh();
@@ -77,7 +82,7 @@ export default function StitchingReceiveLot() {
   }
 
   async function doSubmit() {
-    if (!canSubmit) return;
+    if (!canSubmit || stageId === null) return;
     setSubmitting(true);
     try {
       const receipts = Object.entries(qty)
@@ -85,10 +90,21 @@ export default function StitchingReceiveLot() {
         .map(([sizeLabel, q]) => ({ sizeLabel, qty: Number(q) }));
       await createReceipts({
         lotId,
-        stageId: STAGE_ID_STITCHING,
+        stageId,
         receipts,
       });
-      toast.show(t('stitching.lot.successToast'), 'success');
+      // Rich success toast: how many moved + where they're headed.
+      const totalMoved = receipts.reduce((a, r) => a + r.qty, 0);
+      sonnerToast.success(
+        t('stitching.lot.forwardedToast', {
+          defaultValue: 'Forwarded {{n}} units → Finishing',
+          n: totalMoved,
+        }),
+        {
+          description: receipts.map((r) => `${r.sizeLabel} × ${r.qty}`).join(' · '),
+          duration: 4500,
+        },
+      );
       try {
         localStorage.setItem('nowi.firstReceiptDoneAt', new Date().toISOString());
       } catch {
@@ -126,6 +142,14 @@ export default function StitchingReceiveLot() {
                   </span>
                   {lot.lotNo}
                 </CardTitle>
+                {lot.style && (
+                  <div className="mt-1 font-mono text-sm text-[var(--stage-stitch-acc)]">
+                    {lot.style.styleId}
+                    {lot.style.category?.name
+                      ? ` · ${lot.style.category.name}`
+                      : ''}
+                  </div>
+                )}
                 {/* Only surface anomalies — routine status is implied by being on this page. */}
                 {(lot.order?.status === 'in_rework' || lot.order?.status === 'stuck') && (
                   <div className="mt-2">

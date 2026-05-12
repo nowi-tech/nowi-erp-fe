@@ -97,6 +97,14 @@ export default function StitchingHome() {
                       </span>
                       {lot.lotNo}
                     </div>
+                    {lot.style && (
+                      <div className="text-xs font-mono text-[var(--stage-stitch-acc)] truncate">
+                        {lot.style.styleId}
+                        {lot.style.category?.name
+                          ? ` · ${lot.style.category.name}`
+                          : ''}
+                      </div>
+                    )}
                     <div className="text-sm text-[var(--color-muted-foreground)] truncate">
                       {lot.vendor?.name ?? lot.vendorId}
                       {lot.vendorLotNo ? ` • ${lot.vendorLotNo}` : ''} •{' '}

@@ -1,7 +1,7 @@
 import { lazy, Suspense, type ReactNode } from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider } from './context/auth';
-import { ToastProvider } from './components/ui/toast';
+import { AppToaster, ToastProvider } from './components/ui/toast';
 import ProtectedRoute from './components/ProtectedRouteV2';
 // import PlaceholderSection from './components/PlaceholderSection'; // TODO: re-enable when commented stub routes return
 import PwaInstallPrompt from './components/PwaInstallPrompt';
@@ -51,6 +51,7 @@ function App() {
   return (
     <AuthProvider>
       <ToastProvider>
+        <AppToaster />
         <PwaInstallPrompt />
         <Onboarding />
         <BrowserRouter>

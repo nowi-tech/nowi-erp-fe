@@ -78,11 +78,20 @@ export interface Lot {
   vendorLotNo?: string | null;
   inboundChallanId?: string | null;
   orderId: string;
-  sku: string;
+  /** Optional legacy. Real per-size SKU lives on the Style. */
+  sku?: string;
   baseCode?: string | null;
   qtyIn: SizeMatrix;
   vendor?: Vendor | null;
   order?: Order | null;
+  /** Embedded NOWI Style (added when the BE response includes it). */
+  style?: {
+    id: number;
+    styleId: string;
+    gender: 'W' | 'M' | 'U';
+    categoryCode: string;
+    category?: { id: number; code: string; name: string };
+  } | null;
   createdAt: string;
 }
 
@@ -112,30 +121,43 @@ export interface Style {
 // ─── Inbound ──────────────────────────────────────────────────────────────
 
 export interface InboundLotPayload {
-  lotNo: string;
+  /** Optional override; if omitted, BE generates `LOT-YY-NNNNN`. */
+  lotNo?: string;
   /** Vendor's own style code from the paper challan (e.g. Kotty `724`). */
   vendorStyleId: string;
+  /** Vendor's lot id for THIS lot (e.g. `560MM`). Required. */
+  vendorLotNo: string;
   /** Used only when minting a fresh NOWI Style — ignored if the mapping
    *  already exists for this (vendor, vendorStyleId). */
   gender: StyleGender;
   categoryId: number;
-  vendorLotNo?: string;
   qtyIn: SizeMatrix;
 }
 
 export interface CreateInboundPayload {
   vendorId: number;
   vendorChallanNo: string;
-  vendorLotNo: string;
+  /** Optional legacy fallback — new flow carries vendorLotNo per lot. */
+  vendorLotNo?: string;
   receivedAt?: string;
   notes?: string;
   lots: InboundLotPayload[];
 }
 
+export interface CreateInboundResponseLot {
+  id: number;
+  lotNo: string;
+  vendorLotNo: string | null;
+  /** Resolved NOWI Style id (e.g. `NOWI-W-DR-1002`). */
+  styleCode: string;
+  /** True if this lot caused a brand-new Style to be minted. */
+  styleCreated: boolean;
+}
+
 export interface CreateInboundResponse {
-  inboundChallanId: string;
-  orderIds: string[];
-  lotIds: string[];
+  challan: { id: number; vendorChallanNo: string };
+  order: { id: number; orderNo: string };
+  lots: CreateInboundResponseLot[];
 }
 
 // ─── Receipts ─────────────────────────────────────────────────────────────

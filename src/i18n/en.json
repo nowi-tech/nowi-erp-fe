@@ -94,6 +94,7 @@
       "vendor": "Vendor",
       "challanNo": "Vendor challan number",
       "lotNo": "Lot ID",
+      "lotN": "Lot {{n}}",
       "vendorLotNo": "Vendor lot no",
       "vendorStyleId": "Vendor style ID",
       "gender": "Gender",
@@ -104,6 +105,7 @@
       "styleIdHint": "New combos generate a fresh NOWI Style ID (e.g. NOWI-W-DR-1001) on save.",
       "sizeMatrix": "Size matrix",
       "notes": "Notes (optional)",
+      "remark": "Remark (optional)",
       "addLot": "Add another lot",
       "removeLot": "Remove lot",
       "addSize": "Add size",
@@ -126,6 +128,7 @@
       "confirmBody": "Forward {{total}} units to next stage?",
       "nothingLeft": "Nothing left to forward.",
       "successToast": "Forwarded",
+      "forwardedToast": "Forwarded {{n}} units → Finishing",
       "loadError": "Could not load lot"
     }
   },

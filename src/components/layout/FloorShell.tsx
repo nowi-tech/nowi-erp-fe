@@ -83,7 +83,7 @@ export default function FloorShell({ children }: FloorShellProps) {
         </div>
       </header>
 
-      <main className="flex-1 overflow-auto p-4 sm:p-6 lg:p-8 pb-[calc(4rem+env(safe-area-inset-bottom))] lg:pb-8 max-w-3xl lg:max-w-5xl w-full mx-auto">
+      <main className="flex-1 overflow-auto px-3 py-3 sm:px-4 sm:py-4 lg:px-6 lg:py-6 pb-[calc(4rem+env(safe-area-inset-bottom))] lg:pb-6 max-w-3xl lg:max-w-5xl w-full mx-auto">
         {children}
       </main>
 

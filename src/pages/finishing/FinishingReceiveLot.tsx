@@ -199,12 +199,14 @@ export default function FinishingReceiveLot() {
         });
       }
       // Rework: one POST per size with rework qty > 0.
+      const reworkStyleId = lot.style?.styleId ?? lot.sku;
       for (const s of sizes) {
         const r = rows[s];
         if (!r?.reworkOpen || r.reworkQty <= 0) continue;
+        if (!reworkStyleId) continue;
         await openRework({
           lotId: lot.id,
-          sku: lot.sku,
+          sku: `${reworkStyleId}-${s}`,
           sizeLabel: s,
           qty: r.reworkQty,
           reason: reasonText(r),
@@ -254,14 +256,18 @@ export default function FinishingReceiveLot() {
     setDispatching(true);
     setDispatchError(null);
     try {
+      // SKU code follows `<styleId>-<size>` (e.g. NOWI-W-DR-1001-S).
+      // Fall back to the legacy `lot.sku` string if Style isn't embedded
+      // (older API responses without `style`).
+      const styleId = lot.style?.styleId ?? lot.sku;
       const items: CreateDispatchItemInput[] = dispatchSizes
         .map((s) => ({
           lotId: lot.id,
-          sku: lot.sku,
+          sku: styleId ? `${styleId}-${s}` : '',
           sizeLabel: s,
           qty: Number(shipQty[s] ?? 0),
         }))
-        .filter((i) => i.qty > 0);
+        .filter((i) => i.qty > 0 && i.sku.length > 0);
       if (items.length === 0) {
         setDispatchError(t('finishing.dispatch.noItems'));
         setDispatching(false);

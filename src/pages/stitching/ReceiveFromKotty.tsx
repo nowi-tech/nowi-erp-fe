@@ -16,8 +16,8 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select } from '@/components/ui/select';
-import { Textarea } from '@/components/ui/textarea';
 import { useToast } from '@/components/ui/toast';
+import { toast as sonnerToast } from 'sonner';
 import { cn } from '@/lib/utils';
 import { listVendors } from '@/api/vendors';
 import { listCategories } from '@/api/categories';
@@ -39,9 +39,10 @@ const PRESETS: Record<Preset, readonly string[]> = {
 
 interface LotRow {
   key: number;
-  lotNo: string;
   /** Vendor's own style code from the paper challan (e.g. Kotty `724`). */
   vendorStyleId: string;
+  /** Vendor's lot id from the paper for THIS lot (e.g. `560MM`). */
+  vendorLotNo: string;
   /** Used only when minting a fresh NOWI Style. */
   gender: StyleGender;
   /** Category id (resolved from the dropdown). 0 = unselected. */
@@ -66,8 +67,8 @@ function newRow(key: number, preset: Preset = 'alpha'): LotRow {
   const sizes = [...PRESETS[preset]];
   return {
     key,
-    lotNo: '',
     vendorStyleId: '',
+    vendorLotNo: '',
     gender: 'W',
     categoryId: 0,
     preset,
@@ -85,8 +86,7 @@ export default function ReceiveFromKottyPage() {
   const [categories, setCategories] = useState<CategoryWithStyleCode[]>([]);
   const [vendorId, setVendorId] = useState<string>('');
   const [challanNo, setChallanNo] = useState('');
-  const [vendorLotNo, setVendorLotNo] = useState('');
-  const [notes, setNotes] = useState('');
+  const [remark, setRemark] = useState('');
   const [rows, setRows] = useState<LotRow[]>([newRow(1)]);
   const nextKeyRef = useRef(2);
   const [submitting, setSubmitting] = useState(false);
@@ -132,11 +132,10 @@ export default function ReceiveFromKottyPage() {
   const canSubmit =
     !!vendorId &&
     challanNo.trim().length > 0 &&
-    vendorLotNo.trim().length > 0 &&
     rows.every(
       (r) =>
-        r.lotNo.trim().length > 0 &&
         r.vendorStyleId.trim().length > 0 &&
+        r.vendorLotNo.trim().length > 0 &&
         r.categoryId > 0,
     ) &&
     grandTotal > 0;
@@ -150,9 +149,9 @@ export default function ReceiveFromKottyPage() {
     );
   }
 
-  function updateLotNo(key: number, value: string) {
+  function updateVendorLotNo(key: number, value: string) {
     setRows((prev) =>
-      prev.map((r) => (r.key === key ? { ...r, lotNo: value } : r)),
+      prev.map((r) => (r.key === key ? { ...r, vendorLotNo: value } : r)),
     );
   }
 
@@ -237,20 +236,35 @@ export default function ReceiveFromKottyPage() {
     setSubmitting(true);
     try {
       const lots: InboundLotPayload[] = rows.map((r) => ({
-        lotNo: r.lotNo.trim(),
+        // lotNo intentionally omitted — BE generates LOT-YY-NNNNN.
         vendorStyleId: r.vendorStyleId.trim(),
+        vendorLotNo: r.vendorLotNo.trim(),
         gender: r.gender,
         categoryId: r.categoryId,
         qtyIn: r.matrix,
       }));
-      await createInbound({
+      const res = await createInbound({
         vendorId: Number(vendorId),
         vendorChallanNo: challanNo.trim(),
-        vendorLotNo: vendorLotNo.trim(),
-        notes: notes.trim() || undefined,
+        notes: remark.trim() || undefined,
         lots,
       });
-      toast.show(t('stitching.receiveFromKotty.successToast'), 'success');
+      // Rich success toast: show the generated lot numbers + their
+      // resolved Style IDs, with "(new)" tag on freshly minted styles.
+      sonnerToast.success(
+        res.lots.length === 1
+          ? `Recorded ${res.lots[0].lotNo}`
+          : `Recorded ${res.lots.length} lots`,
+        {
+          description: res.lots
+            .map(
+              (l) =>
+                `${l.lotNo}  →  ${l.styleCode}${l.styleCreated ? '  (new)' : ''}`,
+            )
+            .join('\n'),
+          duration: 6000,
+        },
+      );
       navigate('/stitching');
     } catch {
       toast.show(t('stitching.receiveFromKotty.errorToast'), 'error');
@@ -284,10 +298,10 @@ export default function ReceiveFromKottyPage() {
       {/* Form body — single column on mobile, two on desktop */}
       <div className="grid lg:grid-cols-[1fr_2fr] gap-4 pb-32">
         <Card>
-          <CardHeader>
+          <CardHeader className="px-4 py-3">
             <CardTitle>{t('stitching.receiveFromKotty.challanSection', { defaultValue: 'Challan' })}</CardTitle>
           </CardHeader>
-          <CardContent className="space-y-4">
+          <CardContent className="px-4 pb-4 space-y-3">
             <div>
               <Label htmlFor="vendor" required>
                 {t('stitching.receiveFromKotty.vendor')}
@@ -323,45 +337,37 @@ export default function ReceiveFromKottyPage() {
             </div>
 
             <div>
-              <Label htmlFor="vendorLotNo" required>
-                {t('stitching.receiveFromKotty.vendorLotNo')}
+              <Label htmlFor="remark">
+                {t('stitching.receiveFromKotty.remark', { defaultValue: 'Remark (optional)' })}
               </Label>
               <Input
-                id="vendorLotNo"
-                value={vendorLotNo}
-                onChange={(e) => setVendorLotNo(e.target.value)}
-                required
-              />
-            </div>
-
-            <div>
-              <Label htmlFor="notes">{t('stitching.receiveFromKotty.notes')}</Label>
-              <Textarea
-                id="notes"
-                value={notes}
-                onChange={(e) => setNotes(e.target.value)}
-                rows={3}
+                id="remark"
+                value={remark}
+                onChange={(e) => setRemark(e.target.value)}
               />
             </div>
           </CardContent>
         </Card>
 
         <Card>
-          <CardHeader>
+          <CardHeader className="px-4 py-3">
             <CardTitle>
               {t('stitching.receiveFromKotty.lotsSection', { defaultValue: 'Lots' })}
             </CardTitle>
           </CardHeader>
-          <CardContent className="space-y-3">
+          <CardContent className="px-4 pb-4 space-y-3">
             {rows.map((row, idx) => (
               <div
                 key={row.key}
-                className="rounded-[var(--radius-md)] border border-[var(--color-border)] p-3 space-y-3"
+                className="rounded-[var(--radius-md)] border border-[var(--color-border)] p-2.5 space-y-2.5"
               >
                 <div className="flex items-center justify-between">
-                  <Label htmlFor={`lotNo-${row.key}`} className="mb-0" required>
-                    {t('stitching.receiveFromKotty.lotNo')} #{idx + 1}
-                  </Label>
+                  <span className="text-xs uppercase tracking-wide text-[var(--color-muted-foreground)] font-medium">
+                    {t('stitching.receiveFromKotty.lotN', {
+                      defaultValue: 'Lot {{n}}',
+                      n: idx + 1,
+                    })}
+                  </span>
                   {rows.length > 1 && (
                     <button
                       type="button"
@@ -373,12 +379,6 @@ export default function ReceiveFromKottyPage() {
                     </button>
                   )}
                 </div>
-                <Input
-                  id={`lotNo-${row.key}`}
-                  value={row.lotNo}
-                  onChange={(e) => updateLotNo(row.key, e.target.value)}
-                  required
-                />
 
                 {/* Vendor's own style code from the paper. Drives the
                     NOWI Style ID lookup (or mint, if unseen). */}
@@ -397,6 +397,21 @@ export default function ReceiveFromKottyPage() {
                       required
                     />
                   </div>
+                  <div>
+                    <Label htmlFor={`vlot-${row.key}`} required>
+                      {t('stitching.receiveFromKotty.vendorLotNo')}
+                    </Label>
+                    <Input
+                      id={`vlot-${row.key}`}
+                      value={row.vendorLotNo}
+                      onChange={(e) => updateVendorLotNo(row.key, e.target.value)}
+                      placeholder="e.g. 560MM"
+                      required
+                    />
+                  </div>
+                </div>
+
+                <div className="grid sm:grid-cols-2 gap-3">
                   <div>
                     <Label htmlFor={`gender-${row.key}`} required>
                       {t('stitching.receiveFromKotty.gender', {
@@ -427,37 +442,30 @@ export default function ReceiveFromKottyPage() {
                       </option>
                     </Select>
                   </div>
-                </div>
-
-                <div>
-                  <Label htmlFor={`cat-${row.key}`} required>
-                    {t('stitching.receiveFromKotty.category', {
-                      defaultValue: 'Category',
-                    })}
-                  </Label>
-                  <Select
-                    id={`cat-${row.key}`}
-                    value={row.categoryId === 0 ? '' : String(row.categoryId)}
-                    onChange={(e) =>
-                      updateCategoryId(row.key, Number(e.target.value))
-                    }
-                    required
-                  >
-                    <option value="" disabled>
-                      —
-                    </option>
-                    {categories.map((c) => (
-                      <option key={c.id} value={c.id}>
-                        {c.name} ({c.styleCode})
+                  <div>
+                    <Label htmlFor={`cat-${row.key}`} required>
+                      {t('stitching.receiveFromKotty.category', {
+                        defaultValue: 'Category',
+                      })}
+                    </Label>
+                    <Select
+                      id={`cat-${row.key}`}
+                      value={row.categoryId === 0 ? '' : String(row.categoryId)}
+                      onChange={(e) =>
+                        updateCategoryId(row.key, Number(e.target.value))
+                      }
+                      required
+                    >
+                      <option value="" disabled>
+                        —
                       </option>
-                    ))}
-                  </Select>
-                  <p className="mt-1 text-xs text-[var(--color-muted-foreground)]">
-                    {t('stitching.receiveFromKotty.styleIdHint', {
-                      defaultValue:
-                        'New combos generate a fresh NOWI Style ID (e.g. NOWI-W-DR-1001) on save.',
-                    })}
-                  </p>
+                      {categories.map((c) => (
+                        <option key={c.id} value={c.id}>
+                          {c.name} ({c.styleCode})
+                        </option>
+                      ))}
+                    </Select>
+                  </div>
                 </div>
 
                 <SizeMatrixEditor

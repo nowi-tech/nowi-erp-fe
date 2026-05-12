@@ -1,85 +1,60 @@
-import {
-  createContext,
-  useCallback,
-  useContext,
-  useEffect,
-  useMemo,
-  useRef,
-  useState,
-  type ReactNode,
-} from 'react';
-import { cn } from '@/lib/utils';
+import { useMemo, type ReactNode } from 'react';
+import { Toaster, toast as sonnerToast } from 'sonner';
+
+/**
+ * Adapter over `sonner`. Keeps the original `useToast().show(message, variant)`
+ * call signature so existing call sites don't have to change. Use sonner
+ * directly (`import { toast } from 'sonner'`) for richer features —
+ * descriptions, actions, custom JSX.
+ *
+ * Positioned top-center via `<Toaster />` rendered in App.tsx.
+ */
 
 export type ToastVariant = 'success' | 'error' | 'info';
-
-interface ToastItem {
-  id: number;
-  message: string;
-  variant: ToastVariant;
-}
 
 interface ToastContextValue {
   show: (message: string, variant?: ToastVariant) => void;
 }
 
-const ToastContext = createContext<ToastContextValue | null>(null);
-
+/** ToastProvider is now a no-op wrapper around children — the actual
+ * <Toaster /> is mounted at the App root. Kept so existing
+ * `<ToastProvider>` JSX wrapping still type-checks. */
 export function ToastProvider({ children }: { children: ReactNode }) {
-  const [items, setItems] = useState<ToastItem[]>([]);
-  const idRef = useRef(0);
-
-  const show = useCallback((message: string, variant: ToastVariant = 'success') => {
-    idRef.current += 1;
-    const id = idRef.current;
-    setItems((prev) => [...prev, { id, message, variant }]);
-    window.setTimeout(() => {
-      setItems((prev) => prev.filter((t) => t.id !== id));
-    }, 3000);
-  }, []);
-
-  const value = useMemo(() => ({ show }), [show]);
-
-  return (
-    <ToastContext.Provider value={value}>
-      {children}
-      <div className="fixed top-4 right-4 z-50 flex flex-col gap-2 pointer-events-none">
-        {items.map((t) => (
-          <div
-            key={t.id}
-            role="status"
-            className={cn(
-              'pointer-events-auto rounded-[var(--radius-md)] border px-4 py-2 text-sm shadow-md',
-              t.variant === 'success' &&
-                'bg-[var(--color-success)] text-white border-transparent',
-              t.variant === 'error' &&
-                'bg-[var(--color-destructive)] text-[var(--color-destructive-foreground)] border-transparent',
-              t.variant === 'info' &&
-                'bg-[var(--color-background)] text-[var(--color-foreground)] border-[var(--color-border)]',
-            )}
-          >
-            {t.message}
-          </div>
-        ))}
-      </div>
-    </ToastContext.Provider>
-  );
+  return <>{children}</>;
 }
 
 export function useToast(): ToastContextValue {
-  const ctx = useContext(ToastContext);
-  if (!ctx) {
-    // Fallback for components rendered outside the provider — still type-safe.
-    return {
-      show: (msg) => {
-        if (typeof console !== 'undefined') console.warn('[toast]', msg);
+  return useMemo(
+    () => ({
+      show: (message, variant = 'success') => {
+        if (variant === 'success') sonnerToast.success(message);
+        else if (variant === 'error') sonnerToast.error(message);
+        else sonnerToast(message);
       },
-    };
-  }
-  return ctx;
+    }),
+    [],
+  );
 }
 
-// Re-export a hook-style helper that auto-clears, for one-off uses.
+/** Brand-styled `<Toaster />` to mount once at the app root. */
+export function AppToaster(): ReactNode {
+  return (
+    <Toaster
+      position="top-center"
+      richColors
+      closeButton
+      duration={3500}
+      toastOptions={{
+        style: {
+          fontFamily: 'var(--font-sans)',
+          borderRadius: 'var(--radius-md)',
+        },
+      }}
+    />
+  );
+}
+
+// Kept for back-compat with older imports.
 export function useAutoDismiss(_ms = 3000): void {
-  // intentionally a no-op placeholder; toasts auto-dismiss internally.
-  useEffect(() => undefined, []);
+  // sonner manages dismiss internally; this hook is a no-op now.
 }
