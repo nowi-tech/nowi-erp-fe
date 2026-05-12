@@ -129,6 +129,7 @@
       "nothingLeft": "Nothing left to forward.",
       "successToast": "Forwarded",
       "forwardedToast": "Forwarded {{n}} units → Finishing",
+      "recent": "Recently forwarded at stitching",
       "loadError": "Could not load lot"
     }
   },

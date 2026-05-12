@@ -10,7 +10,12 @@ import { Dialog } from '@/components/ui/dialog';
 import { useToast } from '@/components/ui/toast';
 import { toast as sonnerToast } from 'sonner';
 import { getAvailability, getLot } from '@/api/lots';
-import { createReceipts, FeatureUnavailableError } from '@/api/receipts';
+import {
+  createReceipts,
+  listReceipts,
+  FeatureUnavailableError,
+  type ReceiptRow,
+} from '@/api/receipts';
 import { orderStatusVariant } from '@/lib/statusBadge';
 import { useStageId } from '@/lib/useStageId';
 import type { Lot, SizeMatrix } from '@/api/types';
@@ -28,6 +33,7 @@ export default function StitchingReceiveLot() {
   const [lot, setLot] = useState<Lot | null>(null);
   const [available, setAvailable] = useState<SizeMatrix>({});
   const [qty, setQty] = useState<SizeMatrix>({});
+  const [recent, setRecent] = useState<ReceiptRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [confirmOpen, setConfirmOpen] = useState(false);
@@ -41,15 +47,17 @@ export default function StitchingReceiveLot() {
     if (stageId === null) return;
     setLoading(true);
     try {
-      const [lotRes, avail] = await Promise.all([
+      const [lotRes, avail, receipts] = await Promise.all([
         getLot(lotId),
         getAvailability(lotId, stageId).catch(() => ({
           stageId,
           available: {} as SizeMatrix,
         })),
+        listReceipts({ lotId, stageId, take: 10 }).catch(() => [] as ReceiptRow[]),
       ]);
       setLot(lotRes);
       setAvailable(avail.available ?? {});
+      setRecent(receipts);
       setQty({});
     } catch {
       toast.show(t('stitching.lot.loadError'), 'error');
@@ -232,6 +240,48 @@ export default function StitchingReceiveLot() {
                 )}
               </CardContent>
             </Card>
+
+            {/* Recent receipts at this stage — closes the "did I already
+                forward this?" loop. Hidden when the lot is brand-new. */}
+            {recent.length > 0 && (
+              <Card>
+                <CardHeader>
+                  <CardTitle className="text-base">
+                    {t('stitching.lot.recent', {
+                      defaultValue: 'Recently forwarded at stitching',
+                    })}
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <ul className="divide-y divide-[var(--color-border)] text-sm">
+                    {recent.map((r) => (
+                      <li
+                        key={r.id}
+                        className="flex items-center justify-between py-1.5"
+                      >
+                        <span>
+                          <span className="font-medium">{r.sizeLabel}</span>
+                          <span className="ml-2 tabular-nums">× {r.qty}</span>
+                          {r.kind !== 'forward' && (
+                            <span className="ml-2 text-xs text-[var(--status-rework-ink)]">
+                              ({r.kind})
+                            </span>
+                          )}
+                        </span>
+                        <span className="text-xs text-[var(--color-muted-foreground)] font-mono">
+                          {new Date(r.receivedAt).toLocaleString(undefined, {
+                            month: 'short',
+                            day: 'numeric',
+                            hour: '2-digit',
+                            minute: '2-digit',
+                          })}
+                        </span>
+                      </li>
+                    ))}
+                  </ul>
+                </CardContent>
+              </Card>
+            )}
           </>
         ) : null}
       </div>
