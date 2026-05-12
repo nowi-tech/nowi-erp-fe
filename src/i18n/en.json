@@ -14,6 +14,7 @@
     "error": "Something went wrong",
     "retry": "Retry",
     "close": "Close",
+    "details": "Details",
     "open": "Open",
     "noInternet": "No internet — please reconnect",
     "comingSoon": "Coming soon",
@@ -137,6 +138,7 @@
       "scrapReason": "Reason",
       "scrapReasonPlaceholder": "e.g. fabric tear, stitching defect",
       "scrappedToast": "Scrapped {{n}} × {{size}}",
+      "orderRef": "Order",
       "loadError": "Could not load lot"
     }
   },

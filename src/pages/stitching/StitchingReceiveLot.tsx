@@ -243,11 +243,21 @@ export default function StitchingReceiveLot() {
                     {lot.vendorLotNo}
                   </div>
                 )}
+                {/* Admin / cross-reference info — hidden by default so the
+                    floor isn't distracted. One tap to expand. */}
                 {lot.order && (
-                  <div className="flex items-center gap-2">
-                    <span className="text-[var(--color-muted-foreground)]">Order:</span>
-                    <span className="font-mono">{lot.order.orderNo}</span>
-                  </div>
+                  <details className="mt-1 group">
+                    <summary className="cursor-pointer list-none text-xs uppercase tracking-wider text-[var(--color-muted-foreground)] hover:text-[var(--color-foreground)] select-none">
+                      {t('common.details', { defaultValue: 'Details' })}
+                      <span className="ml-1 group-open:rotate-180 inline-block transition-transform">▾</span>
+                    </summary>
+                    <div className="mt-2 flex items-center gap-2 text-xs">
+                      <span className="text-[var(--color-muted-foreground)]">
+                        {t('stitching.lot.orderRef', { defaultValue: 'Order' })}:
+                      </span>
+                      <span className="font-mono">{lot.order.orderNo}</span>
+                    </div>
+                  </details>
                 )}
               </CardContent>
             </Card>

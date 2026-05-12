@@ -14,6 +14,7 @@
     "error": "कुछ गड़बड़ हो गई",
     "retry": "पुनः प्रयास करें",
     "close": "बंद करें",
+    "details": "विवरण",
     "open": "खोलें",
     "noInternet": "इंटरनेट नहीं — कृपया पुनः कनेक्ट करें",
     "comingSoon": "जल्द आ रहा है",
@@ -137,6 +138,7 @@
       "scrapReason": "कारण",
       "scrapReasonPlaceholder": "जैसे कपड़ा फटा, सिलाई में दोष",
       "scrappedToast": "{{n}} × {{size}} स्क्रैप किया",
+      "orderRef": "ऑर्डर",
       "loadError": "लॉट लोड नहीं हो सका"
     }
   },
