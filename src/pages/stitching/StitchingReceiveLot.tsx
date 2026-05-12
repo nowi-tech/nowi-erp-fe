@@ -1,13 +1,16 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useNavigate, useParams } from 'react-router-dom';
+import { Trash2 } from 'lucide-react';
 import FloorShell from '@/components/layout/FloorShell';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
 import { Dialog } from '@/components/ui/dialog';
 import { useToast } from '@/components/ui/toast';
+import { createScrap } from '@/api/scrap';
 import { toast as sonnerToast } from 'sonner';
 import { getAvailability, getLot } from '@/api/lots';
 import {
@@ -38,6 +41,12 @@ export default function StitchingReceiveLot() {
   const [submitting, setSubmitting] = useState(false);
   const [confirmOpen, setConfirmOpen] = useState(false);
   const cancelRef = useRef<HTMLButtonElement>(null);
+
+  // Scrap modal state — opened by the per-row trash button.
+  const [scrapSize, setScrapSize] = useState<string | null>(null);
+  const [scrapQty, setScrapQty] = useState<number>(0);
+  const [scrapReason, setScrapReason] = useState('');
+  const [scrapping, setScrapping] = useState(false);
 
   // Resolve the "stitching" stage id at runtime instead of hardcoding 1
   // — survives seed reorders / future stage additions.
@@ -82,6 +91,51 @@ export default function StitchingReceiveLot() {
   const allZero =
     sizes.length > 0 && sizes.every((s) => (available?.[s] ?? 0) === 0);
   const canSubmit = total > 0 && !submitting;
+
+  function openScrap(size: string) {
+    setScrapSize(size);
+    setScrapQty(1);
+    setScrapReason('');
+  }
+  function closeScrap() {
+    setScrapSize(null);
+    setScrapQty(0);
+    setScrapReason('');
+  }
+
+  async function doScrap() {
+    if (!lot || !lot.style || scrapSize === null || scrapping) return;
+    const max = available?.[scrapSize] ?? 0;
+    const qtyToScrap = Math.max(0, Math.min(max, scrapQty));
+    if (qtyToScrap === 0 || scrapReason.trim().length === 0 || stageId === null) {
+      return;
+    }
+    setScrapping(true);
+    try {
+      await createScrap({
+        lotId: lot.id,
+        stageId,
+        sku: `${lot.style.styleId}-${scrapSize}`,
+        sizeLabel: scrapSize,
+        qty: qtyToScrap,
+        reason: scrapReason.trim(),
+      });
+      sonnerToast.success(
+        t('stitching.lot.scrappedToast', {
+          defaultValue: 'Scrapped {{n}} × {{size}}',
+          n: qtyToScrap,
+          size: scrapSize,
+        }),
+        { description: scrapReason.trim(), duration: 4500 },
+      );
+      closeScrap();
+      await refresh();
+    } catch {
+      toast.show(t('common.error'), 'error');
+    } finally {
+      setScrapping(false);
+    }
+  }
 
   function setSize(size: string, raw: string) {
     const max = available?.[size] ?? 0;
@@ -206,7 +260,7 @@ export default function StitchingReceiveLot() {
                     return (
                       <div
                         key={size}
-                        className="flex items-center justify-between gap-3"
+                        className="flex items-center justify-between gap-2"
                       >
                         <div className="min-w-0">
                           <span className="font-medium">{size}</span>
@@ -214,16 +268,30 @@ export default function StitchingReceiveLot() {
                             {t('stitching.lot.available')} {max}
                           </span>
                         </div>
-                        <Input
-                          type="number"
-                          inputMode="numeric"
-                          min={0}
-                          max={max}
-                          value={qty[size] ?? 0}
-                          onChange={(e) => setSize(size, e.target.value)}
-                          className="w-24 text-center"
-                          disabled={max === 0}
-                        />
+                        <div className="flex items-center gap-2">
+                          <Input
+                            type="number"
+                            inputMode="numeric"
+                            min={0}
+                            max={max}
+                            value={qty[size] ?? 0}
+                            onChange={(e) => setSize(size, e.target.value)}
+                            className="w-24 text-center"
+                            disabled={max === 0}
+                          />
+                          <button
+                            type="button"
+                            onClick={() => openScrap(size)}
+                            disabled={max === 0}
+                            aria-label={t('stitching.lot.scrap', {
+                              defaultValue: 'Scrap',
+                            })}
+                            title={t('stitching.lot.scrap', { defaultValue: 'Scrap' })}
+                            className="p-2 rounded-[var(--radius-sm)] text-[var(--color-muted-foreground)] hover:bg-[var(--status-stuck-bg)] hover:text-[var(--status-stuck-acc)] disabled:opacity-30 disabled:cursor-not-allowed"
+                          >
+                            <Trash2 size={16} />
+                          </button>
+                        </div>
                       </div>
                     );
                   })
@@ -308,6 +376,76 @@ export default function StitchingReceiveLot() {
         }
       >
         <p>{t('stitching.lot.confirmBody', { total })}</p>
+      </Dialog>
+
+      <Dialog
+        open={scrapSize !== null}
+        onClose={() => !scrapping && closeScrap()}
+        title={t('stitching.lot.scrapTitle', {
+          defaultValue: 'Scrap units',
+        })}
+        footer={
+          <>
+            <Button
+              variant="outline"
+              onClick={closeScrap}
+              disabled={scrapping}
+            >
+              {t('common.cancel')}
+            </Button>
+            <Button
+              variant="destructive"
+              onClick={() => void doScrap()}
+              disabled={
+                scrapping ||
+                scrapQty <= 0 ||
+                scrapReason.trim().length === 0
+              }
+            >
+              {scrapping ? t('common.saving') : t('stitching.lot.scrap', { defaultValue: 'Scrap' })}
+            </Button>
+          </>
+        }
+      >
+        {scrapSize !== null && (
+          <div className="space-y-3">
+            <p className="text-sm text-[var(--color-muted-foreground)]">
+              {t('stitching.lot.scrapHint', {
+                defaultValue: 'Scrapping units removes them from the lot permanently. {{max}} available in size {{size}}.',
+                max: available?.[scrapSize] ?? 0,
+                size: scrapSize,
+              })}
+            </p>
+            <div>
+              <Label htmlFor="scrap-qty" required>
+                {t('stitching.lot.scrapQty', { defaultValue: 'Quantity' })}
+              </Label>
+              <Input
+                id="scrap-qty"
+                type="number"
+                inputMode="numeric"
+                min={1}
+                max={available?.[scrapSize] ?? 0}
+                value={scrapQty}
+                onChange={(e) => setScrapQty(Math.max(0, parseInt(e.target.value, 10) || 0))}
+                autoFocus
+              />
+            </div>
+            <div>
+              <Label htmlFor="scrap-reason" required>
+                {t('stitching.lot.scrapReason', { defaultValue: 'Reason' })}
+              </Label>
+              <Input
+                id="scrap-reason"
+                value={scrapReason}
+                onChange={(e) => setScrapReason(e.target.value)}
+                placeholder={t('stitching.lot.scrapReasonPlaceholder', {
+                  defaultValue: 'e.g. fabric tear, stitching defect',
+                })}
+              />
+            </div>
+          </div>
+        )}
       </Dialog>
     </FloorShell>
   );

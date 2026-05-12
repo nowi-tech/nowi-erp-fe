@@ -130,6 +130,13 @@
       "successToast": "Forwarded",
       "forwardedToast": "Forwarded {{n}} units → Finishing",
       "recent": "Recently forwarded at stitching",
+      "scrap": "Scrap",
+      "scrapTitle": "Scrap units",
+      "scrapHint": "Scrapping units removes them from the lot permanently. {{max}} available in size {{size}}.",
+      "scrapQty": "Quantity",
+      "scrapReason": "Reason",
+      "scrapReasonPlaceholder": "e.g. fabric tear, stitching defect",
+      "scrappedToast": "Scrapped {{n}} × {{size}}",
       "loadError": "Could not load lot"
     }
   },
