@@ -20,8 +20,15 @@ import { Textarea } from '@/components/ui/textarea';
 import { useToast } from '@/components/ui/toast';
 import { cn } from '@/lib/utils';
 import { listVendors } from '@/api/vendors';
+import { listCategories } from '@/api/categories';
 import { createInbound } from '@/api/inbound';
-import type { Vendor, SizeMatrix, InboundLotPayload } from '@/api/types';
+import type {
+  CategoryWithStyleCode,
+  Vendor,
+  SizeMatrix,
+  InboundLotPayload,
+  StyleGender,
+} from '@/api/types';
 
 type Preset = 'alpha' | 'numeric';
 
@@ -33,6 +40,12 @@ const PRESETS: Record<Preset, readonly string[]> = {
 interface LotRow {
   key: number;
   lotNo: string;
+  /** Vendor's own style code from the paper challan (e.g. Kotty `724`). */
+  vendorStyleId: string;
+  /** Used only when minting a fresh NOWI Style. */
+  gender: StyleGender;
+  /** Category id (resolved from the dropdown). 0 = unselected. */
+  categoryId: number;
   preset: Preset;
   sizes: string[];
   matrix: SizeMatrix;
@@ -51,7 +64,16 @@ function matrixTotal(m: SizeMatrix): number {
 
 function newRow(key: number, preset: Preset = 'alpha'): LotRow {
   const sizes = [...PRESETS[preset]];
-  return { key, lotNo: '', preset, sizes, matrix: makeMatrix(sizes) };
+  return {
+    key,
+    lotNo: '',
+    vendorStyleId: '',
+    gender: 'W',
+    categoryId: 0,
+    preset,
+    sizes,
+    matrix: makeMatrix(sizes),
+  };
 }
 
 export default function ReceiveFromKottyPage() {
@@ -60,6 +82,7 @@ export default function ReceiveFromKottyPage() {
   const navigate = useNavigate();
 
   const [vendors, setVendors] = useState<Vendor[]>([]);
+  const [categories, setCategories] = useState<CategoryWithStyleCode[]>([]);
   const [vendorId, setVendorId] = useState<string>('');
   const [challanNo, setChallanNo] = useState('');
   const [vendorLotNo, setVendorLotNo] = useState('');
@@ -85,6 +108,17 @@ export default function ReceiveFromKottyPage() {
       .catch(() => {
         if (!cancelled) setVendors([]);
       });
+    listCategories()
+      .then((cs) => {
+        if (!cancelled) {
+          // Only categories with a configured style code are usable —
+          // the BE rejects others when minting a Style.
+          setCategories(cs.filter((c) => c.styleCode && c.isActive));
+        }
+      })
+      .catch(() => {
+        if (!cancelled) setCategories([]);
+      });
     return () => {
       cancelled = true;
     };
@@ -99,7 +133,12 @@ export default function ReceiveFromKottyPage() {
     !!vendorId &&
     challanNo.trim().length > 0 &&
     vendorLotNo.trim().length > 0 &&
-    rows.every((r) => r.lotNo.trim().length > 0) &&
+    rows.every(
+      (r) =>
+        r.lotNo.trim().length > 0 &&
+        r.vendorStyleId.trim().length > 0 &&
+        r.categoryId > 0,
+    ) &&
     grandTotal > 0;
 
   function updateMatrix(key: number, size: string, raw: string) {
@@ -114,6 +153,24 @@ export default function ReceiveFromKottyPage() {
   function updateLotNo(key: number, value: string) {
     setRows((prev) =>
       prev.map((r) => (r.key === key ? { ...r, lotNo: value } : r)),
+    );
+  }
+
+  function updateVendorStyleId(key: number, value: string) {
+    setRows((prev) =>
+      prev.map((r) => (r.key === key ? { ...r, vendorStyleId: value } : r)),
+    );
+  }
+
+  function updateGender(key: number, value: StyleGender) {
+    setRows((prev) =>
+      prev.map((r) => (r.key === key ? { ...r, gender: value } : r)),
+    );
+  }
+
+  function updateCategoryId(key: number, value: number) {
+    setRows((prev) =>
+      prev.map((r) => (r.key === key ? { ...r, categoryId: value } : r)),
     );
   }
 
@@ -181,12 +238,15 @@ export default function ReceiveFromKottyPage() {
     try {
       const lots: InboundLotPayload[] = rows.map((r) => ({
         lotNo: r.lotNo.trim(),
-        sizeMatrix: r.matrix,
+        vendorStyleId: r.vendorStyleId.trim(),
+        gender: r.gender,
+        categoryId: r.categoryId,
+        qtyIn: r.matrix,
       }));
       await createInbound({
-        vendorId,
+        vendorId: Number(vendorId),
         vendorChallanNo: challanNo.trim(),
-        vendorLotNo: vendorLotNo.trim() || undefined,
+        vendorLotNo: vendorLotNo.trim(),
         notes: notes.trim() || undefined,
         lots,
       });
@@ -319,6 +379,87 @@ export default function ReceiveFromKottyPage() {
                   onChange={(e) => updateLotNo(row.key, e.target.value)}
                   required
                 />
+
+                {/* Vendor's own style code from the paper. Drives the
+                    NOWI Style ID lookup (or mint, if unseen). */}
+                <div className="grid sm:grid-cols-2 gap-3">
+                  <div>
+                    <Label htmlFor={`vstyle-${row.key}`} required>
+                      {t('stitching.receiveFromKotty.vendorStyleId', {
+                        defaultValue: 'Vendor style ID',
+                      })}
+                    </Label>
+                    <Input
+                      id={`vstyle-${row.key}`}
+                      value={row.vendorStyleId}
+                      onChange={(e) => updateVendorStyleId(row.key, e.target.value)}
+                      placeholder="e.g. 724"
+                      required
+                    />
+                  </div>
+                  <div>
+                    <Label htmlFor={`gender-${row.key}`} required>
+                      {t('stitching.receiveFromKotty.gender', {
+                        defaultValue: 'Gender',
+                      })}
+                    </Label>
+                    <Select
+                      id={`gender-${row.key}`}
+                      value={row.gender}
+                      onChange={(e) =>
+                        updateGender(row.key, e.target.value as StyleGender)
+                      }
+                    >
+                      <option value="W">
+                        {t('stitching.receiveFromKotty.genderW', {
+                          defaultValue: 'Women',
+                        })}
+                      </option>
+                      <option value="M">
+                        {t('stitching.receiveFromKotty.genderM', {
+                          defaultValue: 'Men',
+                        })}
+                      </option>
+                      <option value="U">
+                        {t('stitching.receiveFromKotty.genderU', {
+                          defaultValue: 'Unisex',
+                        })}
+                      </option>
+                    </Select>
+                  </div>
+                </div>
+
+                <div>
+                  <Label htmlFor={`cat-${row.key}`} required>
+                    {t('stitching.receiveFromKotty.category', {
+                      defaultValue: 'Category',
+                    })}
+                  </Label>
+                  <Select
+                    id={`cat-${row.key}`}
+                    value={row.categoryId === 0 ? '' : String(row.categoryId)}
+                    onChange={(e) =>
+                      updateCategoryId(row.key, Number(e.target.value))
+                    }
+                    required
+                  >
+                    <option value="" disabled>
+                      —
+                    </option>
+                    {categories.map((c) => (
+                      <option key={c.id} value={c.id}>
+                        {c.name} ({c.styleCode})
+                      </option>
+                    ))}
+                  </Select>
+                  <p className="mt-1 text-xs text-[var(--color-muted-foreground)]">
+                    {t('stitching.receiveFromKotty.styleIdHint', {
+                      defaultValue:
+                        'New combos generate a fresh NOWI Style ID (e.g. NOWI-W-DR-1001) on save.',
+                    })}
+                  </p>
+                </div>
+
                 <SizeMatrixEditor
                   row={row}
                   onPreset={(p) => setPreset(row.key, p)}

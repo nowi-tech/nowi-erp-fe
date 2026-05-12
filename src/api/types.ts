@@ -86,18 +86,47 @@ export interface Lot {
   createdAt: string;
 }
 
+// ─── Styles ───────────────────────────────────────────────────────────────
+
+/** W = Women, M = Men, U = Unisex. Mirrors the BE enum. */
+export type StyleGender = 'W' | 'M' | 'U';
+
+export interface CategoryWithStyleCode {
+  id: number;
+  code: string;
+  name: string;
+  styleCode: string | null;
+  styleCounter: number;
+  isActive: boolean;
+}
+
+export interface Style {
+  id: number;
+  styleId: string;
+  gender: StyleGender;
+  categoryCode: string;
+  sequenceNo: number;
+  category?: CategoryWithStyleCode;
+}
+
 // ─── Inbound ──────────────────────────────────────────────────────────────
 
 export interface InboundLotPayload {
   lotNo: string;
-  baseCode?: string;
-  sizeMatrix: SizeMatrix;
+  /** Vendor's own style code from the paper challan (e.g. Kotty `724`). */
+  vendorStyleId: string;
+  /** Used only when minting a fresh NOWI Style — ignored if the mapping
+   *  already exists for this (vendor, vendorStyleId). */
+  gender: StyleGender;
+  categoryId: number;
+  vendorLotNo?: string;
+  qtyIn: SizeMatrix;
 }
 
 export interface CreateInboundPayload {
-  vendorId: string;
+  vendorId: number;
   vendorChallanNo: string;
-  vendorLotNo?: string;
+  vendorLotNo: string;
   receivedAt?: string;
   notes?: string;
   lots: InboundLotPayload[];
