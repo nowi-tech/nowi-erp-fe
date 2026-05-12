@@ -86,6 +86,11 @@
     "vendorLot": "विक्रेता लॉट",
     "status": "स्थिति",
     "totals": "कुल",
+    "gender": {
+      "W": "महिला",
+      "M": "पुरुष",
+      "U": "यूनिसेक्स"
+    },
     "receiveFromKotty": {
       "fab": "Kotty से माल लें",
       "title": "Kotty से माल लें",

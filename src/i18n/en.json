@@ -86,6 +86,11 @@
     "vendorLot": "Vendor lot",
     "status": "Status",
     "totals": "Totals",
+    "gender": {
+      "W": "Women's",
+      "M": "Men's",
+      "U": "Unisex"
+    },
     "receiveFromKotty": {
       "fab": "Receive from Kotty",
       "title": "Receive from Kotty",

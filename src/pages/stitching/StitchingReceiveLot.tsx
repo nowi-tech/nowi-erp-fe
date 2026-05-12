@@ -212,12 +212,26 @@ export default function StitchingReceiveLot() {
                   {lot.lotNo}
                 </CardTitle>
                 {lot.style && (
-                  <div className="mt-1 font-mono text-sm text-[var(--stage-stitch-acc)]">
-                    {lot.style.styleId}
-                    {lot.style.category?.name
-                      ? ` · ${lot.style.category.name}`
-                      : ''}
-                  </div>
+                  <>
+                    <div className="mt-2 font-serif text-lg text-[var(--color-foreground)]">
+                      {[
+                        t(`stitching.gender.${lot.style.gender}`, {
+                          defaultValue:
+                            lot.style.gender === 'W'
+                              ? "Women's"
+                              : lot.style.gender === 'M'
+                                ? "Men's"
+                                : 'Unisex',
+                        }),
+                        lot.style.category?.name,
+                      ]
+                        .filter(Boolean)
+                        .join(' ')}
+                    </div>
+                    <div className="mt-0.5 font-mono text-xs text-[var(--stage-stitch-acc)]">
+                      {lot.style.styleId}
+                    </div>
+                  </>
                 )}
                 {/* Only surface anomalies — routine status is implied by being on this page. */}
                 {(lot.order?.status === 'in_rework' || lot.order?.status === 'stuck') && (
@@ -229,36 +243,38 @@ export default function StitchingReceiveLot() {
                 )}
               </CardHeader>
               <CardContent className="space-y-1 text-sm">
-                <div>
-                  <span className="text-[var(--color-muted-foreground)]">
-                    {t('stitching.vendor')}:
-                  </span>{' '}
-                  {lot.vendor?.name ?? lot.vendorId}
-                </div>
                 {lot.vendorLotNo && (
                   <div>
                     <span className="text-[var(--color-muted-foreground)]">
                       {t('stitching.vendorLot')}:
                     </span>{' '}
-                    {lot.vendorLotNo}
+                    <span className="font-mono">{lot.vendorLotNo}</span>
                   </div>
                 )}
                 {/* Admin / cross-reference info — hidden by default so the
                     floor isn't distracted. One tap to expand. */}
-                {lot.order && (
-                  <details className="mt-1 group">
-                    <summary className="cursor-pointer list-none text-xs uppercase tracking-wider text-[var(--color-muted-foreground)] hover:text-[var(--color-foreground)] select-none">
-                      {t('common.details', { defaultValue: 'Details' })}
-                      <span className="ml-1 group-open:rotate-180 inline-block transition-transform">▾</span>
-                    </summary>
-                    <div className="mt-2 flex items-center gap-2 text-xs">
+                <details className="mt-2 group">
+                  <summary className="cursor-pointer list-none text-xs uppercase tracking-wider text-[var(--color-muted-foreground)] hover:text-[var(--color-foreground)] select-none">
+                    {t('common.details', { defaultValue: 'Details' })}
+                    <span className="ml-1 group-open:rotate-180 inline-block transition-transform">▾</span>
+                  </summary>
+                  <div className="mt-2 space-y-1 text-xs">
+                    <div>
                       <span className="text-[var(--color-muted-foreground)]">
-                        {t('stitching.lot.orderRef', { defaultValue: 'Order' })}:
-                      </span>
-                      <span className="font-mono">{lot.order.orderNo}</span>
+                        {t('stitching.vendor')}:
+                      </span>{' '}
+                      {lot.vendor?.name ?? lot.vendorId}
                     </div>
-                  </details>
-                )}
+                    {lot.order && (
+                      <div>
+                        <span className="text-[var(--color-muted-foreground)]">
+                          {t('stitching.lot.orderRef', { defaultValue: 'Order' })}:
+                        </span>{' '}
+                        <span className="font-mono">{lot.order.orderNo}</span>
+                      </div>
+                    )}
+                  </div>
+                </details>
               </CardContent>
             </Card>
 

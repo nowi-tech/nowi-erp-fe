@@ -89,9 +89,30 @@ export default function FinishingHome() {
                       </span>
                       {lot.lotNo}
                     </div>
+                    {lot.style && (
+                      <div className="text-sm truncate">
+                        <span className="text-[var(--color-foreground)]">
+                          {[
+                            t(`stitching.gender.${lot.style.gender}`, {
+                              defaultValue:
+                                lot.style.gender === 'W'
+                                  ? "Women's"
+                                  : lot.style.gender === 'M'
+                                    ? "Men's"
+                                    : 'Unisex',
+                            }),
+                            lot.style.category?.name,
+                          ]
+                            .filter(Boolean)
+                            .join(' ')}
+                        </span>
+                        <span className="ml-2 font-mono text-xs text-[var(--stage-finish-acc)]">
+                          {lot.style.styleId}
+                        </span>
+                      </div>
+                    )}
                     <div className="text-sm text-[var(--color-muted-foreground)] truncate">
-                      {lot.vendor?.name ?? lot.vendorId}
-                      {lot.vendorLotNo ? ` • ${lot.vendorLotNo}` : ''} •{' '}
+                      {lot.vendorLotNo ? `${lot.vendorLotNo} • ` : ''}
                       <span className="tabular-nums">{totalUnits(lot.qtyIn)} u</span>
                     </div>
                     <div className="mt-1.5 flex items-center gap-2 flex-wrap">
