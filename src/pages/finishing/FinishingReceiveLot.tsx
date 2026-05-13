@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useNavigate, useParams } from 'react-router-dom';
-import { Camera, ChevronLeft } from 'lucide-react';
+import { Camera, ChevronLeft, Minus, Plus } from 'lucide-react';
+import { toast as sonnerToast } from 'sonner';
 import FloorShell from '@/components/layout/FloorShell';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -12,8 +13,14 @@ import { Select } from '@/components/ui/select';
 import { Textarea } from '@/components/ui/textarea';
 import { Dialog } from '@/components/ui/dialog';
 import { useToast } from '@/components/ui/toast';
+import { cn } from '@/lib/utils';
 import { getAvailability, getLot } from '@/api/lots';
-import { createReceipts, FeatureUnavailableError } from '@/api/receipts';
+import {
+  createReceipts,
+  listReceipts,
+  FeatureUnavailableError,
+  type ReceiptRow,
+} from '@/api/receipts';
 import { openRework } from '@/api/rework';
 import { requestUploadUrl } from '@/api/storage';
 import { createDispatch } from '@/api/dispatches';
@@ -70,6 +77,7 @@ export default function FinishingReceiveLot() {
   const [lot, setLot] = useState<Lot | null>(null);
   const [available, setAvailable] = useState<SizeMatrix>({});
   const [rows, setRows] = useState<Record<string, RowState>>({});
+  const [recent, setRecent] = useState<ReceiptRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [confirmOpen, setConfirmOpen] = useState(false);
@@ -80,6 +88,9 @@ export default function FinishingReceiveLot() {
   const [destWarehouseId, setDestWarehouseId] = useState<string>('');
   const [shipQty, setShipQty] = useState<Record<string, number>>({});
   const [dispatchConfirmOpen, setDispatchConfirmOpen] = useState(false);
+  // Two-step dispatch: confirm (Yes/No) sits between the form and the
+  // actual API call so a misclick can't push units to the warehouse.
+  const [dispatchConfirming, setDispatchConfirming] = useState(false);
   const [dispatching, setDispatching] = useState(false);
   const [dispatchError, setDispatchError] = useState<string | null>(null);
   const dispatchCancelRef = useRef<HTMLButtonElement>(null);
@@ -87,12 +98,15 @@ export default function FinishingReceiveLot() {
   const refresh = useCallback(async () => {
     setLoading(true);
     try {
-      const [lotRes, avail] = await Promise.all([
+      const [lotRes, avail, receipts] = await Promise.all([
         getLot(lotId),
         getAvailability(lotId, STAGE_ID_FINISHING).catch(() => ({
           stageId: STAGE_ID_FINISHING,
           available: {} as SizeMatrix,
         })),
+        listReceipts({ lotId, stageId: STAGE_ID_FINISHING, take: 10 }).catch(
+          () => [] as ReceiptRow[],
+        ),
       ]);
       setLot(lotRes);
       const a = avail.available ?? {};
@@ -102,8 +116,9 @@ export default function FinishingReceiveLot() {
         next[s] = defaultRow();
       });
       setRows(next);
+      setRecent(receipts);
     } catch {
-      toast.show(t('stitching.lot.loadError'), 'error');
+      sonnerToast.error(t('stitching.lot.loadError'));
     } finally {
       setLoading(false);
     }
@@ -167,14 +182,13 @@ export default function FinishingReceiveLot() {
         photoPath: res.objectPath,
         photoNoop: !!res.noop,
       });
-      toast.show(
+      sonnerToast.success(
         res.noop
           ? `${t('finishing.photoAdded')} ${t('common.noopDevHint')}`
           : t('finishing.photoAdded'),
-        'success',
       );
     } catch {
-      toast.show(t('common.error'), 'error');
+      sonnerToast.error(t('common.error'));
     }
   }
 
@@ -213,7 +227,36 @@ export default function FinishingReceiveLot() {
           photoPaths: r.photoPath ? [r.photoPath] : undefined,
         });
       }
-      toast.show(t('stitching.lot.successToast'), 'success');
+      // Rich success toast — show what moved + flag rework (warning tone)
+      // separately if any was opened, since rework is a "loss" event.
+      const fwd = forwardLines.reduce((a, l) => a + l.qty, 0);
+      const rework = Object.values(rows).reduce(
+        (a, r) => a + (r.reworkOpen ? r.reworkQty : 0),
+        0,
+      );
+      if (fwd > 0) {
+        sonnerToast.success(
+          t('finishing.lot.forwardedToast', {
+            defaultValue: 'Forwarded {{n}} units → Dispatch',
+            n: fwd,
+          }),
+          {
+            description: forwardLines
+              .map((r) => `${r.sizeLabel} × ${r.qty}`)
+              .join(' · '),
+            duration: 4500,
+          },
+        );
+      }
+      if (rework > 0) {
+        sonnerToast.warning(
+          t('finishing.lot.reworkToast', {
+            defaultValue: 'Sent {{n}} units back for rework',
+            n: rework,
+          }),
+          { duration: 4500 },
+        );
+      }
       try {
         localStorage.setItem('nowi.firstReceiptDoneAt', new Date().toISOString());
       } catch {
@@ -223,9 +266,9 @@ export default function FinishingReceiveLot() {
       await refresh();
     } catch (err) {
       if (err instanceof FeatureUnavailableError) {
-        toast.show(t('common.featureUnavailable'), 'info');
+        sonnerToast.info(t('common.featureUnavailable'));
       } else {
-        toast.show(t('common.error'), 'error');
+        sonnerToast.error(t('common.error'));
       }
     } finally {
       setSubmitting(false);
@@ -278,18 +321,19 @@ export default function FinishingReceiveLot() {
         destWarehouseId,
         items,
       });
-      toast.show(
+      sonnerToast.success(
         t('finishing.dispatch.successToast', { dispatchNo: dispatch.dispatchNo }),
-        'success',
+        { duration: 5000 },
       );
       setDispatchConfirmOpen(false);
+      setDispatchConfirming(false);
       setShipQty({});
       if (user?.role === 'admin') {
         navigate(`/admin/dispatches/${dispatch.id}`);
       }
     } catch (err) {
       if (err instanceof FeatureUnavailableError) {
-        toast.show(t('common.featureUnavailable'), 'info');
+        sonnerToast.info(t('common.featureUnavailable'));
       } else {
         const e = err as { response?: { data?: { error?: string } }; message?: string };
         const msg = e.response?.data?.error ?? e.message ?? t('common.error');
@@ -405,141 +449,104 @@ export default function FinishingReceiveLot() {
             </details>
             <div className="mt-3.5 space-y-3.5">
 
-            <Card>
-              <CardHeader>
-                <CardTitle>{t('finishing.lot.title')}</CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                {allZero ? (
-                  <p className="text-[var(--color-muted-foreground)]">
-                    {t('stitching.lot.nothingLeft')}
-                  </p>
-                ) : (
-                  sizes.map((size) => {
+            <div className="rounded-[14px] bg-[var(--color-surface)] shadow-[0_1px_2px_rgba(15,26,54,0.04)] p-[16px_18px_6px]">
+              <div className="flex items-baseline justify-between">
+                <div className="font-semibold text-[18px] text-[var(--color-foreground)]">
+                  {t('stitching.lot.forward', { defaultValue: 'Forward' })}
+                </div>
+                <span className="text-[12px] text-[var(--color-muted-foreground)] font-mono">
+                  {t('stitching.lot.bySize', { defaultValue: 'by size' })}
+                </span>
+              </div>
+              <p className="mt-0.5 text-[12px] text-[var(--color-muted-foreground)]">
+                {t('stitching.lot.forwardHint', {
+                  defaultValue:
+                    'Tap size to forward all, or set quantity manually.',
+                })}
+              </p>
+              {allZero ? (
+                <p className="mt-3 pb-3 text-[var(--color-muted-foreground)]">
+                  {t('stitching.lot.nothingLeft')}
+                </p>
+              ) : (
+                <div className="mt-1.5">
+                  {sizes.map((size) => {
                     const max = available[size] ?? 0;
                     const r = rows[size] ?? defaultRow();
                     return (
-                      <div
+                      <FinishSizeRow
                         key={size}
-                        className="rounded-[var(--radius-md)] border border-[var(--color-border)] p-3 space-y-3"
-                      >
-                        <div className="flex items-center justify-between">
-                          <div>
-                            <span className="font-medium">{size}</span>
-                            <span className="ml-2 text-sm text-[var(--color-muted-foreground)]">
-                              {t('stitching.lot.available')} {max}
-                            </span>
-                          </div>
-                        </div>
-
-                        <div className="flex items-center justify-between gap-3">
-                          <Label className="mb-0">{t('stitching.lot.forward')}</Label>
-                          <Input
-                            type="number"
-                            inputMode="numeric"
-                            min={0}
-                            max={max}
-                            value={r.forwardQty}
-                            onChange={(e) => setForward(size, e.target.value)}
-                            className="w-24 text-center"
-                            disabled={max === 0}
-                          />
-                        </div>
-
-                        <div className="flex items-center justify-between gap-3">
-                          <Label className="mb-0">{t('finishing.markRework')}</Label>
-                          <input
-                            type="checkbox"
-                            checked={r.reworkOpen}
-                            onChange={(e) =>
-                              updateRow(size, {
-                                reworkOpen: e.target.checked,
-                                reworkQty: e.target.checked ? r.reworkQty : 0,
-                              })
-                            }
-                            className="h-5 w-5"
-                            disabled={max === 0}
-                          />
-                        </div>
-
-                        {r.reworkOpen && (
-                          <div className="space-y-2 rounded bg-[var(--color-muted)] p-2">
-                            <div className="flex items-center justify-between gap-3">
-                              <Label className="mb-0">{t('finishing.reworkQty')}</Label>
-                              <Input
-                                type="number"
-                                inputMode="numeric"
-                                min={0}
-                                max={max}
-                                value={r.reworkQty}
-                                onChange={(e) => setRework(size, e.target.value)}
-                                className="w-24 text-center"
-                              />
-                            </div>
-                            <div>
-                              <Label>{t('finishing.reworkReason')}</Label>
-                              <Select
-                                value={r.reasonKey}
-                                onChange={(e) =>
-                                  updateRow(size, {
-                                    reasonKey: e.target.value as ReasonKey,
-                                  })
-                                }
-                              >
-                                {REASON_KEYS.map((k) => (
-                                  <option key={k} value={k}>
-                                    {t(`finishing.reasons.${k}`)}
-                                  </option>
-                                ))}
-                              </Select>
-                            </div>
-                            {r.reasonKey === 'other' && (
-                              <div>
-                                <Label>{t('finishing.otherReasonLabel')}</Label>
-                                <Textarea
-                                  rows={2}
-                                  value={r.otherReason}
-                                  onChange={(e) =>
-                                    updateRow(size, { otherReason: e.target.value })
-                                  }
-                                />
-                              </div>
-                            )}
-                            <div className="flex items-center gap-2">
-                              <Button
-                                type="button"
-                                variant="outline"
-                                size="sm"
-                                onClick={() => attachPhoto(size)}
-                              >
-                                <Camera size={16} />
-                                {t('finishing.addPhoto')}
-                              </Button>
-                              {r.photoPath && (
-                                <span className="text-xs text-[var(--color-muted-foreground)] truncate">
-                                  {t('finishing.photoAdded')}
-                                  {r.photoNoop ? ` ${t('common.noopDevHint')}` : ''}
-                                </span>
-                              )}
-                            </div>
-                          </div>
-                        )}
-                      </div>
+                        size={size}
+                        max={max}
+                        row={r}
+                        onForwardChange={(v) =>
+                          updateRow(size, { forwardQty: v })
+                        }
+                        onSetForward={(raw) => setForward(size, raw)}
+                        onToggleRework={(open) =>
+                          updateRow(size, {
+                            reworkOpen: open,
+                            reworkQty: open ? r.reworkQty : 0,
+                          })
+                        }
+                        onReworkQty={(raw) => setRework(size, raw)}
+                        onReasonChange={(k) =>
+                          updateRow(size, { reasonKey: k })
+                        }
+                        onOtherReasonChange={(v) =>
+                          updateRow(size, { otherReason: v })
+                        }
+                        onAttachPhoto={() => attachPhoto(size)}
+                        reasonKeys={REASON_KEYS}
+                        labels={{
+                          left: t('stitching.lot.left', {
+                            defaultValue: 'left',
+                          }),
+                          rework: t('finishing.markRework', {
+                            defaultValue: 'Rework',
+                          }),
+                          forwardAll: t('stitching.lot.forwardAll', {
+                            defaultValue: 'Forward all {{n}}',
+                            n: max,
+                          }),
+                          clear: t('common.clear', { defaultValue: 'Clear' }),
+                          reworkQtyLabel: t('finishing.reworkQty'),
+                          reasonLabel: t('finishing.reworkReason'),
+                          otherLabel: t('finishing.otherReasonLabel'),
+                          addPhoto: t('finishing.addPhoto'),
+                          photoAdded: t('finishing.photoAdded'),
+                          noopDev: t('common.noopDevHint'),
+                          reasonOf: (k: ReasonKey) =>
+                            t(`finishing.reasons.${k}`),
+                        }}
+                      />
                     );
-                  })
+                  })}
+                </div>
+              )}
+            </div>
+
+            {!allZero && (
+              <button
+                type="button"
+                onClick={() => setConfirmOpen(true)}
+                disabled={!canSubmit}
+                className={cn(
+                  'mt-3.5 w-full p-[18px] rounded-[14px] text-center font-semibold text-[16px] tracking-[0.01em] text-white transition-transform active:translate-y-px',
+                  canSubmit
+                    ? 'bg-gradient-to-b from-[var(--stage-finish-acc)] to-[var(--stage-finish-ink)] shadow-[inset_0_1px_0_rgba(255,255,255,0.18),0_0_0_1px_var(--stage-finish-ink),0_10px_24px_rgba(196,69,46,0.32)]'
+                    : 'bg-[var(--color-disabled-bg)] cursor-default',
                 )}
-                {!allZero && (
-                  <Button
-                    size="lg"
-                    className="w-full"
-                    onClick={() => setConfirmOpen(true)}
-                    disabled={!canSubmit}
-                  >
-                    {t('finishing.lot.submit')}
-                  </Button>
-                )}
-              </CardContent>
-            </Card>
+              >
+                {totals.forward > 0 || totals.rework > 0
+                  ? t('finishing.lot.submitN', {
+                      defaultValue: 'Send {{fwd}} → Dispatch · {{rwk}} → Rework',
+                      fwd: totals.forward,
+                      rwk: totals.rework,
+                    })
+                  : t('finishing.lot.submit')}
+              </button>
+            )}
             <Card>
               <CardHeader>
                 <CardTitle>{t('finishing.dispatch.generateChallan')}</CardTitle>
@@ -601,6 +608,77 @@ export default function FinishingReceiveLot() {
                 </Button>
               </CardContent>
             </Card>
+
+            {/* Recently forwarded + rework-returned at finishing —
+                stage-scoped: only this lot's events at finishing, so the
+                master can see "did I already forward / send back these
+                sizes today?". 24px gap from the cards above. */}
+            {recent.length > 0 && (
+              <Card className="mt-6">
+                <CardHeader>
+                  <CardTitle className="text-base">
+                    {t('stitching.lot.recent', {
+                      defaultValue: 'Recently at finishing',
+                    })}
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <ul className="divide-y divide-[var(--color-border)] text-sm">
+                    {recent.map((r) => {
+                      const isRework = r.kind === 'rework_return';
+                      return (
+                        <li
+                          key={r.id}
+                          className="flex items-center gap-3 py-2"
+                        >
+                          <div
+                            className={cn(
+                              'min-w-[34px] h-7 px-1.5 rounded-[var(--radius-sm)] flex items-center justify-center font-semibold text-xs',
+                              isRework
+                                ? 'bg-[var(--status-rework-bg)] text-[var(--status-rework-ink)]'
+                                : 'bg-[var(--color-muted)]',
+                            )}
+                          >
+                            {r.sizeLabel}
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <span
+                              className={cn(
+                                'font-mono tabular-nums',
+                                isRework && 'text-[var(--status-rework-ink)]',
+                              )}
+                            >
+                              ×{r.qty}
+                            </span>
+                            {isRework && (
+                              <span className="ml-2 text-xs font-semibold uppercase tracking-wider text-[var(--status-rework-ink)]">
+                                {t('finishing.markRework', {
+                                  defaultValue: 'Rework',
+                                })}
+                              </span>
+                            )}
+                            {r.receivedByName && (
+                              <span className="ml-2 text-xs text-[var(--color-muted-foreground)]">
+                                {t('common.by', { defaultValue: 'by' })}{' '}
+                                {r.receivedByName}
+                              </span>
+                            )}
+                          </div>
+                          <span className="text-xs text-[var(--color-muted-foreground)] font-mono">
+                            {new Date(r.receivedAt).toLocaleString(undefined, {
+                              month: 'short',
+                              day: 'numeric',
+                              hour: '2-digit',
+                              minute: '2-digit',
+                            })}
+                          </span>
+                        </li>
+                      );
+                    })}
+                  </ul>
+                </CardContent>
+              </Card>
+            )}
             </div>
           </>
         ) : null}
@@ -608,32 +686,83 @@ export default function FinishingReceiveLot() {
 
       <Dialog
         open={dispatchConfirmOpen}
-        onClose={() => setDispatchConfirmOpen(false)}
-        title={t('finishing.dispatch.confirmTitle')}
+        onClose={() => {
+          setDispatchConfirmOpen(false);
+          setDispatchConfirming(false);
+        }}
+        title={
+          dispatchConfirming
+            ? t('finishing.dispatch.confirmYesNoTitle', {
+                defaultValue: 'Send {{n}} units to {{warehouse}}?',
+                n: dispatchTotal,
+                warehouse: destWarehouse?.name ?? '',
+              })
+            : t('finishing.dispatch.confirmTitle')
+        }
         initialFocusRef={dispatchCancelRef}
         footer={
-          <>
-            <Button
-              ref={dispatchCancelRef}
-              variant="outline"
-              onClick={() => setDispatchConfirmOpen(false)}
-              disabled={dispatching}
-            >
-              {t('common.cancel')}
-            </Button>
-            <Button onClick={() => void doDispatch()} disabled={dispatching}>
-              {dispatching ? t('common.saving') : t('common.confirm')}
-            </Button>
-          </>
+          dispatchConfirming ? (
+            // Step 2 — explicit Yes/No so a misclick on the form's
+            // "Send" button can't push units to the warehouse.
+            <>
+              <Button
+                variant="outline"
+                onClick={() => setDispatchConfirming(false)}
+                disabled={dispatching}
+              >
+                {t('common.no', { defaultValue: 'No' })}
+              </Button>
+              <Button
+                onClick={() => void doDispatch()}
+                disabled={dispatching}
+              >
+                {dispatching
+                  ? t('common.saving')
+                  : t('common.yes', { defaultValue: 'Yes' })}
+              </Button>
+            </>
+          ) : (
+            <>
+              <Button
+                ref={dispatchCancelRef}
+                variant="outline"
+                onClick={() => setDispatchConfirmOpen(false)}
+                disabled={dispatching}
+              >
+                {t('common.cancel')}
+              </Button>
+              <Button
+                onClick={() => setDispatchConfirming(true)}
+                disabled={dispatching}
+              >
+                {t('finishing.dispatch.generateChallan', {
+                  defaultValue: 'Send',
+                })}
+              </Button>
+            </>
+          )
         }
       >
-        <p>
-          {t('finishing.dispatch.confirmBody', {
-            total: dispatchTotal,
-            sku: lot?.sku ?? '',
-            warehouse: destWarehouse?.name ?? '',
-          })}
-        </p>
+        {!dispatchConfirming ? (
+          <p>
+            {t('finishing.dispatch.confirmBody', {
+              total: dispatchTotal,
+              sku: lot?.sku ?? '',
+              warehouse: destWarehouse?.name ?? '',
+            })}
+          </p>
+        ) : (
+          <div className="space-y-2 text-sm">
+            <p className="text-[var(--color-foreground)]">
+              {t('finishing.dispatch.confirmYesNoBody', {
+                defaultValue:
+                  'You are about to ship {{n}} units to {{warehouse}}. This will sync to EasyEcom and cannot be undone from here.',
+                n: dispatchTotal,
+                warehouse: destWarehouse?.name ?? '',
+              })}
+            </p>
+          </div>
+        )}
       </Dialog>
 
       <Dialog
@@ -668,5 +797,193 @@ export default function FinishingReceiveLot() {
         </div>
       </Dialog>
     </FloorShell>
+  );
+}
+
+/**
+ * Finishing size row — design's chip-tap-to-fill for forward qty, with
+ * an inline "Rework" link that expands the row into a reason + photo +
+ * rework-qty block when toggled. Forward and rework share the available
+ * count: forwardQty + reworkQty ≤ max.
+ */
+function FinishSizeRow({
+  size,
+  max,
+  row,
+  onForwardChange,
+  onSetForward,
+  onToggleRework,
+  onReworkQty,
+  onReasonChange,
+  onOtherReasonChange,
+  onAttachPhoto,
+  reasonKeys,
+  labels,
+}: {
+  size: string;
+  max: number;
+  row: RowState;
+  onForwardChange: (v: number) => void;
+  onSetForward: (raw: string) => void;
+  onToggleRework: (open: boolean) => void;
+  onReworkQty: (raw: string) => void;
+  onReasonChange: (k: ReasonKey) => void;
+  onOtherReasonChange: (v: string) => void;
+  onAttachPhoto: () => void;
+  reasonKeys: readonly ReasonKey[];
+  labels: {
+    left: string;
+    rework: string;
+    forwardAll: string;
+    clear: string;
+    reworkQtyLabel: string;
+    reasonLabel: string;
+    otherLabel: string;
+    addPhoto: string;
+    photoAdded: string;
+    noopDev: string;
+    reasonOf: (k: ReasonKey) => string;
+  };
+}) {
+  // forward + rework share the available pool; chip-cap = max - reworkQty
+  const reworkPart = row.reworkOpen ? row.reworkQty : 0;
+  const fwdCap = Math.max(0, max - reworkPart);
+  const filled = row.forwardQty === fwdCap && fwdCap > 0;
+  const active = row.forwardQty > 0;
+  const disabled = max === 0;
+
+  const set = (v: number) =>
+    onForwardChange(Math.max(0, Math.min(fwdCap, v)));
+
+  return (
+    <div className="border-b border-[#efeee9] last:border-b-0 py-2.5">
+      <div className="flex items-center gap-2.5">
+        <button
+          type="button"
+          onClick={() => set(filled ? 0 : fwdCap)}
+          disabled={disabled || fwdCap === 0}
+          title={filled ? labels.clear : labels.forwardAll}
+          aria-label={filled ? labels.clear : labels.forwardAll}
+          className={cn(
+            'min-w-[44px] h-10 px-2.5 rounded-[10px] flex items-center justify-center font-semibold text-[17px] transition-colors disabled:opacity-40 disabled:cursor-not-allowed',
+            active
+              ? 'text-white bg-gradient-to-b from-[var(--stage-finish-acc)] to-[var(--stage-finish-ink)] shadow-[inset_0_1px_0_rgba(255,255,255,0.2),0_4px_10px_rgba(196,69,46,0.25)]'
+              : 'text-[var(--color-foreground)] bg-[#f1efe8] shadow-[inset_0_-1px_0_rgba(14,23,48,0.04),inset_0_1px_0_rgba(255,255,255,0.6)] hover:bg-[var(--stage-finish-bg)]',
+          )}
+        >
+          {size}
+        </button>
+        <div className="flex-1 min-w-0 text-[14px] whitespace-nowrap">
+          <span className="font-mono font-semibold tabular-nums text-[var(--color-foreground)]">
+            {max}
+          </span>{' '}
+          <span className="text-[var(--color-muted-foreground)]">{labels.left}</span>
+        </div>
+        <div className="flex items-center gap-1">
+          <button
+            type="button"
+            onClick={() => set(row.forwardQty - 1)}
+            disabled={disabled || row.forwardQty <= 0}
+            aria-label="−"
+            className="w-8 h-8 rounded-[9px] bg-[#f1efe8] text-[var(--color-foreground)] flex items-center justify-center disabled:opacity-40 shadow-[inset_0_-1px_0_rgba(14,23,48,0.04),inset_0_1px_0_rgba(255,255,255,0.6)]"
+          >
+            <Minus size={16} strokeWidth={2.4} />
+          </button>
+          <input
+            type="text"
+            inputMode="numeric"
+            value={row.forwardQty}
+            onChange={(e) => onSetForward(e.target.value)}
+            disabled={disabled}
+            className={cn(
+              'w-[42px] h-9 text-center rounded-[9px] border bg-white text-[16px] font-semibold tabular-nums outline-none transition-colors',
+              row.forwardQty > 0
+                ? 'border-[var(--stage-finish-acc)]'
+                : 'border-[#e3e2dc]',
+            )}
+          />
+          <button
+            type="button"
+            onClick={() => set(row.forwardQty + 1)}
+            disabled={disabled || row.forwardQty >= fwdCap}
+            aria-label="+"
+            className="w-8 h-8 rounded-[9px] bg-[#f1efe8] text-[var(--color-foreground)] flex items-center justify-center disabled:opacity-40 shadow-[inset_0_-1px_0_rgba(14,23,48,0.04),inset_0_1px_0_rgba(255,255,255,0.6)]"
+          >
+            <Plus size={16} strokeWidth={2.4} />
+          </button>
+        </div>
+        <button
+          type="button"
+          onClick={() => onToggleRework(!row.reworkOpen)}
+          disabled={disabled}
+          className={cn(
+            'ml-0.5 px-1.5 py-1 rounded-md text-[11px] font-semibold uppercase tracking-[0.02em] transition-colors disabled:opacity-40',
+            row.reworkOpen
+              ? 'bg-[var(--status-rework-bg)] text-[var(--status-rework-ink)]'
+              : 'text-[var(--color-muted-foreground)] hover:bg-[var(--status-rework-bg)] hover:text-[var(--status-rework-ink)]',
+          )}
+        >
+          {labels.rework}
+        </button>
+      </div>
+
+      {row.reworkOpen && (
+        <div className="mt-3 ml-[54px] rounded-[10px] bg-[var(--status-rework-bg)]/40 border border-[var(--status-rework-bg)] p-3 space-y-2.5">
+          <div className="flex items-center justify-between gap-3">
+            <Label className="mb-0">{labels.reworkQtyLabel}</Label>
+            <Input
+              type="number"
+              inputMode="numeric"
+              min={0}
+              max={Math.max(0, max - row.forwardQty)}
+              value={row.reworkQty}
+              onChange={(e) => onReworkQty(e.target.value)}
+              className="w-24 h-10 text-center"
+            />
+          </div>
+          <div>
+            <Label className="mb-1">{labels.reasonLabel}</Label>
+            <Select
+              value={row.reasonKey}
+              onChange={(e) => onReasonChange(e.target.value as ReasonKey)}
+              className="h-10"
+            >
+              {reasonKeys.map((k) => (
+                <option key={k} value={k}>
+                  {labels.reasonOf(k)}
+                </option>
+              ))}
+            </Select>
+          </div>
+          {row.reasonKey === 'other' && (
+            <div>
+              <Label className="mb-1">{labels.otherLabel}</Label>
+              <Textarea
+                rows={2}
+                value={row.otherReason}
+                onChange={(e) => onOtherReasonChange(e.target.value)}
+              />
+            </div>
+          )}
+          <div className="flex items-center gap-2">
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={onAttachPhoto}
+            >
+              <Camera size={14} />
+              {labels.addPhoto}
+            </Button>
+            {row.photoPath && (
+              <span className="text-xs text-[var(--color-muted-foreground)] truncate">
+                {labels.photoAdded}
+                {row.photoNoop ? ` ${labels.noopDev}` : ''}
+              </span>
+            )}
+          </div>
+        </div>
+      )}
+    </div>
   );
 }
