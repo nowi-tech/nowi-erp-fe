@@ -118,6 +118,7 @@
       "remark": "Remark (optional)",
       "addLot": "Add another lot",
       "removeLot": "Remove lot",
+      "applyToAll": "Apply size matrix to all styles",
       "addSize": "Add size",
       "removeSize": "Remove {{size}}",
       "presets": {

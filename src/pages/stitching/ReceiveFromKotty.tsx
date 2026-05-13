@@ -185,6 +185,28 @@ export default function ReceiveFromKottyPage() {
     setRows((prev) => (prev.length === 1 ? prev : prev.filter((r) => r.key !== key)));
   }
 
+  /**
+   * Copy this row's size preset + matrix to every other row. Useful when
+   * one challan has the same per-size qty across multiple styles (Kotty
+   * often sends 100/100/100/100/100 across 3 style codes in one bundle).
+   * Preserves each target row's vendorStyleId, vendorLot, gender, category.
+   */
+  function applyMatrixToAll(sourceKey: number) {
+    setRows((prev) => {
+      const source = prev.find((r) => r.key === sourceKey);
+      if (!source) return prev;
+      return prev.map((r) => {
+        if (r.key === sourceKey) return r;
+        return {
+          ...r,
+          preset: source.preset,
+          sizes: [...source.sizes],
+          matrix: { ...source.matrix },
+        };
+      });
+    });
+  }
+
   function setPreset(key: number, preset: Preset) {
     setRows((prev) =>
       prev.map((r) => {
@@ -497,10 +519,29 @@ export default function ReceiveFromKottyPage() {
                   onRemoveSize={(s) => removeSize(row.key, s)}
                   totalLabel={t('common.total')}
                 />
-                <div className="text-right text-xs text-[var(--color-muted-foreground)]">
-                  {t('common.total')}:{' '}
-                  <span className="tabular-nums font-medium text-[var(--color-foreground)]">
-                    {matrixTotal(row.matrix)}
+                <div className="flex items-center justify-between gap-2">
+                  {/* "Apply to all styles" — broadcasts this row's size
+                      matrix to every other row in the form. Only renders
+                      with 2+ rows and a non-empty matrix (nothing to
+                      broadcast otherwise). */}
+                  {rows.length > 1 && matrixTotal(row.matrix) > 0 ? (
+                    <button
+                      type="button"
+                      onClick={() => applyMatrixToAll(row.key)}
+                      className="text-xs font-medium text-[var(--color-primary)] hover:underline"
+                    >
+                      {t('stitching.receiveFromKotty.applyToAll', {
+                        defaultValue: 'Apply size matrix to all styles',
+                      })}
+                    </button>
+                  ) : (
+                    <span />
+                  )}
+                  <span className="text-xs text-[var(--color-muted-foreground)]">
+                    {t('common.total')}:{' '}
+                    <span className="tabular-nums font-medium text-[var(--color-foreground)]">
+                      {matrixTotal(row.matrix)}
+                    </span>
                   </span>
                 </div>
               </div>
