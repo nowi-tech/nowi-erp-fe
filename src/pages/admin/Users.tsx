@@ -20,6 +20,7 @@ import type { User, UserRole } from '@/api/types';
 
 const ROLES: UserRole[] = [
   'admin',
+  'floor_manager',
   'stitching_master',
   'finishing_master',
   'data_manager',
