@@ -191,6 +191,27 @@ export default function ReceiveFromKottyPage() {
    * often sends 100/100/100/100/100 across 3 style codes in one bundle).
    * Preserves each target row's vendorStyleId, vendorLot, gender, category.
    */
+  /**
+   * Within-lot copy: take the qty in `sourceSize` and broadcast to every
+   * other size in the same row. Overwrites silently (per UX call). Used
+   * when the lot has the same qty across all sizes — type one number,
+   * tap ↪, done.
+   */
+  function copyValueToAllSizes(rowKey: number, sourceSize: string) {
+    setRows((prev) =>
+      prev.map((r) => {
+        if (r.key !== rowKey) return r;
+        const value = r.matrix[sourceSize] ?? 0;
+        if (value <= 0) return r;
+        const matrix: SizeMatrix = r.sizes.reduce((acc, s) => {
+          acc[s] = value;
+          return acc;
+        }, {} as SizeMatrix);
+        return { ...r, matrix };
+      }),
+    );
+  }
+
   function applyMatrixToAll(sourceKey: number) {
     setRows((prev) => {
       const source = prev.find((r) => r.key === sourceKey);
@@ -517,6 +538,7 @@ export default function ReceiveFromKottyPage() {
                   onUpdate={(s, v) => updateMatrix(row.key, s, v)}
                   onAddSize={(label) => addSize(row.key, label)}
                   onRemoveSize={(s) => removeSize(row.key, s)}
+                  onCopyToAll={(s) => copyValueToAllSizes(row.key, s)}
                   totalLabel={t('common.total')}
                 />
                 <div className="flex items-center justify-between gap-2">
@@ -622,12 +644,14 @@ function SizeMatrixEditor({
   onUpdate,
   onAddSize,
   onRemoveSize,
+  onCopyToAll,
 }: {
   row: LotRow;
   onPreset: (p: Preset) => void;
   onUpdate: (size: string, raw: string) => void;
   onAddSize: (label: string) => void;
   onRemoveSize: (size: string) => void;
+  onCopyToAll: (sourceSize: string) => void;
   totalLabel: string;
 }) {
   const { t } = useTranslation();
@@ -696,6 +720,27 @@ function SizeMatrixEditor({
               }
               className="text-center px-1"
             />
+            {/* ↪ "copy this value to every other size in this lot".
+                Renders only when this cell has a positive value AND
+                there's more than one size in the row (nothing to fill
+                otherwise). Tap = silent overwrite of all other cells. */}
+            {(row.matrix[s] ?? 0) > 0 && row.sizes.length > 1 ? (
+              <button
+                type="button"
+                onClick={() => onCopyToAll(s)}
+                className="mt-1 text-[10px] font-semibold text-[var(--color-primary)] hover:underline"
+                title={t('stitching.receiveFromKotty.copyToAll', {
+                  defaultValue: 'Use {{n}} for all sizes',
+                  n: row.matrix[s] ?? 0,
+                })}
+              >
+                {t('stitching.receiveFromKotty.copyToAllShort', {
+                  defaultValue: '↪ all',
+                })}
+              </button>
+            ) : (
+              <span className="mt-1 h-3" />
+            )}
           </div>
         ))}
 

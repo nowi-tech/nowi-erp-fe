@@ -119,6 +119,8 @@
       "addLot": "एक और लॉट जोड़ें",
       "removeLot": "लॉट हटाएँ",
       "applyToAll": "साइज़ मैट्रिक्स सभी स्टाइल पर लागू करें",
+      "copyToAll": "सभी साइज़ के लिए {{n}} रखें",
+      "copyToAllShort": "↪ सभी",
       "addSize": "साइज़ जोड़ें",
       "removeSize": "{{size}} हटाएँ",
       "presets": {

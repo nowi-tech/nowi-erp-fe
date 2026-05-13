@@ -119,6 +119,8 @@
       "addLot": "Add another lot",
       "removeLot": "Remove lot",
       "applyToAll": "Apply size matrix to all styles",
+      "copyToAll": "Use {{n}} for all sizes",
+      "copyToAllShort": "↪ all",
       "addSize": "Add size",
       "removeSize": "Remove {{size}}",
       "presets": {
