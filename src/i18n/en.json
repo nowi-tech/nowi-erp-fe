@@ -262,7 +262,17 @@
       "skus": "SKUs",
       "users": "Users",
       "settings": "Settings",
-      "masterData": "Master data"
+      "masterData": "Master data",
+      "editRequests": "Edit requests"
+    },
+    "editRequests": {
+      "title": "Edit requests",
+      "subtitle": "Floor managers route edits here when a lot's 24-hour direct-edit window has passed.",
+      "pending": "Pending",
+      "resolved": "Resolved",
+      "empty": "No pending requests.",
+      "apply": "Apply",
+      "appliedToast": "Applied to lot"
     },
     "testData": {
       "label": "Show test data",
@@ -479,18 +489,36 @@
     "next": "Next",
     "skip": "Skip",
     "done": "Done",
+    "floor_manager": {
+      "slide1": {
+        "title": "Welcome to NOWI ERP",
+        "body": "Receive lots from vendors, assign them to stitching masters, and keep production moving."
+      },
+      "slide2": {
+        "title": "Receive a lot",
+        "body": "Tap Receive new lot on your home screen. Enter the vendor challan and per-size quantities for each style."
+      },
+      "slide3": {
+        "title": "Assign to a master",
+        "body": "Each received lot lands in Pending assignment. Tap Assign on a card and pick a stitching master — least-loaded shown first."
+      },
+      "slide4": {
+        "title": "Edit within 24 hours",
+        "body": "Made a typo on receive? Tap Edit on the lot card within 24 hours. After that, send an edit request and the admin can apply it."
+      }
+    },
     "stitching_master": {
       "slide1": {
         "title": "Welcome to NOWI ERP",
-        "body": "Track every lot from cutting to dispatch — right from your phone."
+        "body": "Track every lot you stitch — right from your phone."
       },
       "slide2": {
-        "title": "Receive from Kotty",
-        "body": "Tap the green button on the queue screen to open the Receive form. Pick the vendor, enter the challan number, then the size matrix for each lot."
+        "title": "Your queue",
+        "body": "The Your lots tab shows lots assigned to you by the floor manager. Tap one to open it."
       },
       "slide3": {
         "title": "Forward to finishing",
-        "body": "Open a lot from your queue, enter the quantity per size you have stitched, and forward it to finishing."
+        "body": "On a lot, set the per-size quantity you have stitched (tap a size chip to forward all of it). Then tap Forward to send it to finishing."
       }
     },
     "finishing_master": {

@@ -48,6 +48,31 @@ export async function requestLotEdit(
   await apiClient.post(`/api/lots/${lotId}/edit-request`, body);
 }
 
+export interface EditRequestRow {
+  id: number;
+  lotId: number;
+  lot: {
+    id: number;
+    lotNo: string;
+    vendorLotNo: string | null;
+    createdAt: string;
+    assignedUser?: { id: number; name: string } | null;
+    style?: { styleId: string } | null;
+    vendor?: { name: string } | null;
+  } | null;
+  requestedAt: string;
+  requestedByUserId: number | null;
+  requestedByName: string | null;
+  before: Record<string, unknown> | null;
+  after: Record<string, unknown> | null;
+  status: 'pending' | 'resolved';
+}
+
+export async function listEditRequests(): Promise<EditRequestRow[]> {
+  const res = await apiClient.get<EditRequestRow[]>('/api/lots/edit-requests');
+  return res.data;
+}
+
 export async function getLot(id: number): Promise<Lot> {
   const res = await apiClient.get<Lot>(`/api/lots/${id}`);
   return res.data;

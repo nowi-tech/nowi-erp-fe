@@ -459,6 +459,38 @@ function Section({
   );
 }
 
+function progressForLot(
+  lot: Lot,
+): { stageKey: 'stitching' | 'finishing' | null; done: number; total: number } {
+  const total = totalUnits(lot.qtyIn);
+  // Map current order status -> the stage we want to show progress for.
+  // Receiving / in_stitching / in_rework / stuck => stitching stage.
+  // in_finishing => finishing stage.
+  // dispatched / closed => no per-stage progress.
+  const status = lot.order?.status;
+  if (status === 'in_finishing') {
+    return {
+      stageKey: 'finishing',
+      done: lot.stageForwarded?.finishing ?? 0,
+      total,
+    };
+  }
+  if (
+    !status ||
+    status === 'receiving' ||
+    status === 'in_stitching' ||
+    status === 'in_rework' ||
+    status === 'stuck'
+  ) {
+    return {
+      stageKey: 'stitching',
+      done: lot.stageForwarded?.stitching ?? 0,
+      total,
+    };
+  }
+  return { stageKey: null, done: 0, total };
+}
+
 function FloorLotRow({
   lot,
   selectionMode,
@@ -476,6 +508,7 @@ function FloorLotRow({
 }) {
   const { t } = useTranslation();
   const units = totalUnits(lot.qtyIn);
+  const progress = progressForLot(lot);
   const productLabel = lot.style
     ? [
         t(`stitching.gender.${lot.style.gender}`, {
@@ -569,7 +602,19 @@ function FloorLotRow({
               </>
             )}
           </div>
-          <StageTimeline status={lot.order?.status} size="compact" />
+          <div className="flex items-center gap-3 flex-wrap">
+            <StageTimeline status={lot.order?.status} size="compact" />
+            {progress.stageKey && (
+              <span className="font-mono text-[12px] text-[var(--color-muted-foreground)] tabular-nums">
+                {t(`stages.${progress.stageKey}`)} ·{' '}
+                {t('stitching.lot.forwardedOf', {
+                  defaultValue: '{{done}} of {{total}} forwarded',
+                  done: progress.done,
+                  total: progress.total,
+                })}
+              </span>
+            )}
+          </div>
         </div>
         {!selectionMode && (
           <button

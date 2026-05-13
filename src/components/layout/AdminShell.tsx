@@ -9,6 +9,7 @@ import {
   LogOut,
   Database,
   FlaskConical,
+  Inbox,
   MoreHorizontal,
   X,
 } from 'lucide-react';
@@ -43,6 +44,7 @@ const NAV_ITEMS: NavItem[] = [
   { to: '/admin', end: true, icon: <LayoutDashboard size={20} />, labelKey: 'admin.nav.dashboard', roles: ['admin', 'viewer'], stage: 'ink' },
   { to: '/admin/locator', icon: <Search size={20} />, labelKey: 'admin.nav.locator', roles: ['admin', 'viewer'], stage: 'ink' },
   { to: '/admin/dispatches', icon: <Truck size={20} />, labelKey: 'admin.nav.dispatches', roles: ['admin', 'viewer'], stage: 'disp' },
+  { to: '/admin/edit-requests', icon: <Inbox size={20} />, labelKey: 'admin.nav.editRequests', roles: ['admin'], stage: 'ink' },
   { to: '/data', icon: <Database size={20} />, labelKey: 'admin.nav.masterData', roles: ['data_manager'], stage: 'ink' },
   { to: '/admin/users', icon: <Users size={20} />, labelKey: 'admin.nav.users', roles: ['admin'], stage: 'ink' },
   // TODO: build — surface once admin Vendors / SKUs / Settings pages exist.

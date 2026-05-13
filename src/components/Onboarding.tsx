@@ -8,6 +8,7 @@ import type { UserRole } from '@/api/types';
 
 const ROLES_WITH_SLIDES: readonly UserRole[] = [
   'admin',
+  'floor_manager',
   'stitching_master',
   'finishing_master',
   'data_manager',
@@ -61,10 +62,17 @@ export default function Onboarding() {
   const slides = useMemo(() => {
     if (!user) return [] as { title: string; body: string }[];
     const role: UserRole = isOnboardingRole(user.role) ? user.role : 'viewer';
-    return ([1, 2, 3] as const).map((n) => ({
-      title: t(`onboarding.${role}.slide${n}.title`),
-      body: t(`onboarding.${role}.slide${n}.body`),
-    }));
+    // Roles can have a variable number of slides. We walk up from 1
+    // and stop on the first missing key (i18next returns the key
+    // itself when a translation is absent — sentinel by string match).
+    const out: { title: string; body: string }[] = [];
+    for (let n = 1; n <= 6; n++) {
+      const titleKey = `onboarding.${role}.slide${n}.title`;
+      const title = t(titleKey);
+      if (title === titleKey) break;
+      out.push({ title, body: t(`onboarding.${role}.slide${n}.body`) });
+    }
+    return out;
   }, [t, user]);
 
   if (!user || dismissed || user.onboardedAt) return null;
