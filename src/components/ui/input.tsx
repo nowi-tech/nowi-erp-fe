@@ -10,7 +10,9 @@ const Input = React.forwardRef<HTMLInputElement, InputProps>(
         type={type}
         ref={ref}
         className={cn(
-          'flex w-full rounded-[var(--radius-md)] border border-[var(--color-input)] bg-[var(--color-background)] px-3 py-2 text-[length:var(--density-font-base)] text-[var(--color-foreground)] placeholder:text-[var(--color-muted-foreground)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-ring)] disabled:cursor-not-allowed disabled:opacity-50 min-h-[var(--density-tap-target)] h-[var(--density-control-height)]',
+          // h-12 / 48px on floor (mobile-friendly tap target). text-base / 15px.
+          // Admin can pass `h-9 text-sm` etc. via className to hard-code denser.
+          'flex w-full h-12 rounded-[10px] border border-[var(--color-input)] bg-white px-3.5 py-2 text-[15px] text-[var(--color-foreground)] placeholder:text-[var(--color-muted-foreground)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-ring)] disabled:cursor-not-allowed disabled:opacity-50',
           className,
         )}
         {...props}

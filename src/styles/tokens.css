@@ -1,22 +1,26 @@
 /* Design tokens — NOWI ERP
-   Palette: single-blue-accent system on a warm off-white surface.
-   Aligned with the Claude Design "Stitching" handoff (2026-05-12).
-   Stage accents on admin keep their differentiation (cobalt / vermilion /
-   marigold); the floor app reads --color-primary everywhere. */
-:root {
-  /* ── Surfaces ── */
-  --color-background: #f4f3ee;     /* warm canvas (design `C.bg`) */
-  --color-background-2: #e9e7e0;   /* slightly darker (frame / sidebar) */
-  --color-surface: #ffffff;        /* cards / sheets (design `C.bgRaised`) */
-  --color-surface-2: #faf9f5;      /* subtle row alt */
+   Palette mirrors the Claude Design "Stitching" handoff 1:1.
+   Token names = the design's `C.xxx` names so reading the JSX matches
+   reading the handoff. No derived tokens; if you need a shade not listed
+   here, write the hex inline.
 
-  --color-foreground: #0e1730;     /* ink */
-  --color-foreground-2: #3a4358;   /* secondary ink */
-  --color-foreground-3: #4d5670;   /* nav text */
-  --color-muted: #f1efe8;          /* chip / step btn bg */
+   Stage accents on admin keep their differentiation (cobalt / vermilion /
+   marigold); the floor app uses --color-primary everywhere. */
+:root {
+  /* ── Surfaces (design `C.bg` / `C.bgRaised` / `C.bgChip`) ── */
+  --color-background: #ffffff;     /* page bg — white per user request */
+  --color-background-2: #f4f3ee;   /* warm panel (sidebar / android frame) */
+  --color-surface: #ffffff;        /* cards / sheets */
+  --color-surface-2: #faf9f5;      /* table head, subtle row alt */
+
+  /* ── Ink (design `C.ink` / `C.ink2` / `C.muted`) ── */
+  --color-foreground: #0e1730;     /* primary text */
+  --color-foreground-2: #3a4358;   /* secondary text */
+  --color-foreground-3: #4d5670;   /* admin nav (legacy — not in floor design) */
+  --color-muted: #f1efe8;          /* chip / step btn bg (`C.bgChip`) */
   --color-muted-foreground: #71788b;
-  --color-muted-foreground-2: #99a0b1;
-  --color-border: #e6e6e0;         /* hairline */
+  --color-muted-foreground-2: #cbd0d8;  /* separator dot color (design uses #cbd0d8 inline) */
+  --color-border: #e6e6e0;         /* hairline (`C.hairline`) */
   --color-border-strong: #d0cec5;
   --color-input: #d6d4cb;
   --color-ring: #2240c4;
@@ -98,10 +102,4 @@
   --radius-md: 0.5rem;
   --radius-lg: 0.875rem;
 
-  /* ── Density-driven defaults (overridden by .density-*) ── */
-  --density-control-height: 2.5rem;
-  --density-tap-target: 2.75rem;
-  --density-font-base: 1rem;
-  --density-font-sm: 0.875rem;
-  --density-spacing-unit: 0.25rem;
 }

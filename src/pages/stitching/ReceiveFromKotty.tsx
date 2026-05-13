@@ -317,7 +317,7 @@ export default function ReceiveFromKottyPage() {
                 {t('stitching.receiveFromKotty.vendor')}
               </Label>
               {vendors.length <= 1 ? (
-                <div className="flex items-center h-[var(--density-control-height)] px-3 rounded-[var(--radius-md)] border border-[var(--color-border)] bg-[var(--color-muted)]/40 text-sm">
+                <div className="flex items-center h-12 px-3.5 rounded-[10px] border border-[var(--color-border)] bg-[var(--color-muted)]/40 text-[15px]">
                   {vendors[0]?.name ?? '—'}
                   {vendors[0]?.code && (
                     <span className="ml-2 text-[var(--color-muted-foreground)] font-mono text-xs">
@@ -683,7 +683,7 @@ function SizeMatrixEditor({
             <button
               type="button"
               onClick={() => setAdding(true)}
-              className="h-[var(--density-control-height)] rounded-[var(--radius-md)] border border-dashed border-[var(--color-border)] text-[var(--color-muted-foreground)] hover:border-[var(--color-primary)] hover:text-[var(--color-primary)] flex items-center justify-center"
+              className="h-12 rounded-[10px] border border-dashed border-[var(--color-border)] text-[var(--color-muted-foreground)] hover:border-[var(--color-primary)] hover:text-[var(--color-primary)] flex items-center justify-center"
               aria-label={t('stitching.receiveFromKotty.addSize', { defaultValue: 'Add size' })}
               title={t('stitching.receiveFromKotty.addSize', { defaultValue: 'Add size' })}
             >

@@ -25,7 +25,7 @@ export default function FloorShell({ children }: FloorShellProps) {
   const isHome = location.pathname === homePath;
 
   return (
-    <div className="density-comfortable min-h-screen flex flex-col bg-[var(--color-background)] text-[var(--color-foreground)]">
+    <div className="min-h-screen flex flex-col bg-[var(--color-background)] text-[var(--color-foreground)]">
       {/* ── MOBILE HEADER ── (logo left, lang right) */}
       <header className="lg:hidden sticky top-0 z-20 border-b border-[var(--color-border)] bg-[var(--color-background)]/95 backdrop-blur px-3 h-14">
         <div className="flex items-center justify-between h-full">
@@ -126,7 +126,7 @@ function TabButton({
       type="button"
       onClick={onClick}
       className={cn(
-        'flex flex-col items-center justify-center gap-1 py-2 min-h-[var(--density-tap-target)]',
+        'flex flex-col items-center justify-center gap-1 py-2 min-h-11',
         active
           ? 'text-[var(--color-primary)]'
           : 'text-[var(--color-muted-foreground)]',

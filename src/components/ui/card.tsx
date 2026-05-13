@@ -30,7 +30,8 @@ const Card = React.forwardRef<HTMLDivElement, CardProps>(
           : style
       }
       className={cn(
-        'relative rounded-[var(--radius-lg)] border border-[var(--color-border)] bg-[var(--color-surface)] text-[var(--color-foreground)] shadow-[var(--shadow-card)] overflow-hidden',
+        // 14px radius + soft shadow per design `C.bgRaised` card.
+        'relative rounded-[14px] bg-white text-[#0e1730] shadow-[0_1px_2px_rgba(15,26,54,0.04)] overflow-hidden',
         stage &&
           'before:absolute before:left-0 before:top-3.5 before:bottom-3.5 before:w-[3px] before:rounded-r-full before:bg-[var(--card-acc)]',
         className,
@@ -65,7 +66,7 @@ const CardDescription = React.forwardRef<HTMLDivElement, React.HTMLAttributes<HT
   ({ className, ...props }, ref) => (
     <div
       ref={ref}
-      className={cn('text-[length:var(--density-font-sm)] text-[var(--color-muted-foreground)]', className)}
+      className={cn('text-[13px] text-[#71788b]', className)}
       {...props}
     />
   ),

@@ -1,6 +1,5 @@
 @import "tailwindcss";
 @import "./styles/tokens.css";
-@import "./styles/density.css";
 
 body {
   margin: 0;
@@ -17,11 +16,4 @@ body.lang-hi,
 /* Lighter placeholders globally — keep the muted color but knock the alpha down */
 ::placeholder {
   opacity: 0.5;
-}
-
-/* Floor app default density */
-.density-comfortable button,
-.density-comfortable input,
-.density-comfortable select {
-  min-height: var(--density-tap-target);
 }

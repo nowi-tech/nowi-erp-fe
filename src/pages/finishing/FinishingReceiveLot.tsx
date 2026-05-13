@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useNavigate, useParams } from 'react-router-dom';
-import { Camera } from 'lucide-react';
+import { Camera, ChevronLeft } from 'lucide-react';
 import FloorShell from '@/components/layout/FloorShell';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -310,10 +310,7 @@ export default function FinishingReceiveLot() {
           onClick={() => navigate('/finishing')}
           className="inline-flex items-center gap-1 pr-3.5 pl-2 py-2 rounded-full bg-[var(--color-surface)] border border-[var(--color-border)] text-[14px] font-medium text-[var(--color-foreground)] shadow-[0_1px_1px_rgba(14,23,48,0.03)] hover:bg-[var(--color-muted)] transition-colors"
         >
-          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden>
-            <path d="M15 6l-6 6 6 6" stroke="currentColor" strokeWidth="2"
-              strokeLinecap="round" strokeLinejoin="round"/>
-          </svg>
+          <ChevronLeft size={20} />
           {t('stitching.queueShort', { defaultValue: 'Queue' })}
         </button>
       </div>
