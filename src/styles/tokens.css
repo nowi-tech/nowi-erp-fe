@@ -1,39 +1,43 @@
 /* Design tokens — NOWI ERP
-   Palette: Editorial Bold (cobalt / vermilion / marigold) on a Plain
-   off-white surface. Mapped from the Claude Design "Stage system v2" handoff. */
+   Palette: single-blue-accent system on a warm off-white surface.
+   Aligned with the Claude Design "Stitching" handoff (2026-05-12).
+   Stage accents on admin keep their differentiation (cobalt / vermilion /
+   marigold); the floor app reads --color-primary everywhere. */
 :root {
   /* ── Surfaces ── */
-  --color-background: #f4f4f3;     /* plain off-white, lets ink colors punch */
-  --color-background-2: #ebebe9;   /* slightly darker surface (sidebar, etc.) */
-  --color-surface: #ffffff;        /* cards / sheets sit on top */
-  --color-surface-2: #f9f9f8;      /* table head, subtle row alt */
+  --color-background: #f4f3ee;     /* warm canvas (design `C.bg`) */
+  --color-background-2: #e9e7e0;   /* slightly darker (frame / sidebar) */
+  --color-surface: #ffffff;        /* cards / sheets (design `C.bgRaised`) */
+  --color-surface-2: #faf9f5;      /* subtle row alt */
 
-  --color-foreground: #14213a;     /* ink */
-  --color-foreground-2: #2d3a55;   /* secondary ink */
+  --color-foreground: #0e1730;     /* ink */
+  --color-foreground-2: #3a4358;   /* secondary ink */
   --color-foreground-3: #4d5670;   /* nav text */
-  --color-muted: #f1f1ef;          /* hover tint, muted backgrounds */
-  --color-muted-foreground: #6c7589;
+  --color-muted: #f1efe8;          /* chip / step btn bg */
+  --color-muted-foreground: #71788b;
   --color-muted-foreground-2: #99a0b1;
-  --color-border: #e2e2df;
-  --color-border-strong: #d0d0cc;
-  --color-input: #d0d0cc;
-  --color-ring: #14213a;
+  --color-border: #e6e6e0;         /* hairline */
+  --color-border-strong: #d0cec5;
+  --color-input: #d6d4cb;
+  --color-ring: #2240c4;
 
-  /* ── Primary (ink, used for primary buttons / focus) ── */
-  --color-primary: #14213a;
-  --color-primary-foreground: #f4f4f3;
-  --color-primary-hover: #0a1428;
+  /* ── Primary — brand blue (design `C.accent`) ── */
+  --color-primary: #2240c4;
+  --color-primary-foreground: #ffffff;
+  --color-primary-hover: #1a2f96;       /* design `C.accentDeep` (pressed) */
+  --color-primary-soft: #eef1ff;        /* design `C.accentSoft` */
 
-  /* Accent — kept for brand chips / occasional callouts */
-  --color-accent: #c79224;            /* same as dispatch — marigold */
-  --color-accent-foreground: #14213a;
+  /* Accent — secondary brand chips / occasional callouts (kept marigold) */
+  --color-accent: #c79224;
+  --color-accent-foreground: #0e1730;
 
-  --color-secondary: #ebebe9;
-  --color-secondary-foreground: #14213a;
+  --color-secondary: #e9e7e0;
+  --color-secondary-foreground: #0e1730;
 
   /* ── Semantic status colors ── */
-  --color-destructive: #b04b3a;
-  --color-destructive-bg: #f3d8d1;
+  --color-destructive: #dc2626;         /* design `C.danger` */
+  --color-destructive-bg: #fdecec;      /* design `C.dangerSoft` */
+  --color-destructive-strong: #a8201d;  /* design `C.dangerDeep` (pressed) */
   --color-destructive-foreground: #ffffff;
   --color-success: #5d8a5f;
   --color-success-bg: #dfe9da;
@@ -42,12 +46,17 @@
   --color-info: #4f7a9c;
   --color-info-bg: #dbe5ed;
 
-  /* ── Stage tokens — Editorial Bold ──
-     Each stage has 4 tokens: accent (line/icon), ink (text on tinted bg),
-     bg (tinted surface), border (subtle hairline on tinted surface). */
-  --stage-stitch-acc: #2747a8;     /* cobalt */
-  --stage-stitch-ink: #1a2e6b;
-  --stage-stitch-bg:  #dfe5f4;
+  /* Disabled */
+  --color-disabled-bg: #d3d1c8;
+  --color-disabled-foreground: #ffffff;
+
+  /* ── Stage tokens ──
+     The floor app uses --color-primary directly; these stay for admin
+     screens that still benefit from cobalt / vermilion / marigold
+     differentiation. Stitching accent is bumped to match the new primary. */
+  --stage-stitch-acc: #2240c4;     /* match primary */
+  --stage-stitch-ink: #1a2f96;
+  --stage-stitch-bg:  #eef1ff;
   --stage-stitch-bd:  #b3c0e2;
 
   --stage-finish-acc: #c4452e;     /* vermilion */

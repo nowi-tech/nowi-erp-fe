@@ -1,11 +1,10 @@
 import { useCallback, useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useNavigate } from 'react-router-dom';
+import { ChevronRight } from 'lucide-react';
 import FloorShell from '@/components/layout/FloorShell';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import LotProgress from '@/components/LotProgress';
 import { listLots } from '@/api/lots';
 import type { Lot, OrderStatus } from '@/api/types';
 
@@ -77,72 +76,72 @@ export default function FinishingHome() {
             <p className="text-[var(--color-muted-foreground)]">{t('finishing.empty')}</p>
           ) : (
             <ul className="space-y-2">
-              {lots.map((lot) => (
-                <li
-                  key={lot.id}
-                  className="flex items-center justify-between gap-3 rounded-[var(--radius-md)] border border-[var(--color-border)] border-l-[3px] border-l-[var(--stage-finish-acc)] p-3 hover:bg-[var(--stage-finish-bg)]/40 transition-colors"
-                >
-                  <div className="min-w-0">
-                    <div className="font-serif text-lg leading-snug truncate">
-                      <span className="text-[var(--color-muted-foreground)] text-sm font-sans uppercase tracking-wider mr-2">
-                        {t('stitching.lotNo')}
-                      </span>
-                      {lot.lotNo}
-                    </div>
-                    {lot.style && (
-                      <div className="text-sm truncate">
-                        <span className="text-[var(--color-foreground)]">
-                          {[
-                            t(`stitching.gender.${lot.style.gender}`, {
-                              defaultValue:
-                                lot.style.gender === 'W'
-                                  ? "Women's"
-                                  : lot.style.gender === 'M'
-                                    ? "Men's"
-                                    : 'Unisex',
-                            }),
-                            lot.style.category?.name,
-                          ]
-                            .filter(Boolean)
-                            .join(' ')}
-                        </span>
-                        <span className="ml-2 font-mono text-xs text-[var(--stage-finish-acc)]">
-                          {lot.style.styleId}
-                        </span>
+              {lots.map((lot) => {
+                const units = totalUnits(lot.qtyIn);
+                const forwarded = lot.stageForwarded?.finishing ?? 0;
+                const productLabel = lot.style
+                  ? [
+                      t(`stitching.gender.${lot.style.gender}`, {
+                        defaultValue:
+                          lot.style.gender === 'W'
+                            ? "Women's"
+                            : lot.style.gender === 'M'
+                              ? "Men's"
+                              : 'Unisex',
+                      }),
+                      lot.style.category?.name,
+                    ]
+                      .filter(Boolean)
+                      .join(' ')
+                  : null;
+                const anomaly =
+                  lot.order?.status === 'in_rework'
+                    ? 'rework'
+                    : lot.order?.status === 'stuck'
+                      ? 'stuck'
+                      : null;
+                return (
+                  <li key={lot.id}>
+                    <button
+                      type="button"
+                      onClick={() => navigate(`/finishing/lot/${lot.id}`)}
+                      className="w-full text-left flex items-center gap-3 rounded-[var(--radius-md)] bg-[var(--color-surface)] border border-[var(--color-border)] border-l-[3px] border-l-[var(--stage-finish-acc)] p-4 hover:shadow-sm hover:-translate-y-px transition-all"
+                    >
+                      <div className="flex-1 min-w-0">
+                        <div className="font-semibold text-xl leading-tight tracking-tight text-[var(--color-foreground)] break-all">
+                          {lot.lotNo}
+                        </div>
+                        <div className="mt-1 flex items-center gap-2 text-sm text-[var(--color-foreground)]">
+                          {productLabel && (
+                            <span className="font-medium">{productLabel}</span>
+                          )}
+                          {productLabel && (
+                            <span className="text-[var(--color-muted-foreground)]">·</span>
+                          )}
+                          <span className="font-mono tabular-nums">{units}u</span>
+                        </div>
+                        <div className="mt-1 flex items-center gap-2 text-xs text-[var(--color-muted-foreground)] font-mono">
+                          <span className="tabular-nums">
+                            {t('stitching.lot.forwardedOf', {
+                              defaultValue: '{{done}} of {{total}} forwarded',
+                              done: forwarded,
+                              total: units,
+                            })}
+                          </span>
+                          {anomaly && (
+                            <Badge variant={anomaly === 'stuck' ? 'stuck' : 'rework'} dot>
+                              {anomaly === 'stuck' ? 'Stuck' : 'Rework'}
+                            </Badge>
+                          )}
+                        </div>
                       </div>
-                    )}
-                    <div className="text-sm text-[var(--color-muted-foreground)] truncate">
-                      {lot.vendorLotNo ? `${lot.vendorLotNo} • ` : ''}
-                      <span className="tabular-nums">{totalUnits(lot.qtyIn)} u</span>
-                    </div>
-                    <div className="mt-1.5 flex items-center gap-2 flex-wrap">
-                      <LotProgress
-                        status={lot.order?.status}
-                        anomaly={
-                          lot.order?.status === 'in_rework'
-                            ? 'rework'
-                            : lot.order?.status === 'stuck'
-                              ? 'stuck'
-                              : undefined
-                        }
-                      />
-                      {(lot.order?.status === 'in_rework' ||
-                        lot.order?.status === 'stuck') && (
-                        <Badge variant={lot.order.status === 'stuck' ? 'stuck' : 'rework'} dot>
-                          {lot.order.status === 'stuck' ? 'Stuck' : 'Rework'}
-                        </Badge>
-                      )}
-                    </div>
-                  </div>
-                  <Button
-                    size="lg"
-                    className="min-h-[56px] px-6"
-                    onClick={() => navigate(`/finishing/lot/${lot.id}`)}
-                  >
-                    {t('finishing.openLot')}
-                  </Button>
-                </li>
-              ))}
+                      <div className="shrink-0 w-9 h-9 rounded-full bg-[var(--color-muted)] flex items-center justify-center text-[var(--color-foreground)]">
+                        <ChevronRight size={18} />
+                      </div>
+                    </button>
+                  </li>
+                );
+              })}
             </ul>
           )}
         </CardContent>

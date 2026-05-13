@@ -13,6 +13,8 @@ export interface ReceiptRow {
   qty: number;
   kind: 'forward' | 'rework_return' | 'rework_redo';
   receivedBy: number;
+  /** Display name of the user who recorded this — for "who did what" audit. */
+  receivedByName?: string;
   receivedAt: string;
 }
 

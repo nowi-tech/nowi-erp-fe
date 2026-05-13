@@ -23,7 +23,10 @@
     "saving": "सहेजा जा रहा है…",
     "language": "भाषा",
     "total": "कुल",
+    "unit": "यूनिट",
     "units": "यूनिट",
+    "by": "द्वारा",
+    "clear": "साफ़ करें",
     "more": "और",
     "filters": "फ़िल्टर",
     "filtersActive": "{{count}} सक्रिय",
@@ -144,8 +147,15 @@
       "scrapReasonPlaceholder": "जैसे कपड़ा फटा, सिलाई में दोष",
       "scrappedToast": "{{n}} × {{size}} स्क्रैप किया",
       "orderRef": "ऑर्डर",
+      "forwardedOf": "{{total}} में से {{done}} आगे भेजे",
+      "forwardN": "{{n}} {{unit}} आगे भेजें →",
+      "forwardHint": "साइज़ चिप दबाएँ पूरा भेजने के लिए, या मात्रा खुद टाइप करें।",
+      "forwardAll": "सभी {{n}} भेजें",
+      "bySize": "साइज़-वार",
+      "left": "बचे",
       "loadError": "लॉट लोड नहीं हो सका"
-    }
+    },
+    "style": "स्टाइल"
   },
   "finishing": {
     "title": "फिनिशिंग",

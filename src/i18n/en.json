@@ -23,7 +23,10 @@
     "saving": "Saving…",
     "language": "Language",
     "total": "Total",
+    "unit": "unit",
     "units": "units",
+    "by": "by",
+    "clear": "Clear",
     "more": "More",
     "filters": "Filters",
     "filtersActive": "{{count}} active",
@@ -144,8 +147,15 @@
       "scrapReasonPlaceholder": "e.g. fabric tear, stitching defect",
       "scrappedToast": "Scrapped {{n}} × {{size}}",
       "orderRef": "Order",
+      "forwardedOf": "{{done}} of {{total}} forwarded",
+      "forwardN": "Forward {{n}} {{unit}} →",
+      "forwardHint": "Tap size to forward all, or set quantity manually.",
+      "forwardAll": "Forward all {{n}}",
+      "bySize": "by size",
+      "left": "left",
       "loadError": "Could not load lot"
-    }
+    },
+    "style": "Style"
   },
   "finishing": {
     "title": "Finishing",

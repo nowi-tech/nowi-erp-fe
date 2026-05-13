@@ -315,15 +315,15 @@ export default function FinishingReceiveLot() {
           <>
             <Card stage="finish">
               <CardHeader>
-                <CardTitle className="font-serif text-2xl">
+                <CardTitle className="font-serif text-2xl break-all">
                   <span className="text-[var(--color-muted-foreground)] text-xs uppercase tracking-wider mr-2 font-sans">
                     {t('stitching.lotNo')}
                   </span>
                   {lot.lotNo}
                 </CardTitle>
-                {lot.style && (
-                  <>
-                    <div className="mt-2 font-serif text-lg text-[var(--color-foreground)]">
+                <div className="mt-1.5 flex flex-wrap items-center gap-x-2 gap-y-1 text-sm text-[var(--color-foreground)]">
+                  {lot.style && (
+                    <span className="font-medium">
                       {[
                         t(`stitching.gender.${lot.style.gender}`, {
                           defaultValue:
@@ -337,12 +337,19 @@ export default function FinishingReceiveLot() {
                       ]
                         .filter(Boolean)
                         .join(' ')}
-                    </div>
-                    <div className="mt-0.5 font-mono text-xs text-[var(--stage-finish-acc)]">
-                      {lot.style.styleId}
-                    </div>
-                  </>
-                )}
+                    </span>
+                  )}
+                  <span className="text-[var(--color-muted-foreground)]">·</span>
+                  <span>{lot.vendor?.name ?? lot.vendorId}</span>
+                  <span className="text-[var(--color-muted-foreground)]">·</span>
+                  <span className="font-mono tabular-nums">
+                    {Object.values(lot.qtyIn ?? {}).reduce(
+                      (a, b) => a + (Number(b) || 0),
+                      0,
+                    )}
+                    u
+                  </span>
+                </div>
                 {(lot.order?.status === 'in_rework' || lot.order?.status === 'stuck') && (
                   <div className="mt-2">
                     <Badge variant={orderStatusVariant(lot.order.status)} dot>
@@ -351,38 +358,46 @@ export default function FinishingReceiveLot() {
                   </div>
                 )}
               </CardHeader>
-              <CardContent className="space-y-1 text-sm">
-                {lot.vendorLotNo && (
-                  <div>
-                    <span className="text-[var(--color-muted-foreground)]">
-                      {t('stitching.vendorLot')}:
-                    </span>{' '}
-                    <span className="font-mono">{lot.vendorLotNo}</span>
-                  </div>
-                )}
-                {/* Admin / cross-reference info — hidden by default so the
-                    floor isn't distracted. One tap to expand. */}
-                <details className="mt-2 group">
-                  <summary className="cursor-pointer list-none text-xs uppercase tracking-wider text-[var(--color-muted-foreground)] hover:text-[var(--color-foreground)] select-none">
+              <CardContent className="pt-0">
+                <details className="group">
+                  <summary className="cursor-pointer list-none flex items-center justify-between py-1 text-xs uppercase tracking-wider font-semibold text-[var(--color-muted-foreground)] hover:text-[var(--color-foreground)] select-none">
                     {t('common.details', { defaultValue: 'Details' })}
-                    <span className="ml-1 group-open:rotate-180 inline-block transition-transform">▾</span>
+                    <span className="group-open:rotate-180 inline-block transition-transform text-[10px]">▼</span>
                   </summary>
-                  <div className="mt-2 space-y-1 text-xs">
-                    <div>
-                      <span className="text-[var(--color-muted-foreground)]">
-                        {t('stitching.vendor')}:
-                      </span>{' '}
-                      {lot.vendor?.name ?? lot.vendorId}
-                    </div>
-                    {lot.order && (
-                      <div>
-                        <span className="text-[var(--color-muted-foreground)]">
-                          {t('stitching.lot.orderRef', { defaultValue: 'Order' })}:
-                        </span>{' '}
-                        <span className="font-mono">{lot.order.orderNo}</span>
+                  <dl className="mt-2 divide-y divide-[var(--color-border)] text-sm">
+                    {lot.style && (
+                      <div className="flex items-center justify-between py-2">
+                        <dt className="text-[var(--color-muted-foreground)]">
+                          {t('stitching.style', { defaultValue: 'Style' })}
+                        </dt>
+                        <dd className="font-mono text-[var(--stage-finish-acc)]">
+                          {lot.style.styleId}
+                        </dd>
                       </div>
                     )}
-                  </div>
+                    {lot.order && (
+                      <div className="flex items-center justify-between py-2">
+                        <dt className="text-[var(--color-muted-foreground)]">
+                          {t('stitching.lot.orderRef', { defaultValue: 'Order' })}
+                        </dt>
+                        <dd className="font-mono">{lot.order.orderNo}</dd>
+                      </div>
+                    )}
+                    <div className="flex items-center justify-between py-2">
+                      <dt className="text-[var(--color-muted-foreground)]">
+                        {t('stitching.vendor')}
+                      </dt>
+                      <dd>{lot.vendor?.name ?? lot.vendorId}</dd>
+                    </div>
+                    {lot.vendorLotNo && (
+                      <div className="flex items-center justify-between py-2">
+                        <dt className="text-[var(--color-muted-foreground)]">
+                          {t('stitching.vendorLot')}
+                        </dt>
+                        <dd className="font-mono">{lot.vendorLotNo}</dd>
+                      </div>
+                    )}
+                  </dl>
                 </details>
               </CardContent>
             </Card>

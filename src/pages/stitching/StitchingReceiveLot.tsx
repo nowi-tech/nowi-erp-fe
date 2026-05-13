@@ -1,8 +1,9 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useNavigate, useParams } from 'react-router-dom';
-import { Trash2 } from 'lucide-react';
+import { Minus, Plus } from 'lucide-react';
 import FloorShell from '@/components/layout/FloorShell';
+import { cn } from '@/lib/utils';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -144,12 +145,6 @@ export default function StitchingReceiveLot() {
     }
   }
 
-  function setSize(size: string, raw: string) {
-    const max = available?.[size] ?? 0;
-    const v = Math.max(0, Math.min(max, parseInt(raw, 10) || 0));
-    setQty((prev) => ({ ...prev, [size]: v }));
-  }
-
   async function doSubmit() {
     if (!canSubmit || stageId === null) return;
     setSubmitting(true);
@@ -205,15 +200,15 @@ export default function StitchingReceiveLot() {
           <>
             <Card stage="stitch">
               <CardHeader>
-                <CardTitle className="font-serif text-2xl">
+                <CardTitle className="font-serif text-2xl break-all">
                   <span className="text-[var(--color-muted-foreground)] text-xs uppercase tracking-wider mr-2 font-sans">
                     {t('stitching.lotNo')}
                   </span>
                   {lot.lotNo}
                 </CardTitle>
-                {lot.style && (
-                  <>
-                    <div className="mt-2 font-serif text-lg text-[var(--color-foreground)]">
+                <div className="mt-1.5 flex flex-wrap items-center gap-x-2 gap-y-1 text-sm text-[var(--color-foreground)]">
+                  {lot.style && (
+                    <span className="font-medium">
                       {[
                         t(`stitching.gender.${lot.style.gender}`, {
                           defaultValue:
@@ -227,13 +222,19 @@ export default function StitchingReceiveLot() {
                       ]
                         .filter(Boolean)
                         .join(' ')}
-                    </div>
-                    <div className="mt-0.5 font-mono text-xs text-[var(--stage-stitch-acc)]">
-                      {lot.style.styleId}
-                    </div>
-                  </>
-                )}
-                {/* Only surface anomalies — routine status is implied by being on this page. */}
+                    </span>
+                  )}
+                  <span className="text-[var(--color-muted-foreground)]">·</span>
+                  <span>{lot.vendor?.name ?? lot.vendorId}</span>
+                  <span className="text-[var(--color-muted-foreground)]">·</span>
+                  <span className="font-mono tabular-nums">
+                    {Object.values(lot.qtyIn ?? {}).reduce(
+                      (a, b) => a + (Number(b) || 0),
+                      0,
+                    )}
+                    u
+                  </span>
+                </div>
                 {(lot.order?.status === 'in_rework' || lot.order?.status === 'stuck') && (
                   <div className="mt-2">
                     <Badge variant={orderStatusVariant(lot.order.status)} dot>
@@ -242,102 +243,111 @@ export default function StitchingReceiveLot() {
                   </div>
                 )}
               </CardHeader>
-              <CardContent className="space-y-1 text-sm">
-                {lot.vendorLotNo && (
-                  <div>
-                    <span className="text-[var(--color-muted-foreground)]">
-                      {t('stitching.vendorLot')}:
-                    </span>{' '}
-                    <span className="font-mono">{lot.vendorLotNo}</span>
-                  </div>
-                )}
-                {/* Admin / cross-reference info — hidden by default so the
-                    floor isn't distracted. One tap to expand. */}
-                <details className="mt-2 group">
-                  <summary className="cursor-pointer list-none text-xs uppercase tracking-wider text-[var(--color-muted-foreground)] hover:text-[var(--color-foreground)] select-none">
+              <CardContent className="pt-0">
+                {/* Cross-reference info — one tap to expand. */}
+                <details className="group">
+                  <summary className="cursor-pointer list-none flex items-center justify-between py-1 text-xs uppercase tracking-wider font-semibold text-[var(--color-muted-foreground)] hover:text-[var(--color-foreground)] select-none">
                     {t('common.details', { defaultValue: 'Details' })}
-                    <span className="ml-1 group-open:rotate-180 inline-block transition-transform">▾</span>
+                    <span className="group-open:rotate-180 inline-block transition-transform text-[10px]">▼</span>
                   </summary>
-                  <div className="mt-2 space-y-1 text-xs">
-                    <div>
-                      <span className="text-[var(--color-muted-foreground)]">
-                        {t('stitching.vendor')}:
-                      </span>{' '}
-                      {lot.vendor?.name ?? lot.vendorId}
-                    </div>
-                    {lot.order && (
-                      <div>
-                        <span className="text-[var(--color-muted-foreground)]">
-                          {t('stitching.lot.orderRef', { defaultValue: 'Order' })}:
-                        </span>{' '}
-                        <span className="font-mono">{lot.order.orderNo}</span>
+                  <dl className="mt-2 divide-y divide-[var(--color-border)] text-sm">
+                    {lot.style && (
+                      <div className="flex items-center justify-between py-2">
+                        <dt className="text-[var(--color-muted-foreground)]">
+                          {t('stitching.style', { defaultValue: 'Style' })}
+                        </dt>
+                        <dd className="font-mono text-[var(--stage-stitch-acc)]">
+                          {lot.style.styleId}
+                        </dd>
                       </div>
                     )}
-                  </div>
+                    {lot.order && (
+                      <div className="flex items-center justify-between py-2">
+                        <dt className="text-[var(--color-muted-foreground)]">
+                          {t('stitching.lot.orderRef', { defaultValue: 'Order' })}
+                        </dt>
+                        <dd className="font-mono">{lot.order.orderNo}</dd>
+                      </div>
+                    )}
+                    <div className="flex items-center justify-between py-2">
+                      <dt className="text-[var(--color-muted-foreground)]">
+                        {t('stitching.vendor')}
+                      </dt>
+                      <dd>{lot.vendor?.name ?? lot.vendorId}</dd>
+                    </div>
+                    {lot.vendorLotNo && (
+                      <div className="flex items-center justify-between py-2">
+                        <dt className="text-[var(--color-muted-foreground)]">
+                          {t('stitching.vendorLot')}
+                        </dt>
+                        <dd className="font-mono">{lot.vendorLotNo}</dd>
+                      </div>
+                    )}
+                  </dl>
                 </details>
               </CardContent>
             </Card>
 
             <Card>
               <CardHeader>
-                <CardTitle>{t('stitching.lot.forward')}</CardTitle>
+                <div className="flex items-baseline justify-between">
+                  <CardTitle>{t('stitching.lot.forward')}</CardTitle>
+                  <span className="text-xs uppercase tracking-wider text-[var(--color-muted-foreground)] font-mono">
+                    {t('stitching.lot.bySize', { defaultValue: 'by size' })}
+                  </span>
+                </div>
+                <p className="mt-1 text-xs text-[var(--color-muted-foreground)]">
+                  {t('stitching.lot.forwardHint', {
+                    defaultValue: 'Tap size to forward all, or set quantity manually.',
+                  })}
+                </p>
               </CardHeader>
-              <CardContent className="space-y-3">
+              <CardContent className="pt-0">
                 {allZero ? (
                   <p className="text-[var(--color-muted-foreground)]">
                     {t('stitching.lot.nothingLeft')}
                   </p>
                 ) : (
-                  sizes.map((size) => {
-                    const max = available?.[size] ?? 0;
-                    return (
-                      <div
+                  <div className="divide-y divide-[var(--color-border)]">
+                    {sizes.map((size) => (
+                      <StitchSizeRow
                         key={size}
-                        className="flex items-center justify-between gap-2"
-                      >
-                        <div className="min-w-0">
-                          <span className="font-medium">{size}</span>
-                          <span className="ml-2 text-sm text-[var(--color-muted-foreground)]">
-                            {t('stitching.lot.available')} {max}
-                          </span>
-                        </div>
-                        <div className="flex items-center gap-2">
-                          <Input
-                            type="number"
-                            inputMode="numeric"
-                            min={0}
-                            max={max}
-                            value={qty[size] ?? 0}
-                            onChange={(e) => setSize(size, e.target.value)}
-                            className="w-24 text-center"
-                            disabled={max === 0}
-                            autoFocus={size === firstFocusSize}
-                          />
-                          <button
-                            type="button"
-                            onClick={() => openScrap(size)}
-                            disabled={max === 0}
-                            aria-label={t('stitching.lot.scrap', {
-                              defaultValue: 'Scrap',
-                            })}
-                            title={t('stitching.lot.scrap', { defaultValue: 'Scrap' })}
-                            className="p-2 rounded-[var(--radius-sm)] text-[var(--color-muted-foreground)] hover:bg-[var(--status-stuck-bg)] hover:text-[var(--status-stuck-acc)] disabled:opacity-30 disabled:cursor-not-allowed"
-                          >
-                            <Trash2 size={16} />
-                          </button>
-                        </div>
-                      </div>
-                    );
-                  })
+                        size={size}
+                        max={available?.[size] ?? 0}
+                        value={qty[size] ?? 0}
+                        autoFocus={size === firstFocusSize}
+                        onChange={(v) =>
+                          setQty((prev) => ({ ...prev, [size]: v }))
+                        }
+                        onScrap={() => openScrap(size)}
+                        forwardAllLabel={t('stitching.lot.forwardAll', {
+                          defaultValue: 'Forward all {{n}}',
+                          n: available?.[size] ?? 0,
+                        })}
+                        clearLabel={t('common.clear', { defaultValue: 'Clear' })}
+                        leftLabel={t('stitching.lot.left', { defaultValue: 'left' })}
+                        scrapLabel={t('stitching.lot.scrap', { defaultValue: 'Scrap' })}
+                      />
+                    ))}
+                  </div>
                 )}
                 {!allZero && (
                   <Button
                     size="lg"
-                    className="w-full mt-2"
+                    className="w-full mt-4"
                     onClick={() => setConfirmOpen(true)}
                     disabled={!canSubmit}
                   >
-                    {t('stitching.lot.submit')}
+                    {total > 0
+                      ? t('stitching.lot.forwardN', {
+                          defaultValue: 'Forward {{n}} {{unit}} →',
+                          n: total,
+                          unit:
+                            total === 1
+                              ? t('common.unit', { defaultValue: 'unit' })
+                              : t('common.units'),
+                        })
+                      : t('stitching.lot.submit')}
                   </Button>
                 )}
               </CardContent>
@@ -359,17 +369,25 @@ export default function StitchingReceiveLot() {
                     {recent.map((r) => (
                       <li
                         key={r.id}
-                        className="flex items-center justify-between py-1.5"
+                        className="flex items-center gap-3 py-2"
                       >
-                        <span>
-                          <span className="font-medium">{r.sizeLabel}</span>
-                          <span className="ml-2 tabular-nums">× {r.qty}</span>
+                        <div className="min-w-[34px] h-7 px-1.5 rounded-[var(--radius-sm)] bg-[var(--color-muted)] flex items-center justify-center font-semibold text-xs">
+                          {r.sizeLabel}
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <span className="font-mono tabular-nums">×{r.qty}</span>
                           {r.kind !== 'forward' && (
                             <span className="ml-2 text-xs text-[var(--status-rework-ink)]">
                               ({r.kind})
                             </span>
                           )}
-                        </span>
+                          {r.receivedByName && (
+                            <span className="ml-2 text-xs text-[var(--color-muted-foreground)]">
+                              {t('common.by', { defaultValue: 'by' })}{' '}
+                              {r.receivedByName}
+                            </span>
+                          )}
+                        </div>
                         <span className="text-xs text-[var(--color-muted-foreground)] font-mono">
                           {new Date(r.receivedAt).toLocaleString(undefined, {
                             month: 'short',
@@ -482,5 +500,109 @@ export default function StitchingReceiveLot() {
         )}
       </Dialog>
     </FloorShell>
+  );
+}
+
+/**
+ * Size row: chip + count + stepper + scrap.
+ * Chip is a "forward all / clear" toggle so the common case (forward
+ * everything in this size) is one tap.
+ */
+function StitchSizeRow({
+  size,
+  max,
+  value,
+  autoFocus,
+  onChange,
+  onScrap,
+  forwardAllLabel,
+  clearLabel,
+  leftLabel,
+  scrapLabel,
+}: {
+  size: string;
+  max: number;
+  value: number;
+  autoFocus?: boolean;
+  onChange: (v: number) => void;
+  onScrap: () => void;
+  forwardAllLabel: string;
+  clearLabel: string;
+  leftLabel: string;
+  scrapLabel: string;
+}) {
+  const set = (v: number) => onChange(Math.max(0, Math.min(max, v)));
+  const filled = value === max && max > 0;
+  const active = value > 0;
+  const disabled = max === 0;
+
+  return (
+    <div className="flex items-center gap-2 py-2.5">
+      <button
+        type="button"
+        onClick={() => set(filled ? 0 : max)}
+        disabled={disabled}
+        title={filled ? clearLabel : forwardAllLabel}
+        aria-label={filled ? clearLabel : forwardAllLabel}
+        className={cn(
+          'min-w-[44px] h-10 px-2.5 rounded-[var(--radius-md)] font-semibold text-base transition-colors disabled:opacity-40 disabled:cursor-not-allowed',
+          active
+            ? 'bg-[var(--stage-stitch-acc)] text-[var(--color-primary-foreground)] shadow-[0_4px_10px_-2px_rgba(34,64,196,0.35)]'
+            : 'bg-[var(--color-muted)] text-[var(--color-foreground)] hover:bg-[var(--stage-stitch-bg)]',
+        )}
+      >
+        {size}
+      </button>
+      <div className="flex-1 min-w-0 text-sm whitespace-nowrap">
+        <span className="font-mono font-semibold tabular-nums text-[var(--color-foreground)]">
+          {max}
+        </span>{' '}
+        <span className="text-[var(--color-muted-foreground)]">{leftLabel}</span>
+      </div>
+      <div className="flex items-center gap-1">
+        <button
+          type="button"
+          onClick={() => set(value - 1)}
+          disabled={disabled || value <= 0}
+          aria-label="−"
+          className="w-8 h-9 rounded-[var(--radius-sm)] bg-[var(--color-muted)] text-[var(--color-foreground)] flex items-center justify-center disabled:opacity-30"
+        >
+          <Minus size={14} />
+        </button>
+        <input
+          type="text"
+          inputMode="numeric"
+          value={value}
+          onChange={(e) =>
+            set(parseInt(e.target.value.replace(/\D/g, '') || '0', 10))
+          }
+          disabled={disabled}
+          autoFocus={autoFocus}
+          className={cn(
+            'w-11 h-9 text-center rounded-[var(--radius-sm)] border bg-[var(--color-surface)] font-semibold tabular-nums outline-none transition-colors',
+            value > 0
+              ? 'border-[var(--stage-stitch-acc)]'
+              : 'border-[var(--color-border)]',
+          )}
+        />
+        <button
+          type="button"
+          onClick={() => set(value + 1)}
+          disabled={disabled || value >= max}
+          aria-label="+"
+          className="w-8 h-9 rounded-[var(--radius-sm)] bg-[var(--color-muted)] text-[var(--color-foreground)] flex items-center justify-center disabled:opacity-30"
+        >
+          <Plus size={14} />
+        </button>
+      </div>
+      <button
+        type="button"
+        onClick={onScrap}
+        disabled={disabled}
+        className="ml-1 px-1.5 py-1 rounded-[var(--radius-sm)] text-[11px] font-semibold uppercase tracking-wide text-[var(--color-muted-foreground)] hover:bg-[var(--status-stuck-bg)] hover:text-[var(--status-stuck-acc)] disabled:opacity-30"
+      >
+        {scrapLabel}
+      </button>
+    </div>
   );
 }

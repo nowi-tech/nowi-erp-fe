@@ -82,6 +82,12 @@ export interface Lot {
   sku?: string;
   baseCode?: string | null;
   qtyIn: SizeMatrix;
+  /**
+   * Sum of forward-receipt qty per stage code (`stitching`, `finishing`, …),
+   * if the BE list endpoint included it. Lets the queue card show
+   * "X of Y forwarded" without N+1 availability queries.
+   */
+  stageForwarded?: Partial<Record<string, number>>;
   vendor?: Vendor | null;
   order?: Order | null;
   /** Embedded NOWI Style (added when the BE response includes it). */
