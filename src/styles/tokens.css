@@ -88,9 +88,8 @@
   --status-transit-ink: #2a4f6e;
 
   /* ── Typography ── */
-  --font-sans:  'Poppins', ui-sans-serif, system-ui, -apple-system, sans-serif;
-  --font-serif: 'Lora', 'Poppins', Georgia, 'Times New Roman', serif;
-  --font-hi:    'Noto Sans Devanagari', 'Poppins', system-ui, sans-serif;
+  --font-sans:  'Plus Jakarta Sans', ui-sans-serif, system-ui, -apple-system, sans-serif;
+  --font-hi:    'Noto Sans Devanagari', 'Plus Jakarta Sans', system-ui, sans-serif;
   --font-mono:  'JetBrains Mono', ui-monospace, SFMono-Regular, monospace;
 
   /* ── Elevation (rgba uses design ink #0e1730 = 14,23,48) ── */

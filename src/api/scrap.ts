@@ -11,3 +11,22 @@ export async function createScrap(payload: CreateScrapPayload): Promise<ScrapEve
     throw err;
   }
 }
+
+export interface ScrapRow extends ScrapEvent {
+  /** Filled by BE so the floor "Recently forwarded" log can show who scrapped. */
+  scrappedByName?: string;
+}
+
+export async function listScraps(params: {
+  lotId: number | string;
+  stageId?: number;
+  take?: number;
+}): Promise<ScrapRow[]> {
+  try {
+    const res = await apiClient.get<ScrapRow[]>('/api/scrap', { params });
+    return res.data;
+  } catch (err) {
+    if (is404(err)) return [];
+    throw err;
+  }
+}

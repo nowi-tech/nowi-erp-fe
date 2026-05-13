@@ -11,7 +11,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Dialog } from '@/components/ui/dialog';
 import { useToast } from '@/components/ui/toast';
-import { createScrap } from '@/api/scrap';
+import { createScrap, listScraps, type ScrapRow } from '@/api/scrap';
 import { toast as sonnerToast } from 'sonner';
 import { getAvailability, getLot } from '@/api/lots';
 import {
@@ -38,6 +38,7 @@ export default function StitchingReceiveLot() {
   const [available, setAvailable] = useState<SizeMatrix>({});
   const [qty, setQty] = useState<SizeMatrix>({});
   const [recent, setRecent] = useState<ReceiptRow[]>([]);
+  const [recentScraps, setRecentScraps] = useState<ScrapRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [confirmOpen, setConfirmOpen] = useState(false);
@@ -48,6 +49,9 @@ export default function StitchingReceiveLot() {
   const [scrapQty, setScrapQty] = useState<number>(0);
   const [scrapReason, setScrapReason] = useState('');
   const [scrapping, setScrapping] = useState(false);
+  // Two-step scrap: form → yes/no confirmation. Forces a second tap so
+  // the destructive action doesn't fire on a misclick.
+  const [scrapConfirming, setScrapConfirming] = useState(false);
 
   // Resolve the "stitching" stage id at runtime instead of hardcoding 1
   // — survives seed reorders / future stage additions.
@@ -57,17 +61,19 @@ export default function StitchingReceiveLot() {
     if (stageId === null) return;
     setLoading(true);
     try {
-      const [lotRes, avail, receipts] = await Promise.all([
+      const [lotRes, avail, receipts, scraps] = await Promise.all([
         getLot(lotId),
         getAvailability(lotId, stageId).catch(() => ({
           stageId,
           available: {} as SizeMatrix,
         })),
         listReceipts({ lotId, stageId, take: 10 }).catch(() => [] as ReceiptRow[]),
+        listScraps({ lotId, stageId, take: 10 }).catch(() => [] as ScrapRow[]),
       ]);
       setLot(lotRes);
       setAvailable(avail.available ?? {});
       setRecent(receipts);
+      setRecentScraps(scraps);
       setQty({});
     } catch {
       toast.show(t('stitching.lot.loadError'), 'error');
@@ -104,11 +110,13 @@ export default function StitchingReceiveLot() {
     setScrapSize(size);
     setScrapQty(1);
     setScrapReason('');
+    setScrapConfirming(false);
   }
   function closeScrap() {
     setScrapSize(null);
     setScrapQty(0);
     setScrapReason('');
+    setScrapConfirming(false);
   }
 
   async function doScrap() {
@@ -128,7 +136,10 @@ export default function StitchingReceiveLot() {
         qty: qtyToScrap,
         reason: scrapReason.trim(),
       });
-      sonnerToast.success(
+      // Destructive action — use the warning variant (amber) instead of
+      // the green success tone. The system did its job, but units are
+      // gone; the toast should acknowledge that, not celebrate it.
+      sonnerToast.warning(
         t('stitching.lot.scrappedToast', {
           defaultValue: 'Scrapped {{n}} × {{size}}',
           n: qtyToScrap,
@@ -363,55 +374,93 @@ export default function StitchingReceiveLot() {
               </button>
             )}
 
-            {/* Recent receipts at this stage — closes the "did I already
-                forward this?" loop. Hidden when the lot is brand-new. */}
-            {recent.length > 0 && (
-              <Card>
-                <CardHeader>
-                  <CardTitle className="text-base">
-                    {t('stitching.lot.recent', {
-                      defaultValue: 'Recently forwarded at stitching',
-                    })}
-                  </CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <ul className="divide-y divide-[var(--color-border)] text-sm">
-                    {recent.map((r) => (
-                      <li
-                        key={r.id}
-                        className="flex items-center gap-3 py-2"
-                      >
-                        <div className="min-w-[34px] h-7 px-1.5 rounded-[var(--radius-sm)] bg-[var(--color-muted)] flex items-center justify-center font-semibold text-xs">
-                          {r.sizeLabel}
-                        </div>
-                        <div className="flex-1 min-w-0">
-                          <span className="font-mono tabular-nums">×{r.qty}</span>
-                          {r.kind !== 'forward' && (
-                            <span className="ml-2 text-xs text-[var(--status-rework-ink)]">
-                              ({r.kind})
+            {/* Recently forwarded + scrapped at this stage — single
+                chronological feed so the floor can see "what just happened
+                here". Forwards are neutral; scraps are tinted destructive
+                so they read as losses. */}
+            {(recent.length > 0 || recentScraps.length > 0) && (() => {
+              type FeedItem =
+                | { kind: 'fwd'; row: ReceiptRow; at: string }
+                | { kind: 'scrap'; row: ScrapRow; at: string };
+              const items: FeedItem[] = [
+                ...recent.map((r): FeedItem => ({ kind: 'fwd', row: r, at: r.receivedAt })),
+                ...recentScraps.map((s): FeedItem => ({ kind: 'scrap', row: s, at: s.scrappedAt })),
+              ].sort((a, b) => (a.at > b.at ? -1 : 1));
+              return (
+                <Card className="mt-6">
+                  <CardHeader>
+                    <CardTitle className="text-base">
+                      {t('stitching.lot.recent', {
+                        defaultValue: 'Recently forwarded at stitching',
+                      })}
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <ul className="divide-y divide-[var(--color-border)] text-sm">
+                      {items.map((it) => {
+                        const isScrap = it.kind === 'scrap';
+                        const row = it.row;
+                        return (
+                          <li
+                            key={`${it.kind}-${row.id}`}
+                            className="flex items-center gap-3 py-2"
+                          >
+                            <div
+                              className={
+                                'min-w-[34px] h-7 px-1.5 rounded-[var(--radius-sm)] flex items-center justify-center font-semibold text-xs ' +
+                                (isScrap
+                                  ? 'bg-[var(--color-destructive-bg)] text-[var(--color-destructive)]'
+                                  : 'bg-[var(--color-muted)]')
+                              }
+                            >
+                              {row.sizeLabel}
+                            </div>
+                            <div className="flex-1 min-w-0">
+                              <span
+                                className={
+                                  'font-mono tabular-nums ' +
+                                  (isScrap ? 'text-[var(--color-destructive)]' : '')
+                                }
+                              >
+                                ×{row.qty}
+                              </span>
+                              {isScrap ? (
+                                <span className="ml-2 text-xs font-semibold uppercase tracking-wider text-[var(--color-destructive)]">
+                                  {t('stitching.lot.scrap', { defaultValue: 'Scrap' })}
+                                </span>
+                              ) : (
+                                (it.row as ReceiptRow).kind !== 'forward' && (
+                                  <span className="ml-2 text-xs text-[var(--status-rework-ink)]">
+                                    ({(it.row as ReceiptRow).kind})
+                                  </span>
+                                )
+                              )}
+                              {((isScrap && (it.row as ScrapRow).scrappedByName) ||
+                                (!isScrap && (it.row as ReceiptRow).receivedByName)) && (
+                                <span className="ml-2 text-xs text-[var(--color-muted-foreground)]">
+                                  {t('common.by', { defaultValue: 'by' })}{' '}
+                                  {isScrap
+                                    ? (it.row as ScrapRow).scrappedByName
+                                    : (it.row as ReceiptRow).receivedByName}
+                                </span>
+                              )}
+                            </div>
+                            <span className="text-xs text-[var(--color-muted-foreground)] font-mono">
+                              {new Date(it.at).toLocaleString(undefined, {
+                                month: 'short',
+                                day: 'numeric',
+                                hour: '2-digit',
+                                minute: '2-digit',
+                              })}
                             </span>
-                          )}
-                          {r.receivedByName && (
-                            <span className="ml-2 text-xs text-[var(--color-muted-foreground)]">
-                              {t('common.by', { defaultValue: 'by' })}{' '}
-                              {r.receivedByName}
-                            </span>
-                          )}
-                        </div>
-                        <span className="text-xs text-[var(--color-muted-foreground)] font-mono">
-                          {new Date(r.receivedAt).toLocaleString(undefined, {
-                            month: 'short',
-                            day: 'numeric',
-                            hour: '2-digit',
-                            minute: '2-digit',
-                          })}
-                        </span>
-                      </li>
-                    ))}
-                  </ul>
-                </CardContent>
-              </Card>
-            )}
+                          </li>
+                        );
+                      })}
+                    </ul>
+                  </CardContent>
+                </Card>
+              );
+            })()}
           </>
         ) : null}
       </div>
@@ -443,33 +492,62 @@ export default function StitchingReceiveLot() {
       <Dialog
         open={scrapSize !== null}
         onClose={() => !scrapping && closeScrap()}
-        title={t('stitching.lot.scrapTitle', {
-          defaultValue: 'Scrap units',
-        })}
+        title={
+          scrapConfirming
+            ? t('stitching.lot.scrapConfirmTitle', {
+                defaultValue: 'Scrap {{n}} × {{size}}?',
+                n: scrapQty,
+                size: scrapSize ?? '',
+              })
+            : t('stitching.lot.scrapTitle', { defaultValue: 'Scrap units' })
+        }
         footer={
-          <>
-            <Button
-              variant="outline"
-              onClick={closeScrap}
-              disabled={scrapping}
-            >
-              {t('common.cancel')}
-            </Button>
-            <Button
-              variant="destructive"
-              onClick={() => void doScrap()}
-              disabled={
-                scrapping ||
-                scrapQty <= 0 ||
-                scrapReason.trim().length === 0
-              }
-            >
-              {scrapping ? t('common.saving') : t('stitching.lot.scrap', { defaultValue: 'Scrap' })}
-            </Button>
-          </>
+          scrapConfirming ? (
+            // Yes / No confirm — destructive action lives here, not on the
+            // form step, so a misclick on Scrap can't drop units.
+            <>
+              <Button
+                variant="outline"
+                onClick={() => setScrapConfirming(false)}
+                disabled={scrapping}
+              >
+                {t('common.no', { defaultValue: 'No' })}
+              </Button>
+              <Button
+                variant="destructive"
+                onClick={() => void doScrap()}
+                disabled={scrapping}
+              >
+                {scrapping
+                  ? t('common.saving')
+                  : t('common.yes', { defaultValue: 'Yes' })}
+              </Button>
+            </>
+          ) : (
+            <>
+              <Button
+                variant="outline"
+                onClick={closeScrap}
+                disabled={scrapping}
+              >
+                {t('common.cancel')}
+              </Button>
+              <Button
+                variant="destructive"
+                onClick={() => setScrapConfirming(true)}
+                disabled={
+                  scrapping ||
+                  scrapQty <= 0 ||
+                  scrapReason.trim().length === 0
+                }
+              >
+                {t('stitching.lot.scrap', { defaultValue: 'Scrap' })}
+              </Button>
+            </>
+          )
         }
       >
-        {scrapSize !== null && (
+        {scrapSize !== null && !scrapConfirming && (
           <div className="space-y-3">
             <p className="text-sm text-[var(--color-muted-foreground)]">
               {t('stitching.lot.scrapHint', {
@@ -506,6 +584,26 @@ export default function StitchingReceiveLot() {
                 })}
               />
             </div>
+          </div>
+        )}
+        {scrapSize !== null && scrapConfirming && (
+          // Step 2 — Yes/No body. Show what they're about to scrap so
+          // they can verify before tapping Yes.
+          <div className="space-y-2 text-sm">
+            <p className="text-[var(--color-foreground)]">
+              {t('stitching.lot.scrapConfirmBody', {
+                defaultValue:
+                  'You are about to scrap {{n}} × {{size}}. This cannot be undone.',
+                n: scrapQty,
+                size: scrapSize,
+              })}
+            </p>
+            <p className="text-[var(--color-muted-foreground)]">
+              <span className="text-xs uppercase tracking-wider">
+                {t('stitching.lot.scrapReason', { defaultValue: 'Reason' })}:
+              </span>{' '}
+              {scrapReason.trim()}
+            </p>
           </div>
         )}
       </Dialog>
