@@ -66,6 +66,12 @@
     "users": "उपयोगकर्ता",
     "settings": "सेटिंग्स"
   },
+  "stages": {
+    "receive": "प्राप्ति",
+    "stitching": "सिलाई",
+    "finishing": "फिनिश",
+    "dispatch": "डिस्पैच"
+  },
   "roles": {
     "admin": "एडमिन",
     "floor_manager": "फ़्लोर मैनेजर",
@@ -94,7 +100,23 @@
     "receiveFab": "नया लॉट लें",
     "yourLots": "आपके लॉट",
     "workedOn": "आपने जो किया",
-    "workedOnEmpty": "अभी कोई इतिहास नहीं।"
+    "workedOnEmpty": "अभी कोई इतिहास नहीं।",
+    "reassign": "दोबारा असाइन करें",
+    "currentlyAssigned": "अभी {{name}}",
+    "noOtherMasters": "कोई और सिलाई मास्टर उपलब्ध नहीं।",
+    "editRequestTitle": "एडमिन से संपादन का अनुरोध करें",
+    "editRequestBody": "इस लॉट की 24 घंटे की संपादन अवधि बीत चुकी है। एडमिन को बदलाव के लिए अनुरोध भेजें?",
+    "editRequestSubmit": "अनुरोध भेजें",
+    "editRequestSentToast": "एडमिन को अनुरोध भेज दिया",
+    "filters": {
+      "all": "सभी",
+      "pending": "बाकी",
+      "inStitching": "सिलाई में",
+      "inFinishing": "फिनिशिंग में",
+      "stuck": "रुका हुआ"
+    },
+    "bulkAssignBar": "{{n}} लॉट असाइन करें",
+    "bulkSelectHint": "एक से ज़्यादा चुनने के लिए कार्ड पर लंबे समय तक दबाएँ।"
   },
   "shell": {
     "adminHome": "एडमिन होम — जल्द आ रहा है",

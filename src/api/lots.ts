@@ -36,6 +36,18 @@ export async function patchLot(lotId: number, body: PatchLotPayload): Promise<Lo
   return res.data;
 }
 
+/**
+ * Edit-request — used when the 24h direct-edit window has passed.
+ * BE writes a `lot_edit_requested` audit row; no mutation. Admin
+ * reviews the audit log to act on it.
+ */
+export async function requestLotEdit(
+  lotId: number,
+  body: PatchLotPayload,
+): Promise<void> {
+  await apiClient.post(`/api/lots/${lotId}/edit-request`, body);
+}
+
 export async function getLot(id: number): Promise<Lot> {
   const res = await apiClient.get<Lot>(`/api/lots/${id}`);
   return res.data;

@@ -29,6 +29,7 @@ const FinishingReceiveLot = lazy(
 );
 const FloorHome = lazy(() => import('./pages/floor/FloorHome'));
 const FloorEditLot = lazy(() => import('./pages/floor/FloorEditLot'));
+const FloorLotDetail = lazy(() => import('./pages/floor/FloorLotDetail'));
 const DataHome = lazy(() => import('./pages/data/DataHome'));
 const UsersPage = lazy(() => import('./pages/admin/Users'));
 
@@ -162,6 +163,16 @@ function App() {
                 <ProtectedRoute allowedRoles={['floor_manager', 'admin']}>
                   <S>
                     <ReceiveFromKotty />
+                  </S>
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/floor/lot/:lotId"
+              element={
+                <ProtectedRoute allowedRoles={['floor_manager', 'admin']}>
+                  <S>
+                    <FloorLotDetail />
                   </S>
                 </ProtectedRoute>
               }

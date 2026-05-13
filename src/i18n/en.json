@@ -66,6 +66,12 @@
     "users": "Users",
     "settings": "Settings"
   },
+  "stages": {
+    "receive": "Receive",
+    "stitching": "Stitch",
+    "finishing": "Finish",
+    "dispatch": "Dispatch"
+  },
   "roles": {
     "admin": "Admin",
     "floor_manager": "Floor manager",
@@ -94,7 +100,23 @@
     "receiveFab": "Receive new lot",
     "yourLots": "Your lots",
     "workedOn": "Worked on",
-    "workedOnEmpty": "No history yet."
+    "workedOnEmpty": "No history yet.",
+    "reassign": "Reassign",
+    "currentlyAssigned": "Currently {{name}}",
+    "noOtherMasters": "No other stitching masters available.",
+    "editRequestTitle": "Request admin edit",
+    "editRequestBody": "This lot's 24-hour edit window has passed. Send a request to the admin to make changes?",
+    "editRequestSubmit": "Send request",
+    "editRequestSentToast": "Edit request sent to admin",
+    "filters": {
+      "all": "All",
+      "pending": "Pending",
+      "inStitching": "In stitching",
+      "inFinishing": "In finishing",
+      "stuck": "Stuck"
+    },
+    "bulkAssignBar": "Assign {{n}} lots",
+    "bulkSelectHint": "Long-press a card to select multiple."
   },
   "shell": {
     "adminHome": "Admin home — coming soon",

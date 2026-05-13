@@ -1,13 +1,14 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { useNavigate, useParams } from 'react-router-dom';
+import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { ChevronLeft } from 'lucide-react';
 import { toast as sonnerToast } from 'sonner';
 import FloorShell from '@/components/layout/FloorShell';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Button } from '@/components/ui/button';
-import { getLot, patchLot } from '@/api/lots';
+import { Dialog } from '@/components/ui/dialog';
+import { getLot, patchLot, requestLotEdit } from '@/api/lots';
 import type { Lot, SizeMatrix } from '@/api/types';
 
 const EDIT_WINDOW_MS = 24 * 60 * 60 * 1000;
@@ -18,9 +19,15 @@ export default function FloorEditLot() {
   const lotId = Number(lotIdParam);
   const navigate = useNavigate();
 
+  const [searchParams] = useSearchParams();
+  const arrivedFromExpired = searchParams.get('expired') === '1';
   const [lot, setLot] = useState<Lot | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  // When the window has passed, "Save" becomes "Send request to admin"
+  // and the BE writes an audit row instead of mutating the lot.
+  const [requestOpen, setRequestOpen] = useState(false);
+  const [requesting, setRequesting] = useState(false);
 
   const [vendorLotNo, setVendorLotNo] = useState('');
   const [matrix, setMatrix] = useState<SizeMatrix>({});
@@ -163,12 +170,74 @@ export default function FloorEditLot() {
             >
               {t('common.cancel')}
             </Button>
-            <Button onClick={save} disabled={saving || expired}>
-              {saving ? t('common.saving') : t('common.save')}
-            </Button>
+            {expired ? (
+              // Greyed-but-enabled — tap opens the request dialog so the
+              // floor manager can route the change through the admin.
+              <Button onClick={() => setRequestOpen(true)} disabled={requesting}>
+                {t('floor.editRequestSubmit')}
+              </Button>
+            ) : (
+              <Button onClick={save} disabled={saving}>
+                {saving ? t('common.saving') : t('common.save')}
+              </Button>
+            )}
           </div>
         </div>
       )}
+
+      {/* Edit-request confirmation — opens automatically if the user
+          arrived here from a click on the greyed Edit button on the
+          detail page (?expired=1), or when they tap Send request. */}
+      <Dialog
+        open={requestOpen || (arrivedFromExpired && expired && !loading)}
+        onClose={() => setRequestOpen(false)}
+        title={t('floor.editRequestTitle')}
+        footer={
+          <>
+            <Button
+              variant="outline"
+              onClick={() => {
+                setRequestOpen(false);
+                if (arrivedFromExpired) navigate('/floor');
+              }}
+              disabled={requesting}
+            >
+              {t('common.cancel')}
+            </Button>
+            <Button
+              onClick={async () => {
+                if (!lot) return;
+                setRequesting(true);
+                try {
+                  const body: Parameters<typeof requestLotEdit>[1] = {};
+                  if ((vendorLotNo || '') !== (lot.vendorLotNo ?? '')) {
+                    body.vendorLotNo = vendorLotNo.trim() || null;
+                  }
+                  const matrixChanged = Object.keys(matrix).some(
+                    (s) => (matrix[s] ?? 0) !== (lot.qtyIn[s] ?? 0),
+                  );
+                  if (matrixChanged) body.qtyIn = matrix;
+                  await requestLotEdit(lot.id, body);
+                  sonnerToast.success(t('floor.editRequestSentToast'));
+                  navigate('/floor');
+                } catch {
+                  sonnerToast.error(t('common.error'));
+                } finally {
+                  setRequesting(false);
+                  setRequestOpen(false);
+                }
+              }}
+              disabled={requesting}
+            >
+              {requesting ? t('common.saving') : t('floor.editRequestSubmit')}
+            </Button>
+          </>
+        }
+      >
+        <p className="text-sm text-[var(--color-foreground-2)]">
+          {t('floor.editRequestBody')}
+        </p>
+      </Dialog>
     </FloorShell>
   );
 }
