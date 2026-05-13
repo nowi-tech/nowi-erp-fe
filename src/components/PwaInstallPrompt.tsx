@@ -11,7 +11,11 @@ interface BeforeInstallPromptEvent extends Event {
 
 const FIRST_RECEIPT_KEY = 'nowi.firstReceiptDoneAt';
 const DISMISSED_KEY = 'nowi.pwaInstallDismissedAt';
-const FLOOR_ROLES = new Set(['stitching_master', 'finishing_master']);
+const FLOOR_ROLES = new Set([
+  'floor_manager',
+  'stitching_master',
+  'finishing_master',
+]);
 
 export default function PwaInstallPrompt() {
   const { t } = useTranslation();

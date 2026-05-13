@@ -20,7 +20,12 @@ export default function FloorShell({ children }: FloorShellProps) {
   const location = useLocation();
 
   const role = user?.role;
-  const homePath = role === 'finishing_master' ? '/finishing' : '/stitching';
+  const homePath =
+    role === 'finishing_master'
+      ? '/finishing'
+      : role === 'floor_manager'
+        ? '/floor'
+        : '/stitching';
 
   const isHome = location.pathname === homePath;
 
