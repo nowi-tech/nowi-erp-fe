@@ -2,6 +2,7 @@
 
 export type UserRole =
   | 'admin'
+  | 'floor_manager'
   | 'stitching_master'
   | 'finishing_master'
   | 'data_manager'
@@ -88,6 +89,9 @@ export interface Lot {
    * "X of Y forwarded" without N+1 availability queries.
    */
   stageForwarded?: Partial<Record<string, number>>;
+  /** Stitching master this lot is assigned to. `null` = pending assignment. */
+  assignedUserId?: number | null;
+  assignedUser?: { id: number; name: string } | null;
   vendor?: Vendor | null;
   order?: Order | null;
   /** Embedded NOWI Style (added when the BE response includes it). */

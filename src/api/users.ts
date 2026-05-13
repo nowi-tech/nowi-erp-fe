@@ -51,3 +51,20 @@ export async function markOnboarded(): Promise<User> {
 export async function updateOnboardedAt(_userId: string | number): Promise<User> {
   return markOnboarded();
 }
+
+/**
+ * Workload-sorted list of active stitching masters for the floor-manager
+ * assign picker. Sorted ascending by inProgressLots (least-loaded first),
+ * tiebreak by name. BE: GET /api/users/stitching-masters.
+ */
+export interface StitchingMaster {
+  id: number;
+  name: string;
+  mobileNumber: string;
+  inProgressLots: number;
+}
+
+export async function listStitchingMasters(): Promise<StitchingMaster[]> {
+  const res = await apiClient.get<StitchingMaster[]>('/api/users/stitching-masters');
+  return res.data;
+}

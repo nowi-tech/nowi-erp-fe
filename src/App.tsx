@@ -27,6 +27,8 @@ const FinishingHome = lazy(() => import('./pages/finishing/FinishingHome'));
 const FinishingReceiveLot = lazy(
   () => import('./pages/finishing/FinishingReceiveLot'),
 );
+const FloorHome = lazy(() => import('./pages/floor/FloorHome'));
+const FloorEditLot = lazy(() => import('./pages/floor/FloorEditLot'));
 const DataHome = lazy(() => import('./pages/data/DataHome'));
 const UsersPage = lazy(() => import('./pages/admin/Users'));
 
@@ -143,6 +145,38 @@ function App() {
               */}
             </Route>
 
+            {/* Floor manager — receiving + assignment + 24h edit window. */}
+            <Route
+              path="/floor"
+              element={
+                <ProtectedRoute allowedRoles={['floor_manager', 'admin']}>
+                  <S>
+                    <FloorHome />
+                  </S>
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/floor/receive"
+              element={
+                <ProtectedRoute allowedRoles={['floor_manager', 'admin']}>
+                  <S>
+                    <ReceiveFromKotty />
+                  </S>
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/floor/lot/:lotId/edit"
+              element={
+                <ProtectedRoute allowedRoles={['floor_manager', 'admin']}>
+                  <S>
+                    <FloorEditLot />
+                  </S>
+                </ProtectedRoute>
+              }
+            />
+
             <Route
               path="/stitching"
               element={
@@ -153,10 +187,12 @@ function App() {
                 </ProtectedRoute>
               }
             />
+            {/* Legacy alias — floor manager owns receive now. Admin
+                + floor_manager keep access; stitching_master is blocked. */}
             <Route
               path="/stitching/receive"
               element={
-                <ProtectedRoute allowedRoles={['stitching_master', 'admin']}>
+                <ProtectedRoute allowedRoles={['floor_manager', 'admin']}>
                   <S>
                     <ReceiveFromKotty />
                   </S>

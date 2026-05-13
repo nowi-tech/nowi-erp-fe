@@ -4,6 +4,7 @@ import type { UserRole } from '@/api/types';
 
 const ROLE_HOMES: Record<UserRole, string> = {
   admin: '/admin',
+  floor_manager: '/floor',
   stitching_master: '/stitching',
   finishing_master: '/finishing',
   data_manager: '/data',

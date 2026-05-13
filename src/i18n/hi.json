@@ -68,10 +68,33 @@
   },
   "roles": {
     "admin": "एडमिन",
+    "floor_manager": "फ़्लोर मैनेजर",
     "stitching_master": "सिलाई",
     "finishing_master": "फिनिशिंग",
     "data_manager": "डेटा",
     "viewer": "व्यूअर"
+  },
+  "floor": {
+    "title": "फ़्लोर",
+    "pending": "असाइनमेंट बाकी",
+    "pendingEmpty": "असाइन करने के लिए कोई लॉट नहीं।",
+    "assignedSection": "असाइन किए गए",
+    "assignedEmpty": "प्रगति में कोई लॉट नहीं।",
+    "assignTo": "इन्हें असाइन करें…",
+    "assignedTo": "{{name}} को असाइन किया",
+    "assignSuccessToast": "{{name}} को असाइन किया",
+    "inQueue": "कतार में {{n}}",
+    "edit": "संपादित करें",
+    "editTitle": "लॉट संपादित करें",
+    "editVendorLotNo": "विक्रेता लॉट नंबर",
+    "editStyle": "स्टाइल",
+    "editSaved": "लॉट अपडेट हुआ",
+    "editWindow": "बनाने के 24 घंटे तक संपादन योग्य",
+    "editExpired": "संपादन समय समाप्त",
+    "receiveFab": "नया लॉट लें",
+    "yourLots": "आपके लॉट",
+    "workedOn": "आपने जो किया",
+    "workedOnEmpty": "अभी कोई इतिहास नहीं।"
   },
   "shell": {
     "adminHome": "एडमिन होम — जल्द आ रहा है",
@@ -157,7 +180,11 @@
       "forwardAll": "सभी {{n}} भेजें",
       "bySize": "साइज़-वार",
       "left": "बचे",
-      "loadError": "लॉट लोड नहीं हो सका"
+      "loadError": "लॉट लोड नहीं हो सका",
+      "pendingAcceptance": "स्वीकार करना बाकी",
+      "awaitingAcceptance": "स्वीकृति की प्रतीक्षा",
+      "accept": "स्वीकार करें",
+      "acceptedToast": "{{n}} यूनिट स्वीकार किए"
     },
     "style": "स्टाइल"
   },

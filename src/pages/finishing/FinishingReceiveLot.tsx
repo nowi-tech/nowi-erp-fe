@@ -16,11 +16,13 @@ import { useToast } from '@/components/ui/toast';
 import { cn } from '@/lib/utils';
 import { getAvailability, getLot } from '@/api/lots';
 import {
+  acceptReceipt,
   createReceipts,
   listReceipts,
   FeatureUnavailableError,
   type ReceiptRow,
 } from '@/api/receipts';
+import { useStageId } from '@/lib/useStageId';
 import { openRework } from '@/api/rework';
 import { requestUploadUrl } from '@/api/storage';
 import { createDispatch } from '@/api/dispatches';
@@ -81,6 +83,12 @@ export default function FinishingReceiveLot() {
   const [available, setAvailable] = useState<SizeMatrix>({});
   const [rows, setRows] = useState<Record<string, RowState>>({});
   const [recent, setRecent] = useState<ReceiptRow[]>([]);
+  // Stitching forwards waiting for this floor's Accept. Until accepted,
+  // BE's quantity formula excludes them from `available[size]` — so
+  // they live in their own "Awaiting acceptance" section above Forward.
+  const [pendingForwards, setPendingForwards] = useState<ReceiptRow[]>([]);
+  const [acceptingId, setAcceptingId] = useState<number | null>(null);
+  const stitchingStageId = useStageId('stitching');
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [confirmOpen, setConfirmOpen] = useState(false);
@@ -131,9 +139,57 @@ export default function FinishingReceiveLot() {
     void refresh();
   }, [refresh]);
 
+  const refreshPending = useCallback(async () => {
+    if (stitchingStageId == null || !Number.isFinite(lotId)) {
+      setPendingForwards([]);
+      return;
+    }
+    try {
+      const rows = await listReceipts({
+        lotId,
+        stageId: stitchingStageId,
+        take: 50,
+      });
+      setPendingForwards(
+        rows.filter((r) => r.kind === 'forward' && r.acceptedAt == null),
+      );
+    } catch {
+      setPendingForwards([]);
+    }
+  }, [lotId, stitchingStageId]);
+
+  useEffect(() => {
+    void refreshPending();
+  }, [refreshPending]);
+
   useEffect(() => {
     listWarehouses().then(setWarehouses).catch(() => undefined);
   }, []);
+
+  async function handleAccept(row: ReceiptRow) {
+    setAcceptingId(row.id);
+    try {
+      await acceptReceipt(row.id);
+      sonnerToast.success(
+        t('stitching.lot.acceptedToast', {
+          defaultValue: 'Accepted {{n}} units',
+          n: row.qty,
+        }),
+      );
+      // After accept, the BE adds these units to `available[size]` —
+      // refresh both lists so the size row gets the new headroom and
+      // the accepted batch disappears from "Awaiting acceptance".
+      await Promise.all([refresh(), refreshPending()]);
+    } catch (err) {
+      if (err instanceof FeatureUnavailableError) {
+        sonnerToast.info(t('common.featureUnavailable'));
+      } else {
+        sonnerToast.error(t('common.error'));
+      }
+    } finally {
+      setAcceptingId(null);
+    }
+  }
 
   const sizes = useMemo(() => Object.keys(available ?? {}), [available]);
 
@@ -451,6 +507,63 @@ export default function FinishingReceiveLot() {
               </div>
             </details>
             <div className="mt-3.5 space-y-3.5">
+
+            {pendingForwards.length > 0 && (
+              <div className="rounded-[14px] bg-[var(--color-surface)] shadow-[0_1px_2px_rgba(15,26,54,0.04)] p-[16px_18px]">
+                <div className="flex items-baseline justify-between">
+                  <div className="font-semibold text-[18px] text-[var(--color-foreground)]">
+                    {t('stitching.lot.awaitingAcceptance', {
+                      defaultValue: 'Awaiting acceptance',
+                    })}
+                  </div>
+                  <span className="font-mono text-[12px] tabular-nums text-[var(--color-muted-foreground)]">
+                    {pendingForwards.reduce((a, r) => a + r.qty, 0)}u
+                  </span>
+                </div>
+                <ul className="mt-2 divide-y divide-[var(--color-border)]">
+                  {pendingForwards.map((row) => (
+                    <li
+                      key={row.id}
+                      className="flex items-center gap-3 py-2.5"
+                    >
+                      <div className="min-w-[34px] h-7 px-1.5 rounded-[var(--radius-sm)] flex items-center justify-center font-semibold text-xs bg-[var(--status-rework-bg)] text-[var(--status-rework-ink)]">
+                        {row.sizeLabel}
+                      </div>
+                      <div className="flex-1 min-w-0 text-[13px]">
+                        <span className="font-mono font-semibold tabular-nums text-[var(--color-foreground)]">
+                          ×{row.qty}
+                        </span>
+                        {row.receivedByName && (
+                          <span className="ml-2 text-[var(--color-muted-foreground)]">
+                            {t('common.by', { defaultValue: 'by' })}{' '}
+                            {row.receivedByName}
+                          </span>
+                        )}
+                        <span className="ml-2 font-mono text-xs text-[var(--color-muted-foreground)]">
+                          {new Date(row.receivedAt).toLocaleString(undefined, {
+                            month: 'short',
+                            day: 'numeric',
+                            hour: '2-digit',
+                            minute: '2-digit',
+                          })}
+                        </span>
+                      </div>
+                      <Button
+                        size="sm"
+                        onClick={() => void handleAccept(row)}
+                        disabled={acceptingId === row.id}
+                      >
+                        {acceptingId === row.id
+                          ? t('common.saving')
+                          : t('stitching.lot.accept', {
+                              defaultValue: 'Accept',
+                            })}
+                      </Button>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
 
             <div className="rounded-[14px] bg-[var(--color-surface)] shadow-[0_1px_2px_rgba(15,26,54,0.04)] p-[16px_18px_6px]">
               <div className="flex items-baseline justify-between">

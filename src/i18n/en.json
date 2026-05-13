@@ -68,10 +68,33 @@
   },
   "roles": {
     "admin": "Admin",
+    "floor_manager": "Floor manager",
     "stitching_master": "Stitching",
     "finishing_master": "Finishing",
     "data_manager": "Data",
     "viewer": "Viewer"
+  },
+  "floor": {
+    "title": "Floor",
+    "pending": "Pending assignment",
+    "pendingEmpty": "No lots waiting for assignment.",
+    "assignedSection": "Assigned",
+    "assignedEmpty": "No lots in progress.",
+    "assignTo": "Assign to…",
+    "assignedTo": "Assigned to {{name}}",
+    "assignSuccessToast": "Assigned to {{name}}",
+    "inQueue": "{{n}} in queue",
+    "edit": "Edit",
+    "editTitle": "Edit lot",
+    "editVendorLotNo": "Vendor lot no.",
+    "editStyle": "Style",
+    "editSaved": "Lot updated",
+    "editWindow": "Editable within 24h of creation",
+    "editExpired": "Edit window has passed",
+    "receiveFab": "Receive new lot",
+    "yourLots": "Your lots",
+    "workedOn": "Worked on",
+    "workedOnEmpty": "No history yet."
   },
   "shell": {
     "adminHome": "Admin home — coming soon",
@@ -157,7 +180,11 @@
       "forwardAll": "Forward all {{n}}",
       "bySize": "by size",
       "left": "left",
-      "loadError": "Could not load lot"
+      "loadError": "Could not load lot",
+      "pendingAcceptance": "Pending acceptance",
+      "awaitingAcceptance": "Awaiting acceptance",
+      "accept": "Accept",
+      "acceptedToast": "Accepted {{n}} units"
     },
     "style": "Style"
   },

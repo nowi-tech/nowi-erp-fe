@@ -5,6 +5,8 @@ import { ChevronRight } from 'lucide-react';
 import FloorShell from '@/components/layout/FloorShell';
 import { Badge } from '@/components/ui/badge';
 import { listLots } from '@/api/lots';
+import { listReceipts, type ReceiptRow } from '@/api/receipts';
+import { useStageId } from '@/lib/useStageId';
 import type { Lot, OrderStatus } from '@/api/types';
 
 const FINISHING_QUEUE_STATUSES: OrderStatus[] = [
@@ -37,6 +39,13 @@ export default function FinishingHome() {
   const navigate = useNavigate();
   const [lots, setLots] = useState<Lot[]>([]);
   const [loading, setLoading] = useState(true);
+  const stitchingStageId = useStageId('stitching');
+  // Per-lot list of stitching forwards that haven't been accepted at
+  // finishing yet — surfaces as an amber pill on the queue card so the
+  // master can see "I have N units in transit waiting on my Accept tap".
+  const [pendingByLot, setPendingByLot] = useState<Map<number, ReceiptRow[]>>(
+    () => new Map(),
+  );
 
   const refresh = useCallback(async () => {
     setLoading(true);
@@ -53,6 +62,45 @@ export default function FinishingHome() {
   useEffect(() => {
     void refresh();
   }, [refresh]);
+
+  // Once lots + stitching stage id are both available, batch-fetch
+  // pending stitching forwards for each lot. One listReceipts per lot
+  // (parallelized) — cheaper than wiring a new BE endpoint, and the
+  // queue here is typically <20 lots.
+  useEffect(() => {
+    if (stitchingStageId == null || lots.length === 0) {
+      setPendingByLot(new Map());
+      return;
+    }
+    let cancelled = false;
+    Promise.all(
+      lots.map(async (lot) => {
+        try {
+          const rows = await listReceipts({
+            lotId: lot.id,
+            stageId: stitchingStageId,
+            take: 50,
+          });
+          const pending = rows.filter(
+            (r) => r.kind === 'forward' && r.acceptedAt == null,
+          );
+          return [lot.id, pending] as const;
+        } catch {
+          return [lot.id, [] as ReceiptRow[]] as const;
+        }
+      }),
+    ).then((entries) => {
+      if (cancelled) return;
+      const next = new Map<number, ReceiptRow[]>();
+      for (const [id, pending] of entries) {
+        if (pending.length > 0) next.set(id, pending);
+      }
+      setPendingByLot(next);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [lots, stitchingStageId]);
 
   return (
     <FloorShell title={t('finishing.title')}>
@@ -104,6 +152,8 @@ export default function FinishingHome() {
                     : lot.order?.status === 'stuck'
                       ? 'stuck'
                       : null;
+                const pending = pendingByLot.get(lot.id) ?? [];
+                const pendingUnits = pending.reduce((a, r) => a + r.qty, 0);
                 return (
                   <li key={lot.id}>
                     <button
@@ -135,6 +185,15 @@ export default function FinishingHome() {
                           {anomaly && (
                             <Badge variant={anomaly === 'stuck' ? 'stuck' : 'rework'} dot>
                               {anomaly === 'stuck' ? 'Stuck' : 'Rework'}
+                            </Badge>
+                          )}
+                          {pendingUnits > 0 && (
+                            <Badge variant="rework" dot>
+                              {t('stitching.lot.pendingAcceptance', {
+                                defaultValue: 'Pending acceptance',
+                              })}
+                              {' · '}
+                              <span className="tabular-nums">{pendingUnits}</span>
                             </Badge>
                           )}
                         </div>
