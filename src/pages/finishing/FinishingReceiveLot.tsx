@@ -304,103 +304,109 @@ export default function FinishingReceiveLot() {
 
   return (
     <FloorShell title={t('finishing.lot.title')}>
-      <div className="space-y-4">
-        <Button variant="outline" size="sm" onClick={() => navigate('/finishing')}>
-          ← {t('common.back')}
-        </Button>
-
+      <div>
+        <button
+          type="button"
+          onClick={() => navigate('/finishing')}
+          className="inline-flex items-center gap-1 pr-3.5 pl-2 py-2 rounded-full bg-[var(--color-surface)] border border-[var(--color-border)] text-[14px] font-medium text-[var(--color-foreground)] shadow-[0_1px_1px_rgba(14,23,48,0.03)] hover:bg-[var(--color-muted)] transition-colors"
+        >
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden>
+            <path d="M15 6l-6 6 6 6" stroke="currentColor" strokeWidth="2"
+              strokeLinecap="round" strokeLinejoin="round"/>
+          </svg>
+          {t('stitching.queueShort', { defaultValue: 'Queue' })}
+        </button>
+      </div>
+      <div className="mt-2">
         {loading ? (
           <div className="h-32 animate-pulse rounded bg-[var(--color-muted)]" />
         ) : lot ? (
           <>
-            <Card stage="finish">
-              <CardHeader>
-                <CardTitle className="font-serif text-2xl break-all">
-                  <span className="text-[var(--color-muted-foreground)] text-xs uppercase tracking-wider mr-2 font-sans">
-                    {t('stitching.lotNo')}
+            <div className="rounded-[14px] bg-[var(--color-surface)] border-l-[3px] border-l-[var(--stage-finish-acc)] shadow-[0_1px_2px_rgba(15,26,54,0.04)] p-[16px_18px_14px]">
+              <div className="font-semibold text-[26px] leading-[1.05] tracking-[-0.01em] text-[var(--color-foreground)] break-all">
+                {lot.lotNo}
+              </div>
+              <div className="mt-1.5 flex flex-wrap items-center gap-x-2 gap-y-1 text-[13px] text-[var(--color-foreground-2)]">
+                {lot.style && (
+                  <span className="font-medium text-[var(--color-foreground)]">
+                    {[
+                      t(`stitching.gender.${lot.style.gender}`, {
+                        defaultValue:
+                          lot.style.gender === 'W'
+                            ? "Women's"
+                            : lot.style.gender === 'M'
+                              ? "Men's"
+                              : 'Unisex',
+                      }),
+                      lot.style.category?.name,
+                    ]
+                      .filter(Boolean)
+                      .join(' ')}
                   </span>
-                  {lot.lotNo}
-                </CardTitle>
-                <div className="mt-1.5 flex flex-wrap items-center gap-x-2 gap-y-1 text-sm text-[var(--color-foreground)]">
-                  {lot.style && (
-                    <span className="font-medium">
-                      {[
-                        t(`stitching.gender.${lot.style.gender}`, {
-                          defaultValue:
-                            lot.style.gender === 'W'
-                              ? "Women's"
-                              : lot.style.gender === 'M'
-                                ? "Men's"
-                                : 'Unisex',
-                        }),
-                        lot.style.category?.name,
-                      ]
-                        .filter(Boolean)
-                        .join(' ')}
-                    </span>
-                  )}
-                  <span className="text-[var(--color-muted-foreground)]">·</span>
-                  <span>{lot.vendor?.name ?? lot.vendorId}</span>
-                  <span className="text-[var(--color-muted-foreground)]">·</span>
-                  <span className="font-mono tabular-nums">
-                    {Object.values(lot.qtyIn ?? {}).reduce(
-                      (a, b) => a + (Number(b) || 0),
-                      0,
-                    )}
-                    u
-                  </span>
-                </div>
-                {(lot.order?.status === 'in_rework' || lot.order?.status === 'stuck') && (
-                  <div className="mt-2">
-                    <Badge variant={orderStatusVariant(lot.order.status)} dot>
-                      {lot.order.status}
-                    </Badge>
-                  </div>
                 )}
-              </CardHeader>
-              <CardContent className="pt-0">
-                <details className="group">
-                  <summary className="cursor-pointer list-none flex items-center justify-between py-1 text-xs uppercase tracking-wider font-semibold text-[var(--color-muted-foreground)] hover:text-[var(--color-foreground)] select-none">
-                    {t('common.details', { defaultValue: 'Details' })}
-                    <span className="group-open:rotate-180 inline-block transition-transform text-[10px]">▼</span>
-                  </summary>
-                  <dl className="mt-2 divide-y divide-[var(--color-border)] text-sm">
-                    {lot.style && (
-                      <div className="flex items-center justify-between py-2">
-                        <dt className="text-[var(--color-muted-foreground)]">
-                          {t('stitching.style', { defaultValue: 'Style' })}
-                        </dt>
-                        <dd className="font-mono text-[var(--stage-finish-acc)]">
-                          {lot.style.styleId}
-                        </dd>
-                      </div>
-                    )}
-                    {lot.order && (
-                      <div className="flex items-center justify-between py-2">
-                        <dt className="text-[var(--color-muted-foreground)]">
-                          {t('stitching.lot.orderRef', { defaultValue: 'Order' })}
-                        </dt>
-                        <dd className="font-mono">{lot.order.orderNo}</dd>
-                      </div>
-                    )}
-                    <div className="flex items-center justify-between py-2">
+                <span className="text-[var(--color-muted-foreground-2)]">·</span>
+                <span>{lot.vendor?.name ?? lot.vendorId}</span>
+                <span className="text-[var(--color-muted-foreground-2)]">·</span>
+                <span className="font-mono tabular-nums">
+                  {Object.values(lot.qtyIn ?? {}).reduce(
+                    (a, b) => a + (Number(b) || 0),
+                    0,
+                  )}
+                  u
+                </span>
+              </div>
+              {(lot.order?.status === 'in_rework' || lot.order?.status === 'stuck') && (
+                <div className="mt-2">
+                  <Badge variant={orderStatusVariant(lot.order.status)} dot>
+                    {lot.order.status}
+                  </Badge>
+                </div>
+              )}
+            </div>
+
+            <details className="group mt-3.5 px-1">
+              <summary className="cursor-pointer list-none flex items-center justify-between py-1 text-xs uppercase tracking-[0.08em] font-semibold text-[var(--color-muted-foreground)] hover:text-[var(--color-foreground)] select-none">
+                {t('common.details', { defaultValue: 'Details' })}
+                <span className="group-open:rotate-180 inline-block transition-transform text-[10px]">▼</span>
+              </summary>
+              <div className="mt-2 rounded-[14px] bg-[var(--color-surface)] shadow-[0_1px_2px_rgba(15,26,54,0.04)] px-4 py-1">
+                <dl className="divide-y divide-[var(--color-border)] text-[13px]">
+                  {lot.style && (
+                    <div className="flex items-center justify-between py-2.5">
                       <dt className="text-[var(--color-muted-foreground)]">
-                        {t('stitching.vendor')}
+                        {t('stitching.style', { defaultValue: 'Style' })}
                       </dt>
-                      <dd>{lot.vendor?.name ?? lot.vendorId}</dd>
+                      <dd className="font-mono text-[var(--stage-finish-acc)]">
+                        {lot.style.styleId}
+                      </dd>
                     </div>
-                    {lot.vendorLotNo && (
-                      <div className="flex items-center justify-between py-2">
-                        <dt className="text-[var(--color-muted-foreground)]">
-                          {t('stitching.vendorLot')}
-                        </dt>
-                        <dd className="font-mono">{lot.vendorLotNo}</dd>
-                      </div>
-                    )}
-                  </dl>
-                </details>
-              </CardContent>
-            </Card>
+                  )}
+                  {lot.order && (
+                    <div className="flex items-center justify-between py-2.5">
+                      <dt className="text-[var(--color-muted-foreground)]">
+                        {t('stitching.lot.orderRef', { defaultValue: 'Order' })}
+                      </dt>
+                      <dd className="font-mono">{lot.order.orderNo}</dd>
+                    </div>
+                  )}
+                  <div className="flex items-center justify-between py-2.5">
+                    <dt className="text-[var(--color-muted-foreground)]">
+                      {t('stitching.vendor')}
+                    </dt>
+                    <dd>{lot.vendor?.name ?? lot.vendorId}</dd>
+                  </div>
+                  {lot.vendorLotNo && (
+                    <div className="flex items-center justify-between py-2.5">
+                      <dt className="text-[var(--color-muted-foreground)]">
+                        {t('stitching.vendorLot')}
+                      </dt>
+                      <dd className="font-mono">{lot.vendorLotNo}</dd>
+                    </div>
+                  )}
+                </dl>
+              </div>
+            </details>
+            <div className="mt-3.5 space-y-4">
 
             <Card>
               <CardHeader>
@@ -598,6 +604,7 @@ export default function FinishingReceiveLot() {
                 </Button>
               </CardContent>
             </Card>
+            </div>
           </>
         ) : null}
       </div>

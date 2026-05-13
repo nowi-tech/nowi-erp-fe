@@ -81,7 +81,8 @@
   },
   "stitching": {
     "title": "Stitching",
-    "queue": "Today's queue",
+    "queue": "In your queue",
+    "queueShort": "Queue",
     "empty": "No lots awaiting stitching.",
     "openLot": "Open",
     "lotNo": "Lot",
@@ -159,7 +160,7 @@
   },
   "finishing": {
     "title": "Finishing",
-    "queue": "Today's queue",
+    "queue": "In your queue",
     "empty": "No lots awaiting finishing.",
     "openLot": "Open",
     "markRework": "Mark rework",

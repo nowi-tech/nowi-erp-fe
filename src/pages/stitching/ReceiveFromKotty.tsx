@@ -277,19 +277,26 @@ export default function ReceiveFromKottyPage() {
   return (
     <FloorShell>
       {/* Page heading + back */}
-      <div className="mb-4 flex items-center justify-between gap-2">
-        <Button variant="ghost" size="sm" onClick={() => navigate('/stitching')}>
-          <ArrowLeft size={16} />
+      <div className="mb-3 flex items-center justify-between gap-2">
+        <button
+          type="button"
+          onClick={() => navigate('/stitching')}
+          className="inline-flex items-center gap-1 pr-3.5 pl-2 py-2 rounded-full bg-[var(--color-surface)] border border-[var(--color-border)] text-[14px] font-medium text-[var(--color-foreground)] shadow-[0_1px_1px_rgba(14,23,48,0.03)] hover:bg-[var(--color-muted)] transition-colors"
+        >
+          <ArrowLeft size={18} />
           {t('common.back')}
-        </Button>
-        <span className="text-sm text-[var(--color-muted-foreground)]">
-          {t('common.total')}: <span className="tabular-nums font-medium text-[var(--color-foreground)]">{grandTotal}</span>
+        </button>
+        <span className="text-[13px] text-[var(--color-muted-foreground)]">
+          {t('common.total')}:{' '}
+          <span className="tabular-nums font-semibold font-mono text-[var(--color-foreground)]">
+            {grandTotal}
+          </span>
         </span>
       </div>
-      <h1 className="font-serif text-2xl text-[var(--color-foreground)] mb-1">
+      <h1 className="font-semibold text-[26px] leading-[1.1] tracking-[-0.01em] text-[var(--color-foreground)] mb-1">
         {t('stitching.receiveFromKotty.title')}
       </h1>
-      <p className="mb-5 text-sm text-[var(--color-muted-foreground)]">
+      <p className="mb-5 text-[13px] text-[var(--color-muted-foreground)]">
         {t('stitching.receiveFromKotty.subtitle', {
           defaultValue: 'Capture the challan, then the per-size quantities for each lot.',
         })}
@@ -498,15 +505,16 @@ export default function ReceiveFromKottyPage() {
                 </div>
               </div>
             ))}
-            <Button
+            {/* Dashed accent-on-hover plus button — matches design's
+                "Add another style" affordance. */}
+            <button
               type="button"
-              variant="outline"
               onClick={addRow}
-              className="w-full"
+              className="group w-full mt-1 px-3 py-3 rounded-[10px] border border-dashed border-[var(--color-border-strong)] text-[14px] font-medium text-[var(--color-foreground)] bg-transparent hover:bg-[var(--color-primary-soft)] hover:border-[var(--color-primary)] hover:text-[var(--color-primary)] transition-colors flex items-center justify-center gap-1.5"
             >
               <Plus size={16} />
               {t('stitching.receiveFromKotty.addLot')}
-            </Button>
+            </button>
           </CardContent>
         </Card>
       </div>
@@ -598,17 +606,17 @@ function SizeMatrixEditor({
     <div className="space-y-2">
       <div className="flex items-center justify-between gap-2">
         <Label className="mb-0">{t('stitching.receiveFromKotty.sizeMatrix')}</Label>
-        <div className="inline-flex rounded-[var(--radius-md)] border border-[var(--color-border)] p-0.5 text-xs">
+        <div className="inline-flex p-[3px] rounded-full bg-[var(--color-muted)] border border-[var(--color-border)]">
           {(['alpha', 'numeric'] as const).map((p) => (
             <button
               key={p}
               type="button"
               onClick={() => onPreset(p)}
               className={cn(
-                'px-2.5 py-1 rounded-[var(--radius-sm)] transition-colors',
+                'px-3 py-1 text-[12px] font-semibold rounded-full transition-colors',
                 row.preset === p
-                  ? 'bg-[var(--color-primary)] text-[var(--color-primary-foreground)]'
-                  : 'text-[var(--color-muted-foreground)] hover:bg-[var(--color-muted)]',
+                  ? 'bg-[var(--color-surface)] text-[var(--color-primary)] shadow-[0_1px_2px_rgba(14,23,48,0.08),0_0_0_1px_var(--color-border)]'
+                  : 'text-[var(--color-muted-foreground)]',
               )}
             >
               {t(`stitching.receiveFromKotty.presets.${p}`)}

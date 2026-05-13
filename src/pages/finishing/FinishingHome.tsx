@@ -3,7 +3,6 @@ import { useTranslation } from 'react-i18next';
 import { useNavigate } from 'react-router-dom';
 import { ChevronRight } from 'lucide-react';
 import FloorShell from '@/components/layout/FloorShell';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { listLots } from '@/api/lots';
 import type { Lot, OrderStatus } from '@/api/types';
@@ -58,18 +57,23 @@ export default function FinishingHome() {
   return (
     <FloorShell title={t('finishing.title')}>
       <div className="mb-4">
-        <h1 className="font-serif text-2xl text-[var(--color-foreground)]">
+        <h1 className="font-semibold text-[30px] leading-none tracking-[-0.02em] text-[var(--color-foreground)]">
           {t('finishing.title')}
         </h1>
-        <p className="mt-1 text-xs uppercase tracking-wide text-[var(--color-muted-foreground)]">
+        <p className="mt-1.5 font-mono text-[11px] uppercase tracking-[0.08em] text-[var(--color-muted-foreground)]">
           {todayLabel(i18n.language)}
         </p>
       </div>
-      <Card>
-        <CardHeader>
-          <CardTitle>{t('finishing.queue')}</CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-3">
+      <div className="flex items-baseline justify-between px-1 pb-3">
+        <div className="text-[13px] font-semibold text-[var(--color-foreground)]">
+          {t('finishing.queue', { defaultValue: 'In your queue' })}
+        </div>
+        <div className="font-mono text-[12px] text-[var(--color-muted-foreground)] tabular-nums">
+          {lots.length} lots · {lots.reduce((a, l) => a + totalUnits(l.qtyIn), 0)}u
+        </div>
+      </div>
+      <div>
+        <div className="space-y-3">
           {loading ? (
             <div className="h-12 animate-pulse rounded bg-[var(--color-muted)]" />
           ) : lots.length === 0 ? (
@@ -105,22 +109,22 @@ export default function FinishingHome() {
                     <button
                       type="button"
                       onClick={() => navigate(`/finishing/lot/${lot.id}`)}
-                      className="w-full text-left flex items-center gap-3 rounded-[var(--radius-md)] bg-[var(--color-surface)] border border-[var(--color-border)] border-l-[3px] border-l-[var(--stage-finish-acc)] p-4 hover:shadow-sm hover:-translate-y-px transition-all"
+                      className="w-full text-left flex items-center gap-3 rounded-[14px] bg-[var(--color-surface)] border-l-[3px] border-l-[var(--stage-finish-acc)] shadow-[0_1px_2px_rgba(14,23,48,0.04)] hover:shadow-[0_1px_2px_rgba(14,23,48,0.06),0_4px_12px_rgba(14,23,48,0.05)] hover:-translate-y-px transition-all p-4"
                     >
-                      <div className="flex-1 min-w-0">
-                        <div className="font-semibold text-xl leading-tight tracking-tight text-[var(--color-foreground)] break-all">
+                      <div className="flex-1 min-w-0 space-y-1">
+                        <div className="font-semibold text-[22px] leading-[1.1] tracking-[-0.01em] text-[var(--color-foreground)] break-all">
                           {lot.lotNo}
                         </div>
-                        <div className="mt-1 flex items-center gap-2 text-sm text-[var(--color-foreground)]">
+                        <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-[13px] text-[var(--color-foreground-2)]">
                           {productLabel && (
-                            <span className="font-medium">{productLabel}</span>
+                            <span className="font-medium text-[var(--color-foreground)]">{productLabel}</span>
                           )}
                           {productLabel && (
-                            <span className="text-[var(--color-muted-foreground)]">·</span>
+                            <span className="text-[var(--color-muted-foreground-2)]">·</span>
                           )}
                           <span className="font-mono tabular-nums">{units}u</span>
                         </div>
-                        <div className="mt-1 flex items-center gap-2 text-xs text-[var(--color-muted-foreground)] font-mono">
+                        <div className="flex items-center gap-2 text-[13px] text-[var(--color-muted-foreground)] font-mono">
                           <span className="tabular-nums">
                             {t('stitching.lot.forwardedOf', {
                               defaultValue: '{{done}} of {{total}} forwarded',
@@ -135,7 +139,7 @@ export default function FinishingHome() {
                           )}
                         </div>
                       </div>
-                      <div className="shrink-0 w-9 h-9 rounded-full bg-[var(--color-muted)] flex items-center justify-center text-[var(--color-foreground)]">
+                      <div className="shrink-0 w-9 h-9 rounded-full bg-[var(--color-background)] flex items-center justify-center text-[var(--color-foreground)]">
                         <ChevronRight size={18} />
                       </div>
                     </button>
@@ -144,8 +148,8 @@ export default function FinishingHome() {
               })}
             </ul>
           )}
-        </CardContent>
-      </Card>
+        </div>
+      </div>
     </FloorShell>
   );
 }

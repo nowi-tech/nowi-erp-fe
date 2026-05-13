@@ -199,7 +199,7 @@ export default function StitchingReceiveLot() {
             <path d="M15 6l-6 6 6 6" stroke="currentColor" strokeWidth="2"
               strokeLinecap="round" strokeLinejoin="round"/>
           </svg>
-          {t('stitching.queue', { defaultValue: 'Queue' })}
+          {t('stitching.queueShort', { defaultValue: 'Queue' })}
         </button>
       </div>
       <div className="space-y-0 mt-2">{/* sections handle their own spacing */}
