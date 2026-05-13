@@ -127,7 +127,7 @@ export default function AdminShell() {
   }, [location.pathname]);
 
   return (
-    <div className="density-compact min-h-screen flex bg-[var(--color-background)] text-[var(--color-foreground)]">
+    <div className="min-h-screen flex bg-[var(--color-background)] text-[var(--color-foreground)]">
       {/* Desktop sidebar */}
       <aside className="hidden lg:flex w-60 shrink-0 border-r border-[var(--color-border)] flex-col bg-[var(--color-background-2)]">
         <Link

@@ -87,7 +87,8 @@ export default function StitchingHome() {
           ) : lots.length === 0 ? (
             <p className="text-[var(--color-muted-foreground)]">{t('stitching.empty')}</p>
           ) : (
-            <ul className="space-y-2">
+            // 10px gap between cards — design's flex column gap
+            <ul className="space-y-2.5">
               {lots.map((lot) => {
                 const units = totalUnits(lot.qtyIn);
                 const forwarded = lot.stageForwarded?.stitching ?? 0;

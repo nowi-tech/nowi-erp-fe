@@ -8,9 +8,9 @@
    marigold); the floor app uses --color-primary everywhere. */
 :root {
   /* ── Surfaces (design `C.bg` / `C.bgRaised` / `C.bgChip`) ── */
-  --color-background: #ffffff;     /* page bg — white per user request */
-  --color-background-2: #f4f3ee;   /* warm panel (sidebar / android frame) */
-  --color-surface: #ffffff;        /* cards / sheets */
+  --color-background: #f4f3ee;     /* warm canvas (`C.bg`) — cards float on this */
+  --color-background-2: #e9e7e0;   /* slightly darker (android frame in design) */
+  --color-surface: #ffffff;        /* cards / sheets (`C.bgRaised`) */
   --color-surface-2: #faf9f5;      /* table head, subtle row alt */
 
   /* ── Ink (design `C.ink` / `C.ink2` / `C.muted`) ── */
@@ -93,13 +93,12 @@
   --font-hi:    'Noto Sans Devanagari', 'Poppins', system-ui, sans-serif;
   --font-mono:  'JetBrains Mono', ui-monospace, SFMono-Regular, monospace;
 
-  /* ── Elevation ── */
-  --shadow-card: 0 1px 0 rgba(20, 33, 58, 0.04);
-  --shadow-pop:  0 12px 32px -16px rgba(20, 33, 58, 0.18), 0 1px 0 rgba(20, 33, 58, 0.04);
+  /* ── Elevation (rgba uses design ink #0e1730 = 14,23,48) ── */
+  --shadow-card: 0 1px 2px rgba(14, 23, 48, 0.04);
+  --shadow-pop:  0 12px 32px -16px rgba(14, 23, 48, 0.18), 0 1px 0 rgba(14, 23, 48, 0.04);
 
   /* ── Radii ── */
-  --radius-sm: 0.25rem;
-  --radius-md: 0.5rem;
-  --radius-lg: 0.875rem;
-
+  --radius-sm: 0.25rem;       /* 4px */
+  --radius-md: 0.625rem;      /* 10px — matches design inputs/buttons */
+  --radius-lg: 0.875rem;      /* 14px — matches design cards */
 }

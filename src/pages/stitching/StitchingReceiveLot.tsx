@@ -344,7 +344,7 @@ export default function StitchingReceiveLot() {
                 onClick={() => setConfirmOpen(true)}
                 disabled={!canSubmit}
                 className={cn(
-                  'mt-3.5 w-full py-[18px] rounded-[14px] text-center font-semibold text-[16px] tracking-[0.01em] text-white transition-transform active:translate-y-px',
+                  'mt-3.5 w-full p-[18px] rounded-[14px] text-center font-semibold text-[16px] tracking-[0.01em] text-white transition-transform active:translate-y-px',
                   canSubmit
                     ? 'bg-gradient-to-b from-[var(--color-primary)] to-[var(--color-primary-hover)] shadow-[inset_0_1px_0_rgba(255,255,255,0.18),0_0_0_1px_var(--color-primary-hover),0_10px_24px_rgba(34,64,196,0.32)]'
                     : 'bg-[var(--color-disabled-bg)] cursor-default',

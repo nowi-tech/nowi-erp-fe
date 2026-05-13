@@ -233,7 +233,7 @@ async function handleSendOtp(e: FormEvent) {
   }
 
   return (
-    <div className="density-comfortable min-h-screen grid grid-cols-1 lg:grid-cols-[1.1fr_1fr] bg-[var(--color-background)]">
+    <div className="min-h-screen grid grid-cols-1 lg:grid-cols-[1.1fr_1fr] bg-[var(--color-background)]">
       {/* Brand panel — full bleed on desktop, compact logo strip on mobile */}
       <div className="relative overflow-hidden border-b border-white/10 bg-[var(--color-primary)] text-[var(--color-primary-foreground)] lg:border-b-0">
         {/* Decorative blurs only on desktop — keep mobile clean */}

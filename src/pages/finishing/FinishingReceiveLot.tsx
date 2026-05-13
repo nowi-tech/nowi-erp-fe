@@ -403,7 +403,7 @@ export default function FinishingReceiveLot() {
                 </dl>
               </div>
             </details>
-            <div className="mt-3.5 space-y-4">
+            <div className="mt-3.5 space-y-3.5">
 
             <Card>
               <CardHeader>
