@@ -72,12 +72,12 @@ export interface Order {
 export type SizeMatrix = Record<string, number>;
 
 export interface Lot {
-  id: string;
+  id: number;
   lotNo: string;
   vendorId: string;
   vendorLotNo?: string | null;
-  inboundChallanId?: string | null;
-  orderId: string;
+  inboundChallanId?: number | null;
+  orderId: number;
   /** Optional legacy. Real per-size SKU lives on the Style. */
   sku?: string;
   baseCode?: string | null;
@@ -174,7 +174,8 @@ export interface ReceiptLine {
 }
 
 export interface CreateReceiptsPayload {
-  lotId: string;
+  /** BE DTO uses @IsInt() — must be a number, not the URL param string. */
+  lotId: number;
   stageId: number;
   receipts: ReceiptLine[];
 }
@@ -187,7 +188,7 @@ export interface AvailabilityResponse {
 // ─── Rework ───────────────────────────────────────────────────────────────
 
 export interface OpenReworkPayload {
-  lotId: string;
+  lotId: number;
   sku: string;
   sizeLabel: string;
   qty: number;
@@ -210,7 +211,7 @@ export interface ReworkIssue {
 // ─── Scrap ────────────────────────────────────────────────────────────────
 
 export interface CreateScrapPayload {
-  lotId: string;
+  lotId: number;
   stageId?: number | null;
   sku: string;
   sizeLabel: string;
@@ -471,15 +472,15 @@ export interface DispatchDetail extends Dispatch {
 }
 
 export interface CreateDispatchItemInput {
-  lotId: string;
+  lotId: number;
   sku: string;
   sizeLabel: string;
   qty: number;
 }
 
 export interface CreateDispatchPayload {
-  orderId: string;
-  destWarehouseId: string;
+  orderId: number;
+  destWarehouseId: number;
   items: CreateDispatchItemInput[];
   syncMode?: DispatchSyncMode;
 }

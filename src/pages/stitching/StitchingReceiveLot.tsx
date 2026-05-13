@@ -30,7 +30,11 @@ function totalOf(m: SizeMatrix): number {
 
 export default function StitchingReceiveLot() {
   const { t } = useTranslation();
-  const { lotId = '' } = useParams<{ lotId: string }>();
+  // useParams is intrinsically `string` (URL paths are strings); parse to
+  // number once here so every downstream call site (getLot, createReceipts,
+  // listReceipts, …) operates on the real domain type.
+  const { lotId: lotIdParam = '' } = useParams<{ lotId: string }>();
+  const lotId = Number(lotIdParam);
   const navigate = useNavigate();
   const toast = useToast();
 

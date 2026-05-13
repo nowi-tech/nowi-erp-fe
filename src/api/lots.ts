@@ -12,13 +12,13 @@ export async function listLots(params: ListLotsParams = {}): Promise<Lot[]> {
   return Array.isArray(res.data) ? res.data : res.data.data;
 }
 
-export async function getLot(id: string): Promise<Lot> {
+export async function getLot(id: number): Promise<Lot> {
   const res = await apiClient.get<Lot>(`/api/lots/${id}`);
   return res.data;
 }
 
 export async function getAvailability(
-  lotId: string,
+  lotId: number,
   stageId: number,
 ): Promise<AvailabilityResponse> {
   const res = await apiClient.get<AvailabilityResponse>(

@@ -28,7 +28,7 @@ export async function createReceipts(payload: CreateReceiptsPayload): Promise<vo
 }
 
 export async function listReceipts(params: {
-  lotId: number | string;
+  lotId: number;
   stageId?: number;
   take?: number;
 }): Promise<ReceiptRow[]> {

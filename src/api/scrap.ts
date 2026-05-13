@@ -18,7 +18,7 @@ export interface ScrapRow extends ScrapEvent {
 }
 
 export async function listScraps(params: {
-  lotId: number | string;
+  lotId: number;
   stageId?: number;
   take?: number;
 }): Promise<ScrapRow[]> {

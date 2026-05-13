@@ -69,7 +69,10 @@ function defaultRow(): RowState {
 
 export default function FinishingReceiveLot() {
   const { t } = useTranslation();
-  const { lotId = '' } = useParams<{ lotId: string }>();
+  // useParams is intrinsically string (URL paths); parse to number once
+  // here so downstream API calls operate on the real domain type.
+  const { lotId: lotIdParam = '' } = useParams<{ lotId: string }>();
+  const lotId = Number(lotIdParam);
   const navigate = useNavigate();
   const toast = useToast();
 
@@ -174,7 +177,7 @@ export default function FinishingReceiveLot() {
     try {
       const res = await requestUploadUrl({
         entityType: 'rework',
-        entityId: lot.id,
+        entityId: String(lot.id),
         contentType: 'image/jpeg',
       });
       // Noop dev mode: skip the actual GCS PUT, just record the path.
@@ -318,7 +321,7 @@ export default function FinishingReceiveLot() {
       }
       const dispatch = await createDispatch({
         orderId: lot.orderId,
-        destWarehouseId,
+        destWarehouseId: Number(destWarehouseId),
         items,
       });
       sonnerToast.success(
