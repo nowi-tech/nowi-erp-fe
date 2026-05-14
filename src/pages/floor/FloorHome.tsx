@@ -1,7 +1,7 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useNavigate } from 'react-router-dom';
-import { Plus, UserPlus, X } from 'lucide-react';
+import { AlertTriangle, Pencil, Plus, UserPlus, X } from 'lucide-react';
 import { toast as sonnerToast } from 'sonner';
 import FloorShell from '@/components/layout/FloorShell';
 import StageTimeline from '@/components/StageTimeline';
@@ -41,12 +41,16 @@ function todayLabel(locale: string): string {
 
 type Filter = 'all' | 'pending' | 'in_stitching' | 'in_finishing' | 'stuck';
 const LONG_PRESS_MS = 500;
+const PAGE_SIZE = 20;
 
 export default function FloorHome() {
   const { t, i18n } = useTranslation();
   const navigate = useNavigate();
   const [lots, setLots] = useState<Lot[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [skip, setSkip] = useState(0);
+  const [hasMore, setHasMore] = useState(true);
+  const [initialLoading, setInitialLoading] = useState(true);
+  const [pageLoading, setPageLoading] = useState(false);
   const [filter, setFilter] = useState<Filter>('all');
 
   // Assign dialog state — either a single lot or bulk-selected lots.
@@ -58,21 +62,80 @@ export default function FloorHome() {
   const [selectionMode, setSelectionMode] = useState(false);
   const [selected, setSelected] = useState<Set<number>>(new Set());
 
-  const refresh = useCallback(async () => {
-    setLoading(true);
-    try {
-      const all = await listLots();
-      setLots(all.filter(isActive));
-    } catch {
-      setLots([]);
-    } finally {
-      setLoading(false);
-    }
+  /**
+   * Paged loader. `reset=true` starts from skip 0 (initial load + after
+   * an assign). `reset=false` appends the next page.
+   *
+   * We always paginate the unfiltered active set from the BE; tab
+   * filtering is applied client-side. Trade-off: a deep-filtered tab
+   * (e.g. "Stuck") may need to scroll through several pages to fill
+   * up. Acceptable for the floor where active lots count in the
+   * dozens, not thousands.
+   */
+  const loadPage = useCallback(
+    async (reset: boolean) => {
+      if (pageLoading) return;
+      const nextSkip = reset ? 0 : skip;
+      setPageLoading(true);
+      try {
+        const fetched = await listLots({ skip: nextSkip, take: PAGE_SIZE });
+        const active = fetched.filter(isActive);
+        if (reset) {
+          setLots(active);
+          setSkip(fetched.length);
+        } else {
+          // Dedup against existing — a refresh racing with a paginate
+          // could theoretically duplicate. Cheap to guard.
+          setLots((prev) => {
+            const seen = new Set(prev.map((l) => l.id));
+            return [...prev, ...active.filter((l) => !seen.has(l.id))];
+          });
+          setSkip(nextSkip + fetched.length);
+        }
+        // BE returns up to PAGE_SIZE; less than PAGE_SIZE means we're done.
+        setHasMore(fetched.length === PAGE_SIZE);
+      } catch {
+        if (reset) setLots([]);
+        setHasMore(false);
+      } finally {
+        setPageLoading(false);
+        if (reset) setInitialLoading(false);
+      }
+    },
+    [skip, pageLoading],
+  );
+
+  // Initial load — fire once.
+  useEffect(() => {
+    void loadPage(true);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // Sentinel — IntersectionObserver triggers loadPage(false) when the
+  // bottom comes into view. 200px rootMargin so we start fetching just
+  // before the user actually hits bottom (smoother feel).
+  const sentinelRef = useRef<HTMLDivElement | null>(null);
   useEffect(() => {
-    void refresh();
-  }, [refresh]);
+    const el = sentinelRef.current;
+    if (!el || !hasMore || pageLoading || initialLoading) return;
+    const obs = new IntersectionObserver(
+      (entries) => {
+        if (entries[0]?.isIntersecting) {
+          void loadPage(false);
+        }
+      },
+      { rootMargin: '200px' },
+    );
+    obs.observe(el);
+    return () => obs.disconnect();
+  }, [hasMore, pageLoading, initialLoading, loadPage]);
+
+  // After mutations (assign / bulk assign), reset to page 1 so the
+  // moved lots fall into the right section.
+  const refreshFromTop = useCallback(() => {
+    setHasMore(true);
+    void loadPage(true);
+  }, [loadPage]);
 
   useEffect(() => {
     if (assignLots.length === 0) return;
@@ -81,16 +144,29 @@ export default function FloorHome() {
       .catch(() => setMasters([]));
   }, [assignLots.length]);
 
-  const { pending, assigned } = useMemo(() => {
-    const pendingArr: Lot[] = [];
-    const assignedArr: Lot[] = [];
+  // Bucket lots by where they actually are in the workflow. A pending
+  // lot has no stage yet — separate it from the in-stage buckets so
+  // the UI doesn't show a misleading "Stitch active" timeline on a
+  // lot that hasn't been assigned to anyone.
+  const { pending, inStitching, inFinishing, stuck } = useMemo(() => {
+    const buckets = {
+      pending: [] as Lot[],
+      inStitching: [] as Lot[],
+      inFinishing: [] as Lot[],
+      stuck: [] as Lot[],
+    };
     for (const l of lots) {
-      const match = matchesFilter(l, filter);
-      if (!match) continue;
-      if (l.assignedUserId == null) pendingArr.push(l);
-      else assignedArr.push(l);
+      if (!matchesFilter(l, filter)) continue;
+      if (l.assignedUserId == null) {
+        buckets.pending.push(l);
+        continue;
+      }
+      const s = l.order?.status;
+      if (s === 'stuck') buckets.stuck.push(l);
+      else if (s === 'in_finishing') buckets.inFinishing.push(l);
+      else buckets.inStitching.push(l); // receiving / in_stitching / in_rework
     }
-    return { pending: pendingArr, assigned: assignedArr };
+    return buckets;
   }, [lots, filter]);
 
   // Common assignee for all selected lots, if any — used to filter the
@@ -150,7 +226,7 @@ export default function FloorHome() {
       );
       setAssignLots([]);
       exitSelection();
-      await refresh();
+      refreshFromTop();
     } catch {
       sonnerToast.error(t('common.error'));
     } finally {
@@ -207,55 +283,85 @@ export default function FloorHome() {
         ))}
       </div>
 
-      {filter === 'all' || filter === 'pending' ? (
-        <Section
-          title={t('floor.pending')}
-          count={pending.length}
-          emptyLabel={t('floor.pendingEmpty')}
-          loading={loading}
-          lots={pending}
-          selectionMode={selectionMode}
-          selected={selected}
-          onOpenLot={(lot) => {
-            if (selectionMode) {
-              toggleSelection(lot.id);
-            } else {
-              navigate(`/floor/lot/${lot.id}`);
-            }
-          }}
-          onLongPress={(lot) => {
-            if (!selectionMode) setSelectionMode(true);
-            setSelected((prev) => new Set(prev).add(lot.id));
-          }}
-          onAssign={openAssignFor}
-        />
-      ) : null}
+      {/*
+        Sections render in workflow order: Pending → In stitching →
+        In finishing → Stuck. Each section is rendered only when:
+          - the active filter includes that bucket, AND
+          - the bucket has at least one lot OR it's a single-bucket filter (so empty state shows)
+        Pending lots intentionally hide the stage timeline (a lot
+        that's not yet assigned isn't IN any stage yet — showing the
+        timeline would be misleading).
+      */}
+      {(['pending', 'inStitching', 'inFinishing', 'stuck'] as const).map(
+        (bucketKey) => {
+          const buckets = { pending, inStitching, inFinishing, stuck };
+          const bucket = buckets[bucketKey];
+          const visibleByFilter =
+            filter === 'all' ||
+            (filter === 'pending' && bucketKey === 'pending') ||
+            (filter === 'in_stitching' && bucketKey === 'inStitching') ||
+            (filter === 'in_finishing' && bucketKey === 'inFinishing') ||
+            (filter === 'stuck' && bucketKey === 'stuck');
+          if (!visibleByFilter) return null;
+          // In single-bucket filters always show the section (empty
+          // state included). In "All" view, hide empty sections to
+          // keep the page tight.
+          if (filter === 'all' && bucket.length === 0) return null;
 
-      {filter === 'pending' ? null : <div className="h-6" />}
+          const titleKey = {
+            pending: 'floor.pending',
+            inStitching: 'floor.filters.inStitching',
+            inFinishing: 'floor.filters.inFinishing',
+            stuck: 'floor.filters.stuck',
+          }[bucketKey];
+          const emptyKey = {
+            pending: 'floor.pendingEmpty',
+            inStitching: 'floor.assignedEmpty',
+            inFinishing: 'floor.assignedEmpty',
+            stuck: 'floor.assignedEmpty',
+          }[bucketKey];
 
-      {filter !== 'pending' ? (
-        <Section
-          title={t('floor.assignedSection')}
-          count={assigned.length}
-          emptyLabel={t('floor.assignedEmpty')}
-          loading={loading}
-          lots={assigned}
-          selectionMode={selectionMode}
-          selected={selected}
-          onOpenLot={(lot) => {
-            if (selectionMode) {
-              toggleSelection(lot.id);
-            } else {
-              navigate(`/floor/lot/${lot.id}`);
-            }
-          }}
-          onLongPress={(lot) => {
-            if (!selectionMode) setSelectionMode(true);
-            setSelected((prev) => new Set(prev).add(lot.id));
-          }}
-          onAssign={openAssignFor}
-        />
-      ) : null}
+          return (
+            <div key={bucketKey} className="mb-6">
+              <Section
+                title={t(titleKey)}
+                count={bucket.length}
+                emptyLabel={t(emptyKey)}
+                loading={initialLoading}
+                lots={bucket}
+                hideTimeline={bucketKey === 'pending'}
+                selectionMode={selectionMode}
+                selected={selected}
+                onOpenLot={(lot) => {
+                  if (selectionMode) {
+                    toggleSelection(lot.id);
+                  } else {
+                    navigate(`/floor/lot/${lot.id}`);
+                  }
+                }}
+                onLongPress={(lot) => {
+                  if (!selectionMode) setSelectionMode(true);
+                  setSelected((prev) => new Set(prev).add(lot.id));
+                }}
+                onAssign={openAssignFor}
+              />
+            </div>
+          );
+        },
+      )}
+
+      {/* Infinite-scroll sentinel + load indicator */}
+      <div ref={sentinelRef} className="h-1" />
+      {pageLoading && !initialLoading && (
+        <div className="py-4 text-center text-[12px] text-[var(--color-muted-foreground)] font-mono">
+          {t('common.loading')}
+        </div>
+      )}
+      {!hasMore && !initialLoading && lots.length > 0 && (
+        <div className="py-4 text-center text-[11px] uppercase tracking-wider text-[var(--color-muted-foreground-2)] font-mono">
+          {t('floor.endOfList', { defaultValue: 'End of list' })}
+        </div>
+      )}
 
       {/* Bulk-assign sticky bar — appears when selection has lots */}
       {selectionMode && (
@@ -407,6 +513,7 @@ interface SectionProps {
   emptyLabel: string;
   loading: boolean;
   lots: Lot[];
+  hideTimeline?: boolean;
   selectionMode: boolean;
   selected: Set<number>;
   onOpenLot: (lot: Lot) => void;
@@ -420,6 +527,7 @@ function Section({
   emptyLabel,
   loading,
   lots,
+  hideTimeline,
   selectionMode,
   selected,
   onOpenLot,
@@ -446,6 +554,7 @@ function Section({
             <FloorLotRow
               key={lot.id}
               lot={lot}
+              hideTimeline={hideTimeline}
               selectionMode={selectionMode}
               isSelected={selected.has(lot.id)}
               onOpen={() => onOpenLot(lot)}
@@ -493,6 +602,7 @@ function progressForLot(
 
 function FloorLotRow({
   lot,
+  hideTimeline,
   selectionMode,
   isSelected,
   onOpen,
@@ -500,6 +610,7 @@ function FloorLotRow({
   onAssign,
 }: {
   lot: Lot;
+  hideTimeline?: boolean;
   selectionMode: boolean;
   isSelected: boolean;
   onOpen: () => void;
@@ -507,6 +618,7 @@ function FloorLotRow({
   onAssign: () => void;
 }) {
   const { t } = useTranslation();
+  const navigate = useNavigate();
   const units = totalUnits(lot.qtyIn);
   const progress = progressForLot(lot);
   const productLabel = lot.style
@@ -525,9 +637,10 @@ function FloorLotRow({
         .join(' ')
     : null;
   const isAssigned = lot.assignedUserId != null;
+  const status = lot.order?.status;
+  const isAnomaly = status === 'in_rework' || status === 'stuck';
 
-  // Long-press handlers — kick the user into selection mode on touch
-  // hold or mouse down >500ms.
+  // Long-press handlers — kick into selection mode on touch hold >500ms.
   let pressTimer: number | null = null;
   const startPress = () => {
     pressTimer = window.setTimeout(() => {
@@ -551,38 +664,59 @@ function FloorLotRow({
         onPointerCancel={cancelPress}
         onClick={onOpen}
         className={cn(
-          'cursor-pointer select-none w-full text-left flex items-center gap-3 rounded-[14px] bg-[var(--color-surface)] border-l-[3px] border-l-[var(--color-primary)] shadow-[0_1px_2px_rgba(14,23,48,0.04)] p-4 transition-all',
+          'cursor-pointer select-none w-full rounded-[16px] bg-[var(--color-surface)] border-l-[6px] shadow-[0_1px_2px_rgba(14,23,48,0.04)] transition-all',
+          isAnomaly
+            ? 'border-l-[var(--color-destructive)]'
+            : 'border-l-[var(--color-primary)]',
           selectionMode && isSelected
             ? 'ring-2 ring-[var(--color-primary)] bg-[var(--color-primary-soft)]/40'
             : 'hover:shadow-[0_1px_2px_rgba(14,23,48,0.06),0_4px_12px_rgba(14,23,48,0.05)] hover:-translate-y-px',
         )}
       >
-        {selectionMode && (
-          <div
-            className={cn(
-              'shrink-0 w-5 h-5 rounded border-2 flex items-center justify-center transition-colors',
-              isSelected
-                ? 'border-[var(--color-primary)] bg-[var(--color-primary)] text-white'
-                : 'border-[var(--color-border-strong)] bg-white',
+        <div className="p-4 pl-5 space-y-3">
+          {/* Top row — selection checkbox · lot id + edit icon */}
+          <div className="flex items-center gap-3">
+            {selectionMode && (
+              <div
+                className={cn(
+                  'shrink-0 w-5 h-5 rounded border-2 flex items-center justify-center transition-colors',
+                  isSelected
+                    ? 'border-[var(--color-primary)] bg-[var(--color-primary)] text-white'
+                    : 'border-[var(--color-border-strong)] bg-white',
+                )}
+              >
+                {isSelected && (
+                  <svg viewBox="0 0 24 24" width="12" height="12" fill="none">
+                    <path
+                      d="M5 12l5 5L20 7"
+                      stroke="currentColor"
+                      strokeWidth="3"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                    />
+                  </svg>
+                )}
+              </div>
             )}
-          >
-            {isSelected && (
-              <svg viewBox="0 0 24 24" width="12" height="12" fill="none">
-                <path
-                  d="M5 12l5 5L20 7"
-                  stroke="currentColor"
-                  strokeWidth="3"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                />
-              </svg>
+            <h3 className="font-mono font-bold text-[22px] leading-[1.1] tracking-tight text-[var(--color-foreground)] break-all flex-1 min-w-0">
+              {lot.lotNo}
+            </h3>
+            {!selectionMode && (
+              <button
+                type="button"
+                aria-label={t('floor.edit')}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  navigate(`/floor/lot/${lot.id}/edit`);
+                }}
+                className="shrink-0 text-[var(--color-muted-foreground)] hover:text-[var(--color-primary)] p-1 transition-colors"
+              >
+                <Pencil size={18} />
+              </button>
             )}
           </div>
-        )}
-        <div className="flex-1 min-w-0 space-y-1.5">
-          <div className="font-semibold text-[22px] leading-[1.1] tracking-[-0.01em] text-[var(--color-foreground)] break-all">
-            {lot.lotNo}
-          </div>
+
+          {/* Product · units · assignee */}
           <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-[13px] text-[var(--color-foreground-2)]">
             {productLabel && (
               <span className="font-medium text-[var(--color-foreground)]">
@@ -592,48 +726,98 @@ function FloorLotRow({
             {productLabel && (
               <span className="text-[var(--color-muted-foreground-2)]">·</span>
             )}
-            <span className="font-mono tabular-nums">{units}u</span>
+            <span className="font-mono bg-[var(--color-muted)] px-1.5 py-0.5 rounded text-[var(--color-foreground)] tabular-nums text-[12px]">
+              {units}u
+            </span>
             {lot.assignedUser && (
               <>
                 <span className="text-[var(--color-muted-foreground-2)]">·</span>
-                <span className="text-[var(--color-muted-foreground)]">
+                <span className="text-[var(--color-muted-foreground)] italic text-[12px] flex items-center gap-1">
+                  <span
+                    className="inline-block w-1.5 h-1.5 rounded-full bg-[var(--color-muted-foreground-2)]"
+                    aria-hidden
+                  />
                   {lot.assignedUser.name}
                 </span>
               </>
             )}
           </div>
-          <div className="flex items-center gap-3 flex-wrap">
-            <StageTimeline status={lot.order?.status} size="compact" />
-            {progress.stageKey && (
-              <span className="font-mono text-[12px] text-[var(--color-muted-foreground)] tabular-nums">
-                {t(`stages.${progress.stageKey}`)} ·{' '}
-                {t('stitching.lot.forwardedOf', {
-                  defaultValue: '{{done}} of {{total}} forwarded',
-                  done: progress.done,
-                  total: progress.total,
-                })}
-              </span>
-            )}
-          </div>
+
+          {/* Stage timeline + forwarded pill — hidden for pending lots
+              since they aren't in any stage yet. */}
+          {!hideTimeline && (
+            <div className="space-y-2.5">
+              <StageTimeline status={status} size="compact" />
+              {progress.stageKey && (
+                <div
+                  className={cn(
+                    'flex items-center justify-between gap-2 px-2.5 py-1.5 rounded-[10px] border text-[12px]',
+                    isAnomaly
+                      ? 'bg-[var(--color-destructive-bg)]/50 border-[var(--color-destructive-bg)] text-[var(--color-destructive-strong)]'
+                      : 'bg-[var(--color-primary-soft)] border-[var(--color-primary-soft)] text-[var(--color-primary)]',
+                  )}
+                >
+                  <div className="flex items-center gap-1.5 font-mono">
+                    <span className="font-semibold uppercase tracking-wide text-[11px]">
+                      {t(`stages.${progress.stageKey}`)}
+                    </span>
+                    <span className="opacity-60">·</span>
+                    <span className="font-medium tabular-nums">
+                      {progress.done} / {progress.total}
+                    </span>
+                    <span className="opacity-70 text-[11px]">
+                      {t('floor.forwardedShort', { defaultValue: 'forwarded' })}
+                    </span>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Footer — Report + Assign/Reassign (hidden in selection mode) */}
+          {!selectionMode && (
+            <div className="flex items-center justify-end gap-2 pt-3 border-t border-[var(--color-border)]">
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  sonnerToast.info(
+                    t('floor.reportComingSoon', {
+                      defaultValue: 'Report flow coming soon.',
+                    }),
+                  );
+                }}
+                className={cn(
+                  'inline-flex items-center gap-1.5 px-3 h-9 rounded-[10px] text-[13px] font-medium border transition-colors',
+                  isAnomaly
+                    ? 'text-[var(--color-destructive)] border-[var(--color-destructive)]/30 bg-[var(--color-destructive-bg)]/30 hover:bg-[var(--color-destructive-bg)]'
+                    : 'text-[var(--color-foreground)] border-[var(--color-border)] bg-white hover:bg-[var(--color-muted)]',
+                )}
+              >
+                <AlertTriangle size={14} />
+                {isAnomaly
+                  ? t('floor.reportIssue', { defaultValue: 'Report issue' })
+                  : t('floor.report', { defaultValue: 'Report' })}
+              </button>
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onAssign();
+                }}
+                className={cn(
+                  'inline-flex items-center gap-1.5 px-3 h-9 rounded-[10px] text-[13px] font-semibold transition-transform active:translate-y-px',
+                  isAssigned
+                    ? 'text-[var(--color-foreground)] border border-[var(--color-border)] bg-white hover:bg-[var(--color-muted)]'
+                    : 'text-white bg-gradient-to-b from-[var(--color-primary)] to-[var(--color-primary-hover)] shadow-[inset_0_1px_0_rgba(255,255,255,0.18),0_0_0_1px_var(--color-primary-hover),0_4px_10px_rgba(34,64,196,0.28)]',
+                )}
+              >
+                <UserPlus size={14} />
+                {isAssigned ? t('floor.reassign') : t('floor.assignTo')}
+              </button>
+            </div>
+          )}
         </div>
-        {!selectionMode && (
-          <button
-            type="button"
-            onClick={(e) => {
-              e.stopPropagation();
-              onAssign();
-            }}
-            className={cn(
-              'shrink-0 inline-flex items-center gap-1.5 px-3 h-9 rounded-[10px] text-[13px] font-semibold transition-transform active:translate-y-px',
-              isAssigned
-                ? 'text-[var(--color-foreground)] border border-[var(--color-border)] bg-white hover:bg-[var(--color-muted)]'
-                : 'text-white bg-gradient-to-b from-[var(--color-primary)] to-[var(--color-primary-hover)] shadow-[inset_0_1px_0_rgba(255,255,255,0.18),0_0_0_1px_var(--color-primary-hover),0_4px_10px_rgba(34,64,196,0.28)]',
-            )}
-          >
-            <UserPlus size={14} />
-            {isAssigned ? t('floor.reassign') : t('floor.assignTo')}
-          </button>
-        )}
       </div>
     </li>
   );

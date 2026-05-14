@@ -116,7 +116,12 @@
       "stuck": "Stuck"
     },
     "bulkAssignBar": "Assign {{n}} lots",
-    "bulkSelectHint": "Long-press a card to select multiple."
+    "bulkSelectHint": "Long-press a card to select multiple.",
+    "report": "Report",
+    "reportIssue": "Report issue",
+    "reportComingSoon": "Report flow coming soon.",
+    "forwardedShort": "forwarded",
+    "endOfList": "End of list"
   },
   "shell": {
     "adminHome": "Admin home — coming soon",

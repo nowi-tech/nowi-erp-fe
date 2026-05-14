@@ -1,26 +1,33 @@
 import { useTranslation } from 'react-i18next';
+import { Check } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import type { OrderStatus } from '@/api/types';
 
 /**
- * 4-dot pipeline showing where a lot is in the
+ * Pipeline showing where a lot is in the
  * Receive → Stitching → Finishing → Dispatch flow.
- * Completed stages: filled muted; current stage: filled with stage
- * accent; future: outlined. Anomalies (rework, stuck) tint the active
- * dot with the anomaly color.
+ *
+ * - Completed steps: filled emerald with a check.
+ * - Current step: filled with stage accent (blue/vermilion/marigold;
+ *   red for anomalies), ringed with a soft halo, white pip in centre.
+ * - Future steps: hollow gray.
+ * - Connector line between dots: gray base with the active accent
+ *   filled to the current step (percentage).
+ *
+ * Matches the Stitch handoff "Warehouse Floor Management - Improved UI"
+ * + "Warehouse Floor - Cleaned Layout" combined card pattern.
  */
 type Step = 'receive' | 'stitching' | 'finishing' | 'dispatch';
 
-const STEPS: { id: Step; labelKey: string; accent: string }[] = [
-  { id: 'receive', labelKey: 'stages.receive', accent: 'var(--color-foreground)' },
-  { id: 'stitching', labelKey: 'stages.stitching', accent: 'var(--stage-stitch-acc)' },
-  { id: 'finishing', labelKey: 'stages.finishing', accent: 'var(--stage-finish-acc)' },
-  { id: 'dispatch', labelKey: 'stages.dispatch', accent: 'var(--stage-disp-acc)' },
+const STEPS: { id: Step; labelKey: string; accent: string; bg: string }[] = [
+  { id: 'receive', labelKey: 'stages.receive', accent: 'var(--color-foreground)', bg: 'rgba(14,23,48,0.08)' },
+  { id: 'stitching', labelKey: 'stages.stitching', accent: 'var(--stage-stitch-acc)', bg: 'var(--stage-stitch-bg)' },
+  { id: 'finishing', labelKey: 'stages.finishing', accent: 'var(--stage-finish-acc)', bg: 'var(--stage-finish-bg)' },
+  { id: 'dispatch', labelKey: 'stages.dispatch', accent: 'var(--stage-disp-acc)', bg: 'var(--stage-disp-bg)' },
 ];
 
 /**
- * Map an order status to the current pipeline step + index.
- * Returns -1 for completed (status=closed*) which lights all dots.
+ * Map order status → current step index + anomaly tint.
  */
 function statusToStepIndex(status: OrderStatus | undefined): {
   index: number;
@@ -62,83 +69,116 @@ export default function StageTimeline({
 }: StageTimelineProps) {
   const { t } = useTranslation();
   const { index, anomaly } = statusToStepIndex(status ?? undefined);
+  const isAnomaly = anomaly !== null;
 
-  const dotSize = size === 'detail' ? 10 : 8;
-  const dotGap = size === 'detail' ? 6 : 4;
+  // Step sizing
+  const dotSize = size === 'detail' ? 22 : 18;
+  const ringWidth = size === 'detail' ? 4 : 3;
+  const labelClass =
+    size === 'detail'
+      ? 'text-[11px]'
+      : 'text-[10px]';
+
+  // Active-step accent (anomaly overrides stage accent)
+  const activeAccent = isAnomaly
+    ? anomaly === 'stuck'
+      ? 'var(--status-stuck-acc)'
+      : 'var(--status-rework-acc)'
+    : STEPS[Math.min(index, STEPS.length - 1)]?.accent ?? 'var(--color-primary)';
+  const activeRing = isAnomaly
+    ? anomaly === 'stuck'
+      ? 'var(--status-stuck-bg)'
+      : 'var(--status-rework-bg)'
+    : STEPS[Math.min(index, STEPS.length - 1)]?.bg ?? 'var(--color-primary-soft)';
+
+  // Connector fill ratio
+  const totalSteps = STEPS.length;
+  const fillPct = Math.max(0, Math.min(1, index / (totalSteps - 1))) * 100;
 
   return (
-    <div className={cn('flex items-center', className)}>
-      {STEPS.map((step, i) => {
-        const isCompleted = i < index;
-        const isCurrent = i === index;
-        const isFuture = i > index;
+    <div className={cn('w-full', className)}>
+      <div className="relative">
+        {/* connector line — sits behind the dots */}
+        <div
+          className="absolute top-0 left-0 right-0 h-[2px] rounded-full bg-[var(--color-border)]"
+          style={{ transform: 'translateY(50%)', marginTop: dotSize / 2 - 1 }}
+          aria-hidden
+        />
+        <div
+          className="absolute top-0 left-0 h-[2px] rounded-full transition-[width] duration-300"
+          style={{
+            width: `${fillPct}%`,
+            backgroundColor: isAnomaly ? activeAccent : 'var(--color-foreground)',
+            transform: 'translateY(50%)',
+            marginTop: dotSize / 2 - 1,
+            opacity: 0.7,
+          }}
+          aria-hidden
+        />
+        <ol className="flex justify-between items-start relative z-10">
+          {STEPS.map((step, i) => {
+            const isCompleted = i < index;
+            const isCurrent = i === index;
 
-        const accent = anomaly === 'stuck'
-          ? 'var(--status-stuck-acc)'
-          : anomaly === 'rework'
-            ? 'var(--status-rework-acc)'
-            : step.accent;
-
-        return (
-          <div key={step.id} className="flex items-center">
-            <div
-              className="flex flex-col items-center"
-              style={{ minWidth: size === 'detail' ? 60 : 40 }}
-            >
-              <span
-                className={cn(
-                  'rounded-full border transition-colors',
-                  isCurrent ? 'border-transparent' : 'border-current',
-                )}
-                style={{
-                  width: dotSize,
-                  height: dotSize,
-                  backgroundColor: isFuture
-                    ? 'transparent'
-                    : isCurrent
-                      ? accent
-                      : 'var(--color-muted-foreground)',
-                  color: isCurrent
-                    ? accent
-                    : isCompleted
-                      ? 'var(--color-muted-foreground)'
-                      : 'var(--color-muted-foreground-2)',
-                  // tiny glow on the active dot in detail mode
-                  boxShadow:
-                    isCurrent && size === 'detail'
-                      ? `0 0 0 3px color-mix(in srgb, ${accent} 20%, transparent)`
-                      : undefined,
-                }}
-              />
-              <span
-                className={cn(
-                  'mt-1 font-mono tabular-nums uppercase tracking-[0.06em]',
-                  size === 'detail' ? 'text-[11px]' : 'text-[9px]',
-                  isCurrent
-                    ? 'text-[var(--color-foreground)] font-semibold'
-                    : 'text-[var(--color-muted-foreground)]',
-                )}
+            return (
+              <li
+                key={step.id}
+                className="flex flex-col items-center min-w-[44px]"
               >
-                {t(step.labelKey, { defaultValue: step.id })}
-              </span>
-            </div>
-            {i < STEPS.length - 1 && (
-              <span
-                style={{
-                  width: size === 'detail' ? 24 : 12,
-                  height: 1,
-                  backgroundColor:
-                    i < index
-                      ? 'var(--color-muted-foreground)'
-                      : 'var(--color-border)',
-                  marginInline: dotGap,
-                  marginBottom: size === 'detail' ? 14 : 10,
-                }}
-              />
-            )}
-          </div>
-        );
-      })}
+                <span
+                  className={cn(
+                    'rounded-full flex items-center justify-center border-2 border-white shadow-sm transition-colors',
+                  )}
+                  style={{
+                    width: dotSize,
+                    height: dotSize,
+                    backgroundColor: isCompleted
+                      ? 'var(--color-success)'
+                      : isCurrent
+                        ? activeAccent
+                        : 'var(--color-surface)',
+                    borderColor: isCompleted || isCurrent ? '#fff' : 'var(--color-border-strong)',
+                    boxShadow: isCurrent
+                      ? `0 0 0 ${ringWidth}px ${activeRing}, 0 1px 2px rgba(14,23,48,0.08)`
+                      : '0 1px 2px rgba(14,23,48,0.05)',
+                  }}
+                >
+                  {isCompleted ? (
+                    <Check size={dotSize * 0.55} strokeWidth={3} color="#fff" />
+                  ) : isCurrent ? (
+                    <span
+                      style={{
+                        width: dotSize * 0.3,
+                        height: dotSize * 0.3,
+                        borderRadius: '50%',
+                        backgroundColor: '#fff',
+                      }}
+                    />
+                  ) : null}
+                </span>
+                <span
+                  className={cn(
+                    'mt-1.5 font-mono uppercase tracking-[0.06em]',
+                    labelClass,
+                    isCurrent
+                      ? 'font-bold'
+                      : isCompleted
+                        ? 'font-semibold text-[var(--color-foreground)]'
+                        : 'font-semibold text-[var(--color-muted-foreground-2)]',
+                  )}
+                  style={
+                    isCurrent
+                      ? { color: activeAccent }
+                      : undefined
+                  }
+                >
+                  {t(step.labelKey, { defaultValue: step.id })}
+                </span>
+              </li>
+            );
+          })}
+        </ol>
+      </div>
     </div>
   );
 }
