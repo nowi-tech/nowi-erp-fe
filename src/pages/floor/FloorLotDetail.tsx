@@ -115,8 +115,32 @@ export default function FloorLotDetail() {
         <div className="mt-3 space-y-3.5">
           {/* Identity */}
           <div className="rounded-[14px] bg-[var(--color-surface)] border-l-[3px] border-l-[var(--color-primary)] shadow-[0_1px_2px_rgba(15,26,54,0.04)] p-[16px_18px_14px]">
-            <div className="font-semibold text-[26px] leading-[1.05] tracking-[-0.01em] text-[var(--color-foreground)] break-all">
-              {lot.lotNo}
+            <div className="flex items-start justify-between gap-3">
+              <h2 className="font-semibold text-[26px] leading-[1.05] tracking-[-0.01em] text-[var(--color-foreground)] break-all flex-1 min-w-0">
+                {lot.lotNo}
+              </h2>
+              {/* Edit affordance — top-right of the identity card,
+                  matching the queue-card pattern. Routes to FloorEditLot
+                  with ?expired=1 when the 24h window has passed; the
+                  edit page surfaces the request-admin dialog there. */}
+              <button
+                type="button"
+                aria-label={t('floor.edit')}
+                title={inEditWindow ? t('floor.editWindow') : t('floor.editExpired')}
+                onClick={() =>
+                  inEditWindow
+                    ? navigate(`/floor/lot/${lot.id}/edit`)
+                    : navigate(`/floor/lot/${lot.id}/edit?expired=1`)
+                }
+                className={cn(
+                  'shrink-0 p-1.5 rounded-md transition-colors',
+                  inEditWindow
+                    ? 'text-[var(--color-muted-foreground)] hover:text-[var(--color-primary)] hover:bg-[var(--color-muted)]'
+                    : 'text-[var(--color-muted-foreground-2)] hover:text-[var(--color-foreground)]',
+                )}
+              >
+                <Pencil size={18} />
+              </button>
             </div>
             <div className="mt-1.5 flex flex-wrap items-center gap-x-2 gap-y-1 text-[13px] text-[var(--color-foreground-2)]">
               {productLabel && (

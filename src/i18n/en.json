@@ -268,7 +268,10 @@
       "users": "Users",
       "settings": "Settings",
       "masterData": "Master data",
-      "editRequests": "Edit requests"
+      "editRequests": "Edit requests",
+      "floor": "Floor",
+      "stitching": "Stitching",
+      "finishing": "Finishing"
     },
     "editRequests": {
       "title": "Edit requests",

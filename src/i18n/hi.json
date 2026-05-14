@@ -268,7 +268,10 @@
       "users": "उपयोगकर्ता",
       "settings": "सेटिंग्स",
       "masterData": "मास्टर डेटा",
-      "editRequests": "संपादन अनुरोध"
+      "editRequests": "संपादन अनुरोध",
+      "floor": "फ़्लोर",
+      "stitching": "सिलाई",
+      "finishing": "फिनिशिंग"
     },
     "editRequests": {
       "title": "संपादन अनुरोध",

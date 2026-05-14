@@ -10,6 +10,9 @@ import {
   Database,
   FlaskConical,
   Inbox,
+  Boxes,
+  Scissors,
+  Sparkles,
   MoreHorizontal,
   X,
 } from 'lucide-react';
@@ -45,6 +48,13 @@ const NAV_ITEMS: NavItem[] = [
   { to: '/admin/locator', icon: <Search size={20} />, labelKey: 'admin.nav.locator', roles: ['admin', 'viewer'], stage: 'ink' },
   { to: '/admin/dispatches', icon: <Truck size={20} />, labelKey: 'admin.nav.dispatches', roles: ['admin', 'viewer'], stage: 'disp' },
   { to: '/admin/edit-requests', icon: <Inbox size={20} />, labelKey: 'admin.nav.editRequests', roles: ['admin'], stage: 'ink' },
+  // Floor surfaces — admins drop in to triage / receive / forward when
+  // a floor user is unavailable. Each route already permits 'admin' in
+  // ProtectedRoute, but the sidebar didn't surface them. Same icons
+  // make the role mapping obvious.
+  { to: '/floor', icon: <Boxes size={20} />, labelKey: 'admin.nav.floor', roles: ['admin'], stage: 'ink' },
+  { to: '/stitching', icon: <Scissors size={20} />, labelKey: 'admin.nav.stitching', roles: ['admin'], stage: 'stitch' },
+  { to: '/finishing', icon: <Sparkles size={20} />, labelKey: 'admin.nav.finishing', roles: ['admin'], stage: 'finish' },
   { to: '/data', icon: <Database size={20} />, labelKey: 'admin.nav.masterData', roles: ['data_manager'], stage: 'ink' },
   { to: '/admin/users', icon: <Users size={20} />, labelKey: 'admin.nav.users', roles: ['admin'], stage: 'ink' },
   // TODO: build — surface once admin Vendors / SKUs / Settings pages exist.
