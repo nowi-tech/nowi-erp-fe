@@ -1,5 +1,5 @@
 import { apiClient } from './apiClient';
-import type { CreateReceiptsPayload } from './types';
+import type { CreateReceiptsPayload, Lot } from './types';
 import { FeatureUnavailableError, is404 } from './_errors';
 
 export { FeatureUnavailableError, is404 };
@@ -21,6 +21,8 @@ export interface ReceiptRow {
    *  and do NOT count toward `available[size]` at the next stage. */
   acceptedAt?: string | null;
   acceptedBy?: number | null;
+  lot?: Lot;
+  stage?: { id: number; code: string; name: string };
 }
 
 export async function createReceipts(payload: CreateReceiptsPayload): Promise<void> {
@@ -42,8 +44,11 @@ export async function acceptReceipt(id: number): Promise<void> {
 }
 
 export async function listReceipts(params: {
-  lotId: number;
+  lotId?: number;
   stageId?: number;
+  kind?: ReceiptRow['kind'];
+  byMe?: boolean;
+  skip?: number;
   take?: number;
 }): Promise<ReceiptRow[]> {
   const res = await apiClient.get<ReceiptRow[]>('/api/receipts', { params });

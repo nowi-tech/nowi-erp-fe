@@ -1,5 +1,5 @@
 import { apiClient } from './apiClient';
-import type { CreateScrapPayload, ScrapEvent } from './types';
+import type { CreateScrapPayload, Lot, ScrapEvent } from './types';
 import { FeatureUnavailableError, is404 } from './_errors';
 
 export async function createScrap(payload: CreateScrapPayload): Promise<ScrapEvent | null> {
@@ -15,11 +15,15 @@ export async function createScrap(payload: CreateScrapPayload): Promise<ScrapEve
 export interface ScrapRow extends ScrapEvent {
   /** Filled by BE so the floor "Recently forwarded" log can show who scrapped. */
   scrappedByName?: string;
+  lot?: Lot;
+  stage?: { id: number; code: string; name: string } | null;
 }
 
 export async function listScraps(params: {
-  lotId: number;
+  lotId?: number;
   stageId?: number;
+  byMe?: boolean;
+  skip?: number;
   take?: number;
 }): Promise<ScrapRow[]> {
   try {

@@ -12,7 +12,6 @@ import { Label } from '@/components/ui/label';
 import { Select } from '@/components/ui/select';
 import { Textarea } from '@/components/ui/textarea';
 import { Dialog } from '@/components/ui/dialog';
-import { useToast } from '@/components/ui/toast';
 import { cn } from '@/lib/utils';
 import { getAvailability, getLot } from '@/api/lots';
 import {
@@ -35,8 +34,6 @@ import type {
   Lot,
   SizeMatrix,
 } from '@/api/types';
-
-const STAGE_ID_FINISHING = 2;
 
 const REASON_KEYS = [
   'stitchingDefect',
@@ -76,7 +73,6 @@ export default function FinishingReceiveLot() {
   const { lotId: lotIdParam = '' } = useParams<{ lotId: string }>();
   const lotId = Number(lotIdParam);
   const navigate = useNavigate();
-  const toast = useToast();
 
   const { user } = useAuth();
   const [lot, setLot] = useState<Lot | null>(null);
@@ -89,6 +85,9 @@ export default function FinishingReceiveLot() {
   const [pendingForwards, setPendingForwards] = useState<ReceiptRow[]>([]);
   const [acceptingId, setAcceptingId] = useState<number | null>(null);
   const stitchingStageId = useStageId('stitching');
+  // Resolve finishing stage id at runtime via the shared hook so we
+  // don't bake the seed's primary-key ordering into the FE.
+  const finishingStageId = useStageId('finishing');
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [confirmOpen, setConfirmOpen] = useState(false);
@@ -107,15 +106,17 @@ export default function FinishingReceiveLot() {
   const dispatchCancelRef = useRef<HTMLButtonElement>(null);
 
   const refresh = useCallback(async () => {
+    // Wait until the stage hook has resolved finishing's id (BE call).
+    if (finishingStageId == null) return;
     setLoading(true);
     try {
       const [lotRes, avail, receipts] = await Promise.all([
         getLot(lotId),
-        getAvailability(lotId, STAGE_ID_FINISHING).catch(() => ({
-          stageId: STAGE_ID_FINISHING,
+        getAvailability(lotId, finishingStageId).catch(() => ({
+          stageId: finishingStageId,
           available: {} as SizeMatrix,
         })),
-        listReceipts({ lotId, stageId: STAGE_ID_FINISHING, take: 10 }).catch(
+        listReceipts({ lotId, stageId: finishingStageId, take: 10 }).catch(
           () => [] as ReceiptRow[],
         ),
       ]);
@@ -133,7 +134,7 @@ export default function FinishingReceiveLot() {
     } finally {
       setLoading(false);
     }
-  }, [lotId, toast, t]);
+  }, [lotId, finishingStageId, t]);
 
   useEffect(() => {
     void refresh();
@@ -257,7 +258,7 @@ export default function FinishingReceiveLot() {
   }
 
   async function doSubmit() {
-    if (!canSubmit || !lot) return;
+    if (!canSubmit || !lot || finishingStageId == null) return;
     setSubmitting(true);
     try {
       // Forwards (combined into one /api/receipts call).
@@ -267,7 +268,7 @@ export default function FinishingReceiveLot() {
       if (forwardLines.length) {
         await createReceipts({
           lotId: lot.id,
-          stageId: STAGE_ID_FINISHING,
+          stageId: finishingStageId,
           receipts: forwardLines,
         });
       }

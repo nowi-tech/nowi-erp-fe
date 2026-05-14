@@ -5,7 +5,7 @@ import { ChevronLeft, Pencil, Share2, UserPlus } from 'lucide-react';
 import { toast as sonnerToast } from 'sonner';
 import FloorShell from '@/components/layout/FloorShell';
 import StageTimeline from '@/components/StageTimeline';
-import { Dialog } from '@/components/ui/dialog';
+import AssignSheet from '@/components/floor/AssignSheet';
 import { assignLot, getLot } from '@/api/lots';
 import { listStitchingMasters, type StitchingMaster } from '@/api/users';
 import type { Lot } from '@/api/types';
@@ -332,65 +332,27 @@ export default function FloorLotDetail() {
         </div>
       )}
 
-      <Dialog
+      <AssignSheet
         open={assignOpen}
         onClose={() => setAssignOpen(false)}
-        title={t(isAssigned ? 'floor.reassign' : 'floor.assignTo', {
-          defaultValue: isAssigned ? 'Reassign' : 'Assign to…',
-        })}
-      >
-        {lot && (
-          <div className="space-y-2">
-            <p className="text-sm text-[var(--color-muted-foreground)]">
-              <span className="font-mono">{lot.lotNo}</span>
-              {' · '}
-              {units}u
-              {isAssigned && lot.assignedUser && (
-                <>
-                  {' · '}
-                  <span>
-                    {t('floor.currentlyAssigned', {
-                      defaultValue: 'Currently {{name}}',
-                      name: lot.assignedUser.name,
-                    })}
-                  </span>
-                </>
-              )}
-            </p>
-            <ul className="divide-y divide-[var(--color-border)]">
-              {masters
-                .filter((m) => m.id !== lot.assignedUserId)
-                .map((m) => (
-                  <li key={m.id} className="py-1">
-                    <button
-                      type="button"
-                      onClick={() => doAssign(m.id)}
-                      disabled={assigning !== null}
-                      className="w-full flex items-center justify-between gap-3 px-2 py-2 rounded-[10px] hover:bg-[var(--color-muted)] disabled:opacity-50 transition-colors"
-                    >
-                      <span className="text-[15px] font-medium text-[var(--color-foreground)]">
-                        {m.name}
-                      </span>
-                      <span className="font-mono text-[12px] text-[var(--color-muted-foreground)]">
-                        {t('floor.inQueue', {
-                          defaultValue: '{{n}} in queue',
-                          n: m.inProgressLots,
-                        })}
-                      </span>
-                    </button>
-                  </li>
-                ))}
-              {masters.filter((m) => m.id !== lot.assignedUserId).length === 0 && (
-                <li className="py-3 text-sm text-[var(--color-muted-foreground)]">
-                  {t('floor.noOtherMasters', {
-                    defaultValue: 'No other stitching masters available.',
-                  })}
-                </li>
-              )}
-            </ul>
-          </div>
-        )}
-      </Dialog>
+        lots={
+          lot
+            ? [
+                {
+                  id: lot.id,
+                  lotNo: lot.lotNo,
+                  units,
+                  assignedUserId: lot.assignedUserId,
+                  assignedUserName: lot.assignedUser?.name ?? null,
+                },
+              ]
+            : []
+        }
+        masters={masters}
+        excludeMasterId={lot?.assignedUserId ?? null}
+        busy={assigning !== null}
+        onConfirm={doAssign}
+      />
     </FloorShell>
   );
 }

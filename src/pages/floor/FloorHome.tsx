@@ -5,8 +5,8 @@ import { AlertTriangle, Pencil, Plus, UserPlus, X } from 'lucide-react';
 import { toast as sonnerToast } from 'sonner';
 import FloorShell from '@/components/layout/FloorShell';
 import StageTimeline from '@/components/StageTimeline';
-import { Dialog } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
+import AssignSheet from '@/components/floor/AssignSheet';
 import { assignLot, getLotCounts, listLots, type LotCounts } from '@/api/lots';
 import { listStitchingMasters, type StitchingMaster } from '@/api/users';
 import type { Lot, OrderStatus } from '@/api/types';
@@ -177,10 +177,14 @@ export default function FloorHome() {
       .catch(() => setMasters([]));
   }, [assignLots.length]);
 
-  // Bucket lots by where they actually are in the workflow. A pending
-  // lot has no stage yet — separate it from the in-stage buckets so
-  // the UI doesn't show a misleading "Stitch active" timeline on a
-  // lot that hasn't been assigned to anyone.
+  // Bucket lots by where they ACTUALLY are in the workflow — not by
+  // assignment status. A lot that's already moved past `receiving`
+  // belongs in its current stage's bucket even if no formal
+  // stitching-master assignment ever happened (admin-triggered forward,
+  // legacy data, etc).
+  //
+  // pending = "truly needs FM action": just received, no assignee.
+  // Mirrors BE counts() so pill totals and section contents agree.
   const { pending, inStitching, inFinishing, stuck } = useMemo(() => {
     const buckets = {
       pending: [] as Lot[],
@@ -190,14 +194,17 @@ export default function FloorHome() {
     };
     for (const l of lots) {
       if (!matchesFilter(l, filter)) continue;
-      if (l.assignedUserId == null) {
-        buckets.pending.push(l);
-        continue;
-      }
       const s = l.order?.status;
       if (s === 'stuck') buckets.stuck.push(l);
       else if (s === 'in_finishing') buckets.inFinishing.push(l);
-      else buckets.inStitching.push(l); // receiving / in_stitching / in_rework
+      else if (s === 'in_stitching' || s === 'in_rework')
+        buckets.inStitching.push(l);
+      else if (s === 'receiving' || s == null) {
+        // receiving = just landed. Pending only when no assignee;
+        // already-assigned-but-not-started lots go to in_stitching.
+        if (l.assignedUserId == null) buckets.pending.push(l);
+        else buckets.inStitching.push(l);
+      }
     }
     return buckets;
   }, [lots, filter]);
@@ -576,85 +583,21 @@ export default function FloorHome() {
         </div>
       )}
 
-      <Dialog
+      <AssignSheet
         open={assignLots.length > 0}
         onClose={() => setAssignLots([])}
-        title={
-          assignLots.length > 1
-            ? t('floor.bulkAssignBar', {
-                defaultValue: 'Assign {{n}} lots',
-                n: assignLots.length,
-              })
-            : t(
-                assignLots[0]?.assignedUserId != null
-                  ? 'floor.reassign'
-                  : 'floor.assignTo',
-                {
-                  defaultValue:
-                    assignLots[0]?.assignedUserId != null ? 'Reassign' : 'Assign to…',
-                },
-              )
-        }
-      >
-        {assignLots.length > 0 && (
-          <div className="space-y-2">
-            {assignLots.length === 1 ? (
-              <p className="text-sm text-[var(--color-muted-foreground)]">
-                <span className="font-mono">{assignLots[0].lotNo}</span>
-                {' · '}
-                {totalUnits(assignLots[0].qtyIn)}u
-                {assignLots[0].assignedUser && (
-                  <>
-                    {' · '}
-                    <span>
-                      {t('floor.currentlyAssigned', {
-                        defaultValue: 'Currently {{name}}',
-                        name: assignLots[0].assignedUser.name,
-                      })}
-                    </span>
-                  </>
-                )}
-              </p>
-            ) : (
-              <p className="text-sm text-[var(--color-muted-foreground)]">
-                {assignLots.length} lots ·{' '}
-                {assignLots.reduce((a, l) => a + totalUnits(l.qtyIn), 0)}u
-              </p>
-            )}
-            <ul className="divide-y divide-[var(--color-border)]">
-              {masters
-                .filter((m) => m.id !== sharedAssignee)
-                .map((m) => (
-                  <li key={m.id} className="py-1">
-                    <button
-                      type="button"
-                      onClick={() => doAssign(m.id)}
-                      disabled={assigning !== null}
-                      className="w-full flex items-center justify-between gap-3 px-2 py-2 rounded-[10px] hover:bg-[var(--color-muted)] disabled:opacity-50 transition-colors"
-                    >
-                      <span className="text-[15px] font-medium text-[var(--color-foreground)]">
-                        {m.name}
-                      </span>
-                      <span className="font-mono text-[12px] text-[var(--color-muted-foreground)]">
-                        {t('floor.inQueue', {
-                          defaultValue: '{{n}} in queue',
-                          n: m.inProgressLots,
-                        })}
-                      </span>
-                    </button>
-                  </li>
-                ))}
-              {masters.filter((m) => m.id !== sharedAssignee).length === 0 && (
-                <li className="py-3 text-sm text-[var(--color-muted-foreground)]">
-                  {t('floor.noOtherMasters', {
-                    defaultValue: 'No other stitching masters available.',
-                  })}
-                </li>
-              )}
-            </ul>
-          </div>
-        )}
-      </Dialog>
+        lots={assignLots.map((l) => ({
+          id: l.id,
+          lotNo: l.lotNo,
+          units: totalUnits(l.qtyIn),
+          assignedUserId: l.assignedUserId,
+          assignedUserName: l.assignedUser?.name ?? null,
+        }))}
+        masters={masters}
+        excludeMasterId={sharedAssignee}
+        busy={assigning !== null}
+        onConfirm={doAssign}
+      />
     </FloorShell>
   );
 }
