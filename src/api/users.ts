@@ -53,18 +53,26 @@ export async function updateOnboardedAt(_userId: string | number): Promise<User>
 }
 
 /**
- * Workload-sorted list of active stitching masters for the floor-manager
- * assign picker. Sorted ascending by inProgressLots (least-loaded first),
- * tiebreak by name. BE: GET /api/users/stitching-masters.
+ * Workload-sorted list of active masters for the floor-manager assign
+ * picker. Sorted ascending by inProgressLots (least-loaded first),
+ * tiebreak by name. BE: GET /api/users/{stitching|finishing}-masters.
  */
-export interface StitchingMaster {
+export interface MasterWithLoad {
   id: number;
   name: string;
   mobileNumber: string;
   inProgressLots: number;
 }
 
-export async function listStitchingMasters(): Promise<StitchingMaster[]> {
-  const res = await apiClient.get<StitchingMaster[]>('/api/users/stitching-masters');
+/** @deprecated Use MasterWithLoad — same shape, neutral name. */
+export type StitchingMaster = MasterWithLoad;
+
+export async function listStitchingMasters(): Promise<MasterWithLoad[]> {
+  const res = await apiClient.get<MasterWithLoad[]>('/api/users/stitching-masters');
+  return res.data;
+}
+
+export async function listFinishingMasters(): Promise<MasterWithLoad[]> {
+  const res = await apiClient.get<MasterWithLoad[]>('/api/users/finishing-masters');
   return res.data;
 }

@@ -6,8 +6,12 @@ import { toast as sonnerToast } from 'sonner';
 import FloorShell from '@/components/layout/FloorShell';
 import StageTimeline from '@/components/StageTimeline';
 import AssignSheet from '@/components/floor/AssignSheet';
-import { assignLot, getLot } from '@/api/lots';
-import { listStitchingMasters, type StitchingMaster } from '@/api/users';
+import { assignLot, getLot, type AssignSlot } from '@/api/lots';
+import {
+  listFinishingMasters,
+  listStitchingMasters,
+  type MasterWithLoad,
+} from '@/api/users';
 import type { Lot } from '@/api/types';
 import { cn } from '@/lib/utils';
 
@@ -27,7 +31,12 @@ export default function FloorLotDetail() {
   const [lot, setLot] = useState<Lot | null>(null);
   const [loading, setLoading] = useState(true);
   const [assignOpen, setAssignOpen] = useState(false);
-  const [masters, setMasters] = useState<StitchingMaster[]>([]);
+  // Pick the assignment slot from the lot's current state — finishing
+  // for in_finishing, stitching for everything else. Recomputed when
+  // the sheet opens (below).
+  const [assignSlot, setAssignSlot] =
+    useState<AssignSlot>('stitching_master');
+  const [masters, setMasters] = useState<MasterWithLoad[]>([]);
   const [assigning, setAssigning] = useState<number | null>(null);
 
   const refresh = useCallback(async () => {
@@ -48,17 +57,31 @@ export default function FloorLotDetail() {
 
   useEffect(() => {
     if (!assignOpen) return;
-    listStitchingMasters()
+    const fetcher =
+      assignSlot === 'finishing_master'
+        ? listFinishingMasters
+        : listStitchingMasters;
+    fetcher()
       .then(setMasters)
       .catch(() => setMasters([]));
-  }, [assignOpen]);
+  }, [assignOpen, assignSlot]);
+
+  function openAssign() {
+    if (!lot) return;
+    setAssignSlot(
+      lot.order?.status === 'in_finishing'
+        ? 'finishing_master'
+        : 'stitching_master',
+    );
+    setAssignOpen(true);
+  }
 
   async function doAssign(userId: number) {
     if (!lot) return;
     setAssigning(userId);
     const master = masters.find((m) => m.id === userId);
     try {
-      await assignLot(lot.id, userId);
+      await assignLot(lot.id, userId, assignSlot);
       sonnerToast.success(
         t('floor.assignSuccessToast', {
           defaultValue: 'Assigned to {{name}}',
@@ -242,31 +265,72 @@ export default function FloorLotDetail() {
             )}
           </div>
 
-          {/* Assignment */}
-          <div className="rounded-[14px] bg-[var(--color-surface)] shadow-[0_1px_2px_rgba(15,26,54,0.04)] p-[16px_18px]">
+          {/* Assignment — two slots, surface both. The action button
+              targets the slot that's relevant to the lot's current
+              status (finishing if in_finishing, else stitching). */}
+          <div className="rounded-[14px] bg-[var(--color-surface)] shadow-[0_1px_2px_rgba(15,26,54,0.04)] p-[16px_18px] space-y-3">
             <div className="flex items-center justify-between gap-3">
               <div>
                 <div className="text-[12px] uppercase tracking-[0.08em] font-semibold text-[var(--color-muted-foreground)]">
-                  {t('floor.assignedSection')}
+                  {t('floor.assignedStitcher', {
+                    defaultValue: 'Stitching Master',
+                  })}
                 </div>
                 <div className="mt-1 text-[15px] font-medium text-[var(--color-foreground)]">
                   {lot.assignedUser?.name ?? '—'}
                 </div>
               </div>
-              <button
-                type="button"
-                onClick={() => setAssignOpen(true)}
-                className={cn(
-                  'inline-flex items-center gap-1.5 px-3 h-9 rounded-[10px] text-[13px] font-semibold transition-transform active:translate-y-px',
-                  isAssigned
-                    ? 'text-[var(--color-foreground)] border border-[var(--color-border)] bg-white hover:bg-[var(--color-muted)]'
-                    : 'text-white bg-gradient-to-b from-[var(--color-primary)] to-[var(--color-primary-hover)] shadow-[inset_0_1px_0_rgba(255,255,255,0.18),0_0_0_1px_var(--color-primary-hover),0_4px_10px_rgba(34,64,196,0.28)]',
-                )}
-              >
-                <UserPlus size={14} />
-                {isAssigned ? t('floor.reassign') : t('floor.assignTo')}
-              </button>
+              {(() => {
+                const isStitchSlot = lot.order?.status !== 'in_finishing';
+                if (!isStitchSlot) return null;
+                return (
+                  <button
+                    type="button"
+                    onClick={openAssign}
+                    className={cn(
+                      'inline-flex items-center gap-1.5 px-3 h-9 rounded-[10px] text-[13px] font-semibold transition-transform active:translate-y-px',
+                      isAssigned
+                        ? 'text-[var(--color-foreground)] border border-[var(--color-border)] bg-white hover:bg-[var(--color-muted)]'
+                        : 'text-white bg-gradient-to-b from-[var(--color-primary)] to-[var(--color-primary-hover)] shadow-[inset_0_1px_0_rgba(255,255,255,0.18),0_0_0_1px_var(--color-primary-hover),0_4px_10px_rgba(34,64,196,0.28)]',
+                    )}
+                  >
+                    <UserPlus size={14} />
+                    {isAssigned ? t('floor.reassign') : t('floor.assignTo')}
+                  </button>
+                );
+              })()}
             </div>
+            {/* Finishing slot — only shown once the lot has actually
+                reached finishing. Action targets the finishing slot. */}
+            {lot.order?.status === 'in_finishing' && (
+              <div className="flex items-center justify-between gap-3 pt-3 border-t border-[var(--color-border)]">
+                <div>
+                  <div className="text-[12px] uppercase tracking-[0.08em] font-semibold text-[var(--color-muted-foreground)]">
+                    {t('floor.assignedFinisher', {
+                      defaultValue: 'Finishing Master',
+                    })}
+                  </div>
+                  <div className="mt-1 text-[15px] font-medium text-[var(--color-foreground)]">
+                    {lot.assignedFinisher?.name ?? '—'}
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={openAssign}
+                  className={cn(
+                    'inline-flex items-center gap-1.5 px-3 h-9 rounded-[10px] text-[13px] font-semibold transition-transform active:translate-y-px',
+                    lot.assignedFinisherUserId != null
+                      ? 'text-[var(--color-foreground)] border border-[var(--color-border)] bg-white hover:bg-[var(--color-muted)]'
+                      : 'text-white bg-gradient-to-b from-[var(--color-primary)] to-[var(--color-primary-hover)] shadow-[inset_0_1px_0_rgba(255,255,255,0.18),0_0_0_1px_var(--color-primary-hover),0_4px_10px_rgba(34,64,196,0.28)]',
+                  )}
+                >
+                  <UserPlus size={14} />
+                  {lot.assignedFinisherUserId != null
+                    ? t('floor.reassign')
+                    : t('floor.assignTo')}
+                </button>
+              </div>
+            )}
           </div>
 
           {/* Size matrix */}
@@ -334,6 +398,7 @@ export default function FloorLotDetail() {
 
       <AssignSheet
         open={assignOpen}
+        slot={assignSlot}
         onClose={() => setAssignOpen(false)}
         lots={
           lot
@@ -342,14 +407,24 @@ export default function FloorLotDetail() {
                   id: lot.id,
                   lotNo: lot.lotNo,
                   units,
-                  assignedUserId: lot.assignedUserId,
-                  assignedUserName: lot.assignedUser?.name ?? null,
+                  assignedUserId:
+                    assignSlot === 'finishing_master'
+                      ? lot.assignedFinisherUserId
+                      : lot.assignedUserId,
+                  assignedUserName:
+                    assignSlot === 'finishing_master'
+                      ? (lot.assignedFinisher?.name ?? null)
+                      : (lot.assignedUser?.name ?? null),
                 },
               ]
             : []
         }
         masters={masters}
-        excludeMasterId={lot?.assignedUserId ?? null}
+        excludeMasterId={
+          assignSlot === 'finishing_master'
+            ? (lot?.assignedFinisherUserId ?? null)
+            : (lot?.assignedUserId ?? null)
+        }
         busy={assigning !== null}
         onConfirm={doAssign}
       />

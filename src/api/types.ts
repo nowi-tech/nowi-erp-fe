@@ -95,11 +95,14 @@ export interface Lot {
    * can hide the lot once work is finished even before status advances.
    */
   stageScrapped?: Partial<Record<string, number>>;
-  /** Stitching master this lot is assigned to. `null` = pending assignment. */
+  /** Stitching master this lot is assigned to. `null` = pending stitching assignment. */
   assignedUserId?: number | null;
+  /** Finishing master this lot is assigned to. `null` = pending finishing assignment. */
+  assignedFinisherUserId?: number | null;
   /** Training/test row. Floor screens may flag these so they're not mistaken for live work. */
   isTestData?: boolean;
   assignedUser?: { id: number; name: string } | null;
+  assignedFinisher?: { id: number; name: string } | null;
   vendor?: Vendor | null;
   order?: Order | null;
   /** Embedded NOWI Style (added when the BE response includes it). */

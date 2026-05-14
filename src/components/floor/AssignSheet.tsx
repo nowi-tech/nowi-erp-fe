@@ -2,7 +2,8 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Search, X } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import type { StitchingMaster } from '@/api/users';
+import type { MasterWithLoad } from '@/api/users';
+import type { AssignSlot } from '@/api/lots';
 
 export interface AssignSheetLot {
   id: number;
@@ -15,9 +16,15 @@ export interface AssignSheetLot {
 interface AssignSheetProps {
   open: boolean;
   onClose: () => void;
+  /**
+   * Which assignment slot we're filling. Drives the title + i18n keys
+   * so the same sheet works for stitching-master and finishing-master
+   * picks. Defaults to stitching for back-compat.
+   */
+  slot?: AssignSlot;
   /** One-element array = single lot. Multi-element = bulk assign. */
   lots: AssignSheetLot[];
-  masters: StitchingMaster[];
+  masters: MasterWithLoad[];
   /** Master id currently shared across all selected lots (hides their card). */
   excludeMasterId?: number | null;
   busy?: boolean;
@@ -27,6 +34,7 @@ interface AssignSheetProps {
 export default function AssignSheet({
   open,
   onClose,
+  slot = 'stitching_master',
   lots,
   masters,
   excludeMasterId,
@@ -34,6 +42,7 @@ export default function AssignSheet({
   onConfirm,
 }: AssignSheetProps) {
   const { t } = useTranslation();
+  const isFinishing = slot === 'finishing_master';
   const [selected, setSelected] = useState<number | null>(null);
   const [query, setQuery] = useState('');
   const searchRef = useRef<HTMLInputElement>(null);
@@ -71,14 +80,27 @@ export default function AssignSheet({
 
   if (!open) return null;
 
+  const titleSuffix = isFinishing
+    ? t('floor.assignSheet.finisherSuffix', {
+        defaultValue: 'Finishing Master',
+      })
+    : t('floor.assignSheet.stitcherSuffix', {
+        defaultValue: 'Stitching Master',
+      });
   const title = isBulk
     ? t('floor.bulkAssignBar', {
         defaultValue: 'Assign {{n}} lots',
         n: lots.length,
       })
-    : t(isReassign ? 'floor.reassign' : 'floor.assignTo', {
-        defaultValue: isReassign ? 'Reassign' : 'Assign Lot',
-      });
+    : isReassign
+      ? t('floor.assignSheet.reassign', {
+          defaultValue: 'Reassign {{slot}}',
+          slot: titleSuffix,
+        })
+      : t('floor.assignSheet.assign', {
+          defaultValue: 'Assign {{slot}}',
+          slot: titleSuffix,
+        });
 
   const totalUnits = lots.reduce((a, l) => a + l.units, 0);
 
@@ -152,9 +174,15 @@ export default function AssignSheet({
               type="text"
               value={query}
               onChange={(e) => setQuery(e.target.value)}
-              placeholder={t('floor.searchMasters', {
-                defaultValue: 'Search Stitching Masters…',
-              })}
+              placeholder={
+                isFinishing
+                  ? t('floor.searchFinishingMasters', {
+                      defaultValue: 'Search Finishing Masters…',
+                    })
+                  : t('floor.searchMasters', {
+                      defaultValue: 'Search Stitching Masters…',
+                    })
+              }
               className="w-full h-12 bg-[var(--color-background-2)] border border-[var(--color-border)] rounded-[8px] pl-11 pr-4 text-[16px] focus:border-[var(--color-primary)] focus:ring-1 focus:ring-[var(--color-primary)] focus:outline-none"
             />
           </div>

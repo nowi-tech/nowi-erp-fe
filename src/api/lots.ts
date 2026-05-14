@@ -5,12 +5,16 @@ export interface ListLotsParams {
   search?: string;
   status?: string;
   vendorId?: string;
-  /** Filter to lots assigned to a specific user. */
+  /** Filter to lots assigned to a specific user (stitching slot). */
   assignedUserId?: number;
-  /** Floor manager view: only unassigned lots. */
+  /** Floor manager view: only unassigned (stitching) lots. */
   unassigned?: boolean;
-  /** Stitching home: lots assigned to me. */
+  /** Stitching home: lots assigned to me (stitching slot). */
   assignedToMe?: boolean;
+  /** Floor manager view: lots in finishing with no finisher assigned. */
+  unassignedFinishing?: boolean;
+  /** Finishing home: lots whose finishing slot is me. */
+  assignedFinisherToMe?: boolean;
   take?: number;
   skip?: number;
 }
@@ -20,8 +24,17 @@ export async function listLots(params: ListLotsParams = {}): Promise<Lot[]> {
   return Array.isArray(res.data) ? res.data : res.data.data;
 }
 
-export async function assignLot(lotId: number, userId: number): Promise<Lot> {
-  const res = await apiClient.post<Lot>(`/api/lots/${lotId}/assign`, { userId });
+export type AssignSlot = 'stitching_master' | 'finishing_master';
+
+export async function assignLot(
+  lotId: number,
+  userId: number,
+  role: AssignSlot = 'stitching_master',
+): Promise<Lot> {
+  const res = await apiClient.post<Lot>(`/api/lots/${lotId}/assign`, {
+    userId,
+    role,
+  });
   return res.data;
 }
 
@@ -75,8 +88,12 @@ export async function listEditRequests(): Promise<EditRequestRow[]> {
 
 export interface LotCounts {
   all: number;
+  /** Pending stitching assignment (status=receiving + no stitching master). */
   pending: number;
   in_stitching: number;
+  /** Pending finishing assignment (status=in_finishing + no finishing master). */
+  pending_finishing: number;
+  /** Active in finishing (assigned finisher present). */
   in_finishing: number;
   stuck: number;
   /** Age of the oldest active lot, in ms. null when there are none. */

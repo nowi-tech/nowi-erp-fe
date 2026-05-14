@@ -7,8 +7,18 @@ import FloorShell from '@/components/layout/FloorShell';
 import StageTimeline from '@/components/StageTimeline';
 import { Button } from '@/components/ui/button';
 import AssignSheet from '@/components/floor/AssignSheet';
-import { assignLot, getLotCounts, listLots, type LotCounts } from '@/api/lots';
-import { listStitchingMasters, type StitchingMaster } from '@/api/users';
+import {
+  assignLot,
+  getLotCounts,
+  listLots,
+  type AssignSlot,
+  type LotCounts,
+} from '@/api/lots';
+import {
+  listFinishingMasters,
+  listStitchingMasters,
+  type MasterWithLoad,
+} from '@/api/users';
 import type { Lot, OrderStatus } from '@/api/types';
 import { cn } from '@/lib/utils';
 
@@ -39,7 +49,13 @@ function todayLabel(locale: string): string {
   });
 }
 
-type Filter = 'all' | 'pending' | 'in_stitching' | 'in_finishing' | 'stuck';
+type Filter =
+  | 'all'
+  | 'pending'
+  | 'in_stitching'
+  | 'pending_finishing'
+  | 'in_finishing'
+  | 'stuck';
 const LONG_PRESS_MS = 500;
 const PAGE_SIZE = 20;
 
@@ -57,8 +73,14 @@ export default function FloorHome() {
   const [searchParams, setSearchParams] = useSearchParams();
   const filter: Filter = (() => {
     const raw = searchParams.get('tab');
-    if (raw === 'all' || raw === 'pending' || raw === 'in_stitching' ||
-        raw === 'in_finishing' || raw === 'stuck') {
+    if (
+      raw === 'all' ||
+      raw === 'pending' ||
+      raw === 'in_stitching' ||
+      raw === 'pending_finishing' ||
+      raw === 'in_finishing' ||
+      raw === 'stuck'
+    ) {
       return raw;
     }
     return 'pending';
@@ -75,8 +97,12 @@ export default function FloorHome() {
   };
 
   // Assign dialog state — either a single lot or bulk-selected lots.
+  // `assignSlot` = which assignment column the picker writes:
+  //   stitching_master = the original "pending" → stitching flow
+  //   finishing_master = the new "pending finishing" → finishing flow
   const [assignLots, setAssignLots] = useState<Lot[]>([]);
-  const [masters, setMasters] = useState<StitchingMaster[]>([]);
+  const [assignSlot, setAssignSlot] = useState<AssignSlot>('stitching_master');
+  const [masters, setMasters] = useState<MasterWithLoad[]>([]);
   const [assigning, setAssigning] = useState<number | null>(null);
 
   // Bulk selection state — entered via long-press.
@@ -172,10 +198,14 @@ export default function FloorHome() {
 
   useEffect(() => {
     if (assignLots.length === 0) return;
-    listStitchingMasters()
+    const fetcher =
+      assignSlot === 'finishing_master'
+        ? listFinishingMasters
+        : listStitchingMasters;
+    fetcher()
       .then(setMasters)
       .catch(() => setMasters([]));
-  }, [assignLots.length]);
+  }, [assignLots.length, assignSlot]);
 
   // Bucket lots by where they ACTUALLY are in the workflow — not by
   // assignment status. A lot that's already moved past `receiving`
@@ -185,40 +215,50 @@ export default function FloorHome() {
   //
   // pending = "truly needs FM action": just received, no assignee.
   // Mirrors BE counts() so pill totals and section contents agree.
-  const { pending, inStitching, inFinishing, stuck } = useMemo(() => {
-    const buckets = {
-      pending: [] as Lot[],
-      inStitching: [] as Lot[],
-      inFinishing: [] as Lot[],
-      stuck: [] as Lot[],
-    };
-    for (const l of lots) {
-      if (!matchesFilter(l, filter)) continue;
-      const s = l.order?.status;
-      if (s === 'stuck') buckets.stuck.push(l);
-      else if (s === 'in_finishing') buckets.inFinishing.push(l);
-      else if (s === 'in_stitching' || s === 'in_rework')
-        buckets.inStitching.push(l);
-      else if (s === 'receiving' || s == null) {
-        // receiving = just landed. Pending only when no assignee;
-        // already-assigned-but-not-started lots go to in_stitching.
-        if (l.assignedUserId == null) buckets.pending.push(l);
-        else buckets.inStitching.push(l);
+  const { pending, inStitching, pendingFinishing, inFinishing, stuck } =
+    useMemo(() => {
+      const buckets = {
+        pending: [] as Lot[],
+        inStitching: [] as Lot[],
+        pendingFinishing: [] as Lot[],
+        inFinishing: [] as Lot[],
+        stuck: [] as Lot[],
+      };
+      for (const l of lots) {
+        if (!matchesFilter(l, filter)) continue;
+        const s = l.order?.status;
+        if (s === 'stuck') buckets.stuck.push(l);
+        else if (s === 'in_finishing') {
+          // Mirror BE counts(): split in_finishing by whether a finisher
+          // is assigned. No finisher = FM still needs to pick someone.
+          if (l.assignedFinisherUserId == null) buckets.pendingFinishing.push(l);
+          else buckets.inFinishing.push(l);
+        } else if (s === 'in_stitching' || s === 'in_rework')
+          buckets.inStitching.push(l);
+        else if (s === 'receiving' || s == null) {
+          // receiving = just landed. Pending only when no assignee;
+          // already-assigned-but-not-started lots go to in_stitching.
+          if (l.assignedUserId == null) buckets.pending.push(l);
+          else buckets.inStitching.push(l);
+        }
       }
-    }
-    return buckets;
-  }, [lots, filter]);
+      return buckets;
+    }, [lots, filter]);
 
   // Common assignee for all selected lots, if any — used to filter the
   // master picker on bulk reassign. If lots have different assignees,
   // we show all masters (no exclusion).
   const sharedAssignee = useMemo(() => {
     if (assignLots.length === 0) return null;
-    const ids = new Set(assignLots.map((l) => l.assignedUserId ?? null));
+    const pickAssignee = (l: Lot) =>
+      assignSlot === 'finishing_master'
+        ? (l.assignedFinisherUserId ?? null)
+        : (l.assignedUserId ?? null);
+    const ids = new Set(assignLots.map(pickAssignee));
     if (ids.size > 1) return null;
     const [only] = [...ids];
     return only;
-  }, [assignLots]);
+  }, [assignLots, assignSlot]);
 
   function exitSelection() {
     setSelectionMode(false);
@@ -235,12 +275,25 @@ export default function FloorHome() {
   }
 
   function openAssignFor(lot: Lot) {
+    // Pick the right slot from the lot's current state. A lot in
+    // in_finishing is being routed to a finisher; everything else is
+    // the original stitching assignment.
+    const slot: AssignSlot =
+      lot.order?.status === 'in_finishing'
+        ? 'finishing_master'
+        : 'stitching_master';
+    setAssignSlot(slot);
     setAssignLots([lot]);
   }
 
   function openBulkAssign() {
     const targets = lots.filter((l) => selected.has(l.id));
     if (targets.length === 0) return;
+    // Bulk only operates on a single homogenous slot. The selection UI
+    // below restricts long-press to the pending-stitching bucket today,
+    // so this is effectively always stitching. Future: extend selection
+    // to pending-finishing and infer from the bucket.
+    setAssignSlot('stitching_master');
     setAssignLots(targets);
   }
 
@@ -250,7 +303,7 @@ export default function FloorHome() {
     try {
       // Sequential to keep audit rows ordered + simpler error UX.
       for (const lot of assignLots) {
-        await assignLot(lot.id, userId);
+        await assignLot(lot.id, userId, assignSlot);
       }
       sonnerToast.success(
         assignLots.length === 1
@@ -306,12 +359,24 @@ export default function FloorHome() {
         {(() => {
           const stuck = counts?.stuck ?? 0;
           const pending = counts?.pending ?? 0;
+          const pendingFinishing = counts?.pending_finishing ?? 0;
+          const needsAction = pending + pendingFinishing + stuck;
           const attentionTone: KpiTone =
-            stuck > 0 ? 'danger' : pending > 0 ? 'warning' : 'success';
+            stuck > 0 ? 'danger' : needsAction > 0 ? 'warning' : 'success';
+          // Land on the most-urgent bucket: stuck > pending stitching >
+          // pending finishing.
+          const attentionLandingFilter: Filter =
+            stuck > 0
+              ? 'stuck'
+              : pending > 0
+                ? 'pending'
+                : pendingFinishing > 0
+                  ? 'pending_finishing'
+                  : 'pending';
           return (
             <KpiCard
               label={t('floor.kpi.attention', { defaultValue: 'Needs your attention' })}
-              value={counts == null ? '—' : String(pending + stuck)}
+              value={counts == null ? '—' : String(needsAction)}
               sub={
                 counts == null
                   ? null
@@ -320,25 +385,24 @@ export default function FloorHome() {
                         defaultValue: '{{n}} stuck',
                         n: stuck,
                       })
-                    : pending > 0
+                    : needsAction > 0
                       ? t('floor.kpi.attentionPending', {
                           defaultValue: '{{n}} pending',
-                          n: pending,
+                          n: pending + pendingFinishing,
                         })
                       : t('floor.kpi.attentionAllClear', {
                           defaultValue: 'All clear',
                         })
               }
               tone={attentionTone}
-              onClick={() =>
-                setFilter(stuck > 0 ? 'stuck' : 'pending')
-              }
+              onClick={() => setFilter(attentionLandingFilter)}
             />
           );
         })()}
         {(() => {
           const inFlight =
             (counts?.in_stitching ?? 0) +
+            (counts?.pending_finishing ?? 0) +
             (counts?.in_finishing ?? 0) +
             (counts?.pending ?? 0);
           const ageMs = counts?.oldestActiveAgeMs ?? null;
@@ -387,6 +451,13 @@ export default function FloorHome() {
           [
             { id: 'pending' as const, label: t('floor.filters.pending'), count: counts?.pending },
             { id: 'in_stitching' as const, label: t('floor.filters.inStitching'), count: counts?.in_stitching },
+            {
+              id: 'pending_finishing' as const,
+              label: t('floor.filters.pendingFinishing', {
+                defaultValue: 'Pending Finishing',
+              }),
+              count: counts?.pending_finishing,
+            },
             { id: 'in_finishing' as const, label: t('floor.filters.inFinishing'), count: counts?.in_finishing },
             { id: 'stuck' as const, label: t('floor.filters.stuck'), count: counts?.stuck },
             { id: 'all' as const, label: t('floor.filters.all'), count: counts?.all },
@@ -466,59 +537,79 @@ export default function FloorHome() {
         // Single-bucket filter views — full cards via the existing
         // Section component. No per-section cap; the infinite-scroll
         // sentinel below handles pagination.
-        (['pending', 'inStitching', 'inFinishing', 'stuck'] as const).map(
-          (bucketKey) => {
-            const buckets = { pending, inStitching, inFinishing, stuck };
-            const bucket = buckets[bucketKey];
-            const visibleByFilter =
-              (filter === 'pending' && bucketKey === 'pending') ||
-              (filter === 'in_stitching' && bucketKey === 'inStitching') ||
-              (filter === 'in_finishing' && bucketKey === 'inFinishing') ||
-              (filter === 'stuck' && bucketKey === 'stuck');
-            if (!visibleByFilter) return null;
+        (
+          [
+            'pending',
+            'inStitching',
+            'pendingFinishing',
+            'inFinishing',
+            'stuck',
+          ] as const
+        ).map((bucketKey) => {
+          const buckets = {
+            pending,
+            inStitching,
+            pendingFinishing,
+            inFinishing,
+            stuck,
+          };
+          const bucket = buckets[bucketKey];
+          const visibleByFilter =
+            (filter === 'pending' && bucketKey === 'pending') ||
+            (filter === 'in_stitching' && bucketKey === 'inStitching') ||
+            (filter === 'pending_finishing' &&
+              bucketKey === 'pendingFinishing') ||
+            (filter === 'in_finishing' && bucketKey === 'inFinishing') ||
+            (filter === 'stuck' && bucketKey === 'stuck');
+          if (!visibleByFilter) return null;
 
-            const titleKey = {
-              pending: 'floor.pending',
-              inStitching: 'floor.filters.inStitching',
-              inFinishing: 'floor.filters.inFinishing',
-              stuck: 'floor.filters.stuck',
-            }[bucketKey];
-            const emptyKey = {
-              pending: 'floor.pendingEmpty',
-              inStitching: 'floor.assignedEmpty',
-              inFinishing: 'floor.assignedEmpty',
-              stuck: 'floor.assignedEmpty',
-            }[bucketKey];
+          const titleKey = {
+            pending: 'floor.pending',
+            inStitching: 'floor.filters.inStitching',
+            pendingFinishing: 'floor.filters.pendingFinishing',
+            inFinishing: 'floor.filters.inFinishing',
+            stuck: 'floor.filters.stuck',
+          }[bucketKey];
+          const emptyKey = {
+            pending: 'floor.pendingEmpty',
+            inStitching: 'floor.assignedEmpty',
+            pendingFinishing: 'floor.pendingEmpty',
+            inFinishing: 'floor.assignedEmpty',
+            stuck: 'floor.assignedEmpty',
+          }[bucketKey];
 
-            return (
-              <div key={bucketKey} className="mb-6">
-                <Section
-                  title={t(titleKey)}
-                  count={bucket.length}
-                  emptyLabel={t(emptyKey)}
-                  loading={initialLoading}
-                  lots={bucket}
-                  hideTimeline={bucketKey === 'pending'}
-                  selectionMode={selectionMode && bucketKey === 'pending'}
-                  selected={selected}
-                  onOpenLot={(lot) => {
-                    if (selectionMode && bucketKey === 'pending') {
-                      toggleSelection(lot.id);
-                    } else {
-                      navigate(`/floor/lot/${lot.id}`);
-                    }
-                  }}
-                  onLongPress={(lot) => {
-                    if (bucketKey !== 'pending') return;
-                    if (!selectionMode) setSelectionMode(true);
-                    setSelected((prev) => new Set(prev).add(lot.id));
-                  }}
-                  onAssign={openAssignFor}
-                />
-              </div>
-            );
-          },
-        )
+          // Long-press / bulk-select today only operates on the
+          // pending-stitching bucket.
+          const isPendingBucket = bucketKey === 'pending';
+
+          return (
+            <div key={bucketKey} className="mb-6">
+              <Section
+                title={t(titleKey)}
+                count={bucket.length}
+                emptyLabel={t(emptyKey)}
+                loading={initialLoading}
+                lots={bucket}
+                hideTimeline={isPendingBucket || bucketKey === 'pendingFinishing'}
+                selectionMode={selectionMode && isPendingBucket}
+                selected={selected}
+                onOpenLot={(lot) => {
+                  if (selectionMode && isPendingBucket) {
+                    toggleSelection(lot.id);
+                  } else {
+                    navigate(`/floor/lot/${lot.id}`);
+                  }
+                }}
+                onLongPress={(lot) => {
+                  if (!isPendingBucket) return;
+                  if (!selectionMode) setSelectionMode(true);
+                  setSelected((prev) => new Set(prev).add(lot.id));
+                }}
+                onAssign={openAssignFor}
+              />
+            </div>
+          );
+        })
       )}
 
       {/* Infinite-scroll sentinel + load indicator */}
@@ -585,13 +676,20 @@ export default function FloorHome() {
 
       <AssignSheet
         open={assignLots.length > 0}
+        slot={assignSlot}
         onClose={() => setAssignLots([])}
         lots={assignLots.map((l) => ({
           id: l.id,
           lotNo: l.lotNo,
           units: totalUnits(l.qtyIn),
-          assignedUserId: l.assignedUserId,
-          assignedUserName: l.assignedUser?.name ?? null,
+          assignedUserId:
+            assignSlot === 'finishing_master'
+              ? l.assignedFinisherUserId
+              : l.assignedUserId,
+          assignedUserName:
+            assignSlot === 'finishing_master'
+              ? (l.assignedFinisher?.name ?? null)
+              : (l.assignedUser?.name ?? null),
         }))}
         masters={masters}
         excludeMasterId={sharedAssignee}
@@ -610,7 +708,16 @@ function matchesFilter(lot: Lot, filter: Filter): boolean {
     return ['receiving', 'in_stitching', 'in_rework'].includes(
       lot.order?.status ?? '',
     );
-  if (filter === 'in_finishing') return lot.order?.status === 'in_finishing';
+  if (filter === 'pending_finishing')
+    return (
+      lot.order?.status === 'in_finishing' &&
+      lot.assignedFinisherUserId == null
+    );
+  if (filter === 'in_finishing')
+    return (
+      lot.order?.status === 'in_finishing' &&
+      lot.assignedFinisherUserId != null
+    );
   return true;
 }
 
