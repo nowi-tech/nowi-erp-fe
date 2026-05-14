@@ -329,27 +329,6 @@ export default function FloorLotDetail() {
             </dl>
           </div>
 
-          {/* Edit action */}
-          <div className="flex justify-end">
-            <button
-              type="button"
-              onClick={() =>
-                inEditWindow
-                  ? navigate(`/floor/lot/${lot.id}/edit`)
-                  : navigate(`/floor/lot/${lot.id}/edit?expired=1`)
-              }
-              className={cn(
-                'inline-flex items-center gap-1.5 px-3 h-9 rounded-[10px] text-[13px] font-medium border transition-colors',
-                inEditWindow
-                  ? 'text-[var(--color-foreground)] border-[var(--color-border)] bg-white hover:bg-[var(--color-muted)]'
-                  : 'text-[var(--color-muted-foreground)] border-[var(--color-border)] bg-[var(--color-muted)]/40',
-              )}
-              title={inEditWindow ? t('floor.editWindow') : t('floor.editExpired')}
-            >
-              <Pencil size={14} />
-              {t('floor.edit')}
-            </button>
-          </div>
         </div>
       )}
 
