@@ -290,53 +290,79 @@ export default function FloorHome() {
         </Button>
       </div>
 
-      {/* KPI cards — what the FM cares about most:
-          1. Needs your attention (Pending + Stuck) — directly actionable
-          2. Active pipeline — health snapshot with oldest lot age */}
+      {/* KPI cards — traffic-light tones tell you status at a glance.
+          1. Needs your attention: red if stuck > 0; amber if pending > 0
+             but no stuck; green when nothing to do.
+          2. Active pipeline: green if oldest < 1d; amber 1–3d; red > 3d.
+             Falls back to ink when there's no active work. */}
       <div className="mb-4 grid grid-cols-2 gap-2.5">
-        <KpiCard
-          label={t('floor.kpi.attention', { defaultValue: 'Needs your attention' })}
-          value={
-            counts == null
-              ? '—'
-              : String((counts.pending ?? 0) + (counts.stuck ?? 0))
-          }
-          sub={
-            counts == null
-              ? null
-              : counts.stuck > 0
-                ? t('floor.kpi.attentionWithStuck', {
-                    defaultValue: '{{n}} stuck',
-                    n: counts.stuck,
-                  })
-                : t('floor.kpi.attentionPending', {
-                    defaultValue: '{{n}} pending',
-                    n: counts.pending,
-                  })
-          }
-          tone={counts && counts.stuck > 0 ? 'danger' : 'primary'}
-          onClick={() => setFilter(counts && counts.stuck > 0 ? 'stuck' : 'pending')}
-        />
-        <KpiCard
-          label={t('floor.kpi.pipeline', { defaultValue: 'Active pipeline' })}
-          value={
-            counts == null
-              ? '—'
-              : String(
-                  counts.in_stitching + counts.in_finishing + counts.pending,
-                )
-          }
-          sub={
-            counts == null || counts.oldestActiveAgeMs == null
-              ? null
-              : t('floor.kpi.pipelineSub', {
-                  defaultValue: 'oldest {{age}}',
-                  age: formatAgeShort(counts.oldestActiveAgeMs),
-                })
-          }
-          tone="ink"
-          onClick={() => setFilter('all')}
-        />
+        {(() => {
+          const stuck = counts?.stuck ?? 0;
+          const pending = counts?.pending ?? 0;
+          const attentionTone: KpiTone =
+            stuck > 0 ? 'danger' : pending > 0 ? 'warning' : 'success';
+          return (
+            <KpiCard
+              label={t('floor.kpi.attention', { defaultValue: 'Needs your attention' })}
+              value={counts == null ? '—' : String(pending + stuck)}
+              sub={
+                counts == null
+                  ? null
+                  : stuck > 0
+                    ? t('floor.kpi.attentionWithStuck', {
+                        defaultValue: '{{n}} stuck',
+                        n: stuck,
+                      })
+                    : pending > 0
+                      ? t('floor.kpi.attentionPending', {
+                          defaultValue: '{{n}} pending',
+                          n: pending,
+                        })
+                      : t('floor.kpi.attentionAllClear', {
+                          defaultValue: 'All clear',
+                        })
+              }
+              tone={attentionTone}
+              onClick={() =>
+                setFilter(stuck > 0 ? 'stuck' : 'pending')
+              }
+            />
+          );
+        })()}
+        {(() => {
+          const inFlight =
+            (counts?.in_stitching ?? 0) +
+            (counts?.in_finishing ?? 0) +
+            (counts?.pending ?? 0);
+          const ageMs = counts?.oldestActiveAgeMs ?? null;
+          const dayMs = 24 * 60 * 60 * 1000;
+          const pipelineTone: KpiTone =
+            inFlight === 0
+              ? 'ink'
+              : ageMs == null
+                ? 'success'
+                : ageMs > 3 * dayMs
+                  ? 'danger'
+                  : ageMs > dayMs
+                    ? 'warning'
+                    : 'success';
+          return (
+            <KpiCard
+              label={t('floor.kpi.pipeline', { defaultValue: 'Active pipeline' })}
+              value={counts == null ? '—' : String(inFlight)}
+              sub={
+                counts == null || ageMs == null
+                  ? null
+                  : t('floor.kpi.pipelineSub', {
+                      defaultValue: 'oldest {{age}}',
+                      age: formatAgeShort(ageMs),
+                    })
+              }
+              tone={pipelineTone}
+              onClick={() => setFilter('all')}
+            />
+          );
+        })()}
       </div>
 
       {/* Filter tabs — floating pill row. Each tab is its own pill
@@ -372,20 +398,20 @@ export default function FloorHome() {
               type="button"
               onClick={() => setFilter(opt.id)}
               className={cn(
-                'shrink-0 inline-flex items-center gap-2 pl-5 pr-3 h-11 rounded-full text-[15px] font-semibold whitespace-nowrap transition-all',
+                'shrink-0 inline-flex items-center gap-2 pl-4 pr-3 h-10 rounded-full text-[14px] font-semibold whitespace-nowrap transition-colors border',
                 isActive
-                  ? 'bg-[var(--color-primary)] text-white shadow-[0_2px_8px_rgba(34,64,196,0.3)]'
-                  : 'bg-[var(--color-surface)] text-[var(--color-foreground)] border border-[var(--color-border)] shadow-[0_1px_2px_rgba(14,23,48,0.04)] hover:bg-[var(--color-muted)]',
+                  ? 'bg-[var(--color-primary-soft)] text-[var(--color-primary)] border-transparent'
+                  : 'bg-[var(--color-surface)] text-[var(--color-foreground-2)] border-[var(--color-border)] hover:bg-[var(--color-muted)]',
               )}
             >
               <span>{opt.label}</span>
               {countLabel != null && (
                 <span
                   className={cn(
-                    'inline-flex items-center justify-center min-w-[24px] h-6 px-1.5 rounded-full text-[12px] font-bold tabular-nums',
+                    'inline-flex items-center justify-center min-w-[22px] h-5 px-1.5 rounded-full text-[11px] font-bold tabular-nums',
                     isActive
-                      ? 'bg-white/20 text-white'
-                      : 'bg-[var(--color-muted)] text-[var(--color-primary)]',
+                      ? 'bg-[var(--color-primary)]/15 text-[var(--color-primary)]'
+                      : 'bg-[var(--color-muted)] text-[var(--color-muted-foreground)]',
                   )}
                 >
                   {countLabel}
@@ -1056,10 +1082,12 @@ function DenseLotRow({
   );
 }
 
+type KpiTone = 'success' | 'warning' | 'danger' | 'ink';
+
 /**
  * Compact KPI tile used at the top of the floor dashboard.
- * Big number + label + optional subtitle, full-width tap target,
- * tone drives color (primary blue, ink, danger red).
+ * Traffic-light tone drives both the number color and the soft tinted
+ * background so status reads at a glance.
  */
 function KpiCard({
   label,
@@ -1071,37 +1099,61 @@ function KpiCard({
   label: string;
   value: string;
   sub: string | null;
-  tone: 'primary' | 'ink' | 'danger';
+  tone: KpiTone;
   onClick?: () => void;
 }) {
-  const accent =
-    tone === 'danger'
-      ? 'var(--color-destructive)'
-      : tone === 'primary'
-        ? 'var(--color-primary)'
-        : 'var(--color-foreground)';
+  const palette: Record<
+    KpiTone,
+    { accent: string; bg: string; subColor: string }
+  > = {
+    success: {
+      accent: 'var(--color-success)',
+      bg: 'var(--color-success-bg)',
+      subColor: 'var(--status-ready-ink)',
+    },
+    warning: {
+      accent: 'var(--color-warning)',
+      bg: 'var(--color-warning-bg)',
+      subColor: 'var(--status-rework-ink)',
+    },
+    danger: {
+      accent: 'var(--color-destructive)',
+      bg: 'var(--color-destructive-bg)',
+      subColor: 'var(--color-destructive-strong)',
+    },
+    ink: {
+      accent: 'var(--color-foreground)',
+      bg: 'var(--color-surface)',
+      subColor: 'var(--color-muted-foreground)',
+    },
+  };
+  const p = palette[tone];
   return (
     <button
       type="button"
       onClick={onClick}
       className={cn(
-        'text-left rounded-[14px] bg-[var(--color-surface)] border border-[var(--color-border)] shadow-[0_1px_2px_rgba(14,23,48,0.04)] px-4 py-3 transition-colors',
-        onClick && 'hover:bg-[var(--color-muted)] active:scale-[0.99]',
+        'text-left rounded-[14px] border border-[var(--color-border)] shadow-[0_1px_2px_rgba(14,23,48,0.04)] px-4 py-3 transition-all',
+        onClick && 'hover:brightness-95 active:scale-[0.99]',
       )}
+      style={{ backgroundColor: p.bg }}
     >
-      <div className="text-[11px] font-semibold uppercase tracking-[0.06em] text-[var(--color-muted-foreground)] truncate">
+      <div
+        className="text-[11px] font-semibold uppercase tracking-[0.06em] truncate"
+        style={{ color: p.subColor }}
+      >
         {label}
       </div>
       <div
         className="mt-1 font-mono font-bold text-[28px] leading-none tabular-nums"
-        style={{ color: accent }}
+        style={{ color: p.accent }}
       >
         {value}
       </div>
       {sub && (
         <div
           className="mt-1.5 text-[12px] font-medium"
-          style={{ color: tone === 'danger' ? accent : 'var(--color-muted-foreground)' }}
+          style={{ color: p.subColor }}
         >
           {sub}
         </div>
