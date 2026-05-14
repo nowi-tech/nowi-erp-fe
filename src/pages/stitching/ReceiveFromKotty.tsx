@@ -308,7 +308,7 @@ export default function ReceiveFromKottyPage() {
           duration: 6000,
         },
       );
-      navigate('/stitching');
+      navigate('/floor');
     } catch {
       toast.show(t('stitching.receiveFromKotty.errorToast'), 'error');
     } finally {
@@ -323,7 +323,7 @@ export default function ReceiveFromKottyPage() {
       <div className="mb-3 flex items-center justify-between gap-2">
         <button
           type="button"
-          onClick={() => navigate('/stitching')}
+          onClick={() => navigate('/floor')}
           className="inline-flex items-center gap-1 pr-3.5 pl-2 py-2 rounded-full bg-[var(--color-surface)] border border-[var(--color-border)] text-[14px] font-medium text-[var(--color-foreground)] shadow-[0_1px_1px_rgba(14,23,48,0.03)] hover:bg-[var(--color-muted)] transition-colors"
         >
           <ArrowLeft size={18} />
@@ -596,7 +596,7 @@ export default function ReceiveFromKottyPage() {
             <Button
               variant="outline"
               size="sm"
-              onClick={() => navigate('/stitching')}
+              onClick={() => navigate('/floor')}
               disabled={submitting}
             >
               {t('common.cancel')}
