@@ -7,6 +7,7 @@ import FloorShell from '@/components/layout/FloorShell';
 import StageTimeline from '@/components/StageTimeline';
 import { Button } from '@/components/ui/button';
 import AssignSheet from '@/components/floor/AssignSheet';
+import HomePillFilters from '@/components/floor/HomePillFilters';
 import {
   assignLot,
   getLotCounts,
@@ -436,69 +437,25 @@ export default function FloorHome() {
         })()}
       </div>
 
-      {/* Filter tabs — floating pill row. Each tab is its own pill
-          with the label inline + a count badge to the right. Active
-          tab fills brand blue; inactive tabs are white with a hairline.
-          All tab is last (the bird's-eye view) — Pending leads since
-          it's the FM's primary action queue. Counts come from BE
-          /api/lots/counts; capped visually at 99+. */}
-      {/* `[&::-webkit-scrollbar]:hidden` + `[scrollbar-width:none]`
-          hide the bar while keeping horizontal scroll on narrow
-          phones. Pad the bottom slightly so the active pill's shadow
-          doesn't get clipped. */}
-      <div className="mb-4 flex items-center gap-2 overflow-x-auto pb-1 -mx-1 px-1 [&::-webkit-scrollbar]:hidden [scrollbar-width:none]">
-        {(
-          [
-            { id: 'pending' as const, label: t('floor.filters.pending'), count: counts?.pending },
-            { id: 'in_stitching' as const, label: t('floor.filters.inStitching'), count: counts?.in_stitching },
-            {
-              id: 'pending_finishing' as const,
-              label: t('floor.filters.pendingFinishing', {
-                defaultValue: 'Pending Finishing',
-              }),
-              count: counts?.pending_finishing,
-            },
-            { id: 'in_finishing' as const, label: t('floor.filters.inFinishing'), count: counts?.in_finishing },
-            { id: 'stuck' as const, label: t('floor.filters.stuck'), count: counts?.stuck },
-            { id: 'all' as const, label: t('floor.filters.all'), count: counts?.all },
-          ]
-        ).map((opt) => {
-          const isActive = filter === opt.id;
-          const countLabel =
-            opt.count == null
-              ? null
-              : opt.count > 99
-                ? '99+'
-                : String(opt.count);
-          return (
-            <button
-              key={opt.id}
-              type="button"
-              onClick={() => setFilter(opt.id)}
-              className={cn(
-                'shrink-0 inline-flex items-center gap-2 pl-4 pr-3 h-10 rounded-full text-[14px] font-semibold whitespace-nowrap transition-colors border',
-                isActive
-                  ? 'bg-[var(--color-primary-soft)] text-[var(--color-primary)] border-transparent'
-                  : 'bg-[var(--color-surface)] text-[var(--color-foreground-2)] border-[var(--color-border)] hover:bg-[var(--color-muted)]',
-              )}
-            >
-              <span>{opt.label}</span>
-              {countLabel != null && (
-                <span
-                  className={cn(
-                    'inline-flex items-center justify-center min-w-[22px] h-5 px-1.5 rounded-full text-[11px] font-bold tabular-nums',
-                    isActive
-                      ? 'bg-[var(--color-primary)]/15 text-[var(--color-primary)]'
-                      : 'bg-[var(--color-muted)] text-[var(--color-muted-foreground)]',
-                  )}
-                >
-                  {countLabel}
-                </span>
-              )}
-            </button>
-          );
-        })}
-      </div>
+      <HomePillFilters
+        ariaLabel={t('floor.filters.ariaLabel', { defaultValue: 'Lot filters' })}
+        active={filter}
+        onChange={setFilter}
+        tabs={[
+          { id: 'pending', label: t('floor.filters.pending'), count: counts?.pending },
+          { id: 'in_stitching', label: t('floor.filters.inStitching'), count: counts?.in_stitching },
+          {
+            id: 'pending_finishing',
+            label: t('floor.filters.pendingFinishing', {
+              defaultValue: 'Pending Finishing',
+            }),
+            count: counts?.pending_finishing,
+          },
+          { id: 'in_finishing', label: t('floor.filters.inFinishing'), count: counts?.in_finishing },
+          { id: 'stuck', label: t('floor.filters.stuck'), count: counts?.stuck },
+          { id: 'all', label: t('floor.filters.all'), count: counts?.all },
+        ]}
+      />
 
       {/*
         Sections render in workflow order: Pending → In stitching →
