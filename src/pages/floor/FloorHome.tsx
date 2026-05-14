@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { AlertTriangle, Pencil, Plus, UserPlus, X } from 'lucide-react';
 import { toast as sonnerToast } from 'sonner';
 import FloorShell from '@/components/layout/FloorShell';
@@ -51,8 +51,28 @@ export default function FloorHome() {
   const [hasMore, setHasMore] = useState(true);
   const [initialLoading, setInitialLoading] = useState(true);
   const [pageLoading, setPageLoading] = useState(false);
-  // Pending is the FM's primary work — default landing tab.
-  const [filter, setFilter] = useState<Filter>('pending');
+  // Filter persisted in the URL query string so back-from-lot-detail
+  // (and reload, and shared links) restore the same view. Default
+  // landing tab = pending — the FM's primary action queue.
+  const [searchParams, setSearchParams] = useSearchParams();
+  const filter: Filter = (() => {
+    const raw = searchParams.get('tab');
+    if (raw === 'all' || raw === 'pending' || raw === 'in_stitching' ||
+        raw === 'in_finishing' || raw === 'stuck') {
+      return raw;
+    }
+    return 'pending';
+  })();
+  const setFilter = (next: Filter) => {
+    const params = new URLSearchParams(searchParams);
+    if (next === 'pending') {
+      // Default — drop the param to keep URLs tidy.
+      params.delete('tab');
+    } else {
+      params.set('tab', next);
+    }
+    setSearchParams(params, { replace: true });
+  };
 
   // Assign dialog state — either a single lot or bulk-selected lots.
   const [assignLots, setAssignLots] = useState<Lot[]>([]);
