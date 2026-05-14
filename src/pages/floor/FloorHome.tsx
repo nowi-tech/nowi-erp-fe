@@ -269,13 +269,14 @@ export default function FloorHome() {
         </Button>
       </div>
 
-      {/* Filter tabs — metric-tile pill: count stacked above the label
-          (not on All — the bucket totals already sum to "all"). Counts
-          come from the BE counts endpoint, capped visually at 99+. */}
-      <div className="mb-4 inline-flex p-[3px] rounded-2xl bg-[var(--color-muted)] border border-[var(--color-border)] overflow-x-auto max-w-full">
+      {/* Filter tabs — floating pill row. Each tab is its own pill
+          with the label inline + a count badge to the right. Active
+          tab fills brand blue; inactive tabs are white with a hairline.
+          Counts come from BE /api/lots/counts; capped visually at 99+. */}
+      <div className="mb-4 flex items-center gap-2 overflow-x-auto pb-1 -mx-1 px-1">
         {(
           [
-            { id: 'all' as const, label: t('floor.filters.all'), count: undefined },
+            { id: 'all' as const, label: t('floor.filters.all'), count: counts?.all },
             { id: 'pending' as const, label: t('floor.filters.pending'), count: counts?.pending },
             { id: 'in_stitching' as const, label: t('floor.filters.inStitching'), count: counts?.in_stitching },
             { id: 'in_finishing' as const, label: t('floor.filters.inFinishing'), count: counts?.in_finishing },
@@ -295,37 +296,25 @@ export default function FloorHome() {
               type="button"
               onClick={() => setFilter(opt.id)}
               className={cn(
-                'min-w-[72px] px-3 py-2 rounded-xl transition-colors whitespace-nowrap flex flex-col items-center justify-center gap-0.5',
+                'shrink-0 inline-flex items-center gap-2 pl-5 pr-3 h-11 rounded-full text-[15px] font-semibold whitespace-nowrap transition-all',
                 isActive
-                  ? 'bg-[var(--color-surface)] shadow-[0_1px_2px_rgba(14,23,48,0.08),0_0_0_1px_var(--color-border)]'
-                  : '',
+                  ? 'bg-[var(--color-primary)] text-white shadow-[0_2px_8px_rgba(34,64,196,0.3)]'
+                  : 'bg-[var(--color-surface)] text-[var(--color-foreground)] border border-[var(--color-border)] shadow-[0_1px_2px_rgba(14,23,48,0.04)] hover:bg-[var(--color-muted)]',
               )}
             >
+              <span>{opt.label}</span>
               {countLabel != null && (
                 <span
                   className={cn(
-                    'font-mono font-bold text-[16px] tabular-nums leading-none',
+                    'inline-flex items-center justify-center min-w-[24px] h-6 px-1.5 rounded-full text-[12px] font-bold tabular-nums',
                     isActive
-                      ? 'text-[var(--color-primary)]'
-                      : 'text-[var(--color-foreground)]',
+                      ? 'bg-white/20 text-white'
+                      : 'bg-[var(--color-muted)] text-[var(--color-primary)]',
                   )}
                 >
                   {countLabel}
                 </span>
               )}
-              <span
-                className={cn(
-                  'text-[11px] font-semibold leading-none',
-                  isActive
-                    ? 'text-[var(--color-primary)]'
-                    : 'text-[var(--color-muted-foreground)]',
-                  // When there's no count (All tab), nudge the label up
-                  // so the pill height stays consistent with neighbors.
-                  countLabel == null && 'text-[14px] py-[6px]',
-                )}
-              >
-                {opt.label}
-              </span>
             </button>
           );
         })}
@@ -368,6 +357,23 @@ export default function FloorHome() {
             inFinishing: 'floor.assignedEmpty',
             stuck: 'floor.assignedEmpty',
           }[bucketKey];
+          const filterId = {
+            pending: 'pending' as const,
+            inStitching: 'in_stitching' as const,
+            inFinishing: 'in_finishing' as const,
+            stuck: 'stuck' as const,
+          }[bucketKey];
+          // In the "All" view, cap each section at 5 cards so the
+          // page stays scannable even with 10–20 lots per bucket.
+          // A "Show all N" link jumps to that filter tab where the
+          // full list paginates infinitely.
+          const ALL_VIEW_PREVIEW = 5;
+          const isAllView = filter === 'all';
+          const visibleLots =
+            isAllView && bucket.length > ALL_VIEW_PREVIEW
+              ? bucket.slice(0, ALL_VIEW_PREVIEW)
+              : bucket;
+          const hiddenCount = bucket.length - visibleLots.length;
 
           return (
             <div key={bucketKey} className="mb-6">
@@ -376,23 +382,46 @@ export default function FloorHome() {
                 count={bucket.length}
                 emptyLabel={t(emptyKey)}
                 loading={initialLoading}
-                lots={bucket}
+                lots={visibleLots}
                 hideTimeline={bucketKey === 'pending'}
-                selectionMode={selectionMode}
+                // Bulk-selection only operates on pending (unassigned)
+                // lots — already-assigned lots use the per-card
+                // Reassign action so the operator confirms one at a
+                // time. Cards in non-pending sections render with no
+                // long-press hook.
+                selectionMode={selectionMode && bucketKey === 'pending'}
                 selected={selected}
                 onOpenLot={(lot) => {
-                  if (selectionMode) {
+                  if (selectionMode && bucketKey === 'pending') {
                     toggleSelection(lot.id);
                   } else {
                     navigate(`/floor/lot/${lot.id}`);
                   }
                 }}
                 onLongPress={(lot) => {
+                  // Long-press only enters selection mode on a pending
+                  // card. Skips on already-assigned cards.
+                  if (bucketKey !== 'pending') return;
                   if (!selectionMode) setSelectionMode(true);
                   setSelected((prev) => new Set(prev).add(lot.id));
                 }}
                 onAssign={openAssignFor}
               />
+              {hiddenCount > 0 && (
+                <div className="mt-2.5 px-1">
+                  <button
+                    type="button"
+                    onClick={() => setFilter(filterId)}
+                    className="text-[13px] font-semibold text-[var(--color-primary)] hover:underline"
+                  >
+                    {t('floor.showAll', {
+                      defaultValue: 'Show all {{n}}',
+                      n: bucket.length,
+                    })}
+                    {' →'}
+                  </button>
+                </div>
+              )}
             </div>
           );
         },

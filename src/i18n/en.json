@@ -121,7 +121,8 @@
     "reportIssue": "Report issue",
     "reportComingSoon": "Report flow coming soon.",
     "forwardedShort": "forwarded",
-    "endOfList": "End of list"
+    "endOfList": "End of list",
+    "showAll": "Show all {{n}}"
   },
   "shell": {
     "adminHome": "Admin home — coming soon",

@@ -121,7 +121,8 @@
     "reportIssue": "समस्या रिपोर्ट करें",
     "reportComingSoon": "रिपोर्ट जल्द आ रहा है।",
     "forwardedShort": "भेजे",
-    "endOfList": "सूची समाप्त"
+    "endOfList": "सूची समाप्त",
+    "showAll": "सभी {{n}} देखें"
   },
   "shell": {
     "adminHome": "एडमिन होम — जल्द आ रहा है",
