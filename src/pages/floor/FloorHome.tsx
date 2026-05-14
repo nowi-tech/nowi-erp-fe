@@ -7,7 +7,7 @@ import FloorShell from '@/components/layout/FloorShell';
 import StageTimeline from '@/components/StageTimeline';
 import { Dialog } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
-import { assignLot, listLots } from '@/api/lots';
+import { assignLot, getLotCounts, listLots, type LotCounts } from '@/api/lots';
 import { listStitchingMasters, type StitchingMaster } from '@/api/users';
 import type { Lot, OrderStatus } from '@/api/types';
 import { cn } from '@/lib/utils';
@@ -61,6 +61,18 @@ export default function FloorHome() {
   // Bulk selection state — entered via long-press.
   const [selectionMode, setSelectionMode] = useState(false);
   const [selected, setSelected] = useState<Set<number>>(new Set());
+
+  // Real bucket counts for the filter pills (independent of pagination).
+  // Refreshed alongside the lot list after assigns.
+  const [counts, setCounts] = useState<LotCounts | null>(null);
+  const refreshCounts = useCallback(() => {
+    getLotCounts()
+      .then(setCounts)
+      .catch(() => setCounts(null));
+  }, []);
+  useEffect(() => {
+    refreshCounts();
+  }, [refreshCounts]);
 
   /**
    * Paged loader. `reset=true` starts from skip 0 (initial load + after
@@ -227,6 +239,7 @@ export default function FloorHome() {
       setAssignLots([]);
       exitSelection();
       refreshFromTop();
+      refreshCounts();
     } catch {
       sonnerToast.error(t('common.error'));
     } finally {
@@ -256,31 +269,66 @@ export default function FloorHome() {
         </Button>
       </div>
 
-      {/* Filter tabs — pill style matching language toggle */}
-      <div className="mb-4 inline-flex p-[3px] rounded-full bg-[var(--color-muted)] border border-[var(--color-border)] overflow-x-auto max-w-full">
+      {/* Filter tabs — metric-tile pill: count stacked above the label
+          (not on All — the bucket totals already sum to "all"). Counts
+          come from the BE counts endpoint, capped visually at 99+. */}
+      <div className="mb-4 inline-flex p-[3px] rounded-2xl bg-[var(--color-muted)] border border-[var(--color-border)] overflow-x-auto max-w-full">
         {(
           [
-            { id: 'all' as const, label: t('floor.filters.all') },
-            { id: 'pending' as const, label: t('floor.filters.pending') },
-            { id: 'in_stitching' as const, label: t('floor.filters.inStitching') },
-            { id: 'in_finishing' as const, label: t('floor.filters.inFinishing') },
-            { id: 'stuck' as const, label: t('floor.filters.stuck') },
+            { id: 'all' as const, label: t('floor.filters.all'), count: undefined },
+            { id: 'pending' as const, label: t('floor.filters.pending'), count: counts?.pending },
+            { id: 'in_stitching' as const, label: t('floor.filters.inStitching'), count: counts?.in_stitching },
+            { id: 'in_finishing' as const, label: t('floor.filters.inFinishing'), count: counts?.in_finishing },
+            { id: 'stuck' as const, label: t('floor.filters.stuck'), count: counts?.stuck },
           ]
-        ).map((opt) => (
-          <button
-            key={opt.id}
-            type="button"
-            onClick={() => setFilter(opt.id)}
-            className={cn(
-              'px-3 py-1.5 text-[13px] font-semibold rounded-full transition-colors whitespace-nowrap',
-              filter === opt.id
-                ? 'bg-[var(--color-surface)] text-[var(--color-primary)] shadow-[0_1px_2px_rgba(14,23,48,0.08),0_0_0_1px_var(--color-border)]'
-                : 'text-[var(--color-muted-foreground)]',
-            )}
-          >
-            {opt.label}
-          </button>
-        ))}
+        ).map((opt) => {
+          const isActive = filter === opt.id;
+          const countLabel =
+            opt.count == null
+              ? null
+              : opt.count > 99
+                ? '99+'
+                : String(opt.count);
+          return (
+            <button
+              key={opt.id}
+              type="button"
+              onClick={() => setFilter(opt.id)}
+              className={cn(
+                'min-w-[72px] px-3 py-2 rounded-xl transition-colors whitespace-nowrap flex flex-col items-center justify-center gap-0.5',
+                isActive
+                  ? 'bg-[var(--color-surface)] shadow-[0_1px_2px_rgba(14,23,48,0.08),0_0_0_1px_var(--color-border)]'
+                  : '',
+              )}
+            >
+              {countLabel != null && (
+                <span
+                  className={cn(
+                    'font-mono font-bold text-[16px] tabular-nums leading-none',
+                    isActive
+                      ? 'text-[var(--color-primary)]'
+                      : 'text-[var(--color-foreground)]',
+                  )}
+                >
+                  {countLabel}
+                </span>
+              )}
+              <span
+                className={cn(
+                  'text-[11px] font-semibold leading-none',
+                  isActive
+                    ? 'text-[var(--color-primary)]'
+                    : 'text-[var(--color-muted-foreground)]',
+                  // When there's no count (All tab), nudge the label up
+                  // so the pill height stays consistent with neighbors.
+                  countLabel == null && 'text-[14px] py-[6px]',
+                )}
+              >
+                {opt.label}
+              </span>
+            </button>
+          );
+        })}
       </div>
 
       {/*

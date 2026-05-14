@@ -73,6 +73,19 @@ export async function listEditRequests(): Promise<EditRequestRow[]> {
   return res.data;
 }
 
+export interface LotCounts {
+  all: number;
+  pending: number;
+  in_stitching: number;
+  in_finishing: number;
+  stuck: number;
+}
+
+export async function getLotCounts(): Promise<LotCounts> {
+  const res = await apiClient.get<LotCounts>('/api/lots/counts');
+  return res.data;
+}
+
 export async function getLot(id: number): Promise<Lot> {
   const res = await apiClient.get<Lot>(`/api/lots/${id}`);
   return res.data;

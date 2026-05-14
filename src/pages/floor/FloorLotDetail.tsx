@@ -134,6 +134,48 @@ export default function FloorLotDetail() {
             </div>
           </div>
 
+          {/* Per-stage production status — units forwarded at each
+              stage with a thin progress bar tinted to the stage accent.
+              Builds on lot.stageForwarded which the BE list already
+              provides; getById should also include it. Falls back to
+              0 for missing keys. */}
+          <div className="rounded-[14px] bg-[var(--color-surface)] shadow-[0_1px_2px_rgba(15,26,54,0.04)] p-[16px_18px] space-y-3">
+            <div className="text-[12px] uppercase tracking-[0.08em] font-semibold text-[var(--color-muted-foreground)]">
+              {t('floor.statusBreakdown', { defaultValue: 'Production status' })}
+            </div>
+            <StageProgressRow
+              label={t('stages.stitching')}
+              done={lot.stageForwarded?.stitching ?? 0}
+              total={units}
+              accent="var(--stage-stitch-acc)"
+              bg="var(--stage-stitch-bg)"
+            />
+            <StageProgressRow
+              label={t('stages.finishing')}
+              done={lot.stageForwarded?.finishing ?? 0}
+              total={units}
+              accent="var(--stage-finish-acc)"
+              bg="var(--stage-finish-bg)"
+            />
+            <StageProgressRow
+              label={t('stages.dispatch')}
+              done={lot.stageForwarded?.dispatch ?? 0}
+              total={units}
+              accent="var(--stage-disp-acc)"
+              bg="var(--stage-disp-bg)"
+            />
+            {lot.order?.status && (
+              <div className="pt-2 border-t border-[var(--color-border)] text-[12px] text-[var(--color-muted-foreground)] flex items-center justify-between">
+                <span className="font-mono uppercase tracking-wide">
+                  {t('floor.currentStatus', { defaultValue: 'Status' })}
+                </span>
+                <span className="font-mono text-[var(--color-foreground)]">
+                  {lot.order.status}
+                </span>
+              </div>
+            )}
+          </div>
+
           {/* Assignment */}
           <div className="rounded-[14px] bg-[var(--color-surface)] shadow-[0_1px_2px_rgba(15,26,54,0.04)] p-[16px_18px]">
             <div className="flex items-center justify-between gap-3">
@@ -305,5 +347,50 @@ export default function FloorLotDetail() {
         )}
       </Dialog>
     </FloorShell>
+  );
+}
+
+/**
+ * One row of the per-stage status card: stage label · forwarded ratio
+ * + a thin progress bar tinted to the stage accent. Used three times
+ * (stitching / finishing / dispatch) on the lot detail page.
+ */
+function StageProgressRow({
+  label,
+  done,
+  total,
+  accent,
+  bg,
+}: {
+  label: string;
+  done: number;
+  total: number;
+  accent: string;
+  bg: string;
+}) {
+  const pct = total > 0 ? Math.min(100, Math.round((done / total) * 100)) : 0;
+  return (
+    <div className="space-y-1">
+      <div className="flex items-baseline justify-between">
+        <span
+          className="text-[12px] font-mono uppercase tracking-wide font-semibold"
+          style={{ color: accent }}
+        >
+          {label}
+        </span>
+        <span className="text-[13px] font-mono tabular-nums text-[var(--color-foreground-2)]">
+          {done} / {total}
+        </span>
+      </div>
+      <div
+        className="h-1.5 rounded-full overflow-hidden"
+        style={{ backgroundColor: bg }}
+      >
+        <div
+          className="h-full transition-[width] duration-300"
+          style={{ width: `${pct}%`, backgroundColor: accent }}
+        />
+      </div>
+    </div>
   );
 }
