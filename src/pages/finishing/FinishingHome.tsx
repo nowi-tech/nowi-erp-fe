@@ -5,21 +5,7 @@ import { ChevronRight } from 'lucide-react';
 import FloorShell from '@/components/layout/FloorShell';
 import { Badge } from '@/components/ui/badge';
 import { listLots } from '@/api/lots';
-import { listReceipts, type ReceiptRow } from '@/api/receipts';
-import { useStageId } from '@/lib/useStageId';
-import type { Lot, OrderStatus } from '@/api/types';
-
-const FINISHING_QUEUE_STATUSES: OrderStatus[] = [
-  'in_stitching',
-  'in_finishing',
-  'in_rework',
-];
-
-function isInQueue(lot: Lot): boolean {
-  const status = lot.order?.status;
-  if (!status) return true;
-  return FINISHING_QUEUE_STATUSES.includes(status);
-}
+import type { Lot } from '@/api/types';
 
 function totalUnits(matrix: Record<string, number> | null | undefined): number {
   if (!matrix) return 0;
@@ -39,19 +25,16 @@ export default function FinishingHome() {
   const navigate = useNavigate();
   const [lots, setLots] = useState<Lot[]>([]);
   const [loading, setLoading] = useState(true);
-  const stitchingStageId = useStageId('stitching');
-  // Per-lot list of stitching forwards that haven't been accepted at
-  // finishing yet — surfaces as an amber pill on the queue card so the
-  // master can see "I have N units in transit waiting on my Accept tap".
-  const [pendingByLot, setPendingByLot] = useState<Map<number, ReceiptRow[]>>(
-    () => new Map(),
-  );
 
+  // Queue = lots whose finishing slot is me. The accept-tap step is
+  // gone — the per-lot finisher assignment by the floor manager is the
+  // gate. The BE sets order.status = in_finishing on the first stitching
+  // forward, so the lot lands here as soon as the FM assigns me.
   const refresh = useCallback(async () => {
     setLoading(true);
     try {
-      const all = await listLots();
-      setLots(all.filter(isInQueue));
+      const all = await listLots({ assignedFinisherToMe: true });
+      setLots(all);
     } catch {
       setLots([]);
     } finally {
@@ -62,45 +45,6 @@ export default function FinishingHome() {
   useEffect(() => {
     void refresh();
   }, [refresh]);
-
-  // Once lots + stitching stage id are both available, batch-fetch
-  // pending stitching forwards for each lot. One listReceipts per lot
-  // (parallelized) — cheaper than wiring a new BE endpoint, and the
-  // queue here is typically <20 lots.
-  useEffect(() => {
-    if (stitchingStageId == null || lots.length === 0) {
-      setPendingByLot(new Map());
-      return;
-    }
-    let cancelled = false;
-    Promise.all(
-      lots.map(async (lot) => {
-        try {
-          const rows = await listReceipts({
-            lotId: lot.id,
-            stageId: stitchingStageId,
-            take: 50,
-          });
-          const pending = rows.filter(
-            (r) => r.kind === 'forward' && r.acceptedAt == null,
-          );
-          return [lot.id, pending] as const;
-        } catch {
-          return [lot.id, [] as ReceiptRow[]] as const;
-        }
-      }),
-    ).then((entries) => {
-      if (cancelled) return;
-      const next = new Map<number, ReceiptRow[]>();
-      for (const [id, pending] of entries) {
-        if (pending.length > 0) next.set(id, pending);
-      }
-      setPendingByLot(next);
-    });
-    return () => {
-      cancelled = true;
-    };
-  }, [lots, stitchingStageId]);
 
   return (
     <FloorShell title={t('finishing.title')}>
@@ -117,97 +61,104 @@ export default function FinishingHome() {
           {t('finishing.queue', { defaultValue: 'In your queue' })}
         </div>
         <div className="font-mono text-[12px] text-[var(--color-muted-foreground)] tabular-nums">
-          {lots.length} lots · {lots.reduce((a, l) => a + totalUnits(l.qtyIn), 0)}u
+          {lots.length} lots ·{' '}
+          {lots.reduce((a, l) => a + totalUnits(l.qtyIn), 0)}u
         </div>
       </div>
-      <div>
-        <div className="space-y-3">
-          {loading ? (
-            <div className="h-12 animate-pulse rounded bg-[var(--color-muted)]" />
-          ) : lots.length === 0 ? (
-            <p className="text-[var(--color-muted-foreground)]">{t('finishing.empty')}</p>
-          ) : (
-            <ul className="space-y-2.5">
-              {lots.map((lot) => {
-                const units = totalUnits(lot.qtyIn);
-                const forwarded = lot.stageForwarded?.finishing ?? 0;
-                const productLabel = lot.style
-                  ? [
-                      t(`stitching.gender.${lot.style.gender}`, {
-                        defaultValue:
-                          lot.style.gender === 'W'
-                            ? "Women's"
-                            : lot.style.gender === 'M'
-                              ? "Men's"
-                              : 'Unisex',
-                      }),
-                      lot.style.category?.name,
-                    ]
-                      .filter(Boolean)
-                      .join(' ')
-                  : null;
-                const anomaly =
-                  lot.order?.status === 'in_rework'
-                    ? 'rework'
-                    : lot.order?.status === 'stuck'
-                      ? 'stuck'
-                      : null;
-                const pending = pendingByLot.get(lot.id) ?? [];
-                const pendingUnits = pending.reduce((a, r) => a + r.qty, 0);
-                return (
-                  <li key={lot.id}>
-                    <button
-                      type="button"
-                      onClick={() => navigate(`/finishing/lot/${lot.id}`)}
-                      className="w-full text-left flex items-center gap-3 rounded-[14px] bg-[var(--color-surface)] border-l-[3px] border-l-[var(--stage-finish-acc)] shadow-[0_1px_2px_rgba(14,23,48,0.04)] hover:shadow-[0_1px_2px_rgba(14,23,48,0.06),0_4px_12px_rgba(14,23,48,0.05)] hover:-translate-y-px transition-all p-4"
-                    >
-                      <div className="flex-1 min-w-0 space-y-1">
-                        <div className="font-semibold text-[22px] leading-[1.1] tracking-[-0.01em] text-[var(--color-foreground)] break-all">
-                          {lot.lotNo}
-                        </div>
-                        <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-[13px] text-[var(--color-foreground-2)]">
-                          {productLabel && (
-                            <span className="font-medium text-[var(--color-foreground)]">{productLabel}</span>
-                          )}
-                          {productLabel && (
-                            <span className="text-[var(--color-muted-foreground-2)]">·</span>
-                          )}
-                          <span className="font-mono tabular-nums">{units}u</span>
-                        </div>
-                        <div className="flex items-center gap-2 text-[13px] text-[var(--color-muted-foreground)] font-mono">
-                          <span className="tabular-nums">
-                            {t('stitching.lot.forwardedOf', {
-                              defaultValue: '{{done}} of {{total}} forwarded',
-                              done: forwarded,
-                              total: units,
-                            })}
+      <div className="space-y-3">
+        {loading ? (
+          <div className="h-12 animate-pulse rounded bg-[var(--color-muted)]" />
+        ) : lots.length === 0 ? (
+          <p className="text-[var(--color-muted-foreground)]">
+            {t('finishing.empty')}
+          </p>
+        ) : (
+          <ul className="space-y-2.5">
+            {lots.map((lot) => {
+              const units = totalUnits(lot.qtyIn);
+              const finishedForwarded = lot.stageForwarded?.finishing ?? 0;
+              const stitchForwarded = lot.stageForwarded?.stitching ?? 0;
+              const productLabel = lot.style
+                ? [
+                    t(`stitching.gender.${lot.style.gender}`, {
+                      defaultValue:
+                        lot.style.gender === 'W'
+                          ? "Women's"
+                          : lot.style.gender === 'M'
+                            ? "Men's"
+                            : 'Unisex',
+                    }),
+                    lot.style.category?.name,
+                  ]
+                    .filter(Boolean)
+                    .join(' ')
+                : null;
+              const anomaly =
+                lot.order?.status === 'in_rework'
+                  ? 'rework'
+                  : lot.order?.status === 'stuck'
+                    ? 'stuck'
+                    : null;
+              return (
+                <li key={lot.id}>
+                  <button
+                    type="button"
+                    onClick={() => navigate(`/finishing/lot/${lot.id}`)}
+                    className="w-full text-left flex items-center gap-3 rounded-[14px] bg-[var(--color-surface)] border-l-[3px] border-l-[var(--stage-finish-acc)] shadow-[0_1px_2px_rgba(14,23,48,0.04)] hover:shadow-[0_1px_2px_rgba(14,23,48,0.06),0_4px_12px_rgba(14,23,48,0.05)] hover:-translate-y-px transition-all p-4"
+                  >
+                    <div className="flex-1 min-w-0 space-y-1">
+                      <div className="font-semibold text-[22px] leading-[1.1] tracking-[-0.01em] text-[var(--color-foreground)] break-all">
+                        {lot.lotNo}
+                      </div>
+                      <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-[13px] text-[var(--color-foreground-2)]">
+                        {productLabel && (
+                          <span className="font-medium text-[var(--color-foreground)]">
+                            {productLabel}
                           </span>
-                          {anomaly && (
-                            <Badge variant={anomaly === 'stuck' ? 'stuck' : 'rework'} dot>
-                              {anomaly === 'stuck' ? 'Stuck' : 'Rework'}
-                            </Badge>
-                          )}
-                          {pendingUnits > 0 && (
-                            <Badge variant="rework" dot>
-                              {t('stitching.lot.pendingAcceptance', {
-                                defaultValue: 'Pending acceptance',
-                              })}
-                              {' · '}
-                              <span className="tabular-nums">{pendingUnits}</span>
-                            </Badge>
-                          )}
-                        </div>
+                        )}
+                        {productLabel && (
+                          <span className="text-[var(--color-muted-foreground-2)]">
+                            ·
+                          </span>
+                        )}
+                        <span className="font-mono tabular-nums">{units}u</span>
                       </div>
-                      <div className="shrink-0 w-9 h-9 rounded-full bg-[var(--color-background)] flex items-center justify-center text-[var(--color-foreground)]">
-                        <ChevronRight size={18} />
+                      <div className="flex items-center gap-2 text-[13px] text-[var(--color-muted-foreground)] font-mono">
+                        <span className="tabular-nums">
+                          {t('finishing.lot.availableOf', {
+                            defaultValue:
+                              '{{available}} of {{total}} from stitching',
+                            available: stitchForwarded,
+                            total: units,
+                          })}
+                        </span>
+                        <span>·</span>
+                        <span className="tabular-nums">
+                          {t('stitching.lot.forwardedOf', {
+                            defaultValue: '{{done}} of {{total}} forwarded',
+                            done: finishedForwarded,
+                            total: units,
+                          })}
+                        </span>
+                        {anomaly && (
+                          <Badge
+                            variant={anomaly === 'stuck' ? 'stuck' : 'rework'}
+                            dot
+                          >
+                            {anomaly === 'stuck' ? 'Stuck' : 'Rework'}
+                          </Badge>
+                        )}
                       </div>
-                    </button>
-                  </li>
-                );
-              })}
-            </ul>
-          )}
-        </div>
+                    </div>
+                    <div className="shrink-0 w-9 h-9 rounded-full bg-[var(--color-background)] flex items-center justify-center text-[var(--color-foreground)]">
+                      <ChevronRight size={18} />
+                    </div>
+                  </button>
+                </li>
+              );
+            })}
+          </ul>
+        )}
       </div>
     </FloorShell>
   );
