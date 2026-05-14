@@ -95,7 +95,12 @@ export default function FloorEditLot() {
       <div>
         <button
           type="button"
-          onClick={() => navigate('/floor')}
+          onClick={() => {
+            // Pop history so the user lands on whatever they came from
+            // (preserves /floor?tab=… filters or detail-page scroll).
+            if (window.history.length > 1) navigate(-1);
+            else navigate('/floor');
+          }}
           className="inline-flex items-center gap-1 pr-3.5 pl-2 py-2 rounded-full bg-[var(--color-surface)] border border-[var(--color-border)] text-[14px] font-medium text-[var(--color-foreground)] shadow-[0_1px_1px_rgba(14,23,48,0.03)] hover:bg-[var(--color-muted)] transition-colors"
         >
           <ChevronLeft size={20} />

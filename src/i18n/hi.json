@@ -122,7 +122,9 @@
     "reportComingSoon": "रिपोर्ट जल्द आ रहा है।",
     "forwardedShort": "भेजे",
     "endOfList": "सूची समाप्त",
-    "showAll": "सभी {{n}} देखें"
+    "showAll": "सभी {{n}} देखें",
+    "share": "साझा करें",
+    "linkCopiedToast": "लिंक कॉपी हुआ"
   },
   "shell": {
     "adminHome": "एडमिन होम — जल्द आ रहा है",

@@ -122,7 +122,9 @@
     "reportComingSoon": "Report flow coming soon.",
     "forwardedShort": "forwarded",
     "endOfList": "End of list",
-    "showAll": "Show all {{n}}"
+    "showAll": "Show all {{n}}",
+    "share": "Share",
+    "linkCopiedToast": "Link copied"
   },
   "shell": {
     "adminHome": "Admin home — coming soon",

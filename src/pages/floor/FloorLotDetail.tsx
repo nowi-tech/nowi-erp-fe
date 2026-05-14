@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useNavigate, useParams } from 'react-router-dom';
-import { ChevronLeft, Pencil, UserPlus } from 'lucide-react';
+import { ChevronLeft, Pencil, Share2, UserPlus } from 'lucide-react';
 import { toast as sonnerToast } from 'sonner';
 import FloorShell from '@/components/layout/FloorShell';
 import StageTimeline from '@/components/StageTimeline';
@@ -101,7 +101,13 @@ export default function FloorLotDetail() {
       <div>
         <button
           type="button"
-          onClick={() => navigate('/floor')}
+          onClick={() => {
+            // Pop to whatever the user came from so the filter / scroll
+            // position survives. If they landed here via a shared link
+            // (no in-app history), fall through to /floor.
+            if (window.history.length > 1) navigate(-1);
+            else navigate('/floor');
+          }}
           className="inline-flex items-center gap-1 pr-3.5 pl-2 py-2 rounded-full bg-[var(--color-surface)] border border-[var(--color-border)] text-[14px] font-medium text-[var(--color-foreground)] shadow-[0_1px_1px_rgba(14,23,48,0.03)] hover:bg-[var(--color-muted)] transition-colors"
         >
           <ChevronLeft size={20} />
@@ -119,28 +125,64 @@ export default function FloorLotDetail() {
               <h2 className="font-semibold text-[26px] leading-[1.05] tracking-[-0.01em] text-[var(--color-foreground)] break-all flex-1 min-w-0">
                 {lot.lotNo}
               </h2>
-              {/* Edit affordance — top-right of the identity card,
-                  matching the queue-card pattern. Routes to FloorEditLot
-                  with ?expired=1 when the 24h window has passed; the
-                  edit page surfaces the request-admin dialog there. */}
-              <button
-                type="button"
-                aria-label={t('floor.edit')}
-                title={inEditWindow ? t('floor.editWindow') : t('floor.editExpired')}
-                onClick={() =>
-                  inEditWindow
-                    ? navigate(`/floor/lot/${lot.id}/edit`)
-                    : navigate(`/floor/lot/${lot.id}/edit?expired=1`)
-                }
-                className={cn(
-                  'shrink-0 p-1.5 rounded-md transition-colors',
-                  inEditWindow
-                    ? 'text-[var(--color-muted-foreground)] hover:text-[var(--color-primary)] hover:bg-[var(--color-muted)]'
-                    : 'text-[var(--color-muted-foreground-2)] hover:text-[var(--color-foreground)]',
-                )}
-              >
-                <Pencil size={18} />
-              </button>
+              {/* Header action cluster — Share + Edit. Both are tiny
+                  icon buttons matching the queue-card pattern. Share
+                  uses navigator.share() on mobile (WhatsApp/Slack
+                  picker); falls back to clipboard on desktop. */}
+              <div className="shrink-0 flex items-center gap-1">
+                <button
+                  type="button"
+                  aria-label={t('floor.share', { defaultValue: 'Share' })}
+                  title={t('floor.share', { defaultValue: 'Share' })}
+                  onClick={async () => {
+                    const url = window.location.href;
+                    const title = `${lot.lotNo} · ${productLabel ?? ''}`.trim();
+                    // Web Share API on supported devices (mobile +
+                    // recent desktop browsers) opens the native share
+                    // sheet — WhatsApp / Slack / etc. show up there.
+                    if (navigator.share) {
+                      try {
+                        await navigator.share({ title, url });
+                        return;
+                      } catch {
+                        // User cancelled — fall through to clipboard
+                        // copy as a last-resort.
+                      }
+                    }
+                    try {
+                      await navigator.clipboard.writeText(url);
+                      sonnerToast.success(
+                        t('floor.linkCopiedToast', {
+                          defaultValue: 'Link copied',
+                        }),
+                      );
+                    } catch {
+                      sonnerToast.error(t('common.error'));
+                    }
+                  }}
+                  className="p-1.5 rounded-md text-[var(--color-muted-foreground)] hover:text-[var(--color-primary)] hover:bg-[var(--color-muted)] transition-colors"
+                >
+                  <Share2 size={18} />
+                </button>
+                <button
+                  type="button"
+                  aria-label={t('floor.edit')}
+                  title={inEditWindow ? t('floor.editWindow') : t('floor.editExpired')}
+                  onClick={() =>
+                    inEditWindow
+                      ? navigate(`/floor/lot/${lot.id}/edit`)
+                      : navigate(`/floor/lot/${lot.id}/edit?expired=1`)
+                  }
+                  className={cn(
+                    'p-1.5 rounded-md transition-colors',
+                    inEditWindow
+                      ? 'text-[var(--color-muted-foreground)] hover:text-[var(--color-primary)] hover:bg-[var(--color-muted)]'
+                      : 'text-[var(--color-muted-foreground-2)] hover:text-[var(--color-foreground)]',
+                  )}
+                >
+                  <Pencil size={18} />
+                </button>
+              </div>
             </div>
             <div className="mt-1.5 flex flex-wrap items-center gap-x-2 gap-y-1 text-[13px] text-[var(--color-foreground-2)]">
               {productLabel && (
