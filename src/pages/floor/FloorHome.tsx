@@ -290,13 +290,66 @@ export default function FloorHome() {
         </Button>
       </div>
 
+      {/* KPI cards — what the FM cares about most:
+          1. Needs your attention (Pending + Stuck) — directly actionable
+          2. Active pipeline — health snapshot with oldest lot age */}
+      <div className="mb-4 grid grid-cols-2 gap-2.5">
+        <KpiCard
+          label={t('floor.kpi.attention', { defaultValue: 'Needs your attention' })}
+          value={
+            counts == null
+              ? '—'
+              : String((counts.pending ?? 0) + (counts.stuck ?? 0))
+          }
+          sub={
+            counts == null
+              ? null
+              : counts.stuck > 0
+                ? t('floor.kpi.attentionWithStuck', {
+                    defaultValue: '{{n}} stuck',
+                    n: counts.stuck,
+                  })
+                : t('floor.kpi.attentionPending', {
+                    defaultValue: '{{n}} pending',
+                    n: counts.pending,
+                  })
+          }
+          tone={counts && counts.stuck > 0 ? 'danger' : 'primary'}
+          onClick={() => setFilter(counts && counts.stuck > 0 ? 'stuck' : 'pending')}
+        />
+        <KpiCard
+          label={t('floor.kpi.pipeline', { defaultValue: 'Active pipeline' })}
+          value={
+            counts == null
+              ? '—'
+              : String(
+                  counts.in_stitching + counts.in_finishing + counts.pending,
+                )
+          }
+          sub={
+            counts == null || counts.oldestActiveAgeMs == null
+              ? null
+              : t('floor.kpi.pipelineSub', {
+                  defaultValue: 'oldest {{age}}',
+                  age: formatAgeShort(counts.oldestActiveAgeMs),
+                })
+          }
+          tone="ink"
+          onClick={() => setFilter('all')}
+        />
+      </div>
+
       {/* Filter tabs — floating pill row. Each tab is its own pill
           with the label inline + a count badge to the right. Active
           tab fills brand blue; inactive tabs are white with a hairline.
           All tab is last (the bird's-eye view) — Pending leads since
           it's the FM's primary action queue. Counts come from BE
           /api/lots/counts; capped visually at 99+. */}
-      <div className="mb-4 flex items-center gap-2 overflow-x-auto pb-1 -mx-1 px-1">
+      {/* `[&::-webkit-scrollbar]:hidden` + `[scrollbar-width:none]`
+          hide the bar while keeping horizontal scroll on narrow
+          phones. Pad the bottom slightly so the active pill's shadow
+          doesn't get clipped. */}
+      <div className="mb-4 flex items-center gap-2 overflow-x-auto pb-1 -mx-1 px-1 [&::-webkit-scrollbar]:hidden [scrollbar-width:none]">
         {(
           [
             { id: 'pending' as const, label: t('floor.filters.pending'), count: counts?.pending },
@@ -1001,6 +1054,72 @@ function DenseLotRow({
       </button>
     </li>
   );
+}
+
+/**
+ * Compact KPI tile used at the top of the floor dashboard.
+ * Big number + label + optional subtitle, full-width tap target,
+ * tone drives color (primary blue, ink, danger red).
+ */
+function KpiCard({
+  label,
+  value,
+  sub,
+  tone,
+  onClick,
+}: {
+  label: string;
+  value: string;
+  sub: string | null;
+  tone: 'primary' | 'ink' | 'danger';
+  onClick?: () => void;
+}) {
+  const accent =
+    tone === 'danger'
+      ? 'var(--color-destructive)'
+      : tone === 'primary'
+        ? 'var(--color-primary)'
+        : 'var(--color-foreground)';
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={cn(
+        'text-left rounded-[14px] bg-[var(--color-surface)] border border-[var(--color-border)] shadow-[0_1px_2px_rgba(14,23,48,0.04)] px-4 py-3 transition-colors',
+        onClick && 'hover:bg-[var(--color-muted)] active:scale-[0.99]',
+      )}
+    >
+      <div className="text-[11px] font-semibold uppercase tracking-[0.06em] text-[var(--color-muted-foreground)] truncate">
+        {label}
+      </div>
+      <div
+        className="mt-1 font-mono font-bold text-[28px] leading-none tabular-nums"
+        style={{ color: accent }}
+      >
+        {value}
+      </div>
+      {sub && (
+        <div
+          className="mt-1.5 text-[12px] font-medium"
+          style={{ color: tone === 'danger' ? accent : 'var(--color-muted-foreground)' }}
+        >
+          {sub}
+        </div>
+      )}
+    </button>
+  );
+}
+
+/** Short age — '2h', '3d', '1w' — for KPI subtitles. */
+function formatAgeShort(ms: number): string {
+  const min = Math.floor(ms / 60000);
+  if (min < 60) return `${Math.max(1, min)}m`;
+  const hr = Math.floor(min / 60);
+  if (hr < 24) return `${hr}h`;
+  const d = Math.floor(hr / 24);
+  if (d < 7) return `${d}d`;
+  const w = Math.floor(d / 7);
+  return `${w}w`;
 }
 
 /**

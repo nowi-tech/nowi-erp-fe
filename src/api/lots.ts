@@ -79,6 +79,8 @@ export interface LotCounts {
   in_stitching: number;
   in_finishing: number;
   stuck: number;
+  /** Age of the oldest active lot, in ms. null when there are none. */
+  oldestActiveAgeMs: number | null;
 }
 
 export async function getLotCounts(): Promise<LotCounts> {
