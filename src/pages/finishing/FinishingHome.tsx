@@ -262,7 +262,7 @@ function FinishingLotCard({ lot, onOpen }: CardProps) {
       className={cn(
         'rounded-[14px] bg-[var(--color-surface)] border-l-[3px] shadow-[0_1px_2px_rgba(14,23,48,0.04)] hover:shadow-[0_1px_2px_rgba(14,23,48,0.06),0_4px_12px_rgba(14,23,48,0.05)] transition-shadow p-4',
         m.isReady
-          ? 'border-l-[var(--status-success-ink,#16a34a)]'
+          ? 'border-l-[var(--color-success)]'
           : 'border-l-[var(--stage-finish-acc)]',
       )}
     >
@@ -356,7 +356,7 @@ function ProgressRow({ label, value, max, tone }: ProgressRowProps) {
           className={cn(
             'h-full rounded-full transition-[width]',
             tone === 'success'
-              ? 'bg-[var(--status-success-ink,#16a34a)]'
+              ? 'bg-[var(--color-success)]'
               : 'bg-[var(--color-primary)]',
           )}
           style={{ width: `${pct}%` }}
