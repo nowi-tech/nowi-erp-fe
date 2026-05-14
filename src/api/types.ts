@@ -89,8 +89,16 @@ export interface Lot {
    * "X of Y forwarded" without N+1 availability queries.
    */
   stageForwarded?: Partial<Record<string, number>>;
+  /**
+   * Mirror of stageForwarded for scrap events. `forwarded + scrapped >=
+   * totalUnits(qtyIn)` ⇒ nothing left to do at that stage, so queue UIs
+   * can hide the lot once work is finished even before status advances.
+   */
+  stageScrapped?: Partial<Record<string, number>>;
   /** Stitching master this lot is assigned to. `null` = pending assignment. */
   assignedUserId?: number | null;
+  /** Training/test row. Floor screens may flag these so they're not mistaken for live work. */
+  isTestData?: boolean;
   assignedUser?: { id: number; name: string } | null;
   vendor?: Vendor | null;
   order?: Order | null;

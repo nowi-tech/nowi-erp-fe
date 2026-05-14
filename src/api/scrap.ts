@@ -23,6 +23,10 @@ export async function listScraps(params: {
   lotId?: number;
   stageId?: number;
   byMe?: boolean;
+  /** ISO datetime; scrap events with scrappedAt >= from are returned. */
+  from?: string;
+  /** ISO datetime; scrap events with scrappedAt <= to are returned. */
+  to?: string;
   skip?: number;
   take?: number;
 }): Promise<ScrapRow[]> {

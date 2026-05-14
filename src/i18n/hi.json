@@ -2,497 +2,513 @@
   "common": {
     "appName": "NOWI ERP",
     "loading": "लोड हो रहा है…",
-    "save": "सहेजें",
+    "save": "सेव करें",
     "cancel": "रद्द करें",
-    "confirm": "पुष्टि करें",
+    "confirm": "पक्का करें",
     "delete": "हटाएँ",
     "back": "वापस",
-    "submit": "जमा करें",
-    "logout": "लॉगआउट",
+    "submit": "सबमिट करें",
+    "logout": "Logout",
     "yes": "हाँ",
     "no": "नहीं",
     "error": "कुछ गड़बड़ हो गई",
-    "retry": "पुनः प्रयास करें",
+    "retry": "फिर से करें",
     "close": "बंद करें",
-    "details": "विवरण",
+    "details": "Details",
     "open": "खोलें",
-    "noInternet": "इंटरनेट नहीं — कृपया पुनः कनेक्ट करें",
+    "noInternet": "इंटरनेट नहीं है",
     "comingSoon": "जल्द आ रहा है",
-    "featureUnavailable": "यह सुविधा अभी सर्वर पर उपलब्ध नहीं है।",
-    "noopDevHint": "(डेव मोड — असली अपलोड नहीं)",
-    "saving": "सहेजा जा रहा है…",
+    "featureUnavailable": "यह फ़ीचर अभी उपलब्ध नहीं है।",
+    "noopDevHint": "(Dev mode)",
+    "saving": "सेव हो रहा है…",
     "language": "भाषा",
-    "total": "कुल",
-    "unit": "यूनिट",
-    "units": "यूनिट",
+    "total": "Total",
+    "unit": "पीस",
+    "units": "पीस",
     "by": "द्वारा",
-    "clear": "साफ़ करें",
+    "clear": "क्लियर",
     "more": "और",
-    "filters": "फ़िल्टर",
-    "filtersActive": "{{count}} सक्रिय",
-    "showFilters": "फ़िल्टर दिखाएँ",
-    "hideFilters": "फ़िल्टर छिपाएँ",
-    "clearAll": "सभी हटाएँ"
+    "filters": "Filters",
+    "filtersActive": "{{count}} active",
+    "showFilters": "Filters दिखाएँ",
+    "hideFilters": "Filters छिपाएँ",
+    "clearAll": "सब हटाएँ",
+    "testData": "Test",
+    "testDataTooltip": "Test data — असली लॉट नहीं",
+    "showingFirstN": "हाल के {{n}} दिखा रहे हैं — पुरानी rows load नहीं हुईं।"
   },
   "auth": {
-    "title": "साइन इन",
-    "subtitle": "उत्पादन ट्रैकिंग सिस्टम",
-    "mobileLabel": "मोबाइल नंबर",
+    "title": "Sign in",
+    "subtitle": "Production Tracking",
+    "mobileLabel": "Mobile नंबर",
     "mobilePlaceholder": "9876543210",
-    "mobileHelp": "अपना 10 अंकों का मोबाइल नंबर दर्ज करें",
+    "mobileHelp": "10 अंकों का मोबाइल नंबर डालें",
     "sendOtp": "OTP भेजें",
-    "sendingOtp": "भेजा जा रहा है…",
-    "otpLabel": "OTP दर्ज करें",
-    "otpHelp": "{{mobile}} पर WhatsApp के ज़रिए भेजा गया",
-    "verifyOtp": "OTP जाँचें और लॉग इन करें",
-    "loggingIn": "लॉग इन हो रहा है…",
-    "resendOtp": "OTP दोबारा भेजें",
-    "resendIn": "{{seconds}} सेकंड में दोबारा भेजें",
+    "sendingOtp": "भेज रहे हैं…",
+    "otpLabel": "OTP डालें",
+    "otpHelp": "{{mobile}} पर WhatsApp से भेजा गया",
+    "verifyOtp": "Login करें",
+    "loggingIn": "Login हो रहा है…",
+    "resendOtp": "OTP फिर भेजें",
+    "resendIn": "{{seconds}} सेकंड में",
     "changeMobile": "नंबर बदलें",
     "errors": {
-      "invalidMobile": "10 अंकों का सही मोबाइल नंबर दर्ज करें।",
-      "rateLimit": "बहुत अधिक अनुरोध। कृपया कुछ देर बाद पुनः प्रयास करें।",
-      "wrongOtp": "गलत OTP। कृपया पुनः प्रयास करें।",
-      "generic": "साइन इन नहीं हो सका। कृपया पुनः प्रयास करें।"
+      "invalidMobile": "सही 10 अंकों का नंबर डालें",
+      "rateLimit": "थोड़ी देर बाद try करें",
+      "wrongOtp": "गलत OTP",
+      "generic": "Login नहीं हो पाया"
     }
   },
   "nav": {
-    "home": "होम",
-    "lots": "लॉट्स",
-    "profile": "प्रोफ़ाइल",
-    "dashboard": "डैशबोर्ड",
-    "vendors": "विक्रेता",
-    "skus": "SKU",
-    "users": "उपयोगकर्ता",
-    "settings": "सेटिंग्स"
+    "home": "Home",
+    "lots": "Lots",
+    "profile": "Profile",
+    "dashboard": "Dashboard",
+    "vendors": "Vendors",
+    "skus": "SKUs",
+    "users": "Users",
+    "settings": "Settings"
   },
   "stages": {
-    "receive": "प्राप्ति",
-    "stitching": "सिलाई",
-    "finishing": "फिनिश",
-    "dispatch": "डिस्पैच"
+    "receive": "Receive",
+    "stitching": "Stitching",
+    "finishing": "Finishing",
+    "dispatch": "Dispatch"
   },
   "roles": {
-    "admin": "एडमिन",
-    "floor_manager": "फ़्लोर मैनेजर",
-    "stitching_master": "सिलाई",
-    "finishing_master": "फिनिशिंग",
-    "data_manager": "डेटा",
-    "viewer": "व्यूअर"
+    "admin": "Admin",
+    "floor_manager": "Floor Manager",
+    "stitching_master": "Stitching",
+    "finishing_master": "Finishing",
+    "data_manager": "Data",
+    "viewer": "Viewer"
   },
   "floor": {
-    "title": "फ़्लोर",
-    "pending": "असाइनमेंट बाकी",
-    "pendingEmpty": "असाइन करने के लिए कोई लॉट नहीं।",
-    "assignedSection": "असाइन किए गए",
-    "assignedEmpty": "प्रगति में कोई लॉट नहीं।",
-    "assignTo": "इन्हें असाइन करें…",
-    "assignedTo": "{{name}} को असाइन किया",
-    "assignSuccessToast": "{{name}} को असाइन किया",
-    "inQueue": "कतार में {{n}}",
-    "edit": "संपादित करें",
-    "editTitle": "लॉट संपादित करें",
-    "editVendorLotNo": "विक्रेता लॉट नंबर",
-    "editStyle": "स्टाइल",
-    "editSaved": "लॉट अपडेट हुआ",
-    "editWindow": "बनाने के 24 घंटे तक संपादन योग्य",
-    "editExpired": "संपादन समय समाप्त",
-    "receiveFab": "नया लॉट लें",
-    "yourLots": "आपके लॉट",
+    "title": "Floor",
+    "pending": "Assign करना बाकी",
+    "pendingEmpty": "कोई lot pending नहीं",
+    "assignedSection": "Assigned",
+    "assignedEmpty": "कोई lot नहीं",
+    "assignTo": "Assign करें…",
+    "assignedTo": "{{name}} को दिया",
+    "assignSuccessToast": "{{name}} को assign किया",
+    "inQueue": "{{n}} queue में",
+    "edit": "Edit",
+    "editTitle": "Lot edit करें",
+    "editVendorLotNo": "Vendor Lot No.",
+    "editStyle": "Style",
+    "editSaved": "Lot update हो गया",
+    "editWindow": "24 घंटे तक edit कर सकते हैं",
+    "editExpired": "Edit का समय खत्म",
+    "receiveFab": "नया Lot लें",
+    "yourLots": "आपके Lots",
     "workedOn": "आपने जो किया",
-    "workedOnEmpty": "अभी कोई इतिहास नहीं।",
-    "reassign": "दोबारा असाइन करें",
-    "currentlyAssigned": "अभी {{name}}",
-    "noOtherMasters": "कोई और सिलाई मास्टर उपलब्ध नहीं।",
-    "editRequestTitle": "एडमिन से संपादन का अनुरोध करें",
-    "editRequestBody": "इस लॉट की 24 घंटे की संपादन अवधि बीत चुकी है। एडमिन को बदलाव के लिए अनुरोध भेजें?",
-    "editRequestSubmit": "अनुरोध भेजें",
-    "editRequestSentToast": "एडमिन को अनुरोध भेज दिया",
+    "workedOnEmpty": "अभी कोई history नहीं",
+    "reassign": "Reassign",
+    "currentlyAssigned": "अभी {{name}} के पास",
+    "noOtherMasters": "और कोई master नहीं है",
+    "editRequestTitle": "Admin से edit माँगें",
+    "editRequestBody": "24 घंटे का edit time खत्म हो गया। Admin को request भेजें?",
+    "editRequestSubmit": "Request भेजें",
+    "editRequestSentToast": "Admin को request भेज दी",
     "filters": {
       "all": "सभी",
-      "pending": "बाकी",
-      "inStitching": "सिलाई में",
-      "inFinishing": "फिनिशिंग में",
-      "stuck": "रुका हुआ"
+      "pending": "Pending",
+      "inStitching": "Stitching में",
+      "inFinishing": "Finishing में",
+      "stuck": "रुके हुए"
     },
-    "bulkAssignBar": "{{n}} लॉट असाइन करें",
-    "bulkSelectHint": "एक से ज़्यादा चुनने के लिए कार्ड पर लंबे समय तक दबाएँ।",
-    "report": "रिपोर्ट",
-    "reportIssue": "समस्या रिपोर्ट करें",
-    "reportComingSoon": "रिपोर्ट जल्द आ रहा है।",
+    "bulkAssignBar": "{{n}} lots assign करें",
+    "bulkSelectHint": "ज़्यादा select करने के लिए दबाकर रखें",
+    "report": "Report",
+    "reportIssue": "Issue report करें",
+    "reportComingSoon": "Report जल्द आ रहा है",
     "forwardedShort": "भेजे",
-    "endOfList": "सूची समाप्त",
+    "endOfList": "List खत्म",
     "showAll": "सभी {{n}} देखें",
-    "share": "साझा करें",
-    "linkCopiedToast": "लिंक कॉपी हुआ"
+    "share": "Share",
+    "linkCopiedToast": "Link copy हो गया"
   },
   "shell": {
-    "adminHome": "एडमिन होम — जल्द आ रहा है",
-    "stitchingHome": "सिलाई फ़्लोर — जल्द आ रहा है",
-    "finishingHome": "फिनिशिंग फ़्लोर — जल्द आ रहा है",
-    "dataHome": "डेटा कंसोल — जल्द आ रहा है"
+    "adminHome": "Admin Home — जल्द आ रहा है",
+    "stitchingHome": "Stitching Floor — जल्द आ रहा है",
+    "finishingHome": "Finishing Floor — जल्द आ रहा है",
+    "dataHome": "Data Console — जल्द आ रहा है"
   },
   "stitching": {
-    "title": "सिलाई",
-    "queue": "आपकी कतार",
-    "queueShort": "कतार",
-    "empty": "सिलाई के लिए कोई लॉट नहीं।",
+    "title": "Stitching",
+    "queue": "आपकी Queue",
+    "queueShort": "Queue",
+    "allLots": "Stitching में सभी Lots",
+    "empty": "कोई lot नहीं है",
+    "masterNoAssignments": "Floor Manager assign करेंगे — यहाँ दिखेंगे",
+    "kpi": {
+      "lastNDays": "पिछले {{n}} दिन",
+      "forwarded": "भेजे",
+      "rework": "Rework",
+      "scrap": "Scrap"
+    },
     "openLot": "खोलें",
-    "lotNo": "लॉट",
-    "vendor": "विक्रेता",
-    "vendorLot": "विक्रेता लॉट",
-    "status": "स्थिति",
-    "totals": "कुल",
+    "lotNo": "Lot",
+    "vendor": "Vendor",
+    "vendorLot": "Vendor Lot",
+    "status": "Status",
+    "totals": "Total",
     "gender": {
-      "W": "महिला",
-      "M": "पुरुष",
-      "U": "यूनिसेक्स"
+      "W": "Women",
+      "M": "Men",
+      "U": "Unisex"
     },
     "receiveFromKotty": {
       "fab": "Kotty से माल लें",
       "title": "Kotty से माल लें",
-      "subtitle": "पहले चालान भरें, फिर हर स्टाइल के लिए साइज़-वार मात्रा।",
-      "challanSection": "चालान",
-      "lotsSection": "स्टाइल",
-      "vendor": "विक्रेता",
-      "challanNo": "विक्रेता चालान नंबर",
-      "lotNo": "लॉट ID",
-      "lotN": "लॉट {{n}}",
-      "vendorLotNo": "विक्रेता लॉट नंबर",
-      "vendorStyleId": "विक्रेता स्टाइल ID",
-      "gender": "लिंग",
-      "genderW": "महिला",
-      "genderM": "पुरुष",
-      "genderU": "यूनिसेक्स",
-      "category": "श्रेणी",
-      "styleIdHint": "नए संयोजन सहेजने पर नया NOWI Style ID (जैसे NOWI-W-DR-1001) बनाएँगे।",
-      "sizeMatrix": "साइज़ मैट्रिक्स",
-      "notes": "टिप्पणी (वैकल्पिक)",
-      "remark": "टिप्पणी (वैकल्पिक)",
-      "addLot": "एक और लॉट जोड़ें",
-      "removeLot": "लॉट हटाएँ",
-      "applyToAll": "साइज़ मैट्रिक्स सभी स्टाइल पर लागू करें",
-      "copyToAll": "सभी साइज़ के लिए {{n}} रखें",
+      "subtitle": "पहले challan भरें, फिर हर style की size-wise qty",
+      "challanSection": "Challan",
+      "lotsSection": "Styles",
+      "vendor": "Vendor",
+      "challanNo": "Vendor Challan No.",
+      "lotNo": "Lot ID",
+      "lotN": "Lot {{n}}",
+      "vendorLotNo": "Vendor Lot No.",
+      "vendorStyleId": "Vendor Style ID",
+      "gender": "Gender",
+      "genderW": "Women",
+      "genderM": "Men",
+      "genderU": "Unisex",
+      "category": "Category",
+      "styleIdHint": "नए combo से नया NOWI Style ID बनेगा (जैसे NOWI-W-DR-1001)",
+      "sizeMatrix": "Size Matrix",
+      "notes": "Notes (optional)",
+      "remark": "Remark (optional)",
+      "addLot": "और lot जोड़ें",
+      "removeLot": "Lot हटाएँ",
+      "applyToAll": "सभी styles पर apply करें",
+      "copyToAll": "सभी sizes में {{n}} डालें",
       "copyToAllShort": "↪ सभी",
-      "addSize": "साइज़ जोड़ें",
+      "addSize": "Size जोड़ें",
       "removeSize": "{{size}} हटाएँ",
       "presets": {
         "alpha": "S–XXL",
         "numeric": "28–40"
       },
-      "confirmTitle": "प्राप्ति की पुष्टि करें",
-      "totalUnits": "कुल {{total}} यूनिट प्राप्त करें?",
-      "successToast": "लॉट दर्ज हो गया",
-      "errorToast": "लॉट दर्ज नहीं हो सका"
+      "confirmTitle": "Receive confirm करें",
+      "totalUnits": "Total {{total}} पीस receive करें?",
+      "successToast": "Lot record हो गया",
+      "errorToast": "Lot record नहीं हो पाया"
     },
     "lot": {
-      "title": "सिलाई में प्राप्त करें",
-      "available": "उपलब्ध",
-      "forward": "आगे भेजें",
-      "submit": "अगले चरण को भेजें",
-      "confirmTitle": "आगे भेजने की पुष्टि करें",
-      "confirmBody": "{{total}} यूनिट अगले चरण को भेजें?",
-      "nothingLeft": "आगे भेजने के लिए कुछ नहीं बचा।",
-      "successToast": "आगे भेज दिया गया",
-      "forwardedToast": "{{n}} यूनिट फिनिशिंग को भेजी गईं",
-      "recent": "हाल ही में स्टिचिंग से आगे भेजे",
-      "scrap": "स्क्रैप",
-      "scrapTitle": "यूनिट स्क्रैप करें",
-      "scrapHint": "स्क्रैप करने पर यूनिट लॉट से स्थायी रूप से हटा दी जाएगी। साइज़ {{size}} में {{max}} उपलब्ध।",
-      "scrapQty": "मात्रा",
-      "scrapReason": "कारण",
-      "scrapReasonPlaceholder": "जैसे कपड़ा फटा, सिलाई में दोष",
-      "scrappedToast": "{{n}} × {{size}} स्क्रैप किया",
-      "orderRef": "ऑर्डर",
-      "forwardedOf": "{{total}} में से {{done}} आगे भेजे",
-      "forwardN": "{{n}} {{unit}} आगे भेजें →",
-      "forwardHint": "साइज़ चिप दबाएँ पूरा भेजने के लिए, या मात्रा खुद टाइप करें।",
+      "title": "Stitching में Receive",
+      "available": "Available",
+      "forward": "Forward",
+      "submit": "आगे भेजें",
+      "confirmTitle": "Forward confirm करें",
+      "confirmBody": "{{total}} पीस आगे भेजें?",
+      "nothingLeft": "भेजने को कुछ नहीं बचा",
+      "freshLot": "यह lot अभी आया है — पहले stitching करें, फिर forward करें",
+      "activity": "Lot activity",
+      "forwarded": "Forward किया",
+      "scrapped": "Scrap किया",
+      "successToast": "Forward हो गया",
+      "forwardedToast": "{{n}} पीस Finishing को भेजे",
+      "recent": "हाल में forward किए",
+      "scrap": "Scrap",
+      "scrapTitle": "Scrap करें",
+      "scrapHint": "Scrap करने पर पीस lot से हट जाएँगे। Size {{size}} में {{max}} हैं।",
+      "scrapOverMax": "Size {{size}} में सिर्फ़ {{max}} हैं",
+      "scrapQty": "Qty",
+      "scrapReason": "Reason",
+      "scrapReasonPlaceholder": "जैसे कपड़ा फटा, stitching defect",
+      "scrappedToast": "{{n}} × {{size}} scrap किया",
+      "orderRef": "Order",
+      "forwardedOf": "{{total}} में से {{done}} भेजे",
+      "forwardN": "{{n}} {{unit}} भेजें →",
+      "forwardHint": "पूरा भेजने के लिए size पर tap करें",
       "forwardAll": "सभी {{n}} भेजें",
-      "bySize": "साइज़-वार",
-      "left": "बचे",
-      "loadError": "लॉट लोड नहीं हो सका",
-      "pendingAcceptance": "स्वीकार करना बाकी",
-      "awaitingAcceptance": "स्वीकृति की प्रतीक्षा",
-      "accept": "स्वीकार करें",
-      "acceptedToast": "{{n}} यूनिट स्वीकार किए"
+      "bySize": "size-wise",
+      "left": "बाकी",
+      "loadError": "Lot load नहीं हुआ",
+      "pendingAcceptance": "Accept करना बाकी",
+      "awaitingAcceptance": "Accept होने का wait",
+      "accept": "Accept करें",
+      "acceptedToast": "{{n}} पीस accept किए"
     },
-    "style": "स्टाइल"
+    "style": "Style"
   },
   "finishing": {
-    "title": "फिनिशिंग",
-    "queue": "आपकी कतार",
-    "empty": "फिनिशिंग के लिए कोई लॉट नहीं।",
+    "title": "Finishing",
+    "queue": "आपकी Queue",
+    "empty": "कोई lot नहीं है",
     "openLot": "खोलें",
-    "markRework": "रीवर्क के लिए चिह्नित करें",
-    "reworkQty": "रीवर्क मात्रा",
-    "reworkReason": "कारण",
+    "markRework": "Rework mark करें",
+    "reworkQty": "Rework qty",
+    "reworkReason": "Reason",
     "reasons": {
-      "stitchingDefect": "सिलाई दोष",
-      "printDefect": "प्रिंट दोष",
-      "wrongSize": "गलत साइज़",
-      "looseThreads": "ढीले धागे",
-      "other": "अन्य"
+      "stitchingDefect": "Stitching defect",
+      "printDefect": "Print defect",
+      "wrongSize": "Wrong size",
+      "looseThreads": "Loose threads",
+      "other": "Other"
     },
-    "otherReasonLabel": "समस्या लिखें",
-    "addPhoto": "फ़ोटो जोड़ें",
-    "photoAdded": "फ़ोटो संलग्न",
+    "otherReasonLabel": "Problem बताएँ",
+    "addPhoto": "Photo लगाएँ",
+    "photoAdded": "Photo लग गई",
     "lot": {
-      "title": "फिनिशिंग में प्राप्त करें",
-      "submit": "जमा करें",
-      "confirmTitle": "पुष्टि करें",
-      "confirmForward": "{{forward}} आगे भेजने के लिए",
-      "confirmRework": "{{rework}} रीवर्क के लिए",
-      "confirmReasonPrefix": "कारण:"
+      "title": "Finishing में Receive",
+      "submit": "Submit",
+      "confirmTitle": "Confirm करें",
+      "confirmForward": "{{forward}} forward करने के लिए",
+      "confirmRework": "{{rework}} rework के लिए",
+      "confirmReasonPrefix": "Reason:"
     },
-    "generateChallan": "चालान बनाएँ",
+    "generateChallan": "Challan बनाएँ",
     "dispatch": {
-      "generateChallan": "डिस्पैच चालान बनाएँ",
-      "destinationWarehouse": "गंतव्य गोदाम",
-      "selectWarehouse": "गोदाम चुनें…",
-      "shipQty": "भेजने की मात्रा",
-      "shipQtyHint": "भेजी जाने वाली यूनिट",
-      "noItems": "भेजने के लिए कम से कम एक मात्रा दर्ज करें।",
-      "confirmTitle": "डिस्पैच भेजें?",
-      "confirmBody": "{{sku}} की {{total}} यूनिट {{warehouse}} को भेजें?",
-      "successToast": "चालान #{{dispatchNo}} बना"
+      "generateChallan": "Dispatch Challan बनाएँ",
+      "destinationWarehouse": "Warehouse",
+      "selectWarehouse": "Warehouse चुनें…",
+      "shipQty": "Ship qty",
+      "shipQtyHint": "भेजने के लिए पीस",
+      "noItems": "कम से कम एक qty डालें",
+      "confirmTitle": "Dispatch करें?",
+      "confirmBody": "{{sku}} के {{total}} पीस {{warehouse}} को भेजें?",
+      "successToast": "Challan #{{dispatchNo}} बन गया"
     }
   },
   "admin": {
     "today": "आज",
-    "openLocator": "लोकेटर खोलें",
-    "lotsByStatus": "स्थिति के अनुसार लॉट्स",
-    "totalOrders": "कुल ऑर्डर",
+    "openLocator": "Locator खोलें",
+    "lotsByStatus": "Status wise lots",
+    "totalOrders": "Total Orders",
     "nav": {
-      "dashboard": "डैशबोर्ड",
-      "locator": "लोकेटर",
-      "dispatches": "डिस्पैच",
-      "vendors": "विक्रेता",
-      "skus": "SKU",
-      "users": "उपयोगकर्ता",
-      "settings": "सेटिंग्स",
-      "masterData": "मास्टर डेटा",
-      "editRequests": "संपादन अनुरोध",
-      "floor": "फ़्लोर",
-      "stitching": "सिलाई",
-      "finishing": "फिनिशिंग"
+      "dashboard": "Dashboard",
+      "locator": "Locator",
+      "dispatches": "Dispatches",
+      "vendors": "Vendors",
+      "skus": "SKUs",
+      "users": "Users",
+      "settings": "Settings",
+      "masterData": "Master Data",
+      "editRequests": "Edit Requests",
+      "floor": "Floor",
+      "stitching": "Stitching",
+      "finishing": "Finishing"
     },
     "editRequests": {
-      "title": "संपादन अनुरोध",
-      "subtitle": "लॉट की 24 घंटे की संपादन अवधि बीतने के बाद फ्लोर मैनेजर बदलाव यहाँ भेजते हैं।",
-      "pending": "बाकी",
-      "resolved": "हल हुए",
-      "empty": "कोई बाकी अनुरोध नहीं।",
-      "apply": "लागू करें",
-      "appliedToast": "लॉट पर लागू कर दिया"
+      "title": "Edit Requests",
+      "subtitle": "24 घंटे बाद floor managers यहाँ edit request भेजते हैं",
+      "pending": "Pending",
+      "resolved": "Resolved",
+      "empty": "कोई request नहीं",
+      "apply": "Apply करें",
+      "appliedToast": "Lot पर apply हो गया"
     },
     "testData": {
-      "label": "परीक्षण डेटा दिखाएँ",
-      "toastOn": "अब परीक्षण डेटा दिख रहा है",
-      "toastOff": "परीक्षण डेटा छिपा दिया गया"
+      "label": "Test data दिखाएँ",
+      "toastOn": "Test data दिख रहा है",
+      "toastOff": "Test data छिपा दिया"
     },
     "dispatches": {
-      "title": "डिस्पैच",
-      "empty": "कोई डिस्पैच नहीं मिला।",
+      "title": "Dispatches",
+      "empty": "कोई dispatch नहीं",
       "totalCount": "{{start}}–{{end}} / {{total}}",
-      "prev": "पिछला",
-      "next": "अगला",
+      "prev": "Previous",
+      "next": "Next",
       "filters": {
-        "status": "स्थिति",
-        "warehouse": "गोदाम",
-        "dateFrom": "से",
-        "dateTo": "तक",
-        "all": "सभी"
+        "status": "Status",
+        "warehouse": "Warehouse",
+        "dateFrom": "From",
+        "dateTo": "To",
+        "all": "All"
       },
       "columns": {
-        "dispatchNo": "डिस्पैच #",
-        "dispatchedAt": "डिस्पैच समय",
-        "warehouse": "गोदाम",
-        "syncMode": "सिंक मोड",
-        "status": "स्थिति",
-        "items": "आइटम",
-        "totalQty": "कुल मात्रा"
+        "dispatchNo": "Dispatch #",
+        "dispatchedAt": "Dispatch time",
+        "warehouse": "Warehouse",
+        "syncMode": "Sync mode",
+        "status": "Status",
+        "items": "Items",
+        "totalQty": "Total qty"
       },
       "syncMode": {
         "easyecom": "EasyEcom",
-        "manual_pdf": "मैनुअल PDF"
+        "manual_pdf": "Manual PDF"
       },
       "status": {
-        "draft": "ड्राफ्ट",
-        "awaiting_confirmation": "पुष्टि की प्रतीक्षा",
-        "synced": "सिंक हुआ",
-        "manual_pdf": "मैनुअल PDF",
-        "awaiting_grn": "GRN की प्रतीक्षा",
-        "grn_received": "GRN प्राप्त",
-        "grn_mismatch": "GRN बेमेल",
-        "sync_failed": "सिंक विफल",
-        "closed": "बंद",
-        "closed_with_adjustment": "बंद (समायोजित)"
+        "draft": "Draft",
+        "awaiting_confirmation": "Confirmation pending",
+        "synced": "Synced",
+        "manual_pdf": "Manual PDF",
+        "awaiting_grn": "GRN pending",
+        "grn_received": "GRN received",
+        "grn_mismatch": "GRN mismatch",
+        "sync_failed": "Sync failed",
+        "closed": "Closed",
+        "closed_with_adjustment": "Closed (adjusted)"
       }
     },
     "dispatchDetail": {
-      "warehouse": "गोदाम",
-      "dispatchedAt": "डिस्पैच समय",
-      "syncMode": "सिंक मोड",
-      "order": "ऑर्डर",
-      "items": "आइटम",
-      "noItems": "इस डिस्पैच में कोई आइटम नहीं।",
-      "mismatchYes": "बेमेल",
-      "editQty": "मात्रा बदलें",
-      "retrySync": "सिंक पुनः करें",
-      "retryQueued": "पुनः प्रयास कतार में",
-      "grnEvents": "GRN इवेंट",
-      "noGrnEvents": "अब तक कोई GRN इवेंट नहीं।",
-      "syncQueue": "सिंक कतार",
-      "syncAttempts": "प्रयास",
-      "noSyncEntries": "अब तक कोई सिंक प्रयास नहीं।",
+      "warehouse": "Warehouse",
+      "dispatchedAt": "Dispatch time",
+      "syncMode": "Sync mode",
+      "order": "Order",
+      "items": "Items",
+      "noItems": "कोई item नहीं",
+      "mismatchYes": "Mismatch",
+      "editQty": "Qty edit करें",
+      "retrySync": "Sync retry करें",
+      "retryQueued": "Retry queue में",
+      "grnEvents": "GRN Events",
+      "noGrnEvents": "अभी कोई GRN event नहीं",
+      "syncQueue": "Sync Queue",
+      "syncAttempts": "Attempts",
+      "noSyncEntries": "कोई sync attempt नहीं",
       "cols": {
-        "lot": "लॉट",
+        "lot": "Lot",
         "sku": "SKU",
-        "size": "साइज़",
-        "qtySent": "भेजी मात्रा",
-        "qtyReceived": "प्राप्त मात्रा",
-        "mismatch": "बेमेल",
-        "lastEdit": "अंतिम बदलाव"
+        "size": "Size",
+        "qtySent": "Qty sent",
+        "qtyReceived": "Qty received",
+        "mismatch": "Mismatch",
+        "lastEdit": "Last edit"
       },
       "editDialog": {
-        "title": "प्राप्त मात्रा बदलें",
-        "qty": "मात्रा",
-        "reason": "कारण",
-        "note": "टिप्पणी (वैकल्पिक)",
-        "confirmHint": "यह बदलाव ऑडिट लॉग में दर्ज होगा।",
-        "success": "मात्रा अपडेट हुई",
+        "title": "Received qty edit करें",
+        "qty": "Qty",
+        "reason": "Reason",
+        "note": "Note (optional)",
+        "confirmHint": "यह change audit log में record होगा",
+        "success": "Qty update हो गई",
         "reasons": {
-          "shortShipment": "कम शिपमेंट",
-          "lostInTransit": "रास्ते में खोया",
-          "damagedInTransit": "रास्ते में क्षतिग्रस्त",
-          "countingError": "गिनती त्रुटि",
-          "other": "अन्य"
+          "shortShipment": "Short shipment",
+          "lostInTransit": "Lost in transit",
+          "damagedInTransit": "Damaged in transit",
+          "countingError": "Counting error",
+          "other": "Other"
         }
       }
     },
     "locator": {
-      "title": "उत्पाद लोकेटर",
-      "exportXlsx": "Excel में निर्यात करें",
-      "loading": "लोड हो रहा है…",
-      "emptyResults": "कोई परिणाम नहीं मिला।",
+      "title": "Product Locator",
+      "exportXlsx": "Excel export",
+      "loading": "Load हो रहा है…",
+      "emptyResults": "कुछ नहीं मिला",
       "totalCount": "{{start}}–{{end}} / {{total}}",
-      "prev": "पिछला",
-      "next": "अगला",
+      "prev": "Previous",
+      "next": "Next",
       "filters": {
-        "vendor": "विक्रेता",
-        "stage": "चरण",
-        "warehouse": "गोदाम",
-        "status": "स्थिति",
-        "origin": "मूल",
+        "vendor": "Vendor",
+        "stage": "Stage",
+        "warehouse": "Warehouse",
+        "status": "Status",
+        "origin": "Origin",
         "sku": "SKU",
-        "dateFrom": "से",
-        "dateTo": "तक",
-        "all": "सभी",
-        "search": "खोजें…"
+        "dateFrom": "From",
+        "dateTo": "To",
+        "all": "All",
+        "search": "Search…"
       },
       "columns": {
         "sku": "SKU",
-        "base": "बेस",
-        "size": "साइज़",
-        "origin": "मूल",
-        "inbound": "इनबाउंड",
-        "stitching": "सिलाई",
-        "finishing": "फिनिशिंग",
-        "dispatched": "डिस्पैच",
-        "lots": "लॉट्स",
-        "open": "खोलें"
+        "base": "Base",
+        "size": "Size",
+        "origin": "Origin",
+        "inbound": "Inbound",
+        "stitching": "Stitching",
+        "finishing": "Finishing",
+        "dispatched": "Dispatched",
+        "lots": "Lots",
+        "open": "Open"
       }
     },
     "skuDetail": {
-      "title": "SKU विवरण",
-      "lots": "लॉट्स",
-      "lotNo": "लॉट नंबर",
-      "order": "ऑर्डर",
-      "orderStatus": "ऑर्डर स्थिति",
-      "recentReceipts": "हाल की प्राप्तियाँ",
-      "openLot": "लॉट खोलें",
-      "qtyIn": "प्राप्त मात्रा",
-      "stitchingAvail": "सिलाई उपलब्ध",
-      "finishingAvail": "फिनिशिंग उपलब्ध",
-      "scrapped": "स्क्रैप",
-      "openRework": "खुला रीवर्क",
+      "title": "SKU Detail",
+      "lots": "Lots",
+      "lotNo": "Lot No",
+      "order": "Order",
+      "orderStatus": "Order status",
+      "recentReceipts": "Recent receipts",
+      "openLot": "Lot खोलें",
+      "qtyIn": "Qty in",
+      "stitchingAvail": "Stitching avail",
+      "finishingAvail": "Finishing avail",
+      "scrapped": "Scrapped",
+      "openRework": "Open rework",
       "totals": {
-        "inbound": "इनबाउंड",
-        "stitching": "सिलाई",
-        "finishing": "फिनिशिंग",
-        "dispatched": "डिस्पैच",
-        "scrapped": "स्क्रैप",
-        "reworking": "रीवर्किंग"
+        "inbound": "Inbound",
+        "stitching": "Stitching",
+        "finishing": "Finishing",
+        "dispatched": "Dispatched",
+        "scrapped": "Scrapped",
+        "reworking": "Reworking"
       }
     },
     "dashboard": {
-      "throughput": "थ्रूपुट",
-      "finished": "पूर्ण",
-      "dispatched": "डिस्पैच",
-      "last7d": "7 दिन",
-      "last30d": "30 दिन",
-      "reworkRate": "रीवर्क दर",
-      "overall": "कुल",
-      "topSkus": "शीर्ष SKU",
-      "cycleTime": "चक्र समय",
-      "avgDays": "औसत दिन",
-      "distribution": "वितरण",
-      "openLocator": "लोकेटर खोलें"
+      "throughput": "Throughput",
+      "finished": "Finished",
+      "dispatched": "Dispatched",
+      "last7d": "7d",
+      "last30d": "30d",
+      "reworkRate": "Rework rate",
+      "overall": "Overall",
+      "topSkus": "Top SKUs",
+      "cycleTime": "Cycle time",
+      "avgDays": "Avg days",
+      "distribution": "Distribution",
+      "openLocator": "Locator खोलें"
     },
     "placeholder": {
-      "vendors": "विक्रेता",
-      "skus": "SKU",
-      "users": "उपयोगकर्ता",
-      "settings": "सेटिंग्स"
+      "vendors": "Vendors",
+      "skus": "SKUs",
+      "users": "Users",
+      "settings": "Settings"
     },
     "users": {
-      "title": "उपयोगकर्ता",
-      "subtitle": "तय करें कि कौन साइन इन कर सकता है और क्या कर सकता है।",
-      "add": "उपयोगकर्ता जोड़ें",
-      "search": "नाम या मोबाइल से खोजें",
-      "empty": "अभी कोई उपयोगकर्ता नहीं। पहला जोड़कर शुरू करें।",
+      "title": "Users",
+      "subtitle": "कौन login कर सकता है और क्या कर सकता है",
+      "add": "User जोड़ें",
+      "search": "Name या mobile से खोजें",
+      "empty": "कोई user नहीं। पहला जोड़ें।",
       "columns": {
-        "name": "नाम",
-        "mobile": "मोबाइल",
-        "role": "भूमिका",
-        "status": "स्थिति",
+        "name": "Name",
+        "mobile": "Mobile",
+        "role": "Role",
+        "status": "Status",
         "actions": ""
       },
-      "active": "सक्रिय",
-      "inactive": "निष्क्रिय",
-      "deactivate": "निष्क्रिय करें",
-      "activate": "सक्रिय करें",
+      "active": "Active",
+      "inactive": "Inactive",
+      "deactivate": "Deactivate",
+      "activate": "Activate",
       "form": {
-        "createTitle": "उपयोगकर्ता जोड़ें",
-        "editTitle": "उपयोगकर्ता संपादित करें",
+        "createTitle": "User जोड़ें",
+        "editTitle": "User edit करें",
         "name": "पूरा नाम",
-        "mobile": "मोबाइल (10 अंक)",
-        "mobileImmutable": "बनने के बाद मोबाइल बदला नहीं जा सकता",
-        "role": "भूमिका",
-        "trainingMode": "ट्रेनिंग मोड (केवल टेस्ट डेटा लिखेगा)",
-        "save": "सहेजें",
-        "cancel": "रद्द करें"
+        "mobile": "Mobile (10 digits)",
+        "mobileImmutable": "Mobile बाद में नहीं बदल सकते",
+        "role": "Role",
+        "trainingMode": "Training mode (सिर्फ़ test data लिखेगा)",
+        "save": "Save",
+        "cancel": "Cancel"
       },
       "errors": {
-        "duplicate": "इस मोबाइल नंबर वाला उपयोगकर्ता पहले से है।",
-        "generic": "उपयोगकर्ता सहेजा नहीं जा सका। पुनः प्रयास करें।"
+        "duplicate": "इस mobile से user पहले से है",
+        "generic": "User save नहीं हो पाया"
       },
-      "deactivateConfirm": "{{name}} को निष्क्रिय करें? वे साइन इन नहीं कर पाएँगे।"
+      "deactivateConfirm": "{{name}} को deactivate करें? वे login नहीं कर पाएँगे।"
     }
   },
   "profile": {
-    "title": "प्रोफ़ाइल",
+    "title": "Profile",
     "languageLabel": "भाषा",
-    "logout": "लॉगआउट"
+    "logout": "Logout"
   },
   "data": {
-    "title": "मास्टर डेटा",
-    "subtitle": "विक्रेता, SKU और फ़्लोर पर दिखने वाला डेटा यहाँ से मैनेज करें।",
+    "title": "Master Data",
+    "subtitle": "Vendors, SKUs और floor का data यहाँ से manage करें",
     "cards": {
-      "vendorsBody": "ब्रांड और बाहरी पार्टनर जो लॉट भेजते हैं।",
-      "skusBody": "कटिंग, सिलाई और फिनिशिंग में इस्तेमाल होने वाला SKU सूची।",
-      "usersBody": "ऑपरेटर, मास्टर और व्यूअर।",
-      "settingsBody": "स्टेज, गोदाम और प्लेटफ़ॉर्म सेटिंग्स।"
+      "vendorsBody": "Brands और partners जो lots भेजते हैं",
+      "skusBody": "Cutting, stitching और finishing में use होने वाले SKUs",
+      "usersBody": "Operators, masters और viewers",
+      "settingsBody": "Stages, warehouses और platform settings"
     }
   },
   "onboarding": {
@@ -502,97 +518,97 @@
     "done": "हो गया",
     "floor_manager": {
       "slide1": {
-        "title": "NOWI ERP में स्वागत है",
-        "body": "विक्रेताओं से लॉट लें, सिलाई मास्टरों को असाइन करें, और उत्पादन चालू रखें।"
+        "title": "NOWI ERP में आपका स्वागत है",
+        "body": "Vendors से lot लें, stitching masters को assign करें, और production चालू रखें।"
       },
       "slide2": {
-        "title": "लॉट प्राप्त करें",
-        "body": "होम पर 'नया लॉट लें' दबाएँ। विक्रेता चालान और हर स्टाइल की साइज़-वार मात्रा डालें।"
+        "title": "Lot कैसे लें",
+        "body": "Home पर 'नया Lot लें' दबाएँ। Vendor challan और हर style की size-wise qty डालें।"
       },
       "slide3": {
-        "title": "मास्टर को असाइन करें",
-        "body": "हर प्राप्त लॉट 'असाइनमेंट बाकी' में आता है। कार्ड पर 'असाइन' दबाएँ और सिलाई मास्टर चुनें — सबसे कम भार वाला पहले दिखेगा।"
+        "title": "Master को assign करें",
+        "body": "हर lot 'Assign करना बाकी' में आता है। 'Assign करें' दबाएँ और stitching master चुनें — सबसे कम काम वाला पहले दिखेगा।"
       },
       "slide4": {
-        "title": "24 घंटे में संपादन",
-        "body": "प्राप्ति में टाइपो? 24 घंटे के अंदर लॉट कार्ड पर 'संपादित करें' दबाएँ। उसके बाद संपादन अनुरोध भेजें — एडमिन उसे लागू कर सकते हैं।"
+        "title": "24 घंटे में edit कर सकते हैं",
+        "body": "कुछ गलत हो गया? 24 घंटे के अंदर lot पर 'Edit' दबाएँ। उसके बाद admin को request भेजनी होगी।"
       }
     },
     "stitching_master": {
       "slide1": {
-        "title": "NOWI ERP में स्वागत है",
-        "body": "हर लॉट जो आप सिलते हैं — सीधे फ़ोन से ट्रैक करें।"
+        "title": "NOWI ERP में आपका स्वागत है",
+        "body": "जो lot आप सिलते हैं — फ़ोन से track करें।"
       },
       "slide2": {
-        "title": "आपकी कतार",
-        "body": "'आपके लॉट' टैब में फ्लोर मैनेजर द्वारा आपको असाइन किए लॉट दिखते हैं। खोलने के लिए टैप करें।"
+        "title": "आपकी Queue",
+        "body": "'आपके Lots' में floor manager ने जो assign किया वो दिखेगा। खोलने के लिए tap करें।"
       },
       "slide3": {
-        "title": "फिनिशिंग को आगे भेजें",
-        "body": "लॉट पर हर साइज़ की सिली हुई मात्रा डालें (पूरा भेजने के लिए साइज़ चिप पर टैप करें)। फिर 'आगे भेजें' दबाएँ।"
+        "title": "Finishing को भेजें",
+        "body": "Lot में हर size की सिली हुई qty डालें (पूरा भेजने के लिए size पर tap करें)। फिर 'आगे भेजें' दबाएँ।"
       }
     },
     "finishing_master": {
       "slide1": {
-        "title": "NOWI ERP में स्वागत है",
-        "body": "हर लॉट को फिनिशिंग और डिस्पैच तक ट्रैक करें।"
+        "title": "NOWI ERP में आपका स्वागत है",
+        "body": "हर lot को finishing और dispatch तक track करें।"
       },
       "slide2": {
-        "title": "माल लेना और रीवर्क मार्क करना",
-        "body": "लॉट खोलें और सिलाई से प्राप्त मात्रा डालें। ख़राब पीस को कारण और फ़ोटो के साथ ‘रीवर्क के लिए चिह्नित करें’ से मार्क करें।"
+        "title": "माल लें और Rework mark करें",
+        "body": "Lot खोलें और stitching से आई qty डालें। ख़राब पीस को 'Rework mark करें' से photo के साथ mark करें।"
       },
       "slide3": {
-        "title": "डिस्पैच चालान बनाना",
-        "body": "लॉट तैयार हो जाए तो गंतव्य गोदाम चुनें और एक टैप में डिस्पैच चालान बनाएँ।"
+        "title": "Dispatch Challan बनाएँ",
+        "body": "Lot तैयार हो जाए तो warehouse चुनें और एक tap में dispatch challan बनाएँ।"
       }
     },
     "admin": {
       "slide1": {
-        "title": "NOWI ERP में स्वागत है",
-        "body": "कटिंग, सिलाई, फिनिशिंग और डिस्पैच — हर चरण की पूरी जानकारी आपके पास है।"
+        "title": "NOWI ERP में आपका स्वागत है",
+        "body": "Cutting, stitching, finishing और dispatch — हर stage की पूरी visibility आपके पास है।"
       },
       "slide2": {
-        "title": "लोकेटर और फ़िल्टर",
-        "body": "किसी भी SKU, लॉट या ऑर्डर को लोकेटर से ढूँढें। विक्रेता, चरण, स्थिति या तारीख़ से फ़िल्टर करें।"
+        "title": "Locator और Filters",
+        "body": "किसी भी SKU, lot या order को Locator से ढूँढें। Vendor, stage, status या date से filter करें।"
       },
       "slide3": {
-        "title": "डिस्पैच मिलान",
-        "body": "GRN इवेंट के साथ डिस्पैच मिलाएँ। ज़रूरत पड़े तो प्राप्त मात्रा बदलें — ऑडिट लॉग बना रहेगा।"
+        "title": "Dispatch Reconciliation",
+        "body": "GRN events के साथ dispatches match करें। ज़रूरत हो तो received qty edit करें — audit log बना रहेगा।"
       }
     },
     "data_manager": {
       "slide1": {
-        "title": "NOWI ERP में स्वागत है",
-        "body": "मास्टर डेटा साफ़ रखें — विक्रेता, SKU और बाक़ी डेटा जिस पर फ़्लोर निर्भर है।"
+        "title": "NOWI ERP में आपका स्वागत है",
+        "body": "Master data साफ़ रखें — vendors, SKUs और floor का data।"
       },
       "slide2": {
-        "title": "विक्रेता और SKU",
-        "body": "साइड मेनू से विक्रेता और SKU जोड़ें या बदलें। बदलाव तुरंत फ़्लोर पर दिखेंगे।"
+        "title": "Vendors और SKUs",
+        "body": "Side menu से vendors और SKUs add या edit करें। Changes तुरंत floor पर दिखेंगे।"
       },
       "slide3": {
-        "title": "फ़्लोर पर कहाँ दिखेगा",
-        "body": "विक्रेता ‘Kotty से माल लें’ फ़ॉर्म में दिखते हैं। SKU हर लॉट, डिस्पैच और लोकेटर पंक्ति पर दिखता है।"
+        "title": "Floor पर कहाँ दिखेगा",
+        "body": "Vendors 'Kotty से माल लें' form में दिखते हैं। SKUs हर lot, dispatch और locator row पर दिखते हैं।"
       }
     },
     "viewer": {
       "slide1": {
-        "title": "NOWI ERP में स्वागत है",
-        "body": "लॉट, डिस्पैच और फ़्लोर गतिविधि की रीड-ओनली पहुँच।"
+        "title": "NOWI ERP में आपका स्वागत है",
+        "body": "Lots, dispatches और floor activity देख सकते हैं।"
       },
       "slide2": {
-        "title": "लोकेटर ओवरव्यू",
-        "body": "लोकेटर से किसी भी SKU में जाएँ और देखें कि उसका माल अभी कहाँ है।"
+        "title": "Locator Overview",
+        "body": "Locator से किसी भी SKU को खोलें और देखें कि उसका माल अभी कहाँ है।"
       },
       "slide3": {
-        "title": "अलर्ट और रिपोर्ट",
-        "body": "थ्रूपुट, रीवर्क और चक्र समय के संकेतों के लिए डैशबोर्ड पर नज़र रखें।"
+        "title": "Alerts और Reports",
+        "body": "Dashboard पर throughput, rework और cycle time देखते रहें।"
       }
     }
   },
   "pwa": {
-    "installTitle": "NOWI ERP इंस्टॉल करें",
-    "installBody": "तेज़ पहुँच के लिए ऐप को होम स्क्रीन पर जोड़ें।",
-    "installButton": "ऐप इंस्टॉल करें",
+    "installTitle": "NOWI ERP Install करें",
+    "installBody": "App को home screen पर add करें — जल्दी खुलेगा।",
+    "installButton": "Install करें",
     "dismissButton": "अभी नहीं"
   }
 }

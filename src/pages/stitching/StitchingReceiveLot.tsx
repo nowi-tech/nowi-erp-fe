@@ -4,7 +4,6 @@ import { useNavigate, useParams } from 'react-router-dom';
 import { ChevronLeft, Minus, Plus } from 'lucide-react';
 import FloorShell from '@/components/layout/FloorShell';
 import { cn } from '@/lib/utils';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
@@ -16,10 +15,11 @@ import { toast as sonnerToast } from 'sonner';
 import { getAvailability, getLot } from '@/api/lots';
 import {
   createReceipts,
-  listReceipts,
   FeatureUnavailableError,
+  listReceipts,
   type ReceiptRow,
 } from '@/api/receipts';
+import { ActivityLog, type ActivityItem } from '@/components/floor/ActivityLog';
 import { orderStatusVariant } from '@/lib/statusBadge';
 import { useStageId } from '@/lib/useStageId';
 import type { Lot, SizeMatrix } from '@/api/types';
@@ -41,10 +41,12 @@ export default function StitchingReceiveLot() {
   const [lot, setLot] = useState<Lot | null>(null);
   const [available, setAvailable] = useState<SizeMatrix>({});
   const [qty, setQty] = useState<SizeMatrix>({});
-  const [recent, setRecent] = useState<ReceiptRow[]>([]);
-  const [recentScraps, setRecentScraps] = useState<ScrapRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
+  // Full lot activity at the stitching stage — forward receipts + scrap
+  // events from every actor. Shown below the data-entry form so the
+  // master has context for what's already happened on this lot.
+  const [activity, setActivity] = useState<ActivityItem[]>([]);
   const [confirmOpen, setConfirmOpen] = useState(false);
   const cancelRef = useRef<HTMLButtonElement>(null);
 
@@ -71,14 +73,33 @@ export default function StitchingReceiveLot() {
           stageId,
           available: {} as SizeMatrix,
         })),
-        listReceipts({ lotId, stageId, take: 10 }).catch(() => [] as ReceiptRow[]),
-        listScraps({ lotId, stageId, take: 10 }).catch(() => [] as ScrapRow[]),
+        listReceipts({ lotId, stageId, take: 200 }).catch(
+          () => [] as ReceiptRow[],
+        ),
+        listScraps({ lotId, stageId, take: 200 }).catch(() => [] as ScrapRow[]),
       ]);
       setLot(lotRes);
       setAvailable(avail.available ?? {});
-      setRecent(receipts);
-      setRecentScraps(scraps);
       setQty({});
+      const merged: ActivityItem[] = [
+        ...receipts.map(
+          (row): ActivityItem => ({
+            type: 'receipt',
+            id: `receipt-${row.id}`,
+            at: row.receivedAt,
+            row,
+          }),
+        ),
+        ...scraps.map(
+          (row): ActivityItem => ({
+            type: 'scrap',
+            id: `scrap-${row.id}`,
+            at: row.scrappedAt,
+            row,
+          }),
+        ),
+      ].sort((a, b) => new Date(b.at).getTime() - new Date(a.at).getTime());
+      setActivity(merged);
     } catch {
       toast.show(t('stitching.lot.loadError'), 'error');
     } finally {
@@ -126,10 +147,11 @@ export default function StitchingReceiveLot() {
   async function doScrap() {
     if (!lot || !lot.style || scrapSize === null || scrapping) return;
     const max = available?.[scrapSize] ?? 0;
-    const qtyToScrap = Math.max(0, Math.min(max, scrapQty));
-    if (qtyToScrap === 0 || scrapReason.trim().length === 0 || stageId === null) {
-      return;
-    }
+    // No silent clamp — UI disables the Scrap button when qty > max, so
+    // this is a defence-in-depth guard for keyboard-driven flows.
+    if (scrapQty <= 0 || scrapQty > max) return;
+    if (scrapReason.trim().length === 0 || stageId === null) return;
+    const qtyToScrap = scrapQty;
     setScrapping(true);
     try {
       await createScrap({
@@ -264,51 +286,6 @@ export default function StitchingReceiveLot() {
               )}
             </div>
 
-            {/* DETAILS — uppercase section header outside the identity
-                card, matches design layout. */}
-            <details className="group mt-3.5 px-1">
-              <summary className="cursor-pointer list-none flex items-center justify-between py-1 text-xs uppercase tracking-[0.08em] font-semibold text-[var(--color-muted-foreground)] hover:text-[var(--color-foreground)] select-none">
-                {t('common.details', { defaultValue: 'Details' })}
-                <span className="group-open:rotate-180 inline-block transition-transform text-[10px]">▼</span>
-              </summary>
-              <div className="mt-2 rounded-[14px] bg-[var(--color-surface)] shadow-[0_1px_2px_rgba(15,26,54,0.04)] px-4 py-1">
-                <dl className="divide-y divide-[var(--color-border)] text-[13px]">
-                  {lot.style && (
-                    <div className="flex items-center justify-between py-2.5">
-                      <dt className="text-[var(--color-muted-foreground)]">
-                        {t('stitching.style', { defaultValue: 'Style' })}
-                      </dt>
-                      <dd className="font-mono text-[var(--color-primary)]">
-                        {lot.style.styleId}
-                      </dd>
-                    </div>
-                  )}
-                  {lot.order && (
-                    <div className="flex items-center justify-between py-2.5">
-                      <dt className="text-[var(--color-muted-foreground)]">
-                        {t('stitching.lot.orderRef', { defaultValue: 'Order' })}
-                      </dt>
-                      <dd className="font-mono">{lot.order.orderNo}</dd>
-                    </div>
-                  )}
-                  <div className="flex items-center justify-between py-2.5">
-                    <dt className="text-[var(--color-muted-foreground)]">
-                      {t('stitching.vendor')}
-                    </dt>
-                    <dd>{lot.vendor?.name ?? lot.vendorId}</dd>
-                  </div>
-                  {lot.vendorLotNo && (
-                    <div className="flex items-center justify-between py-2.5">
-                      <dt className="text-[var(--color-muted-foreground)]">
-                        {t('stitching.vendorLot')}
-                      </dt>
-                      <dd className="font-mono">{lot.vendorLotNo}</dd>
-                    </div>
-                  )}
-                </dl>
-              </div>
-            </details>
-
             <div className="rounded-[14px] bg-[var(--color-surface)] shadow-[0_1px_2px_rgba(15,26,54,0.04)] p-[16px_18px_6px] mt-3.5">
               <div className="flex items-baseline justify-between">
                 <div className="font-semibold text-[18px] text-[var(--color-foreground)]">
@@ -325,7 +302,12 @@ export default function StitchingReceiveLot() {
               </p>
               {allZero ? (
                 <p className="mt-3 pb-3 text-[var(--color-muted-foreground)]">
-                  {t('stitching.lot.nothingLeft')}
+                  {lot?.order?.status === 'receiving'
+                    ? t('stitching.lot.freshLot', {
+                        defaultValue:
+                          'This lot just arrived — nothing to forward yet. Start stitching, then come back to record forwards.',
+                      })
+                    : t('stitching.lot.nothingLeft')}
                 </p>
               ) : (
                 <div className="mt-1.5">
@@ -378,93 +360,11 @@ export default function StitchingReceiveLot() {
               </button>
             )}
 
-            {/* Recently forwarded + scrapped at this stage — single
-                chronological feed so the floor can see "what just happened
-                here". Forwards are neutral; scraps are tinted destructive
-                so they read as losses. */}
-            {(recent.length > 0 || recentScraps.length > 0) && (() => {
-              type FeedItem =
-                | { kind: 'fwd'; row: ReceiptRow; at: string }
-                | { kind: 'scrap'; row: ScrapRow; at: string };
-              const items: FeedItem[] = [
-                ...recent.map((r): FeedItem => ({ kind: 'fwd', row: r, at: r.receivedAt })),
-                ...recentScraps.map((s): FeedItem => ({ kind: 'scrap', row: s, at: s.scrappedAt })),
-              ].sort((a, b) => (a.at > b.at ? -1 : 1));
-              return (
-                <Card className="mt-6">
-                  <CardHeader>
-                    <CardTitle className="text-base">
-                      {t('stitching.lot.recent', {
-                        defaultValue: 'Recently forwarded at stitching',
-                      })}
-                    </CardTitle>
-                  </CardHeader>
-                  <CardContent>
-                    <ul className="divide-y divide-[var(--color-border)] text-sm">
-                      {items.map((it) => {
-                        const isScrap = it.kind === 'scrap';
-                        const row = it.row;
-                        return (
-                          <li
-                            key={`${it.kind}-${row.id}`}
-                            className="flex items-center gap-3 py-2"
-                          >
-                            <div
-                              className={
-                                'min-w-[34px] h-7 px-1.5 rounded-[var(--radius-sm)] flex items-center justify-center font-semibold text-xs ' +
-                                (isScrap
-                                  ? 'bg-[var(--color-destructive-bg)] text-[var(--color-destructive)]'
-                                  : 'bg-[var(--color-muted)]')
-                              }
-                            >
-                              {row.sizeLabel}
-                            </div>
-                            <div className="flex-1 min-w-0">
-                              <span
-                                className={
-                                  'font-mono tabular-nums ' +
-                                  (isScrap ? 'text-[var(--color-destructive)]' : '')
-                                }
-                              >
-                                ×{row.qty}
-                              </span>
-                              {isScrap ? (
-                                <span className="ml-2 text-xs font-semibold uppercase tracking-wider text-[var(--color-destructive)]">
-                                  {t('stitching.lot.scrap', { defaultValue: 'Scrap' })}
-                                </span>
-                              ) : (
-                                (it.row as ReceiptRow).kind !== 'forward' && (
-                                  <span className="ml-2 text-xs text-[var(--status-rework-ink)]">
-                                    ({(it.row as ReceiptRow).kind})
-                                  </span>
-                                )
-                              )}
-                              {((isScrap && (it.row as ScrapRow).scrappedByName) ||
-                                (!isScrap && (it.row as ReceiptRow).receivedByName)) && (
-                                <span className="ml-2 text-xs text-[var(--color-muted-foreground)]">
-                                  {t('common.by', { defaultValue: 'by' })}{' '}
-                                  {isScrap
-                                    ? (it.row as ScrapRow).scrappedByName
-                                    : (it.row as ReceiptRow).receivedByName}
-                                </span>
-                              )}
-                            </div>
-                            <span className="text-xs text-[var(--color-muted-foreground)] font-mono">
-                              {new Date(it.at).toLocaleString(undefined, {
-                                month: 'short',
-                                day: 'numeric',
-                                hour: '2-digit',
-                                minute: '2-digit',
-                              })}
-                            </span>
-                          </li>
-                        );
-                      })}
-                    </ul>
-                  </CardContent>
-                </Card>
-              );
-            })()}
+            <ActivityLog
+              items={activity}
+              className="mt-3.5"
+              truncatedAt={200}
+            />
           </>
         ) : null}
       </div>
@@ -542,6 +442,8 @@ export default function StitchingReceiveLot() {
                 disabled={
                   scrapping ||
                   scrapQty <= 0 ||
+                  (scrapSize !== null &&
+                    scrapQty > (available?.[scrapSize] ?? 0)) ||
                   scrapReason.trim().length === 0
                 }
               >
@@ -574,6 +476,16 @@ export default function StitchingReceiveLot() {
                 onChange={(e) => setScrapQty(Math.max(0, parseInt(e.target.value, 10) || 0))}
                 autoFocus
               />
+              {scrapQty > (available?.[scrapSize] ?? 0) && (
+                <p className="mt-1 text-[12px] text-[var(--color-destructive)]">
+                  {t('stitching.lot.scrapOverMax', {
+                    defaultValue:
+                      'Only {{max}} available in size {{size}}.',
+                    max: available?.[scrapSize] ?? 0,
+                    size: scrapSize,
+                  })}
+                </p>
+              )}
             </div>
             <div>
               <Label htmlFor="scrap-reason" required>
@@ -718,3 +630,4 @@ function StitchSizeRow({
     </div>
   );
 }
+

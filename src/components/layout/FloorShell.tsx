@@ -20,8 +20,10 @@ export default function FloorShell({ children }: FloorShellProps) {
   const location = useLocation();
 
   const role = user?.role;
+  // Viewers land on /admin (read-only dashboard); ProtectedRoute on /admin
+  // already allows the viewer role. stitching_master falls through to /stitching.
   const homePath =
-    role === 'admin'
+    role === 'admin' || role === 'viewer'
       ? '/admin'
       : role === 'finishing_master'
         ? '/finishing'

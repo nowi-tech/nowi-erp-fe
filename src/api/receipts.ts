@@ -48,6 +48,10 @@ export async function listReceipts(params: {
   stageId?: number;
   kind?: ReceiptRow['kind'];
   byMe?: boolean;
+  /** ISO datetime; receipts with receivedAt >= from are returned. */
+  from?: string;
+  /** ISO datetime; receipts with receivedAt <= to are returned. */
+  to?: string;
   skip?: number;
   take?: number;
 }): Promise<ReceiptRow[]> {
