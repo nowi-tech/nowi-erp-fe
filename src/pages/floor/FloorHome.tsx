@@ -51,7 +51,8 @@ export default function FloorHome() {
   const [hasMore, setHasMore] = useState(true);
   const [initialLoading, setInitialLoading] = useState(true);
   const [pageLoading, setPageLoading] = useState(false);
-  const [filter, setFilter] = useState<Filter>('all');
+  // Pending is the FM's primary work — default landing tab.
+  const [filter, setFilter] = useState<Filter>('pending');
 
   // Assign dialog state — either a single lot or bulk-selected lots.
   const [assignLots, setAssignLots] = useState<Lot[]>([]);
@@ -272,15 +273,17 @@ export default function FloorHome() {
       {/* Filter tabs — floating pill row. Each tab is its own pill
           with the label inline + a count badge to the right. Active
           tab fills brand blue; inactive tabs are white with a hairline.
-          Counts come from BE /api/lots/counts; capped visually at 99+. */}
+          All tab is last (the bird's-eye view) — Pending leads since
+          it's the FM's primary action queue. Counts come from BE
+          /api/lots/counts; capped visually at 99+. */}
       <div className="mb-4 flex items-center gap-2 overflow-x-auto pb-1 -mx-1 px-1">
         {(
           [
-            { id: 'all' as const, label: t('floor.filters.all'), count: counts?.all },
             { id: 'pending' as const, label: t('floor.filters.pending'), count: counts?.pending },
             { id: 'in_stitching' as const, label: t('floor.filters.inStitching'), count: counts?.in_stitching },
             { id: 'in_finishing' as const, label: t('floor.filters.inFinishing'), count: counts?.in_finishing },
             { id: 'stuck' as const, label: t('floor.filters.stuck'), count: counts?.stuck },
+            { id: 'all' as const, label: t('floor.filters.all'), count: counts?.all },
           ]
         ).map((opt) => {
           const isActive = filter === opt.id;
@@ -329,102 +332,87 @@ export default function FloorHome() {
         that's not yet assigned isn't IN any stage yet — showing the
         timeline would be misleading).
       */}
-      {(['pending', 'inStitching', 'inFinishing', 'stuck'] as const).map(
-        (bucketKey) => {
-          const buckets = { pending, inStitching, inFinishing, stuck };
-          const bucket = buckets[bucketKey];
-          const visibleByFilter =
-            filter === 'all' ||
-            (filter === 'pending' && bucketKey === 'pending') ||
-            (filter === 'in_stitching' && bucketKey === 'inStitching') ||
-            (filter === 'in_finishing' && bucketKey === 'inFinishing') ||
-            (filter === 'stuck' && bucketKey === 'stuck');
-          if (!visibleByFilter) return null;
-          // In single-bucket filters always show the section (empty
-          // state included). In "All" view, hide empty sections to
-          // keep the page tight.
-          if (filter === 'all' && bucket.length === 0) return null;
+      {/* All view = dense flat list (one row per lot) so the bird's-eye
+          page stays compact even with 50+ active lots. Each row carries
+          a status chip + LOT id + product + assignee + age. Tap a row
+          to open the lot detail. */}
+      {filter === 'all' ? (
+        initialLoading ? (
+          <div className="h-12 animate-pulse rounded bg-[var(--color-muted)]" />
+        ) : lots.length === 0 ? (
+          <p className="text-[var(--color-muted-foreground)] px-1">
+            {t('floor.assignedEmpty')}
+          </p>
+        ) : (
+          <div className="rounded-[14px] bg-[var(--color-surface)] shadow-[0_1px_2px_rgba(15,26,54,0.04)] overflow-hidden">
+            <ul className="divide-y divide-[var(--color-border)]">
+              {lots.map((lot) => (
+                <DenseLotRow
+                  key={lot.id}
+                  lot={lot}
+                  onOpen={() => navigate(`/floor/lot/${lot.id}`)}
+                />
+              ))}
+            </ul>
+          </div>
+        )
+      ) : (
+        // Single-bucket filter views — full cards via the existing
+        // Section component. No per-section cap; the infinite-scroll
+        // sentinel below handles pagination.
+        (['pending', 'inStitching', 'inFinishing', 'stuck'] as const).map(
+          (bucketKey) => {
+            const buckets = { pending, inStitching, inFinishing, stuck };
+            const bucket = buckets[bucketKey];
+            const visibleByFilter =
+              (filter === 'pending' && bucketKey === 'pending') ||
+              (filter === 'in_stitching' && bucketKey === 'inStitching') ||
+              (filter === 'in_finishing' && bucketKey === 'inFinishing') ||
+              (filter === 'stuck' && bucketKey === 'stuck');
+            if (!visibleByFilter) return null;
 
-          const titleKey = {
-            pending: 'floor.pending',
-            inStitching: 'floor.filters.inStitching',
-            inFinishing: 'floor.filters.inFinishing',
-            stuck: 'floor.filters.stuck',
-          }[bucketKey];
-          const emptyKey = {
-            pending: 'floor.pendingEmpty',
-            inStitching: 'floor.assignedEmpty',
-            inFinishing: 'floor.assignedEmpty',
-            stuck: 'floor.assignedEmpty',
-          }[bucketKey];
-          const filterId = {
-            pending: 'pending' as const,
-            inStitching: 'in_stitching' as const,
-            inFinishing: 'in_finishing' as const,
-            stuck: 'stuck' as const,
-          }[bucketKey];
-          // In the "All" view, cap each section at 5 cards so the
-          // page stays scannable even with 10–20 lots per bucket.
-          // A "Show all N" link jumps to that filter tab where the
-          // full list paginates infinitely.
-          const ALL_VIEW_PREVIEW = 5;
-          const isAllView = filter === 'all';
-          const visibleLots =
-            isAllView && bucket.length > ALL_VIEW_PREVIEW
-              ? bucket.slice(0, ALL_VIEW_PREVIEW)
-              : bucket;
-          const hiddenCount = bucket.length - visibleLots.length;
+            const titleKey = {
+              pending: 'floor.pending',
+              inStitching: 'floor.filters.inStitching',
+              inFinishing: 'floor.filters.inFinishing',
+              stuck: 'floor.filters.stuck',
+            }[bucketKey];
+            const emptyKey = {
+              pending: 'floor.pendingEmpty',
+              inStitching: 'floor.assignedEmpty',
+              inFinishing: 'floor.assignedEmpty',
+              stuck: 'floor.assignedEmpty',
+            }[bucketKey];
 
-          return (
-            <div key={bucketKey} className="mb-6">
-              <Section
-                title={t(titleKey)}
-                count={bucket.length}
-                emptyLabel={t(emptyKey)}
-                loading={initialLoading}
-                lots={visibleLots}
-                hideTimeline={bucketKey === 'pending'}
-                // Bulk-selection only operates on pending (unassigned)
-                // lots — already-assigned lots use the per-card
-                // Reassign action so the operator confirms one at a
-                // time. Cards in non-pending sections render with no
-                // long-press hook.
-                selectionMode={selectionMode && bucketKey === 'pending'}
-                selected={selected}
-                onOpenLot={(lot) => {
-                  if (selectionMode && bucketKey === 'pending') {
-                    toggleSelection(lot.id);
-                  } else {
-                    navigate(`/floor/lot/${lot.id}`);
-                  }
-                }}
-                onLongPress={(lot) => {
-                  // Long-press only enters selection mode on a pending
-                  // card. Skips on already-assigned cards.
-                  if (bucketKey !== 'pending') return;
-                  if (!selectionMode) setSelectionMode(true);
-                  setSelected((prev) => new Set(prev).add(lot.id));
-                }}
-                onAssign={openAssignFor}
-              />
-              {hiddenCount > 0 && (
-                <div className="mt-2.5 px-1">
-                  <button
-                    type="button"
-                    onClick={() => setFilter(filterId)}
-                    className="text-[13px] font-semibold text-[var(--color-primary)] hover:underline"
-                  >
-                    {t('floor.showAll', {
-                      defaultValue: 'Show all {{n}}',
-                      n: bucket.length,
-                    })}
-                    {' →'}
-                  </button>
-                </div>
-              )}
-            </div>
-          );
-        },
+            return (
+              <div key={bucketKey} className="mb-6">
+                <Section
+                  title={t(titleKey)}
+                  count={bucket.length}
+                  emptyLabel={t(emptyKey)}
+                  loading={initialLoading}
+                  lots={bucket}
+                  hideTimeline={bucketKey === 'pending'}
+                  selectionMode={selectionMode && bucketKey === 'pending'}
+                  selected={selected}
+                  onOpenLot={(lot) => {
+                    if (selectionMode && bucketKey === 'pending') {
+                      toggleSelection(lot.id);
+                    } else {
+                      navigate(`/floor/lot/${lot.id}`);
+                    }
+                  }}
+                  onLongPress={(lot) => {
+                    if (bucketKey !== 'pending') return;
+                    if (!selectionMode) setSelectionMode(true);
+                    setSelected((prev) => new Set(prev).add(lot.id));
+                  }}
+                  onAssign={openAssignFor}
+                />
+              </div>
+            );
+          },
+        )
       )}
 
       {/* Infinite-scroll sentinel + load indicator */}
@@ -898,4 +886,117 @@ function FloorLotRow({
       </div>
     </li>
   );
+}
+
+/**
+ * Dense single-row representation of a lot, used in the All view so
+ * 50+ lots fit on screen without infinite scroll fatigue. One line per
+ * lot: status chip · LOT id · product · units · assignee · age · ›
+ *
+ * Tap to open the lot detail page.
+ */
+function DenseLotRow({
+  lot,
+  onOpen,
+}: {
+  lot: Lot;
+  onOpen: () => void;
+}) {
+  const { t, i18n } = useTranslation();
+  const status = lot.order?.status;
+  const units = totalUnits(lot.qtyIn);
+  const productLabel = lot.style
+    ? [
+        t(`stitching.gender.${lot.style.gender}`, {
+          defaultValue:
+            lot.style.gender === 'W'
+              ? "Women's"
+              : lot.style.gender === 'M'
+                ? "Men's"
+                : 'Unisex',
+        }),
+        lot.style.category?.name,
+      ]
+        .filter(Boolean)
+        .join(' ')
+    : null;
+
+  // status → { label, swatch color }. Mirrors the bucket logic.
+  const statusInfo = (() => {
+    if (lot.assignedUserId == null) {
+      return { label: t('floor.filters.pending'), color: 'var(--color-foreground-2)' };
+    }
+    if (status === 'stuck') {
+      return { label: t('floor.filters.stuck'), color: 'var(--color-destructive)' };
+    }
+    if (status === 'in_finishing') {
+      return { label: t('floor.filters.inFinishing'), color: 'var(--stage-finish-acc)' };
+    }
+    if (status === 'in_rework') {
+      return { label: t('admin.locator.filters.rework', { defaultValue: 'Rework' }), color: 'var(--status-rework-acc)' };
+    }
+    return { label: t('floor.filters.inStitching'), color: 'var(--stage-stitch-acc)' };
+  })();
+
+  const ageLabel = formatAge(lot.createdAt, i18n.language);
+
+  return (
+    <li>
+      <button
+        type="button"
+        onClick={onOpen}
+        className="w-full text-left flex items-center gap-3 px-3 py-2.5 hover:bg-[var(--color-muted)]/50 transition-colors"
+      >
+        {/* Status swatch — small colored dot encoding the bucket */}
+        <span
+          className="shrink-0 w-2 h-2 rounded-full"
+          style={{ backgroundColor: statusInfo.color }}
+          aria-label={statusInfo.label}
+        />
+        {/* Identity column */}
+        <div className="flex-1 min-w-0 flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
+          <span className="font-mono font-semibold text-[14px] text-[var(--color-foreground)] truncate">
+            {lot.lotNo}
+          </span>
+          {productLabel && (
+            <span className="text-[12px] text-[var(--color-muted-foreground)] truncate">
+              {productLabel}
+            </span>
+          )}
+          <span className="font-mono text-[11px] text-[var(--color-muted-foreground-2)] tabular-nums">
+            {units}u
+          </span>
+        </div>
+        {/* Assignee */}
+        {lot.assignedUser && (
+          <span className="hidden sm:inline text-[11px] text-[var(--color-muted-foreground)] italic truncate max-w-[80px]">
+            {lot.assignedUser.name}
+          </span>
+        )}
+        {/* Age */}
+        <span className="font-mono text-[11px] text-[var(--color-muted-foreground-2)] tabular-nums">
+          {ageLabel}
+        </span>
+        <span className="text-[var(--color-muted-foreground-2)]">›</span>
+      </button>
+    </li>
+  );
+}
+
+/**
+ * Compact relative-time label for the dense row. Matches what a floor
+ * manager actually wants to know ("how stale is this?") without the
+ * noise of full timestamps.
+ */
+function formatAge(iso: string, _locale: string): string {
+  const ms = Date.now() - new Date(iso).getTime();
+  const min = Math.floor(ms / 60000);
+  if (min < 1) return 'now';
+  if (min < 60) return `${min}m`;
+  const hr = Math.floor(min / 60);
+  if (hr < 24) return `${hr}h`;
+  const d = Math.floor(hr / 24);
+  if (d < 7) return `${d}d`;
+  const w = Math.floor(d / 7);
+  return `${w}w`;
 }
