@@ -20,17 +20,25 @@ function todayLabel(locale: string): string {
   });
 }
 
-const STITCHING_QUEUE_STATUSES: OrderStatus[] = ['receiving', 'in_stitching', 'in_rework'];
+// `in_finishing` is included because the BE flips status on the FIRST
+// stitching forward (so the FM gets the "needs finishing assignment"
+// signal early). The lot still belongs in the stitching master's queue
+// until they've forwarded every unit — the qty gate below handles that.
+// `dispatched` / `closed*` / `stuck` are intentionally absent.
+const STITCHING_QUEUE_STATUSES: OrderStatus[] = [
+  'receiving',
+  'in_stitching',
+  'in_rework',
+  'in_finishing',
+];
 const STITCHING_STAGE = 'stitching';
 
 function isInQueue(lot: Lot): boolean {
   const status = lot.order?.status;
   if (!status) return true;
   if (!STITCHING_QUEUE_STATUSES.includes(status)) return false;
-  // Hide lots where stitching is done — order status doesn't auto-advance
-  // to `in_finishing` until the finishing master makes their first forward,
-  // so an in_stitching lot with 0 remaining qty would otherwise linger in
-  // the master's queue. forwarded + scrapped >= units ⇒ nothing left to do.
+  // forwarded + scrapped >= units ⇒ nothing left to do at stitching;
+  // hide it from the queue even if the lot is still active downstream.
   const units = totalUnits(lot.qtyIn);
   if (units === 0) return true;
   const forwarded = lot.stageForwarded?.[STITCHING_STAGE] ?? 0;
