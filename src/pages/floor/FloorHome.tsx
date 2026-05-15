@@ -54,7 +54,6 @@ type Filter =
   | 'all'
   | 'pending'
   | 'in_stitching'
-  | 'pending_finishing'
   | 'in_finishing'
   | 'stuck';
 const LONG_PRESS_MS = 500;
@@ -78,7 +77,6 @@ export default function FloorHome() {
       raw === 'all' ||
       raw === 'pending' ||
       raw === 'in_stitching' ||
-      raw === 'pending_finishing' ||
       raw === 'in_finishing' ||
       raw === 'stuck'
     ) {
@@ -216,35 +214,32 @@ export default function FloorHome() {
   //
   // pending = "truly needs FM action": just received, no assignee.
   // Mirrors BE counts() so pill totals and section contents agree.
-  const { pending, inStitching, pendingFinishing, inFinishing, stuck } =
-    useMemo(() => {
-      const buckets = {
-        pending: [] as Lot[],
-        inStitching: [] as Lot[],
-        pendingFinishing: [] as Lot[],
-        inFinishing: [] as Lot[],
-        stuck: [] as Lot[],
-      };
-      for (const l of lots) {
-        if (!matchesFilter(l, filter)) continue;
-        const s = l.order?.status;
-        if (s === 'stuck') buckets.stuck.push(l);
-        else if (s === 'in_finishing') {
-          // Mirror BE counts(): split in_finishing by whether a finisher
-          // is assigned. No finisher = FM still needs to pick someone.
-          if (l.assignedFinisherUserId == null) buckets.pendingFinishing.push(l);
-          else buckets.inFinishing.push(l);
-        } else if (s === 'in_stitching' || s === 'in_rework')
-          buckets.inStitching.push(l);
-        else if (s === 'receiving' || s == null) {
-          // receiving = just landed. Pending only when no assignee;
-          // already-assigned-but-not-started lots go to in_stitching.
-          if (l.assignedUserId == null) buckets.pending.push(l);
-          else buckets.inStitching.push(l);
-        }
+  const { pending, inStitching, inFinishing, stuck } = useMemo(() => {
+    const buckets = {
+      pending: [] as Lot[],
+      inStitching: [] as Lot[],
+      inFinishing: [] as Lot[],
+      stuck: [] as Lot[],
+    };
+    for (const l of lots) {
+      if (!matchesFilter(l, filter)) continue;
+      const s = l.order?.status;
+      if (s === 'stuck') buckets.stuck.push(l);
+      else if (s === 'in_finishing') {
+        // Lots in finishing without a finisher assigned land in PENDING
+        // alongside the receiving-no-stitcher lots — one queue for "FM
+        // needs to assign someone." The card itself signals which slot.
+        if (l.assignedFinisherUserId == null) buckets.pending.push(l);
+        else buckets.inFinishing.push(l);
+      } else if (s === 'in_stitching' || s === 'in_rework')
+        buckets.inStitching.push(l);
+      else if (s === 'receiving' || s == null) {
+        if (l.assignedUserId == null) buckets.pending.push(l);
+        else buckets.inStitching.push(l);
       }
-      return buckets;
-    }, [lots, filter]);
+    }
+    return buckets;
+  }, [lots, filter]);
 
   // Common assignee for all selected lots, if any — used to filter the
   // master picker on bulk reassign. If lots have different assignees,
@@ -359,21 +354,15 @@ export default function FloorHome() {
       <div className="mb-4 grid grid-cols-2 gap-2.5">
         {(() => {
           const stuck = counts?.stuck ?? 0;
-          const pending = counts?.pending ?? 0;
-          const pendingFinishing = counts?.pending_finishing ?? 0;
-          const needsAction = pending + pendingFinishing + stuck;
+          // Single Pending bucket = stitching-pending + finishing-pending.
+          // Both need the same FM action: pick someone.
+          const pending =
+            (counts?.pending ?? 0) + (counts?.pending_finishing ?? 0);
+          const needsAction = pending + stuck;
           const attentionTone: KpiTone =
             stuck > 0 ? 'danger' : needsAction > 0 ? 'warning' : 'success';
-          // Land on the most-urgent bucket: stuck > pending stitching >
-          // pending finishing.
           const attentionLandingFilter: Filter =
-            stuck > 0
-              ? 'stuck'
-              : pending > 0
-                ? 'pending'
-                : pendingFinishing > 0
-                  ? 'pending_finishing'
-                  : 'pending';
+            stuck > 0 ? 'stuck' : 'pending';
           return (
             <KpiCard
               label={t('floor.kpi.attention', { defaultValue: 'Needs your attention' })}
@@ -389,7 +378,7 @@ export default function FloorHome() {
                     : needsAction > 0
                       ? t('floor.kpi.attentionPending', {
                           defaultValue: '{{n}} pending',
-                          n: pending + pendingFinishing,
+                          n: pending,
                         })
                       : t('floor.kpi.attentionAllClear', {
                           defaultValue: 'All clear',
@@ -442,15 +431,17 @@ export default function FloorHome() {
         active={filter}
         onChange={setFilter}
         tabs={[
-          { id: 'pending', label: t('floor.filters.pending'), count: counts?.pending },
-          { id: 'in_stitching', label: t('floor.filters.inStitching'), count: counts?.in_stitching },
           {
-            id: 'pending_finishing',
-            label: t('floor.filters.pendingFinishing', {
-              defaultValue: 'Pending Finishing',
-            }),
-            count: counts?.pending_finishing,
+            id: 'pending',
+            label: t('floor.filters.pending'),
+            // Pending now unions stitching-pending + finishing-pending —
+            // FM cares "needs my action," not which slot.
+            count:
+              counts == null
+                ? undefined
+                : (counts.pending ?? 0) + (counts.pending_finishing ?? 0),
           },
+          { id: 'in_stitching', label: t('floor.filters.inStitching'), count: counts?.in_stitching },
           { id: 'in_finishing', label: t('floor.filters.inFinishing'), count: counts?.in_finishing },
           { id: 'stuck', label: t('floor.filters.stuck'), count: counts?.stuck },
           { id: 'all', label: t('floor.filters.all'), count: counts?.all },
@@ -494,79 +485,61 @@ export default function FloorHome() {
         // Single-bucket filter views — full cards via the existing
         // Section component. No per-section cap; the infinite-scroll
         // sentinel below handles pagination.
-        (
-          [
-            'pending',
-            'inStitching',
-            'pendingFinishing',
-            'inFinishing',
-            'stuck',
-          ] as const
-        ).map((bucketKey) => {
-          const buckets = {
-            pending,
-            inStitching,
-            pendingFinishing,
-            inFinishing,
-            stuck,
-          };
-          const bucket = buckets[bucketKey];
-          const visibleByFilter =
-            (filter === 'pending' && bucketKey === 'pending') ||
-            (filter === 'in_stitching' && bucketKey === 'inStitching') ||
-            (filter === 'pending_finishing' &&
-              bucketKey === 'pendingFinishing') ||
-            (filter === 'in_finishing' && bucketKey === 'inFinishing') ||
-            (filter === 'stuck' && bucketKey === 'stuck');
-          if (!visibleByFilter) return null;
+        (['pending', 'inStitching', 'inFinishing', 'stuck'] as const).map(
+          (bucketKey) => {
+            const buckets = { pending, inStitching, inFinishing, stuck };
+            const bucket = buckets[bucketKey];
+            const visibleByFilter =
+              (filter === 'pending' && bucketKey === 'pending') ||
+              (filter === 'in_stitching' && bucketKey === 'inStitching') ||
+              (filter === 'in_finishing' && bucketKey === 'inFinishing') ||
+              (filter === 'stuck' && bucketKey === 'stuck');
+            if (!visibleByFilter) return null;
 
-          const titleKey = {
-            pending: 'floor.pending',
-            inStitching: 'floor.filters.inStitching',
-            pendingFinishing: 'floor.filters.pendingFinishing',
-            inFinishing: 'floor.filters.inFinishing',
-            stuck: 'floor.filters.stuck',
-          }[bucketKey];
-          const emptyKey = {
-            pending: 'floor.pendingEmpty',
-            inStitching: 'floor.assignedEmpty',
-            pendingFinishing: 'floor.pendingEmpty',
-            inFinishing: 'floor.assignedEmpty',
-            stuck: 'floor.assignedEmpty',
-          }[bucketKey];
+            const titleKey = {
+              pending: 'floor.pending',
+              inStitching: 'floor.filters.inStitching',
+              inFinishing: 'floor.filters.inFinishing',
+              stuck: 'floor.filters.stuck',
+            }[bucketKey];
+            const emptyKey = {
+              pending: 'floor.pendingEmpty',
+              inStitching: 'floor.assignedEmpty',
+              inFinishing: 'floor.assignedEmpty',
+              stuck: 'floor.assignedEmpty',
+            }[bucketKey];
 
-          // Long-press / bulk-select today only operates on the
-          // pending-stitching bucket.
-          const isPendingBucket = bucketKey === 'pending';
+            const isPendingBucket = bucketKey === 'pending';
 
-          return (
-            <div key={bucketKey} className="mb-6">
-              <Section
-                title={t(titleKey)}
-                count={bucket.length}
-                emptyLabel={t(emptyKey)}
-                loading={initialLoading}
-                lots={bucket}
-                hideTimeline={isPendingBucket || bucketKey === 'pendingFinishing'}
-                selectionMode={selectionMode && isPendingBucket}
-                selected={selected}
-                onOpenLot={(lot) => {
-                  if (selectionMode && isPendingBucket) {
-                    toggleSelection(lot.id);
-                  } else {
-                    navigate(`/floor/lot/${lot.id}`);
-                  }
-                }}
-                onLongPress={(lot) => {
-                  if (!isPendingBucket) return;
-                  if (!selectionMode) setSelectionMode(true);
-                  setSelected((prev) => new Set(prev).add(lot.id));
-                }}
-                onAssign={openAssignFor}
-              />
-            </div>
-          );
-        })
+            return (
+              <div key={bucketKey} className="mb-6">
+                <Section
+                  title={t(titleKey)}
+                  count={bucket.length}
+                  emptyLabel={t(emptyKey)}
+                  loading={initialLoading}
+                  lots={bucket}
+                  hideTimeline={isPendingBucket}
+                  selectionMode={selectionMode && isPendingBucket}
+                  selected={selected}
+                  onOpenLot={(lot) => {
+                    if (selectionMode && isPendingBucket) {
+                      toggleSelection(lot.id);
+                    } else {
+                      navigate(`/floor/lot/${lot.id}`);
+                    }
+                  }}
+                  onLongPress={(lot) => {
+                    if (!isPendingBucket) return;
+                    if (!selectionMode) setSelectionMode(true);
+                    setSelected((prev) => new Set(prev).add(lot.id));
+                  }}
+                  onAssign={openAssignFor}
+                />
+              </div>
+            );
+          },
+        )
       )}
 
       {/* Infinite-scroll sentinel + load indicator */}
@@ -659,16 +632,16 @@ export default function FloorHome() {
 
 function matchesFilter(lot: Lot, filter: Filter): boolean {
   if (filter === 'all') return true;
-  if (filter === 'pending') return lot.assignedUserId == null;
   if (filter === 'stuck') return lot.order?.status === 'stuck';
+  if (filter === 'pending') {
+    // Either slot empty + waiting on FM action.
+    const status = lot.order?.status;
+    if (status === 'in_finishing') return lot.assignedFinisherUserId == null;
+    return lot.assignedUserId == null;
+  }
   if (filter === 'in_stitching')
     return ['receiving', 'in_stitching', 'in_rework'].includes(
       lot.order?.status ?? '',
-    );
-  if (filter === 'pending_finishing')
-    return (
-      lot.order?.status === 'in_finishing' &&
-      lot.assignedFinisherUserId == null
     );
   if (filter === 'in_finishing')
     return (
@@ -807,8 +780,16 @@ function FloorLotRow({
         .filter(Boolean)
         .join(' ')
     : null;
-  const isAssigned = lot.assignedUserId != null;
   const status = lot.order?.status;
+  // Which slot (if any) the next assign action targets. Drives the
+  // CTA label + the "needs X" chip on pending cards.
+  const pendingSlot: 'stitching_master' | 'finishing_master' | null =
+    lot.assignedUserId == null
+      ? 'stitching_master'
+      : status === 'in_finishing' && lot.assignedFinisherUserId == null
+        ? 'finishing_master'
+        : null;
+  const isAssigned = pendingSlot == null;
   const isAnomaly = status === 'in_rework' || status === 'stuck';
 
   // Long-press handlers — kick into selection mode on touch hold >500ms.
@@ -909,6 +890,20 @@ function FloorLotRow({
                     aria-hidden
                   />
                   {lot.assignedUser.name}
+                </span>
+              </>
+            )}
+            {pendingSlot && (
+              <>
+                <span className="text-[var(--color-muted-foreground-2)]">·</span>
+                <span className="text-[11px] font-bold uppercase tracking-[0.05em] text-[var(--color-primary)] bg-[var(--color-primary-soft)] px-1.5 py-0.5 rounded">
+                  {pendingSlot === 'finishing_master'
+                    ? t('floor.needsFinisher', {
+                        defaultValue: 'Needs Finisher',
+                      })
+                    : t('floor.needsStitcher', {
+                        defaultValue: 'Needs Stitcher',
+                      })}
                 </span>
               </>
             )}
