@@ -293,20 +293,13 @@ function FinishingLotCard({ lot, onOpen }: CardProps) {
             )}
           </div>
 
-          {/* Two-bar progress: stitch → me, then me → dispatch. The
-              finisher's two questions answered without opening the lot. */}
-          <div className="pt-1.5 space-y-1.5">
+          {/* Single progress bar — the finisher's own progress. Upstream
+              (stitching → me) is informational and lives on the detail
+              screen; surfacing it here just adds noise on every card. */}
+          <div className="pt-1.5">
             <ProgressRow
-              label={t('finishing.lot.stitchToMe', {
-                defaultValue: 'Stitch → Me',
-              })}
-              value={m.stitchForwarded}
-              max={m.units}
-              tone="neutral"
-            />
-            <ProgressRow
-              label={t('finishing.lot.meToDispatch', {
-                defaultValue: 'Me → Dispatch',
+              label={t('finishing.lot.progress', {
+                defaultValue: 'Dispatched',
               })}
               value={m.finishingForwarded}
               max={m.units}
