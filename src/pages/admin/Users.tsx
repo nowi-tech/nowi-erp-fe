@@ -10,6 +10,7 @@ import { Badge } from '@/components/ui/badge';
 import { Dialog } from '@/components/ui/dialog';
 import { useToast } from '@/components/ui/toast';
 import { useDebounced } from '@/lib/useDebounced';
+import StepupDialog from '@/components/admin/StepupDialog';
 import {
   listUsers,
   createUser,
@@ -68,14 +69,27 @@ export default function UsersPage() {
     void refresh();
   }, [refresh]);
 
-  const onDeactivate = async (u: User) => {
+  // Step-up gate: BE's @RequireStepup() on DELETE /users/:id rejects
+  // until the session has consumed a fresh OTP within ~60s. Pop the
+  // dialog, run the delete from its onConfirmed callback.
+  const [stepupForUser, setStepupForUser] = useState<User | null>(null);
+  const onDeactivate = (u: User) => {
     if (!window.confirm(t('admin.users.deactivateConfirm', { name: u.name }))) return;
+    setStepupForUser(u);
+  };
+  const doDeactivate = async () => {
+    if (!stepupForUser) return;
     try {
-      await deleteUser(u.id);
+      await deleteUser(stepupForUser.id);
       toast.show(t('common.saved' as const, { defaultValue: 'Saved' }), 'success');
       void refresh();
-    } catch {
-      toast.show(t('common.error'), 'error');
+    } catch (err) {
+      const e = err as { response?: { data?: { message?: string } }; message?: string };
+      toast.show(
+        e.response?.data?.message ?? e.message ?? t('common.error'),
+        'error',
+      );
+      throw err; // keep dialog open
     }
   };
 
@@ -229,6 +243,24 @@ export default function UsersPage() {
           }}
         />
       )}
+
+      <StepupDialog
+        open={stepupForUser != null}
+        title={t('admin.users.deactivateTitle', {
+          defaultValue: 'Confirm: Deactivate user',
+        })}
+        description={
+          stepupForUser
+            ? t('admin.users.deactivateStepupBody', {
+                defaultValue:
+                  'Deactivating "{{name}}" requires a fresh OTP for security.',
+                name: stepupForUser.name,
+              })
+            : undefined
+        }
+        onClose={() => setStepupForUser(null)}
+        onConfirmed={doDeactivate}
+      />
     </div>
   );
 }
