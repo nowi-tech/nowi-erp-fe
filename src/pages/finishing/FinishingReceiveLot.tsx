@@ -1,12 +1,18 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useNavigate, useParams } from 'react-router-dom';
-import { Camera, ChevronLeft, Minus, Plus } from 'lucide-react';
+import {
+  Camera,
+  CheckCircle2,
+  ChevronLeft,
+  Lock,
+  Minus,
+  Plus,
+  Truck,
+} from 'lucide-react';
 import { toast as sonnerToast } from 'sonner';
 import FloorShell from '@/components/layout/FloorShell';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select } from '@/components/ui/select';
@@ -16,16 +22,13 @@ import { cn } from '@/lib/utils';
 import { getAvailability, getLot } from '@/api/lots';
 import {
   createReceipts,
-  listReceipts,
   FeatureUnavailableError,
-  type ReceiptRow,
 } from '@/api/receipts';
 import { useStageId } from '@/lib/useStageId';
 import { openRework } from '@/api/rework';
 import { requestUploadUrl } from '@/api/storage';
 import { createDispatch } from '@/api/dispatches';
 import { listWarehouses } from '@/api/filters';
-import { orderStatusVariant } from '@/lib/statusBadge';
 import type {
   CreateDispatchItemInput,
   FilterOption,
@@ -64,10 +67,50 @@ function defaultRow(): RowState {
   };
 }
 
+function totalUnits(matrix: Record<string, number> | null | undefined): number {
+  if (!matrix) return 0;
+  return Object.values(matrix).reduce((a, b) => a + (Number(b) || 0), 0);
+}
+
+type LifeStage =
+  | 'in_progress'
+  | 'ready'
+  | 'dispatched'
+  | 'rework'
+  | 'stuck';
+
+interface LotMetrics {
+  units: number;
+  stitchForwarded: number;
+  finishingForwarded: number;
+  stage: LifeStage;
+  isReady: boolean;
+}
+
+function deriveMetrics(lot: Lot): LotMetrics {
+  const units = totalUnits(lot.qtyIn);
+  const stitchForwarded = lot.stageForwarded?.stitching ?? 0;
+  const finishingForwarded = lot.stageForwarded?.finishing ?? 0;
+  const status = lot.order?.status;
+  const isReady =
+    units > 0 && stitchForwarded >= units && finishingForwarded >= units;
+  const stage: LifeStage =
+    status === 'stuck'
+      ? 'stuck'
+      : status === 'in_rework'
+        ? 'rework'
+        : status === 'dispatched' ||
+            status === 'closed' ||
+            status === 'closed_with_adjustment'
+          ? 'dispatched'
+          : isReady
+            ? 'ready'
+            : 'in_progress';
+  return { units, stitchForwarded, finishingForwarded, stage, isReady };
+}
+
 export default function FinishingReceiveLot() {
   const { t } = useTranslation();
-  // useParams is intrinsically string (URL paths); parse to number once
-  // here so downstream API calls operate on the real domain type.
   const { lotId: lotIdParam = '' } = useParams<{ lotId: string }>();
   const lotId = Number(lotIdParam);
   const navigate = useNavigate();
@@ -75,9 +118,6 @@ export default function FinishingReceiveLot() {
   const [lot, setLot] = useState<Lot | null>(null);
   const [available, setAvailable] = useState<SizeMatrix>({});
   const [rows, setRows] = useState<Record<string, RowState>>({});
-  const [recent, setRecent] = useState<ReceiptRow[]>([]);
-  // Resolve finishing stage id at runtime via the shared hook so we
-  // don't bake the seed's primary-key ordering into the FE.
   const finishingStageId = useStageId('finishing');
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
@@ -88,28 +128,45 @@ export default function FinishingReceiveLot() {
   const [warehouses, setWarehouses] = useState<FilterOption[]>([]);
   const [destWarehouseId, setDestWarehouseId] = useState<string>('');
   const [shipQty, setShipQty] = useState<Record<string, number>>({});
+  // Partial-dispatch sidestep — user opted to ship what's ready before
+  // finishing is fully complete. Toggled by the "Ship N ready units now"
+  // link inside the Finishing section. When false, the dispatch section
+  // is hidden until isReady (strict gate).
+  const [partialDispatchOpen, setPartialDispatchOpen] = useState(false);
   const [dispatchConfirmOpen, setDispatchConfirmOpen] = useState(false);
-  // Two-step dispatch: confirm (Yes/No) sits between the form and the
-  // actual API call so a misclick can't push units to the warehouse.
   const [dispatchConfirming, setDispatchConfirming] = useState(false);
   const [dispatching, setDispatching] = useState(false);
   const [dispatchError, setDispatchError] = useState<string | null>(null);
   const dispatchCancelRef = useRef<HTMLButtonElement>(null);
+  const dispatchSectionRef = useRef<HTMLDivElement | null>(null);
+
+  // Per-size finishing forwarded — computed from receipts so we can
+  // pre-fill the dispatch ship-qty inputs intelligently. The BE auth-
+  // oritatively gates over-dispatch on submit, so we don't have to
+  // perfectly track already-dispatched units client-side; if a prior
+  // partial dispatch consumed some, the BE rejects and the user edits
+  // down.
+  const finishingPerSize = useMemo<Record<string, number>>(() => {
+    const out: Record<string, number> = {};
+    if (!lot?.receipts || finishingStageId == null) return out;
+    for (const r of lot.receipts) {
+      if (r.stageId === finishingStageId && r.kind === 'forward') {
+        out[r.sizeLabel] = (out[r.sizeLabel] ?? 0) + r.qty;
+      }
+    }
+    return out;
+  }, [lot?.receipts, finishingStageId]);
 
   const refresh = useCallback(async () => {
-    // Wait until the stage hook has resolved finishing's id (BE call).
     if (finishingStageId == null) return;
     setLoading(true);
     try {
-      const [lotRes, avail, receipts] = await Promise.all([
+      const [lotRes, avail] = await Promise.all([
         getLot(lotId),
         getAvailability(lotId, finishingStageId).catch(() => ({
           stageId: finishingStageId,
           available: {} as SizeMatrix,
         })),
-        listReceipts({ lotId, stageId: finishingStageId, take: 10 }).catch(
-          () => [] as ReceiptRow[],
-        ),
       ]);
       setLot(lotRes);
       const a = avail.available ?? {};
@@ -119,7 +176,6 @@ export default function FinishingReceiveLot() {
         next[s] = defaultRow();
       });
       setRows(next);
-      setRecent(receipts);
     } catch {
       sonnerToast.error(t('stitching.lot.loadError'));
     } finally {
@@ -136,6 +192,7 @@ export default function FinishingReceiveLot() {
   }, []);
 
   const sizes = useMemo(() => Object.keys(available ?? {}), [available]);
+  const metrics = lot ? deriveMetrics(lot) : null;
 
   const totals = useMemo(() => {
     let forward = 0;
@@ -149,6 +206,50 @@ export default function FinishingReceiveLot() {
 
   const allZero = sizes.length > 0 && sizes.every((s) => (available[s] ?? 0) === 0);
   const canSubmit = !submitting && (totals.forward > 0 || totals.rework > 0);
+
+  // Dispatch section unlocks when finishing is strictly complete OR
+  // the user opened the partial sidestep.
+  const dispatchUnlocked =
+    metrics?.stage === 'dispatched' ||
+    metrics?.isReady === true ||
+    partialDispatchOpen;
+  const dispatchAlreadyDone = metrics?.stage === 'dispatched';
+
+  // When dispatch first unlocks (transition false → true) auto-scroll
+  // to the dispatch section so the finisher sees what's now available.
+  // Track via a ref so we don't scroll repeatedly on every re-render.
+  const wasUnlockedRef = useRef(false);
+  useEffect(() => {
+    if (
+      !wasUnlockedRef.current &&
+      dispatchUnlocked &&
+      !dispatchAlreadyDone &&
+      dispatchSectionRef.current
+    ) {
+      dispatchSectionRef.current.scrollIntoView({
+        behavior: 'smooth',
+        block: 'start',
+      });
+    }
+    wasUnlockedRef.current = dispatchUnlocked;
+  }, [dispatchUnlocked, dispatchAlreadyDone]);
+
+  // Pre-fill ship qty when dispatch unlocks (or partial mode opens).
+  // Re-pre-fill if the per-size forwarded numbers change (e.g. user
+  // forwards more units, then reopens dispatch).
+  useEffect(() => {
+    if (!dispatchUnlocked || dispatchAlreadyDone) return;
+    setShipQty((prev) => {
+      // Only overwrite empty fields — preserve manual edits.
+      const next = { ...prev };
+      for (const s of sizes) {
+        if (next[s] == null || next[s] === 0) {
+          next[s] = finishingPerSize[s] ?? 0;
+        }
+      }
+      return next;
+    });
+  }, [dispatchUnlocked, dispatchAlreadyDone, sizes, finishingPerSize]);
 
   function updateRow(size: string, patch: Partial<RowState>) {
     setRows((prev) => ({ ...prev, [size]: { ...prev[size], ...patch } }));
@@ -172,6 +273,9 @@ export default function FinishingReceiveLot() {
     updateRow(size, { reworkQty: v });
   }
 
+  // KNOWN BUG (tracked for second pass): no <input type="file"> here, so
+  // the JPG never reaches GCS — only the would-be objectPath is recorded.
+  // Works in noop dev mode; broken in prod. See PROD_READINESS.md.
   async function attachPhoto(size: string) {
     if (!lot) return;
     try {
@@ -180,7 +284,6 @@ export default function FinishingReceiveLot() {
         entityId: String(lot.id),
         contentType: 'image/jpeg',
       });
-      // Noop dev mode: skip the actual GCS PUT, just record the path.
       updateRow(size, {
         photoPath: res.objectPath,
         photoNoop: !!res.noop,
@@ -204,7 +307,6 @@ export default function FinishingReceiveLot() {
     if (!canSubmit || !lot || finishingStageId == null) return;
     setSubmitting(true);
     try {
-      // Forwards (combined into one /api/receipts call).
       const forwardLines = sizes
         .map((s) => ({ sizeLabel: s, qty: rows[s]?.forwardQty ?? 0 }))
         .filter((l) => l.qty > 0);
@@ -215,7 +317,6 @@ export default function FinishingReceiveLot() {
           receipts: forwardLines,
         });
       }
-      // Rework: one POST per size with rework qty > 0.
       const reworkStyleId = lot.style?.styleId ?? lot.sku;
       for (const s of sizes) {
         const r = rows[s];
@@ -230,8 +331,6 @@ export default function FinishingReceiveLot() {
           photoPaths: r.photoPath ? [r.photoPath] : undefined,
         });
       }
-      // Rich success toast — show what moved + flag rework (warning tone)
-      // separately if any was opened, since rework is a "loss" event.
       const fwd = forwardLines.reduce((a, l) => a + l.qty, 0);
       const rework = Object.values(rows).reduce(
         (a, r) => a + (r.reworkOpen ? r.reworkQty : 0),
@@ -260,11 +359,6 @@ export default function FinishingReceiveLot() {
           { duration: 4500 },
         );
       }
-      try {
-        localStorage.setItem('nowi.firstReceiptDoneAt', new Date().toISOString());
-      } catch {
-        // ignore quota / storage errors
-      }
       setConfirmOpen(false);
       await refresh();
     } catch (err) {
@@ -278,13 +372,11 @@ export default function FinishingReceiveLot() {
     }
   }
 
-  // Build summary reason line for confirm dialog (first row that has rework).
   const firstReworkRow = Object.values(rows).find(
     (r) => r.reworkOpen && r.reworkQty > 0,
   );
 
   // ── Dispatch challan helpers ────────────────────────────────────────────
-  const dispatchSizes = useMemo(() => Object.keys(available ?? {}), [available]);
   const dispatchTotal = useMemo(
     () => Object.values(shipQty).reduce((a, b) => a + (Number(b) || 0), 0),
     [shipQty],
@@ -302,11 +394,8 @@ export default function FinishingReceiveLot() {
     setDispatching(true);
     setDispatchError(null);
     try {
-      // SKU code follows `<styleId>-<size>` (e.g. NOWI-W-DR-1001-S).
-      // Fall back to the legacy `lot.sku` string if Style isn't embedded
-      // (older API responses without `style`).
       const styleId = lot.style?.styleId ?? lot.sku;
-      const items: CreateDispatchItemInput[] = dispatchSizes
+      const items: CreateDispatchItemInput[] = sizes
         .map((s) => ({
           lotId: lot.id,
           sku: styleId ? `${styleId}-${s}` : '',
@@ -356,334 +445,69 @@ export default function FinishingReceiveLot() {
           className="inline-flex items-center gap-1 pr-3.5 pl-2 py-2 rounded-full bg-[var(--color-surface)] border border-[var(--color-border)] text-[14px] font-medium text-[var(--color-foreground)] shadow-[0_1px_1px_rgba(14,23,48,0.03)] hover:bg-[var(--color-muted)] transition-colors"
         >
           <ChevronLeft size={20} />
-          {t('stitching.queueShort', { defaultValue: 'Queue' })}
+          {t('finishing.queueShort', { defaultValue: 'Queue' })}
         </button>
       </div>
-      <div className="mt-2">
-        {loading ? (
-          <div className="h-32 animate-pulse rounded bg-[var(--color-muted)]" />
-        ) : lot ? (
-          <>
-            <div className="rounded-[14px] bg-[var(--color-surface)] border-l-[3px] border-l-[var(--stage-finish-acc)] shadow-[0_1px_2px_rgba(15,26,54,0.04)] p-[16px_18px_14px]">
-              <div className="font-semibold text-[26px] leading-[1.05] tracking-[-0.01em] text-[var(--color-foreground)] break-all">
-                {lot.lotNo}
-              </div>
-              <div className="mt-1.5 flex flex-wrap items-center gap-x-2 gap-y-1 text-[13px] text-[var(--color-foreground-2)]">
-                {lot.style && (
-                  <span className="font-medium text-[var(--color-foreground)]">
-                    {[
-                      t(`stitching.gender.${lot.style.gender}`, {
-                        defaultValue:
-                          lot.style.gender === 'W'
-                            ? "Women's"
-                            : lot.style.gender === 'M'
-                              ? "Men's"
-                              : 'Unisex',
-                      }),
-                      lot.style.category?.name,
-                    ]
-                      .filter(Boolean)
-                      .join(' ')}
-                  </span>
-                )}
-                <span className="text-[var(--color-muted-foreground-2)]">·</span>
-                <span>{lot.vendor?.name ?? lot.vendorId}</span>
-                <span className="text-[var(--color-muted-foreground-2)]">·</span>
-                <span className="font-mono tabular-nums">
-                  {Object.values(lot.qtyIn ?? {}).reduce(
-                    (a, b) => a + (Number(b) || 0),
-                    0,
-                  )}
-                  u
-                </span>
-              </div>
-              {(lot.order?.status === 'in_rework' || lot.order?.status === 'stuck') && (
-                <div className="mt-2">
-                  <Badge variant={orderStatusVariant(lot.order.status)} dot>
-                    {lot.order.status}
-                  </Badge>
-                </div>
-              )}
-            </div>
 
-            <details className="group mt-3.5 px-1">
-              <summary className="cursor-pointer list-none flex items-center justify-between py-1 text-xs uppercase tracking-[0.08em] font-semibold text-[var(--color-muted-foreground)] hover:text-[var(--color-foreground)] select-none">
-                {t('common.details', { defaultValue: 'Details' })}
-                <span className="group-open:rotate-180 inline-block transition-transform text-[10px]">▼</span>
-              </summary>
-              <div className="mt-2 rounded-[14px] bg-[var(--color-surface)] shadow-[0_1px_2px_rgba(15,26,54,0.04)] px-4 py-1">
-                <dl className="divide-y divide-[var(--color-border)] text-[13px]">
-                  {lot.style && (
-                    <div className="flex items-center justify-between py-2.5">
-                      <dt className="text-[var(--color-muted-foreground)]">
-                        {t('stitching.style', { defaultValue: 'Style' })}
-                      </dt>
-                      <dd className="font-mono text-[var(--stage-finish-acc)]">
-                        {lot.style.styleId}
-                      </dd>
-                    </div>
-                  )}
-                  {lot.order && (
-                    <div className="flex items-center justify-between py-2.5">
-                      <dt className="text-[var(--color-muted-foreground)]">
-                        {t('stitching.lot.orderRef', { defaultValue: 'Order' })}
-                      </dt>
-                      <dd className="font-mono">{lot.order.orderNo}</dd>
-                    </div>
-                  )}
-                  <div className="flex items-center justify-between py-2.5">
-                    <dt className="text-[var(--color-muted-foreground)]">
-                      {t('stitching.vendor')}
-                    </dt>
-                    <dd>{lot.vendor?.name ?? lot.vendorId}</dd>
-                  </div>
-                  {lot.vendorLotNo && (
-                    <div className="flex items-center justify-between py-2.5">
-                      <dt className="text-[var(--color-muted-foreground)]">
-                        {t('stitching.vendorLot')}
-                      </dt>
-                      <dd className="font-mono">{lot.vendorLotNo}</dd>
-                    </div>
-                  )}
-                </dl>
-              </div>
-            </details>
-            <div className="mt-3.5 space-y-3.5">
+      {loading || !lot || !metrics ? (
+        <div className="mt-4 h-32 animate-pulse rounded bg-[var(--color-muted)]" />
+      ) : (
+        <div className="mt-3">
+          <LotHeader lot={lot} metrics={metrics} />
+          <ChipRow
+            stage={metrics.stage}
+            isReady={metrics.isReady}
+            unitsRemaining={Math.max(0, metrics.units - metrics.finishingForwarded)}
+          />
 
-            <div className="rounded-[14px] bg-[var(--color-surface)] shadow-[0_1px_2px_rgba(15,26,54,0.04)] p-[16px_18px_6px]">
-              <div className="flex items-baseline justify-between">
-                <div className="font-semibold text-[18px] text-[var(--color-foreground)]">
-                  {t('stitching.lot.forward', { defaultValue: 'Forward' })}
-                </div>
-                <span className="text-[12px] text-[var(--color-muted-foreground)] font-mono">
-                  {t('stitching.lot.bySize', { defaultValue: 'by size' })}
-                </span>
-              </div>
-              <p className="mt-0.5 text-[12px] text-[var(--color-muted-foreground)]">
-                {t('stitching.lot.forwardHint', {
-                  defaultValue:
-                    'Tap size to forward all, or set quantity manually.',
-                })}
-              </p>
-              {allZero ? (
-                <p className="mt-3 pb-3 text-[var(--color-muted-foreground)]">
-                  {t('stitching.lot.nothingLeft')}
-                </p>
+          {/* FINISHING section — hidden once everything is dispatched. */}
+          {metrics.stage !== 'dispatched' && (
+            <FinishingSection
+              allZero={allZero}
+              sizes={sizes}
+              available={available}
+              rows={rows}
+              updateRow={updateRow}
+              setForward={setForward}
+              setRework={setRework}
+              attachPhoto={attachPhoto}
+              canSubmit={canSubmit}
+              totals={totals}
+              onSubmitClick={() => setConfirmOpen(true)}
+              partialReadyUnits={metrics.finishingForwarded}
+              partialEnabled={
+                !metrics.isReady &&
+                metrics.finishingForwarded > 0 &&
+                !partialDispatchOpen
+              }
+              onOpenPartial={() => setPartialDispatchOpen(true)}
+            />
+          )}
+
+          {/* DISPATCH section — strict gate, with partial sidestep override. */}
+          {dispatchUnlocked && (
+            <div ref={dispatchSectionRef}>
+              {dispatchAlreadyDone ? (
+                <DispatchDone lot={lot} />
               ) : (
-                <div className="mt-1.5">
-                  {sizes.map((size) => {
-                    const max = available[size] ?? 0;
-                    const r = rows[size] ?? defaultRow();
-                    return (
-                      <FinishSizeRow
-                        key={size}
-                        size={size}
-                        max={max}
-                        row={r}
-                        onForwardChange={(v) =>
-                          updateRow(size, { forwardQty: v })
-                        }
-                        onSetForward={(raw) => setForward(size, raw)}
-                        onToggleRework={(open) =>
-                          updateRow(size, {
-                            reworkOpen: open,
-                            reworkQty: open ? r.reworkQty : 0,
-                          })
-                        }
-                        onReworkQty={(raw) => setRework(size, raw)}
-                        onReasonChange={(k) =>
-                          updateRow(size, { reasonKey: k })
-                        }
-                        onOtherReasonChange={(v) =>
-                          updateRow(size, { otherReason: v })
-                        }
-                        onAttachPhoto={() => attachPhoto(size)}
-                        reasonKeys={REASON_KEYS}
-                        labels={{
-                          left: t('stitching.lot.left', {
-                            defaultValue: 'left',
-                          }),
-                          rework: t('finishing.markRework', {
-                            defaultValue: 'Rework',
-                          }),
-                          forwardAll: t('stitching.lot.forwardAll', {
-                            defaultValue: 'Forward all {{n}}',
-                            n: max,
-                          }),
-                          clear: t('common.clear', { defaultValue: 'Clear' }),
-                          reworkQtyLabel: t('finishing.reworkQty'),
-                          reasonLabel: t('finishing.reworkReason'),
-                          otherLabel: t('finishing.otherReasonLabel'),
-                          addPhoto: t('finishing.addPhoto'),
-                          photoAdded: t('finishing.photoAdded'),
-                          noopDev: t('common.noopDevHint'),
-                          reasonOf: (k: ReasonKey) =>
-                            t(`finishing.reasons.${k}`),
-                        }}
-                      />
-                    );
-                  })}
-                </div>
+                <DispatchSection
+                  sizes={sizes}
+                  warehouses={warehouses}
+                  destWarehouseId={destWarehouseId}
+                  setDestWarehouseId={setDestWarehouseId}
+                  shipQty={shipQty}
+                  setShip={setShip}
+                  finishingPerSize={finishingPerSize}
+                  dispatchError={dispatchError}
+                  canDispatchSubmit={canDispatchSubmit}
+                  onSubmitClick={() => setDispatchConfirmOpen(true)}
+                  isPartial={!metrics.isReady}
+                />
               )}
             </div>
-
-            {!allZero && (
-              <button
-                type="button"
-                onClick={() => setConfirmOpen(true)}
-                disabled={!canSubmit}
-                className={cn(
-                  'mt-3.5 w-full p-[18px] rounded-[14px] text-center font-semibold text-[16px] tracking-[0.01em] text-white transition-transform active:translate-y-px',
-                  canSubmit
-                    ? 'bg-gradient-to-b from-[var(--stage-finish-acc)] to-[var(--stage-finish-ink)] shadow-[inset_0_1px_0_rgba(255,255,255,0.18),0_0_0_1px_var(--stage-finish-ink),0_10px_24px_rgba(196,69,46,0.32)]'
-                    : 'bg-[var(--color-disabled-bg)] cursor-default',
-                )}
-              >
-                {totals.forward > 0 || totals.rework > 0
-                  ? t('finishing.lot.submitN', {
-                      defaultValue: 'Send {{fwd}} → Dispatch · {{rwk}} → Rework',
-                      fwd: totals.forward,
-                      rwk: totals.rework,
-                    })
-                  : t('finishing.lot.submit')}
-              </button>
-            )}
-            <Card>
-              <CardHeader>
-                <CardTitle>{t('finishing.dispatch.generateChallan')}</CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-3">
-                <div>
-                  <Label>{t('finishing.dispatch.destinationWarehouse')}</Label>
-                  <Select
-                    value={destWarehouseId}
-                    onChange={(e) => setDestWarehouseId(e.target.value)}
-                  >
-                    <option value="">
-                      {t('finishing.dispatch.selectWarehouse')}
-                    </option>
-                    {warehouses.map((w) => (
-                      <option key={w.id} value={w.id}>
-                        {w.name}
-                      </option>
-                    ))}
-                  </Select>
-                </div>
-
-                {dispatchSizes.map((size) => (
-                  <div
-                    key={`ship-${size}`}
-                    className="flex items-center justify-between gap-3"
-                  >
-                    <div className="min-w-0">
-                      <span className="font-medium">{size}</span>
-                      <span className="ml-2 text-xs text-[var(--color-muted-foreground)]">
-                        {t('finishing.dispatch.shipQtyHint')}
-                      </span>
-                    </div>
-                    <Input
-                      type="number"
-                      inputMode="numeric"
-                      min={0}
-                      value={shipQty[size] ?? 0}
-                      onChange={(e) => setShip(size, e.target.value)}
-                      className="w-24 text-center"
-                    />
-                  </div>
-                ))}
-
-                {dispatchError && (
-                  <p className="text-sm text-[var(--color-destructive)]">
-                    {dispatchError}
-                  </p>
-                )}
-
-                <Button
-                  size="lg"
-                  variant="outline"
-                  className="w-full"
-                  onClick={() => setDispatchConfirmOpen(true)}
-                  disabled={!canDispatchSubmit}
-                >
-                  {t('finishing.dispatch.generateChallan')}
-                </Button>
-              </CardContent>
-            </Card>
-
-            {/* Recently forwarded + rework-returned at finishing —
-                stage-scoped: only this lot's events at finishing, so the
-                master can see "did I already forward / send back these
-                sizes today?". 24px gap from the cards above. */}
-            {recent.length > 0 && (
-              <Card className="mt-6">
-                <CardHeader>
-                  <CardTitle className="text-base">
-                    {t('stitching.lot.recent', {
-                      defaultValue: 'Recently at finishing',
-                    })}
-                  </CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <ul className="divide-y divide-[var(--color-border)] text-sm">
-                    {recent.map((r) => {
-                      const isRework = r.kind === 'rework_return';
-                      return (
-                        <li
-                          key={r.id}
-                          className="flex items-center gap-3 py-2"
-                        >
-                          <div
-                            className={cn(
-                              'min-w-[34px] h-7 px-1.5 rounded-[var(--radius-sm)] flex items-center justify-center font-semibold text-xs',
-                              isRework
-                                ? 'bg-[var(--status-rework-bg)] text-[var(--status-rework-ink)]'
-                                : 'bg-[var(--color-muted)]',
-                            )}
-                          >
-                            {r.sizeLabel}
-                          </div>
-                          <div className="flex-1 min-w-0">
-                            <span
-                              className={cn(
-                                'font-mono tabular-nums',
-                                isRework && 'text-[var(--status-rework-ink)]',
-                              )}
-                            >
-                              ×{r.qty}
-                            </span>
-                            {isRework && (
-                              <span className="ml-2 text-xs font-semibold uppercase tracking-wider text-[var(--status-rework-ink)]">
-                                {t('finishing.markRework', {
-                                  defaultValue: 'Rework',
-                                })}
-                              </span>
-                            )}
-                            {r.receivedByName && (
-                              <span className="ml-2 text-xs text-[var(--color-muted-foreground)]">
-                                {t('common.by', { defaultValue: 'by' })}{' '}
-                                {r.receivedByName}
-                              </span>
-                            )}
-                          </div>
-                          <span className="text-xs text-[var(--color-muted-foreground)] font-mono">
-                            {new Date(r.receivedAt).toLocaleString(undefined, {
-                              month: 'short',
-                              day: 'numeric',
-                              hour: '2-digit',
-                              minute: '2-digit',
-                            })}
-                          </span>
-                        </li>
-                      );
-                    })}
-                  </ul>
-                </CardContent>
-              </Card>
-            )}
-            </div>
-          </>
-        ) : null}
-      </div>
+          )}
+        </div>
+      )}
 
       <Dialog
         open={dispatchConfirmOpen}
@@ -703,8 +527,6 @@ export default function FinishingReceiveLot() {
         initialFocusRef={dispatchCancelRef}
         footer={
           dispatchConfirming ? (
-            // Step 2 — explicit Yes/No so a misclick on the form's
-            // "Send" button can't push units to the warehouse.
             <>
               <Button
                 variant="outline"
@@ -801,12 +623,520 @@ export default function FinishingReceiveLot() {
   );
 }
 
-/**
- * Finishing size row — design's chip-tap-to-fill for forward qty, with
- * an inline "Rework" link that expands the row into a reason + photo +
- * rework-qty block when toggled. Forward and rework share the available
- * count: forwardQty + reworkQty ≤ max.
- */
+// ─────────────────────────────────────────────────────────────────────
+// Header — title + product line + status pill
+// ─────────────────────────────────────────────────────────────────────
+
+interface LotHeaderProps {
+  lot: Lot;
+  metrics: LotMetrics;
+}
+
+function LotHeader({ lot, metrics }: LotHeaderProps) {
+  const { t } = useTranslation();
+  const productLabel = lot.style
+    ? [
+        t(`stitching.gender.${lot.style.gender}`, {
+          defaultValue:
+            lot.style.gender === 'W'
+              ? "Women's"
+              : lot.style.gender === 'M'
+                ? "Men's"
+                : 'Unisex',
+        }),
+        lot.style.category?.name,
+      ]
+        .filter(Boolean)
+        .join(' ')
+    : null;
+
+  return (
+    <div className="rounded-[14px] bg-[var(--color-surface)] border-l-[3px] border-l-[var(--stage-finish-acc)] shadow-[0_1px_2px_rgba(15,26,54,0.04)] p-[16px_18px_14px]">
+      <div className="font-semibold text-[26px] leading-[1.05] tracking-[-0.01em] text-[var(--color-foreground)] break-all">
+        {lot.lotNo}
+      </div>
+      <div className="mt-1.5 flex flex-wrap items-center gap-x-2 gap-y-1 text-[13px] text-[var(--color-foreground-2)]">
+        {productLabel && (
+          <span className="font-medium text-[var(--color-foreground)]">
+            {productLabel}
+          </span>
+        )}
+        <span className="text-[var(--color-muted-foreground-2)]">·</span>
+        <span>{lot.vendor?.name ?? lot.vendorId}</span>
+        <span className="text-[var(--color-muted-foreground-2)]">·</span>
+        <span className="font-mono tabular-nums">{metrics.units}u</span>
+      </div>
+      <div className="mt-2.5">
+        <StagePill metrics={metrics} />
+      </div>
+    </div>
+  );
+}
+
+function StagePill({ metrics }: { metrics: LotMetrics }) {
+  const { t } = useTranslation();
+  const styleByStage: Record<LifeStage, { bg: string; text: string; label: string }> = {
+    in_progress: {
+      bg: 'bg-[var(--color-primary-soft)]',
+      text: 'text-[var(--color-primary)]',
+      label: t('finishing.pill.inProgress', {
+        defaultValue: 'In Progress · {{done}} / {{total}}',
+        done: metrics.finishingForwarded,
+        total: metrics.units,
+      }),
+    },
+    ready: {
+      bg: 'bg-[var(--color-success-bg)]',
+      text: 'text-[var(--color-success)]',
+      label: t('finishing.pill.ready', {
+        defaultValue: 'Ready to Dispatch · {{n}} / {{n}}',
+        n: metrics.units,
+      }),
+    },
+    dispatched: {
+      bg: 'bg-[var(--color-warning-bg)]',
+      text: 'text-[var(--color-warning)]',
+      label: t('finishing.pill.dispatched', {
+        defaultValue: 'Dispatched · awaiting GRN',
+      }),
+    },
+    rework: {
+      bg: 'bg-[var(--status-rework-bg)]',
+      text: 'text-[var(--status-rework-ink)]',
+      label: t('finishing.pill.rework', {
+        defaultValue: 'Rework in progress',
+      }),
+    },
+    stuck: {
+      bg: 'bg-[var(--color-destructive-bg)]',
+      text: 'text-[var(--color-destructive-strong)]',
+      label: t('finishing.pill.stuck', { defaultValue: 'Stuck — admin only' }),
+    },
+  };
+  const s = styleByStage[metrics.stage];
+  return (
+    <span
+      className={cn(
+        'inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[12px] font-semibold',
+        s.bg,
+        s.text,
+      )}
+    >
+      <span
+        aria-hidden
+        className={cn('inline-block w-1.5 h-1.5 rounded-full', s.text.replace('text-', 'bg-'))}
+      />
+      {s.label}
+    </span>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────
+// Sticky chip row — Finishing · Dispatch (locked / unlocked)
+// ─────────────────────────────────────────────────────────────────────
+
+interface ChipRowProps {
+  stage: LifeStage;
+  isReady: boolean;
+  unitsRemaining: number;
+}
+
+function ChipRow({ stage, isReady, unitsRemaining }: ChipRowProps) {
+  const { t } = useTranslation();
+  const [hint, setHint] = useState(false);
+  const dispatchUnlocked =
+    isReady || stage === 'dispatched' || stage === 'ready';
+
+  return (
+    <div className="sticky top-0 z-10 mt-3.5 -mx-1 px-1 py-2 bg-[var(--color-background)]/90 backdrop-blur-[6px]">
+      <div className="flex items-center gap-2">
+        <Chip
+          icon={
+            stage === 'dispatched' ? (
+              <CheckCircle2 size={14} />
+            ) : null
+          }
+          label={t('finishing.chip.finishing', { defaultValue: 'Finishing' })}
+          tone={
+            stage === 'dispatched'
+              ? 'done'
+              : stage === 'in_progress'
+                ? 'active'
+                : 'done'
+          }
+        />
+        <Chip
+          icon={dispatchUnlocked ? <Truck size={14} /> : <Lock size={14} />}
+          label={
+            stage === 'dispatched'
+              ? t('finishing.chip.dispatchDone', { defaultValue: 'Dispatch ✓' })
+              : dispatchUnlocked
+                ? t('finishing.chip.dispatch', { defaultValue: 'Dispatch' })
+                : t('finishing.chip.dispatchLocked', {
+                    defaultValue: 'Dispatch · locked',
+                  })
+          }
+          tone={
+            stage === 'dispatched'
+              ? 'done'
+              : dispatchUnlocked
+                ? 'active'
+                : 'locked'
+          }
+          onClick={
+            dispatchUnlocked
+              ? undefined
+              : () => {
+                  setHint(true);
+                  window.setTimeout(() => setHint(false), 3000);
+                }
+          }
+        />
+      </div>
+      {hint && !dispatchUnlocked && (
+        <div className="mt-2 inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-[8px] bg-[var(--color-warning-bg)] text-[var(--color-warning)] text-[12px] font-medium">
+          {t('finishing.chip.lockedHint', {
+            defaultValue: 'Complete finishing first — {{n}} units remaining',
+            n: unitsRemaining,
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function Chip({
+  icon,
+  label,
+  tone,
+  onClick,
+}: {
+  icon?: React.ReactNode;
+  label: string;
+  tone: 'active' | 'done' | 'locked';
+  onClick?: () => void;
+}) {
+  const toneClasses =
+    tone === 'active'
+      ? 'bg-[var(--color-primary-soft)] text-[var(--color-primary)]'
+      : tone === 'done'
+        ? 'bg-[var(--color-success-bg)] text-[var(--color-success)]'
+        : 'bg-[var(--color-muted)] text-[var(--color-muted-foreground)] cursor-pointer';
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      // disabled visually only for the locked tone — keep it focusable
+      // so the hint can be triggered by keyboard too.
+      className={cn(
+        'inline-flex items-center gap-1.5 h-9 px-3 rounded-full text-[13px] font-semibold transition-colors',
+        toneClasses,
+      )}
+    >
+      {icon}
+      <span>{label}</span>
+    </button>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────
+// Finishing section — size matrix + primary CTA + partial sidestep
+// ─────────────────────────────────────────────────────────────────────
+
+interface FinishingSectionProps {
+  allZero: boolean;
+  sizes: string[];
+  available: SizeMatrix;
+  rows: Record<string, RowState>;
+  updateRow: (size: string, patch: Partial<RowState>) => void;
+  setForward: (size: string, raw: string) => void;
+  setRework: (size: string, raw: string) => void;
+  attachPhoto: (size: string) => Promise<void>;
+  canSubmit: boolean;
+  totals: { forward: number; rework: number };
+  onSubmitClick: () => void;
+  partialReadyUnits: number;
+  partialEnabled: boolean;
+  onOpenPartial: () => void;
+}
+
+function FinishingSection({
+  allZero,
+  sizes,
+  available,
+  rows,
+  updateRow,
+  setForward,
+  setRework,
+  attachPhoto,
+  canSubmit,
+  totals,
+  onSubmitClick,
+  partialReadyUnits,
+  partialEnabled,
+  onOpenPartial,
+}: FinishingSectionProps) {
+  const { t } = useTranslation();
+  return (
+    <div className="mt-4 space-y-3.5">
+      <div className="rounded-[14px] bg-[var(--color-surface)] shadow-[0_1px_2px_rgba(15,26,54,0.04)] p-[16px_18px_6px]">
+        <div className="flex items-baseline justify-between">
+          <div className="font-semibold text-[18px] text-[var(--color-foreground)]">
+            {t('stitching.lot.forward', { defaultValue: 'Forward' })}
+          </div>
+          <span className="text-[12px] text-[var(--color-muted-foreground)] font-mono">
+            {t('stitching.lot.bySize', { defaultValue: 'by size' })}
+          </span>
+        </div>
+        <p className="mt-0.5 text-[12px] text-[var(--color-muted-foreground)]">
+          {t('stitching.lot.forwardHint', {
+            defaultValue: 'Tap size to forward all, or set quantity manually.',
+          })}
+        </p>
+        {allZero ? (
+          <p className="mt-3 pb-3 text-[var(--color-muted-foreground)]">
+            {t('stitching.lot.nothingLeft')}
+          </p>
+        ) : (
+          <div className="mt-1.5">
+            {sizes.map((size) => {
+              const max = available[size] ?? 0;
+              const r = rows[size] ?? defaultRow();
+              return (
+                <FinishSizeRow
+                  key={size}
+                  size={size}
+                  max={max}
+                  row={r}
+                  onForwardChange={(v) => updateRow(size, { forwardQty: v })}
+                  onSetForward={(raw) => setForward(size, raw)}
+                  onToggleRework={(open) =>
+                    updateRow(size, {
+                      reworkOpen: open,
+                      reworkQty: open ? r.reworkQty : 0,
+                    })
+                  }
+                  onReworkQty={(raw) => setRework(size, raw)}
+                  onReasonChange={(k) => updateRow(size, { reasonKey: k })}
+                  onOtherReasonChange={(v) =>
+                    updateRow(size, { otherReason: v })
+                  }
+                  onAttachPhoto={() => attachPhoto(size)}
+                  reasonKeys={REASON_KEYS}
+                  labels={{
+                    left: t('stitching.lot.left', { defaultValue: 'left' }),
+                    rework: t('finishing.markRework', { defaultValue: 'Rework' }),
+                    forwardAll: t('stitching.lot.forwardAll', {
+                      defaultValue: 'Forward all {{n}}',
+                      n: max,
+                    }),
+                    clear: t('common.clear', { defaultValue: 'Clear' }),
+                    reworkQtyLabel: t('finishing.reworkQty'),
+                    reasonLabel: t('finishing.reworkReason'),
+                    otherLabel: t('finishing.otherReasonLabel'),
+                    addPhoto: t('finishing.addPhoto'),
+                    photoAdded: t('finishing.photoAdded'),
+                    noopDev: t('common.noopDevHint'),
+                    reasonOf: (k: ReasonKey) => t(`finishing.reasons.${k}`),
+                  }}
+                />
+              );
+            })}
+          </div>
+        )}
+      </div>
+
+      {!allZero && (
+        <button
+          type="button"
+          onClick={onSubmitClick}
+          disabled={!canSubmit}
+          className={cn(
+            'w-full p-[18px] rounded-[14px] text-center font-semibold text-[16px] tracking-[0.01em] text-white transition-transform active:translate-y-px',
+            canSubmit
+              ? 'bg-gradient-to-b from-[var(--stage-finish-acc)] to-[var(--stage-finish-ink)] shadow-[inset_0_1px_0_rgba(255,255,255,0.18),0_0_0_1px_var(--stage-finish-ink),0_10px_24px_rgba(196,69,46,0.32)]'
+              : 'bg-[var(--color-disabled-bg)] cursor-default',
+          )}
+        >
+          {totals.forward > 0 || totals.rework > 0
+            ? t('finishing.lot.submitN', {
+                defaultValue: 'Send {{fwd}} → Dispatch · {{rwk}} → Rework',
+                fwd: totals.forward,
+                rwk: totals.rework,
+              })
+            : t('finishing.lot.submit')}
+        </button>
+      )}
+
+      {/* Partial dispatch sidestep — quietly available once at least
+          one unit has been forwarded. Doesn't compete with the primary
+          CTA above; finisher uses it when a truck is filling and they
+          want to ship what's ready instead of waiting. */}
+      {partialEnabled && (
+        <div className="text-center">
+          <button
+            type="button"
+            onClick={onOpenPartial}
+            className="text-[13px] font-semibold text-[var(--color-primary)] hover:underline"
+          >
+            {t('finishing.lot.shipReady', {
+              defaultValue: 'Ship {{n}} ready units now →',
+              n: partialReadyUnits,
+            })}
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────
+// Dispatch section — warehouse picker + per-size ship qty
+// ─────────────────────────────────────────────────────────────────────
+
+interface DispatchSectionProps {
+  sizes: string[];
+  warehouses: FilterOption[];
+  destWarehouseId: string;
+  setDestWarehouseId: (id: string) => void;
+  shipQty: Record<string, number>;
+  setShip: (size: string, raw: string) => void;
+  finishingPerSize: Record<string, number>;
+  dispatchError: string | null;
+  canDispatchSubmit: boolean;
+  onSubmitClick: () => void;
+  isPartial: boolean;
+}
+
+function DispatchSection({
+  sizes,
+  warehouses,
+  destWarehouseId,
+  setDestWarehouseId,
+  shipQty,
+  setShip,
+  finishingPerSize,
+  dispatchError,
+  canDispatchSubmit,
+  onSubmitClick,
+  isPartial,
+}: DispatchSectionProps) {
+  const { t } = useTranslation();
+  return (
+    <div className="mt-4 rounded-[14px] bg-[var(--color-surface)] shadow-[0_1px_2px_rgba(15,26,54,0.04)] p-[16px_18px] space-y-3.5">
+      <div className="flex items-baseline justify-between">
+        <div className="font-semibold text-[18px] text-[var(--color-foreground)]">
+          {t('finishing.dispatch.section', { defaultValue: 'Dispatch' })}
+        </div>
+        {isPartial && (
+          <span className="text-[11px] uppercase tracking-[0.05em] font-semibold text-[var(--color-warning)] bg-[var(--color-warning-bg)] px-1.5 py-0.5 rounded">
+            {t('finishing.dispatch.partial', { defaultValue: 'Partial' })}
+          </span>
+        )}
+      </div>
+
+      <div>
+        <Label>{t('finishing.dispatch.destinationWarehouse')}</Label>
+        <Select
+          value={destWarehouseId}
+          onChange={(e) => setDestWarehouseId(e.target.value)}
+        >
+          <option value="">
+            {t('finishing.dispatch.selectWarehouse')}
+          </option>
+          {warehouses.map((w) => (
+            <option key={w.id} value={w.id}>
+              {w.name}
+            </option>
+          ))}
+        </Select>
+      </div>
+
+      <div className="space-y-1">
+        <Label>{t('finishing.dispatch.shipQty', { defaultValue: 'Ship quantity' })}</Label>
+        {sizes.map((size) => {
+          const ready = finishingPerSize[size] ?? 0;
+          return (
+            <div
+              key={`ship-${size}`}
+              className="flex items-center justify-between gap-3 py-1"
+            >
+              <div className="min-w-[44px] h-7 px-1.5 rounded-[var(--radius-sm)] flex items-center justify-center font-semibold text-xs bg-[var(--color-muted)]">
+                {size}
+              </div>
+              <span className="flex-1 text-[12px] text-[var(--color-muted-foreground)] font-mono tabular-nums">
+                {t('finishing.dispatch.readyN', {
+                  defaultValue: '{{n}} ready',
+                  n: ready,
+                })}
+              </span>
+              <Input
+                type="number"
+                inputMode="numeric"
+                min={0}
+                value={shipQty[size] ?? 0}
+                onChange={(e) => setShip(size, e.target.value)}
+                className="w-24 text-center"
+              />
+            </div>
+          );
+        })}
+      </div>
+
+      {dispatchError && (
+        <p className="text-sm text-[var(--color-destructive)]">
+          {dispatchError}
+        </p>
+      )}
+
+      <button
+        type="button"
+        onClick={onSubmitClick}
+        disabled={!canDispatchSubmit}
+        className={cn(
+          'w-full p-[16px] rounded-[14px] text-center font-semibold text-[15px] text-white transition-transform active:translate-y-px',
+          canDispatchSubmit
+            ? 'bg-gradient-to-b from-[var(--color-primary)] to-[var(--color-primary-hover)] shadow-[inset_0_1px_0_rgba(255,255,255,0.18),0_0_0_1px_var(--color-primary-hover),0_4px_10px_rgba(34,64,196,0.28)]'
+            : 'bg-[var(--color-disabled-bg)] cursor-default',
+        )}
+      >
+        {t('finishing.dispatch.createChallan', {
+          defaultValue: 'Create Dispatch Challan',
+        })}
+      </button>
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────
+// Post-dispatch confirmation card — shown when status === 'dispatched'
+// ─────────────────────────────────────────────────────────────────────
+
+function DispatchDone({ lot }: { lot: Lot }) {
+  const { t } = useTranslation();
+  return (
+    <div className="mt-4 rounded-[14px] bg-[var(--color-surface)] border-l-[3px] border-l-[var(--color-success)] shadow-[0_1px_2px_rgba(15,26,54,0.04)] p-[16px_18px] space-y-2">
+      <div className="flex items-center gap-2 text-[var(--color-success)]">
+        <CheckCircle2 size={18} />
+        <span className="font-semibold text-[15px]">
+          {t('finishing.dispatch.done', { defaultValue: 'Dispatched · awaiting GRN' })}
+        </span>
+      </div>
+      <p className="text-[13px] text-[var(--color-foreground-2)]">
+        {t('finishing.dispatch.doneBody', {
+          defaultValue:
+            'Lot {{lotNo}} has been dispatched and synced. Wait for the destination warehouse to confirm receipt.',
+          lotNo: lot.lotNo,
+        })}
+      </p>
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────
+// Per-size finishing input row (forward + optional rework)
+// ─────────────────────────────────────────────────────────────────────
+
 function FinishSizeRow({
   size,
   max,
@@ -846,15 +1176,13 @@ function FinishSizeRow({
     reasonOf: (k: ReasonKey) => string;
   };
 }) {
-  // forward + rework share the available pool; chip-cap = max - reworkQty
   const reworkPart = row.reworkOpen ? row.reworkQty : 0;
   const fwdCap = Math.max(0, max - reworkPart);
   const filled = row.forwardQty === fwdCap && fwdCap > 0;
   const active = row.forwardQty > 0;
   const disabled = max === 0;
 
-  const set = (v: number) =>
-    onForwardChange(Math.max(0, Math.min(fwdCap, v)));
+  const set = (v: number) => onForwardChange(Math.max(0, Math.min(fwdCap, v)));
 
   return (
     <div className="border-b border-[#efeee9] last:border-b-0 py-2.5">

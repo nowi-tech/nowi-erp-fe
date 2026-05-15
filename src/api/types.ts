@@ -95,6 +95,19 @@ export interface Lot {
    * can hide the lot once work is finished even before status advances.
    */
   stageScrapped?: Partial<Record<string, number>>;
+  /**
+   * Stage receipts for this lot (only included on `getLot`, not on the
+   * list endpoint). Used by the finishing detail screen to compute
+   * per-size dispatch defaults.
+   */
+  receipts?: Array<{
+    id: number;
+    stageId: number;
+    sizeLabel: string;
+    qty: number;
+    kind: 'forward' | 'rework_return' | 'rework_redo';
+    receivedAt: string;
+  }>;
   /** Stitching master this lot is assigned to. `null` = pending stitching assignment. */
   assignedUserId?: number | null;
   /** Finishing master this lot is assigned to. `null` = pending finishing assignment. */
