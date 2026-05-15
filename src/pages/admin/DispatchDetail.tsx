@@ -176,6 +176,17 @@ export default function DispatchDetail() {
                       : t('admin.dispatchDetail.retrySync')}
                   </Button>
                 )}
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() =>
+                    window.open(`/dispatches/${data.id}/print`, '_blank')
+                  }
+                >
+                  {t('admin.dispatchDetail.printChallan', {
+                    defaultValue: 'Print challan',
+                  })}
+                </Button>
               </CardTitle>
             </CardHeader>
             <CardContent className="text-sm space-y-1">

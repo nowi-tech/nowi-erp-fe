@@ -36,6 +36,7 @@ const FloorLotDetail = lazy(() => import('./pages/floor/FloorLotDetail'));
 const DataHome = lazy(() => import('./pages/data/DataHome'));
 const UsersPage = lazy(() => import('./pages/admin/Users'));
 const EditRequestsPage = lazy(() => import('./pages/admin/EditRequests'));
+const DispatchPrint = lazy(() => import('./pages/dispatches/DispatchPrint'));
 
 function PageSkeleton() {
   return (
@@ -70,6 +71,17 @@ function App() {
               element={
                 <ProtectedRoute>
                   <Dashboard />
+                </ProtectedRoute>
+              }
+            />
+
+            <Route
+              path="/dispatches/:id/print"
+              element={
+                <ProtectedRoute>
+                  <S>
+                    <DispatchPrint />
+                  </S>
                 </ProtectedRoute>
               }
             />
