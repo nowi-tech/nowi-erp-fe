@@ -5,7 +5,6 @@ import {
   Camera,
   CheckCircle2,
   ChevronLeft,
-  Lock,
   Minus,
   Plus,
   Truck,
@@ -128,17 +127,13 @@ export default function FinishingReceiveLot() {
   const [warehouses, setWarehouses] = useState<FilterOption[]>([]);
   const [destWarehouseId, setDestWarehouseId] = useState<string>('');
   const [shipQty, setShipQty] = useState<Record<string, number>>({});
-  // Partial-dispatch sidestep — user opted to ship what's ready before
-  // finishing is fully complete. Toggled by the "Ship N ready units now"
-  // link inside the Finishing section. When false, the dispatch section
-  // is hidden until isReady (strict gate).
-  const [partialDispatchOpen, setPartialDispatchOpen] = useState(false);
   const [dispatchConfirmOpen, setDispatchConfirmOpen] = useState(false);
   const [dispatchConfirming, setDispatchConfirming] = useState(false);
   const [dispatching, setDispatching] = useState(false);
   const [dispatchError, setDispatchError] = useState<string | null>(null);
   const dispatchCancelRef = useRef<HTMLButtonElement>(null);
   const dispatchSectionRef = useRef<HTMLDivElement | null>(null);
+  const finishingSectionRef = useRef<HTMLDivElement | null>(null);
 
   // Per-size finishing forwarded — computed from receipts so we can
   // pre-fill the dispatch ship-qty inputs intelligently. The BE auth-
@@ -222,40 +217,17 @@ export default function FinishingReceiveLot() {
   const allZero = sizes.length > 0 && sizes.every((s) => (available[s] ?? 0) === 0);
   const canSubmit = !submitting && (totals.forward > 0 || totals.rework > 0);
 
-  // Dispatch section unlocks when finishing is strictly complete OR
-  // the user opened the partial sidestep.
-  const dispatchUnlocked =
-    metrics?.stage === 'dispatched' ||
-    metrics?.isReady === true ||
-    partialDispatchOpen;
+  // Dispatch section is always visible — finisher can ship whatever
+  // they've forwarded out of finishing at any time. Per-size cap on the
+  // input enforces "only what you've processed". The post-dispatch
+  // confirmation card replaces the form once the lot is fully shipped.
   const dispatchAlreadyDone = metrics?.stage === 'dispatched';
 
-  // When dispatch first unlocks (transition false → true) auto-scroll
-  // to the dispatch section so the finisher sees what's now available.
-  // Track via a ref so we don't scroll repeatedly on every re-render.
-  const wasUnlockedRef = useRef(false);
+  // Pre-fill ship qty with what's currently forwarded out of finishing.
+  // Preserve manual edits — only overwrite empty/zero fields.
   useEffect(() => {
-    if (
-      !wasUnlockedRef.current &&
-      dispatchUnlocked &&
-      !dispatchAlreadyDone &&
-      dispatchSectionRef.current
-    ) {
-      dispatchSectionRef.current.scrollIntoView({
-        behavior: 'smooth',
-        block: 'start',
-      });
-    }
-    wasUnlockedRef.current = dispatchUnlocked;
-  }, [dispatchUnlocked, dispatchAlreadyDone]);
-
-  // Pre-fill ship qty when dispatch unlocks (or partial mode opens).
-  // Re-pre-fill if the per-size forwarded numbers change (e.g. user
-  // forwards more units, then reopens dispatch).
-  useEffect(() => {
-    if (!dispatchUnlocked || dispatchAlreadyDone) return;
+    if (dispatchAlreadyDone) return;
     setShipQty((prev) => {
-      // Only overwrite empty fields — preserve manual edits.
       const next = { ...prev };
       for (const s of sizes) {
         if (next[s] == null || next[s] === 0) {
@@ -264,7 +236,7 @@ export default function FinishingReceiveLot() {
       }
       return next;
     });
-  }, [dispatchUnlocked, dispatchAlreadyDone, sizes, finishingPerSize]);
+  }, [dispatchAlreadyDone, sizes, finishingPerSize]);
 
   function updateRow(size: string, patch: Partial<RowState>) {
     setRows((prev) => ({ ...prev, [size]: { ...prev[size], ...patch } }));
@@ -400,7 +372,11 @@ export default function FinishingReceiveLot() {
     !!lot && !!destWarehouseId && dispatchTotal > 0 && !dispatching;
 
   function setShip(size: string, raw: string) {
-    const v = Math.max(0, parseInt(raw, 10) || 0);
+    // Hard cap: only ship what's been forwarded out of finishing for
+    // this size. The BE re-validates, but capping here keeps the user
+    // from typing a number that's guaranteed to fail.
+    const cap = finishingPerSize[size] ?? 0;
+    const v = Math.max(0, Math.min(cap, parseInt(raw, 10) || 0));
     setShipQty((prev) => ({ ...prev, [size]: v }));
   }
 
@@ -471,57 +447,56 @@ export default function FinishingReceiveLot() {
           <LotHeader lot={lot} metrics={metrics} />
           <ChipRow
             stage={metrics.stage}
-            isReady={metrics.isReady}
-            unitsRemaining={Math.max(0, metrics.units - metrics.finishingForwarded)}
+            onJump={(target) => {
+              const ref =
+                target === 'finishing'
+                  ? finishingSectionRef.current
+                  : dispatchSectionRef.current;
+              ref?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+            }}
           />
 
           {/* FINISHING section — hidden once everything is dispatched. */}
           {metrics.stage !== 'dispatched' && (
-            <FinishingSection
-              allZero={allZero}
-              sizes={sizes}
-              available={available}
-              rows={rows}
-              updateRow={updateRow}
-              setForward={setForward}
-              setRework={setRework}
-              attachPhoto={attachPhoto}
-              canSubmit={canSubmit}
-              totals={totals}
-              onSubmitClick={() => setConfirmOpen(true)}
-              partialReadyUnits={metrics.finishingForwarded}
-              partialEnabled={
-                !metrics.isReady &&
-                metrics.finishingForwarded > 0 &&
-                !partialDispatchOpen
-              }
-              onOpenPartial={() => setPartialDispatchOpen(true)}
-              metrics={metrics}
-            />
-          )}
-
-          {/* DISPATCH section — strict gate, with partial sidestep override. */}
-          {dispatchUnlocked && (
-            <div ref={dispatchSectionRef}>
-              {dispatchAlreadyDone ? (
-                <DispatchDone lot={lot} />
-              ) : (
-                <DispatchSection
-                  sizes={sizes}
-                  warehouses={warehouses}
-                  destWarehouseId={destWarehouseId}
-                  setDestWarehouseId={setDestWarehouseId}
-                  shipQty={shipQty}
-                  setShip={setShip}
-                  finishingPerSize={finishingPerSize}
-                  dispatchError={dispatchError}
-                  canDispatchSubmit={canDispatchSubmit}
-                  onSubmitClick={() => setDispatchConfirmOpen(true)}
-                  isPartial={!metrics.isReady}
-                />
-              )}
+            <div ref={finishingSectionRef}>
+              <FinishingSection
+                allZero={allZero}
+                sizes={sizes}
+                available={available}
+                rows={rows}
+                updateRow={updateRow}
+                setForward={setForward}
+                setRework={setRework}
+                attachPhoto={attachPhoto}
+                canSubmit={canSubmit}
+                totals={totals}
+                onSubmitClick={() => setConfirmOpen(true)}
+                metrics={metrics}
+              />
             </div>
           )}
+
+          {/* DISPATCH section — always rendered. The per-size cap on the
+              ship-qty input ensures the finisher can only ship what
+              they've actually forwarded out of finishing. */}
+          <div ref={dispatchSectionRef}>
+            {dispatchAlreadyDone ? (
+              <DispatchDone lot={lot} />
+            ) : (
+              <DispatchSection
+                sizes={sizes}
+                warehouses={warehouses}
+                destWarehouseId={destWarehouseId}
+                setDestWarehouseId={setDestWarehouseId}
+                shipQty={shipQty}
+                setShip={setShip}
+                finishingPerSize={finishingPerSize}
+                dispatchError={dispatchError}
+                canDispatchSubmit={canDispatchSubmit}
+                onSubmitClick={() => setDispatchConfirmOpen(true)}
+              />
+            )}
+          </div>
         </div>
       )}
 
@@ -748,75 +723,40 @@ function StagePill({ metrics }: { metrics: LotMetrics }) {
 }
 
 // ─────────────────────────────────────────────────────────────────────
-// Sticky chip row — Finishing · Dispatch (locked / unlocked)
+// Sticky chip row — Finishing · Dispatch (both always tappable)
 // ─────────────────────────────────────────────────────────────────────
 
 interface ChipRowProps {
   stage: LifeStage;
-  isReady: boolean;
-  unitsRemaining: number;
+  /** Tap a chip → smooth-scroll to its section. */
+  onJump: (target: 'finishing' | 'dispatch') => void;
 }
 
-function ChipRow({ stage, isReady, unitsRemaining }: ChipRowProps) {
+function ChipRow({ stage, onJump }: ChipRowProps) {
   const { t } = useTranslation();
-  const [hint, setHint] = useState(false);
-  const dispatchUnlocked =
-    isReady || stage === 'dispatched' || stage === 'ready';
-
+  const isDispatched = stage === 'dispatched';
   return (
     <div className="sticky top-0 z-10 mt-3.5 -mx-1 px-1 py-2 bg-[var(--color-background)]/90 backdrop-blur-[6px]">
       <div className="flex items-center gap-2">
         <Chip
-          icon={
-            stage === 'dispatched' ? (
-              <CheckCircle2 size={14} />
-            ) : null
-          }
+          icon={isDispatched ? <CheckCircle2 size={14} /> : null}
           label={t('finishing.chip.finishing', { defaultValue: 'Finishing' })}
           tone={
-            stage === 'dispatched'
-              ? 'done'
-              : stage === 'in_progress'
-                ? 'active'
-                : 'done'
+            isDispatched ? 'done' : stage === 'in_progress' ? 'active' : 'done'
           }
+          onClick={() => onJump('finishing')}
         />
         <Chip
-          icon={dispatchUnlocked ? <Truck size={14} /> : <Lock size={14} />}
+          icon={<Truck size={14} />}
           label={
-            stage === 'dispatched'
+            isDispatched
               ? t('finishing.chip.dispatchDone', { defaultValue: 'Dispatch ✓' })
-              : dispatchUnlocked
-                ? t('finishing.chip.dispatch', { defaultValue: 'Dispatch' })
-                : t('finishing.chip.dispatchLocked', {
-                    defaultValue: 'Dispatch · locked',
-                  })
+              : t('finishing.chip.dispatch', { defaultValue: 'Dispatch' })
           }
-          tone={
-            stage === 'dispatched'
-              ? 'done'
-              : dispatchUnlocked
-                ? 'active'
-                : 'locked'
-          }
-          onClick={
-            dispatchUnlocked
-              ? undefined
-              : () => {
-                  setHint(true);
-                  window.setTimeout(() => setHint(false), 3000);
-                }
-          }
+          tone={isDispatched ? 'done' : 'active'}
+          onClick={() => onJump('dispatch')}
         />
       </div>
-      {hint && !dispatchUnlocked && (
-        <div className="mt-2 inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-[8px] bg-[var(--color-warning-bg)] text-[var(--color-warning)] text-[12px] font-medium">
-          {t('finishing.chip.lockedHint', {
-            defaultValue: 'Complete finishing first — {{n}} units remaining',
-            n: unitsRemaining,
-          })}
-        </div>
-      )}
     </div>
   );
 }
@@ -856,7 +796,7 @@ function Chip({
 }
 
 // ─────────────────────────────────────────────────────────────────────
-// Finishing section — size matrix + primary CTA + partial sidestep
+// Finishing section — size matrix + primary CTA
 // ─────────────────────────────────────────────────────────────────────
 
 interface FinishingSectionProps {
@@ -871,9 +811,6 @@ interface FinishingSectionProps {
   canSubmit: boolean;
   totals: { forward: number; rework: number };
   onSubmitClick: () => void;
-  partialReadyUnits: number;
-  partialEnabled: boolean;
-  onOpenPartial: () => void;
   metrics: LotMetrics;
 }
 
@@ -889,9 +826,6 @@ function FinishingSection({
   canSubmit,
   totals,
   onSubmitClick,
-  partialReadyUnits,
-  partialEnabled,
-  onOpenPartial,
   metrics,
 }: FinishingSectionProps) {
   const { t } = useTranslation();
@@ -1025,24 +959,6 @@ function FinishingSection({
         </button>
       )}
 
-      {/* Partial dispatch sidestep — quietly available once at least
-          one unit has been forwarded. Doesn't compete with the primary
-          CTA above; finisher uses it when a truck is filling and they
-          want to ship what's ready instead of waiting. */}
-      {partialEnabled && (
-        <div className="text-center">
-          <button
-            type="button"
-            onClick={onOpenPartial}
-            className="text-[13px] font-semibold text-[var(--color-primary)] hover:underline"
-          >
-            {t('finishing.lot.shipReady', {
-              defaultValue: 'Ship {{n}} ready units now →',
-              n: partialReadyUnits,
-            })}
-          </button>
-        </div>
-      )}
     </div>
   );
 }
@@ -1062,7 +978,6 @@ interface DispatchSectionProps {
   dispatchError: string | null;
   canDispatchSubmit: boolean;
   onSubmitClick: () => void;
-  isPartial: boolean;
 }
 
 function DispatchSection({
@@ -1076,20 +991,21 @@ function DispatchSection({
   dispatchError,
   canDispatchSubmit,
   onSubmitClick,
-  isPartial,
 }: DispatchSectionProps) {
   const { t } = useTranslation();
+  const totalReady = sizes.reduce((a, s) => a + (finishingPerSize[s] ?? 0), 0);
   return (
     <div className="mt-4 rounded-[14px] bg-[var(--color-surface)] shadow-[0_1px_2px_rgba(15,26,54,0.04)] p-[16px_18px] space-y-3.5">
       <div className="flex items-baseline justify-between">
         <div className="font-semibold text-[18px] text-[var(--color-foreground)]">
           {t('finishing.dispatch.section', { defaultValue: 'Dispatch' })}
         </div>
-        {isPartial && (
-          <span className="text-[11px] uppercase tracking-[0.05em] font-semibold text-[var(--color-warning)] bg-[var(--color-warning-bg)] px-1.5 py-0.5 rounded">
-            {t('finishing.dispatch.partial', { defaultValue: 'Partial' })}
-          </span>
-        )}
+        <span className="text-[12px] text-[var(--color-muted-foreground)] font-mono tabular-nums">
+          {t('finishing.dispatch.readyTotal', {
+            defaultValue: '{{n}} ready to ship',
+            n: totalReady,
+          })}
+        </span>
       </div>
 
       <div>
@@ -1131,9 +1047,11 @@ function DispatchSection({
                 type="number"
                 inputMode="numeric"
                 min={0}
+                max={ready}
                 value={shipQty[size] ?? 0}
                 onChange={(e) => setShip(size, e.target.value)}
-                className="w-24 text-center"
+                disabled={ready === 0}
+                className="w-24 text-center disabled:opacity-50"
               />
             </div>
           );
