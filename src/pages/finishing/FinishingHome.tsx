@@ -33,37 +33,58 @@ interface LotMetrics {
   units: number;
   stitchForwarded: number;
   finishingForwarded: number;
-  isReady: boolean;
+  /** Has any forwarded-out-of-finishing units waiting to ship. */
+  hasReady: boolean;
+  /** Has units forwarded by stitching that finisher hasn't processed yet. */
+  hasInProgress: boolean;
 }
 
 function metricsFor(lot: Lot): LotMetrics {
   const units = totalUnits(lot.qtyIn);
   const stitchForwarded = lot.stageForwarded?.stitching ?? 0;
   const finishingForwarded = lot.stageForwarded?.finishing ?? 0;
-  // "Ready to Dispatch" = finisher has pushed everything they received
-  // out of the finishing stage AND nothing more is coming from
-  // stitching. Stitching may still have units in progress for partial
-  // forwards; we only flag a card ready when the line has caught up.
-  const isReady =
-    units > 0 &&
-    stitchForwarded >= units &&
-    finishingForwarded >= units;
-  return { units, stitchForwarded, finishingForwarded, isReady };
+  return {
+    units,
+    stitchForwarded,
+    finishingForwarded,
+    // "Ready to Dispatch" = anything-ready: at least one unit forwarded
+    // out of finishing. Once the order flips to `dispatched` the lot
+    // moves to the Dispatched bucket via classifyForFilters.
+    hasReady: finishingForwarded > 0,
+    // "In Progress" = anything-to-do: stitching has sent more than
+    // finisher has forwarded out. A lot can be both in_progress AND
+    // ready at the same time (stitching trickling in while finisher
+    // ships what's done) — that's intentional.
+    hasInProgress: stitchForwarded > finishingForwarded,
+  };
 }
 
-function classifyForFilter(lot: Lot, m: LotMetrics): FinFilter | null {
+/**
+ * Returns ALL filter buckets the lot belongs to. A single lot can be
+ * both `in_progress` and `ready` simultaneously — that matches the
+ * real workflow (units arriving from stitching while finisher already
+ * has a pile to ship).
+ */
+function classifyForFilters(lot: Lot, m: LotMetrics): FinFilter[] {
   const status = lot.order?.status;
-  if (status === 'dispatched' || status === 'closed' || status === 'closed_with_adjustment') {
-    return 'dispatched';
+  if (
+    status === 'dispatched' ||
+    status === 'closed' ||
+    status === 'closed_with_adjustment'
+  ) {
+    return ['dispatched'];
   }
-  if (status === 'in_rework') return 'rework';
+  if (status === 'in_rework') return ['rework'];
   if (status === 'in_finishing') {
-    return m.isReady ? 'ready' : 'in_progress';
+    const out: FinFilter[] = [];
+    if (m.hasInProgress) out.push('in_progress');
+    if (m.hasReady) out.push('ready');
+    return out;
   }
-  // Anything else (receiving / in_stitching / stuck) shouldn't appear
-  // in a finisher's queue once it's assigned, but if it does we hide
-  // it from the filter pills (returns null).
-  return null;
+  // receiving / in_stitching / stuck shouldn't reach here (queue is
+  // pre-filtered to lots with stitchForwarded > 0), but if one does
+  // we drop it from filter pills.
+  return [];
 }
 
 export default function FinishingHome() {
@@ -102,7 +123,12 @@ export default function FinishingHome() {
     setLoading(true);
     try {
       const all = await listLots({ assignedFinisherToMe: true });
-      setLots(all);
+      // Defensive filter: a lot with zero stitching-forwards has no
+      // work for the finisher. Status=in_finishing without any forward
+      // shouldn't happen via the receipt path (BE only flips status on
+      // a real forward) but corrupt seed/test data can land here.
+      const actionable = all.filter((l) => (l.stageForwarded?.stitching ?? 0) > 0);
+      setLots(actionable);
     } catch {
       setLots([]);
     } finally {
@@ -116,7 +142,9 @@ export default function FinishingHome() {
 
   // Compute counts client-side from the loaded lots — no separate BE
   // endpoint. The queue is small enough that the bookkeeping is cheap
-  // and we always agree with what the cards show.
+  // and we always agree with what the cards show. A lot can land in
+  // multiple buckets (e.g. in_progress AND ready) — duplicates by lotId
+  // collapse via the Set when rendering.
   const { counts, byBucket } = useMemo(() => {
     const byBucket = {
       in_progress: [] as Lot[],
@@ -126,8 +154,10 @@ export default function FinishingHome() {
     };
     for (const lot of lots) {
       const m = metricsFor(lot);
-      const bucket = classifyForFilter(lot, m);
-      if (bucket && bucket !== 'all') byBucket[bucket].push(lot);
+      const buckets = classifyForFilters(lot, m);
+      for (const b of buckets) {
+        if (b !== 'all') byBucket[b].push(lot);
+      }
     }
     return {
       counts: {
@@ -261,7 +291,7 @@ function FinishingLotCard({ lot, onOpen }: CardProps) {
     <div
       className={cn(
         'rounded-[14px] bg-[var(--color-surface)] border-l-[3px] shadow-[0_1px_2px_rgba(14,23,48,0.04)] hover:shadow-[0_1px_2px_rgba(14,23,48,0.06),0_4px_12px_rgba(14,23,48,0.05)] transition-shadow p-4',
-        m.isReady
+        m.hasReady
           ? 'border-l-[var(--color-success)]'
           : 'border-l-[var(--stage-finish-acc)]',
       )}
@@ -303,7 +333,7 @@ function FinishingLotCard({ lot, onOpen }: CardProps) {
               })}
               value={m.finishingForwarded}
               max={m.units}
-              tone={m.isReady ? 'success' : 'neutral'}
+              tone={m.hasReady ? 'success' : 'neutral'}
             />
           </div>
         </div>
@@ -314,7 +344,7 @@ function FinishingLotCard({ lot, onOpen }: CardProps) {
 
       {/* Inline terminal CTA — same destination as the row tap, but
           surfaced as a primary button so the finisher can't miss it. */}
-      {m.isReady && (
+      {m.hasReady && (
         <button
           type="button"
           onClick={onOpen}
