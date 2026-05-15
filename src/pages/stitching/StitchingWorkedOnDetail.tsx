@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useNavigate, useParams } from 'react-router-dom';
 import { ChevronLeft } from 'lucide-react';
+import { toast as sonnerToast } from 'sonner';
 import FloorShell from '@/components/layout/FloorShell';
 import { Badge } from '@/components/ui/badge';
 import { getLot } from '@/api/lots';
@@ -62,10 +63,21 @@ export default function StitchingWorkedOnDetail() {
           })),
         ]),
       );
+    } catch (err) {
+      const status = (err as { response?: { status?: number } })?.response
+        ?.status;
+      if (status === 403) {
+        sonnerToast.error(
+          t('stitching.lot.notAssigned', {
+            defaultValue: 'This lot is not assigned to you.',
+          }),
+        );
+        navigate('/stitching', { replace: true });
+      }
     } finally {
       setLoading(false);
     }
-  }, [lotId]);
+  }, [lotId, navigate, t]);
 
   useEffect(() => {
     void refresh();

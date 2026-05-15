@@ -176,12 +176,27 @@ export default function FinishingReceiveLot() {
         next[s] = defaultRow();
       });
       setRows(next);
-    } catch {
+    } catch (err) {
+      // BE returns 403 when this finisher isn't assigned to the lot
+      // (admin / FM / viewer can see anything). Bounce them back to the
+      // queue with a one-line explanation so they're not stuck on a
+      // half-loaded page.
+      const status = (err as { response?: { status?: number } })?.response
+        ?.status;
+      if (status === 403) {
+        sonnerToast.error(
+          t('finishing.lot.notAssigned', {
+            defaultValue: 'This lot is not assigned to you.',
+          }),
+        );
+        navigate('/finishing', { replace: true });
+        return;
+      }
       sonnerToast.error(t('stitching.lot.loadError'));
     } finally {
       setLoading(false);
     }
-  }, [lotId, finishingStageId, t]);
+  }, [lotId, finishingStageId, navigate, t]);
 
   useEffect(() => {
     void refresh();

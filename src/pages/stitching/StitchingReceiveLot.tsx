@@ -100,12 +100,26 @@ export default function StitchingReceiveLot() {
         ),
       ].sort((a, b) => new Date(b.at).getTime() - new Date(a.at).getTime());
       setActivity(merged);
-    } catch {
+    } catch (err) {
+      // BE returns 403 when this stitching master isn't assigned to the
+      // lot. Bounce back to the queue so they're not stuck.
+      const status = (err as { response?: { status?: number } })?.response
+        ?.status;
+      if (status === 403) {
+        toast.show(
+          t('stitching.lot.notAssigned', {
+            defaultValue: 'This lot is not assigned to you.',
+          }),
+          'error',
+        );
+        navigate('/stitching', { replace: true });
+        return;
+      }
       toast.show(t('stitching.lot.loadError'), 'error');
     } finally {
       setLoading(false);
     }
-  }, [lotId, stageId, toast, t]);
+  }, [lotId, stageId, navigate, toast, t]);
 
   useEffect(() => {
     void refresh();
