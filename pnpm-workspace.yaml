@@ -1,3 +1,3 @@
 allowBuilds:
-  '@sentry/cli': set this to true or false
-  esbuild: false
+  '@sentry/cli': true
+  esbuild: true
