@@ -25,7 +25,7 @@ import {
 } from '@/api/receipts';
 import { useStageId } from '@/lib/useStageId';
 import { openRework } from '@/api/rework';
-import { requestUploadUrl } from '@/api/storage';
+import { uploadPhoto } from '@/api/storage';
 import { createDispatch } from '@/api/dispatches';
 import { listWarehouses } from '@/api/filters';
 import type {
@@ -260,20 +260,18 @@ export default function FinishingReceiveLot() {
     updateRow(size, { reworkQty: v });
   }
 
-  // KNOWN BUG (tracked for second pass): no <input type="file"> here, so
-  // the JPG never reaches GCS — only the would-be objectPath is recorded.
-  // Works in noop dev mode; broken in prod. See PROD_READINESS.md.
-  async function attachPhoto(size: string) {
+  // attachPhoto now actually PUTs the bytes to GCS via uploadPhoto.
+  // The caller (FinishSizeRow) wires a hidden <input type="file"
+  // accept="image/*" capture="environment"> and forwards the picked
+  // file here. In noop dev mode the BE returns noop=true and uploadPhoto
+  // skips the PUT, so the dev flow stays identical.
+  async function attachPhoto(size: string, file: File) {
     if (!lot) return;
     try {
-      const res = await requestUploadUrl({
-        entityType: 'rework',
-        entityId: String(lot.id),
-        contentType: 'image/jpeg',
-      });
+      const res = await uploadPhoto('rework', lot.id, file);
       updateRow(size, {
         photoPath: res.objectPath,
-        photoNoop: !!res.noop,
+        photoNoop: res.noop,
       });
       sonnerToast.success(
         res.noop
@@ -807,7 +805,7 @@ interface FinishingSectionProps {
   updateRow: (size: string, patch: Partial<RowState>) => void;
   setForward: (size: string, raw: string) => void;
   setRework: (size: string, raw: string) => void;
-  attachPhoto: (size: string) => Promise<void>;
+  attachPhoto: (size: string, file: File) => Promise<void>;
   canSubmit: boolean;
   totals: { forward: number; rework: number };
   onSubmitClick: () => void;
@@ -912,7 +910,7 @@ function FinishingSection({
                   onOtherReasonChange={(v) =>
                     updateRow(size, { otherReason: v })
                   }
-                  onAttachPhoto={() => attachPhoto(size)}
+                  onAttachPhoto={(file) => attachPhoto(size, file)}
                   reasonKeys={REASON_KEYS}
                   labels={{
                     left: t('stitching.lot.left', { defaultValue: 'left' }),
@@ -1135,7 +1133,7 @@ function FinishSizeRow({
   onReworkQty: (raw: string) => void;
   onReasonChange: (k: ReasonKey) => void;
   onOtherReasonChange: (v: string) => void;
-  onAttachPhoto: () => void;
+  onAttachPhoto: (file: File) => void;
   reasonKeys: readonly ReasonKey[];
   labels: {
     left: string;
@@ -1270,15 +1268,30 @@ function FinishSizeRow({
             </div>
           )}
           <div className="flex items-center gap-2">
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              onClick={onAttachPhoto}
-            >
-              <Camera size={14} />
-              {labels.addPhoto}
-            </Button>
+            {/* Native file input — capture="environment" opens the rear
+                camera directly on mobile so floor staff don't have to
+                tap through the gallery. The visible button is just a
+                styled label proxy. */}
+            <label className="inline-flex">
+              <input
+                type="file"
+                accept="image/jpeg,image/png,image/webp"
+                capture="environment"
+                className="sr-only"
+                onChange={(e) => {
+                  const file = e.target.files?.[0];
+                  if (file) onAttachPhoto(file);
+                  // Reset so picking the same file twice still fires onChange.
+                  e.target.value = '';
+                }}
+              />
+              <Button type="button" variant="outline" size="sm" asChild>
+                <span className="cursor-pointer">
+                  <Camera size={14} />
+                  {labels.addPhoto}
+                </span>
+              </Button>
+            </label>
             {row.photoPath && (
               <span className="text-xs text-[var(--color-muted-foreground)] truncate">
                 {labels.photoAdded}
