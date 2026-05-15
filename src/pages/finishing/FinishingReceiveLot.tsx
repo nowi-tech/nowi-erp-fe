@@ -481,6 +481,7 @@ export default function FinishingReceiveLot() {
                 !partialDispatchOpen
               }
               onOpenPartial={() => setPartialDispatchOpen(true)}
+              metrics={metrics}
             />
           )}
 
@@ -858,6 +859,7 @@ interface FinishingSectionProps {
   partialReadyUnits: number;
   partialEnabled: boolean;
   onOpenPartial: () => void;
+  metrics: LotMetrics;
 }
 
 function FinishingSection({
@@ -875,8 +877,18 @@ function FinishingSection({
   partialReadyUnits,
   partialEnabled,
   onOpenPartial,
+  metrics,
 }: FinishingSectionProps) {
   const { t } = useTranslation();
+  // Three flavours of "no inputs" — copy + iconography differ so the
+  // finisher knows whether to wait, dispatch, or do nothing.
+  const isAllForwarded = allZero && metrics.isReady;
+  const isWaitingOnStitch =
+    allZero &&
+    !metrics.isReady &&
+    metrics.units > metrics.finishingForwarded;
+  const stitchPending = Math.max(0, metrics.units - metrics.stitchForwarded);
+
   return (
     <div className="mt-4 space-y-3.5">
       <div className="rounded-[14px] bg-[var(--color-surface)] shadow-[0_1px_2px_rgba(15,26,54,0.04)] p-[16px_18px_6px]">
@@ -888,15 +900,45 @@ function FinishingSection({
             {t('stitching.lot.bySize', { defaultValue: 'by size' })}
           </span>
         </div>
-        <p className="mt-0.5 text-[12px] text-[var(--color-muted-foreground)]">
-          {t('stitching.lot.forwardHint', {
-            defaultValue: 'Tap size to forward all, or set quantity manually.',
-          })}
-        </p>
-        {allZero ? (
-          <p className="mt-3 pb-3 text-[var(--color-muted-foreground)]">
-            {t('stitching.lot.nothingLeft')}
+        {!allZero && (
+          <p className="mt-0.5 text-[12px] text-[var(--color-muted-foreground)]">
+            {t('stitching.lot.forwardHint', {
+              defaultValue: 'Tap size to forward all, or set quantity manually.',
+            })}
           </p>
+        )}
+        {allZero ? (
+          <div className="mt-3 pb-3 space-y-1">
+            {isWaitingOnStitch ? (
+              <>
+                <p className="text-[14px] font-medium text-[var(--color-foreground)]">
+                  {t('finishing.lot.waitingOnStitch', {
+                    defaultValue: 'Waiting on stitching',
+                  })}
+                </p>
+                <p className="text-[12px] text-[var(--color-muted-foreground)]">
+                  {t('finishing.lot.waitingOnStitchSub', {
+                    defaultValue:
+                      '{{received}} of {{total}} received from stitching · {{pending}} still being made',
+                    received: metrics.stitchForwarded,
+                    total: metrics.units,
+                    pending: stitchPending,
+                  })}
+                </p>
+              </>
+            ) : isAllForwarded ? (
+              <p className="text-[14px] font-medium text-[var(--color-success)]">
+                {t('finishing.lot.allForwarded', {
+                  defaultValue:
+                    'All units forwarded · create the dispatch challan below',
+                })}
+              </p>
+            ) : (
+              <p className="text-[var(--color-muted-foreground)]">
+                {t('stitching.lot.nothingLeft')}
+              </p>
+            )}
+          </div>
         ) : (
           <div className="mt-1.5">
             {sizes.map((size) => {
