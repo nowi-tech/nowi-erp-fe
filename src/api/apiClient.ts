@@ -11,13 +11,10 @@ const API_URL = RAW
   : import.meta.env.DEV
     ? 'http://localhost:3001'
     : (() => {
-        const msg =
-          'VITE_API_URL is missing in this production build. Set it in ' +
-          'Vercel (Production scope, exact name VITE_API_URL) and trigger ' +
-          'a fresh build — promoting an old deployment keeps the stale value.';
+        // Generic message — don't leak deploy/config internals to users.
         // eslint-disable-next-line no-console
-        console.error(msg);
-        throw new Error(msg);
+        console.error('API endpoint is not configured.');
+        throw new Error('Application is not configured correctly.');
       })();
 
 export const apiClient: AxiosInstance = axios.create({
