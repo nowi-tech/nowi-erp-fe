@@ -1,6 +1,24 @@
 import axios, { type AxiosInstance } from 'axios';
 
-const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001';
+// VITE_API_URL is inlined by Vite at BUILD time (not read at runtime).
+// On Vercel it must be set in the Production env scope *before* the build
+// that gets promoted. A production bundle must never silently fall back to
+// localhost — that just turns a deploy misconfig into a confusing
+// "prod is calling :3001". Fail loudly so it's caught in a Preview deploy.
+const RAW = import.meta.env.VITE_API_URL?.trim();
+const API_URL = RAW
+  ? RAW.replace(/\/+$/, '')
+  : import.meta.env.DEV
+    ? 'http://localhost:3001'
+    : (() => {
+        const msg =
+          'VITE_API_URL is missing in this production build. Set it in ' +
+          'Vercel (Production scope, exact name VITE_API_URL) and trigger ' +
+          'a fresh build — promoting an old deployment keeps the stale value.';
+        // eslint-disable-next-line no-console
+        console.error(msg);
+        throw new Error(msg);
+      })();
 
 export const apiClient: AxiosInstance = axios.create({
   baseURL: API_URL,
