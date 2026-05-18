@@ -255,6 +255,7 @@
     "lot": {
       "title": "Finishing में Receive",
       "submit": "Submit",
+      "submitN": "{{n}} {{unit}} भेजें →",
       "confirmTitle": "Confirm करें",
       "confirmForward": "{{forward}} forward करने के लिए",
       "confirmRework": "{{rework}} rework के लिए",

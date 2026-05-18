@@ -123,6 +123,15 @@ export default function FinishingReceiveLot() {
   const [confirmOpen, setConfirmOpen] = useState(false);
   const cancelRef = useRef<HTMLButtonElement>(null);
 
+  // Rework modal state — opened by the per-row "Rework" button, mirroring
+  // the stitching scrap-modal pattern. The size whose rework dialog is
+  // open; null = closed. All rework data still lives in `rows[size]`, so
+  // the existing submission path (openRework in doSubmit) is untouched —
+  // this just moves the editing UI from an inline panel into the shared
+  // Dialog shell.
+  const [reworkSize, setReworkSize] = useState<string | null>(null);
+  const reworkDoneRef = useRef<HTMLButtonElement>(null);
+
   // Dispatch challan state.
   const [warehouses, setWarehouses] = useState<FilterOption[]>([]);
   const [destWarehouseId, setDestWarehouseId] = useState<string>('');
@@ -240,6 +249,32 @@ export default function FinishingReceiveLot() {
 
   function updateRow(size: string, patch: Partial<RowState>) {
     setRows((prev) => ({ ...prev, [size]: { ...prev[size], ...patch } }));
+  }
+
+  // Open the rework dialog for a size. Mark the row's rework as "open" so
+  // it stays included in totals/submit — same semantics the inline toggle
+  // had, just triggered from the modal flow now.
+  function openReworkModal(size: string) {
+    const cur = rows[size] ?? defaultRow();
+    updateRow(size, {
+      reworkOpen: true,
+      reworkQty: cur.reworkQty > 0 ? cur.reworkQty : 0,
+    });
+    setReworkSize(size);
+  }
+
+  // Close the dialog. If no qty was actually entered, collapse the row's
+  // rework back to closed so an empty rework isn't carried into submit
+  // (matches the old inline toggle-off behaviour).
+  function closeReworkModal() {
+    const size = reworkSize;
+    if (size) {
+      const cur = rows[size];
+      if (!cur || cur.reworkQty <= 0) {
+        updateRow(size, { reworkOpen: false, reworkQty: 0 });
+      }
+    }
+    setReworkSize(null);
   }
 
   function setForward(size: string, raw: string) {
@@ -464,8 +499,7 @@ export default function FinishingReceiveLot() {
                 rows={rows}
                 updateRow={updateRow}
                 setForward={setForward}
-                setRework={setRework}
-                attachPhoto={attachPhoto}
+                onOpenRework={openReworkModal}
                 canSubmit={canSubmit}
                 totals={totals}
                 onSubmitClick={() => setConfirmOpen(true)}
@@ -608,6 +642,119 @@ export default function FinishingReceiveLot() {
           )}
         </div>
       </Dialog>
+
+      {/* Rework modal — mirrors the stitching scrap-modal pattern: a
+          per-row trigger opens this shared Dialog; the qty / reason /
+          photo controls (unchanged) live inside. Submission is still
+          handled by doSubmit → openRework, so nothing about what rework
+          sends has changed — only where it's edited. */}
+      {(() => {
+        const rs = reworkSize ? rows[reworkSize] ?? defaultRow() : null;
+        const maxRework = reworkSize
+          ? Math.max(0, (available[reworkSize] ?? 0) - (rs?.forwardQty ?? 0))
+          : 0;
+        return (
+          <Dialog
+            open={reworkSize !== null}
+            onClose={closeReworkModal}
+            title={t('finishing.markRework', { defaultValue: 'Mark rework' })}
+            initialFocusRef={reworkDoneRef}
+            footer={
+              <>
+                <Button variant="outline" onClick={closeReworkModal}>
+                  {t('common.cancel')}
+                </Button>
+                <Button ref={reworkDoneRef} onClick={() => setReworkSize(null)}>
+                  {t('common.confirm')}
+                </Button>
+              </>
+            }
+          >
+            {reworkSize && rs && (
+              <div className="space-y-3">
+                <div className="flex items-center justify-between gap-3">
+                  <Label className="mb-0">{t('finishing.reworkQty')}</Label>
+                  <Input
+                    type="number"
+                    inputMode="numeric"
+                    min={0}
+                    max={maxRework}
+                    value={rs.reworkQty}
+                    onChange={(e) => setRework(reworkSize, e.target.value)}
+                    className="w-24 h-10 text-center"
+                    autoFocus
+                  />
+                </div>
+                <div>
+                  <Label className="mb-1">{t('finishing.reworkReason')}</Label>
+                  <Select
+                    value={rs.reasonKey}
+                    onChange={(e) =>
+                      updateRow(reworkSize, {
+                        reasonKey: e.target.value as ReasonKey,
+                      })
+                    }
+                    className="h-10"
+                  >
+                    {REASON_KEYS.map((k) => (
+                      <option key={k} value={k}>
+                        {t(`finishing.reasons.${k}`)}
+                      </option>
+                    ))}
+                  </Select>
+                </div>
+                {rs.reasonKey === 'other' && (
+                  <div>
+                    <Label className="mb-1">
+                      {t('finishing.otherReasonLabel')}
+                    </Label>
+                    <Textarea
+                      rows={2}
+                      value={rs.otherReason}
+                      onChange={(e) =>
+                        updateRow(reworkSize, { otherReason: e.target.value })
+                      }
+                    />
+                  </div>
+                )}
+                <div className="flex items-center gap-2">
+                  {/* Native file input — capture="environment" opens the
+                      rear camera directly on mobile so floor staff don't
+                      have to tap through the gallery. The visible button
+                      is just a styled label proxy. */}
+                  <label className="inline-flex">
+                    <input
+                      type="file"
+                      accept="image/jpeg,image/png,image/webp"
+                      capture="environment"
+                      className="sr-only"
+                      onChange={(e) => {
+                        const file = e.target.files?.[0];
+                        if (file) void attachPhoto(reworkSize, file);
+                        // Reset so picking the same file twice still
+                        // fires onChange.
+                        e.target.value = '';
+                      }}
+                    />
+                    <Button type="button" variant="outline" size="sm" asChild>
+                      <span className="cursor-pointer">
+                        <Camera size={14} />
+                        {t('finishing.addPhoto')}
+                      </span>
+                    </Button>
+                  </label>
+                  {rs.photoPath && (
+                    <span className="text-xs text-[var(--color-muted-foreground)] truncate">
+                      {t('finishing.photoAdded')}
+                      {rs.photoNoop ? ` ${t('common.noopDevHint')}` : ''}
+                    </span>
+                  )}
+                </div>
+              </div>
+            )}
+          </Dialog>
+        );
+      })()}
     </FloorShell>
   );
 }
@@ -640,7 +787,7 @@ function LotHeader({ lot, metrics }: LotHeaderProps) {
     : null;
 
   return (
-    <div className="rounded-[14px] bg-[var(--color-surface)] border-l-[3px] border-l-[var(--stage-finish-acc)] shadow-[0_1px_2px_rgba(15,26,54,0.04)] p-[16px_18px_14px]">
+    <div className="rounded-[14px] bg-[var(--color-surface)] border-l-[3px] border-l-[var(--color-primary)] shadow-[0_1px_2px_rgba(15,26,54,0.04)] p-[16px_18px_14px]">
       <div className="font-semibold text-[26px] leading-[1.05] tracking-[-0.01em] text-[var(--color-foreground)] break-all">
         {lot.lotNo}
       </div>
@@ -706,7 +853,7 @@ function StagePill({ metrics }: { metrics: LotMetrics }) {
   return (
     <span
       className={cn(
-        'inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[12px] font-semibold',
+        'inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-semibold uppercase tracking-[0.06em]',
         s.bg,
         s.text,
       )}
@@ -783,7 +930,7 @@ function Chip({
       // disabled visually only for the locked tone — keep it focusable
       // so the hint can be triggered by keyboard too.
       className={cn(
-        'inline-flex items-center gap-1.5 h-9 px-3 rounded-full text-[13px] font-semibold transition-colors',
+        'inline-flex items-center gap-1.5 h-9 px-3 rounded-full text-[11px] font-semibold uppercase tracking-[0.06em] transition-colors',
         toneClasses,
       )}
     >
@@ -804,8 +951,7 @@ interface FinishingSectionProps {
   rows: Record<string, RowState>;
   updateRow: (size: string, patch: Partial<RowState>) => void;
   setForward: (size: string, raw: string) => void;
-  setRework: (size: string, raw: string) => void;
-  attachPhoto: (size: string, file: File) => Promise<void>;
+  onOpenRework: (size: string) => void;
   canSubmit: boolean;
   totals: { forward: number; rework: number };
   onSubmitClick: () => void;
@@ -819,8 +965,7 @@ function FinishingSection({
   rows,
   updateRow,
   setForward,
-  setRework,
-  attachPhoto,
+  onOpenRework,
   canSubmit,
   totals,
   onSubmitClick,
@@ -899,19 +1044,7 @@ function FinishingSection({
                   row={r}
                   onForwardChange={(v) => updateRow(size, { forwardQty: v })}
                   onSetForward={(raw) => setForward(size, raw)}
-                  onToggleRework={(open) =>
-                    updateRow(size, {
-                      reworkOpen: open,
-                      reworkQty: open ? r.reworkQty : 0,
-                    })
-                  }
-                  onReworkQty={(raw) => setRework(size, raw)}
-                  onReasonChange={(k) => updateRow(size, { reasonKey: k })}
-                  onOtherReasonChange={(v) =>
-                    updateRow(size, { otherReason: v })
-                  }
-                  onAttachPhoto={(file) => attachPhoto(size, file)}
-                  reasonKeys={REASON_KEYS}
+                  onOpenRework={() => onOpenRework(size)}
                   labels={{
                     left: t('stitching.lot.left', { defaultValue: 'left' }),
                     rework: t('finishing.markRework', { defaultValue: 'Rework' }),
@@ -920,13 +1053,6 @@ function FinishingSection({
                       n: max,
                     }),
                     clear: t('common.clear', { defaultValue: 'Clear' }),
-                    reworkQtyLabel: t('finishing.reworkQty'),
-                    reasonLabel: t('finishing.reworkReason'),
-                    otherLabel: t('finishing.otherReasonLabel'),
-                    addPhoto: t('finishing.addPhoto'),
-                    photoAdded: t('finishing.photoAdded'),
-                    noopDev: t('common.noopDevHint'),
-                    reasonOf: (k: ReasonKey) => t(`finishing.reasons.${k}`),
                   }}
                 />
               );
@@ -943,15 +1069,18 @@ function FinishingSection({
           className={cn(
             'w-full p-[18px] rounded-[14px] text-center font-semibold text-[16px] tracking-[0.01em] text-white transition-transform active:translate-y-px',
             canSubmit
-              ? 'bg-gradient-to-b from-[var(--stage-finish-acc)] to-[var(--stage-finish-ink)] shadow-[inset_0_1px_0_rgba(255,255,255,0.18),0_0_0_1px_var(--stage-finish-ink),0_10px_24px_rgba(196,69,46,0.32)]'
+              ? 'bg-gradient-to-b from-[var(--color-primary)] to-[var(--color-primary-hover)] shadow-[inset_0_1px_0_rgba(255,255,255,0.18),0_0_0_1px_var(--color-primary-hover),0_10px_24px_rgba(34,64,196,0.32)]'
               : 'bg-[var(--color-disabled-bg)] cursor-default',
           )}
         >
           {totals.forward > 0 || totals.rework > 0
             ? t('finishing.lot.submitN', {
-                defaultValue: 'Send {{fwd}} → Dispatch · {{rwk}} → Rework',
-                fwd: totals.forward,
-                rwk: totals.rework,
+                defaultValue: 'Send {{n}} {{unit}} →',
+                n: totals.forward + totals.rework,
+                unit:
+                  totals.forward + totals.rework === 1
+                    ? t('common.unit', { defaultValue: 'unit' })
+                    : t('common.units'),
               })
             : t('finishing.lot.submit')}
         </button>
@@ -1116,12 +1245,7 @@ function FinishSizeRow({
   row,
   onForwardChange,
   onSetForward,
-  onToggleRework,
-  onReworkQty,
-  onReasonChange,
-  onOtherReasonChange,
-  onAttachPhoto,
-  reasonKeys,
+  onOpenRework,
   labels,
 }: {
   size: string;
@@ -1129,24 +1253,12 @@ function FinishSizeRow({
   row: RowState;
   onForwardChange: (v: number) => void;
   onSetForward: (raw: string) => void;
-  onToggleRework: (open: boolean) => void;
-  onReworkQty: (raw: string) => void;
-  onReasonChange: (k: ReasonKey) => void;
-  onOtherReasonChange: (v: string) => void;
-  onAttachPhoto: (file: File) => void;
-  reasonKeys: readonly ReasonKey[];
+  onOpenRework: () => void;
   labels: {
     left: string;
     rework: string;
     forwardAll: string;
     clear: string;
-    reworkQtyLabel: string;
-    reasonLabel: string;
-    otherLabel: string;
-    addPhoto: string;
-    photoAdded: string;
-    noopDev: string;
-    reasonOf: (k: ReasonKey) => string;
   };
 }) {
   const reworkPart = row.reworkOpen ? row.reworkQty : 0;
@@ -1169,8 +1281,8 @@ function FinishSizeRow({
           className={cn(
             'min-w-[44px] h-10 px-2.5 rounded-[10px] flex items-center justify-center font-semibold text-[17px] transition-colors disabled:opacity-40 disabled:cursor-not-allowed',
             active
-              ? 'text-white bg-gradient-to-b from-[var(--stage-finish-acc)] to-[var(--stage-finish-ink)] shadow-[inset_0_1px_0_rgba(255,255,255,0.2),0_4px_10px_rgba(196,69,46,0.25)]'
-              : 'text-[var(--color-foreground)] bg-[#f1efe8] shadow-[inset_0_-1px_0_rgba(14,23,48,0.04),inset_0_1px_0_rgba(255,255,255,0.6)] hover:bg-[var(--stage-finish-bg)]',
+              ? 'text-white bg-gradient-to-b from-[var(--color-primary)] to-[var(--color-primary-hover)] shadow-[inset_0_1px_0_rgba(255,255,255,0.2),0_4px_10px_rgba(34,64,196,0.25)]'
+              : 'text-[var(--color-foreground)] bg-[#f1efe8] shadow-[inset_0_-1px_0_rgba(14,23,48,0.04),inset_0_1px_0_rgba(255,255,255,0.6)] hover:bg-[var(--color-primary-soft)]',
           )}
         >
           {size}
@@ -1198,9 +1310,9 @@ function FinishSizeRow({
             onChange={(e) => onSetForward(e.target.value)}
             disabled={disabled}
             className={cn(
-              'w-[42px] h-9 text-center rounded-[9px] border bg-white text-[16px] font-semibold tabular-nums outline-none transition-colors',
+              'w-[42px] h-9 text-center rounded-[9px] border bg-[var(--color-surface)] text-[16px] font-semibold tabular-nums outline-none transition-colors',
               row.forwardQty > 0
-                ? 'border-[var(--stage-finish-acc)]'
+                ? 'border-[var(--color-primary)]'
                 : 'border-[#e3e2dc]',
             )}
           />
@@ -1216,91 +1328,20 @@ function FinishSizeRow({
         </div>
         <button
           type="button"
-          onClick={() => onToggleRework(!row.reworkOpen)}
+          onClick={onOpenRework}
           disabled={disabled}
           className={cn(
             'ml-0.5 px-1.5 py-1 rounded-md text-[11px] font-semibold uppercase tracking-[0.02em] transition-colors disabled:opacity-40',
-            row.reworkOpen
+            row.reworkOpen && row.reworkQty > 0
               ? 'bg-[var(--status-rework-bg)] text-[var(--status-rework-ink)]'
               : 'text-[var(--color-muted-foreground)] hover:bg-[var(--status-rework-bg)] hover:text-[var(--status-rework-ink)]',
           )}
         >
-          {labels.rework}
+          {row.reworkOpen && row.reworkQty > 0
+            ? `${labels.rework} · ${row.reworkQty}`
+            : labels.rework}
         </button>
       </div>
-
-      {row.reworkOpen && (
-        <div className="mt-3 ml-[54px] rounded-[10px] bg-[var(--status-rework-bg)]/40 border border-[var(--status-rework-bg)] p-3 space-y-2.5">
-          <div className="flex items-center justify-between gap-3">
-            <Label className="mb-0">{labels.reworkQtyLabel}</Label>
-            <Input
-              type="number"
-              inputMode="numeric"
-              min={0}
-              max={Math.max(0, max - row.forwardQty)}
-              value={row.reworkQty}
-              onChange={(e) => onReworkQty(e.target.value)}
-              className="w-24 h-10 text-center"
-            />
-          </div>
-          <div>
-            <Label className="mb-1">{labels.reasonLabel}</Label>
-            <Select
-              value={row.reasonKey}
-              onChange={(e) => onReasonChange(e.target.value as ReasonKey)}
-              className="h-10"
-            >
-              {reasonKeys.map((k) => (
-                <option key={k} value={k}>
-                  {labels.reasonOf(k)}
-                </option>
-              ))}
-            </Select>
-          </div>
-          {row.reasonKey === 'other' && (
-            <div>
-              <Label className="mb-1">{labels.otherLabel}</Label>
-              <Textarea
-                rows={2}
-                value={row.otherReason}
-                onChange={(e) => onOtherReasonChange(e.target.value)}
-              />
-            </div>
-          )}
-          <div className="flex items-center gap-2">
-            {/* Native file input — capture="environment" opens the rear
-                camera directly on mobile so floor staff don't have to
-                tap through the gallery. The visible button is just a
-                styled label proxy. */}
-            <label className="inline-flex">
-              <input
-                type="file"
-                accept="image/jpeg,image/png,image/webp"
-                capture="environment"
-                className="sr-only"
-                onChange={(e) => {
-                  const file = e.target.files?.[0];
-                  if (file) onAttachPhoto(file);
-                  // Reset so picking the same file twice still fires onChange.
-                  e.target.value = '';
-                }}
-              />
-              <Button type="button" variant="outline" size="sm" asChild>
-                <span className="cursor-pointer">
-                  <Camera size={14} />
-                  {labels.addPhoto}
-                </span>
-              </Button>
-            </label>
-            {row.photoPath && (
-              <span className="text-xs text-[var(--color-muted-foreground)] truncate">
-                {labels.photoAdded}
-                {row.photoNoop ? ` ${labels.noopDev}` : ''}
-              </span>
-            )}
-          </div>
-        </div>
-      )}
     </div>
   );
 }

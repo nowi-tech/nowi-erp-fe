@@ -51,10 +51,11 @@ function metricsFor(lot: Lot): LotMetrics {
     // out of finishing. Once the order flips to `dispatched` the lot
     // moves to the Dispatched bucket via classifyForFilters.
     hasReady: finishingForwarded > 0,
-    // "In Progress" = anything-to-do: stitching has sent more than
-    // finisher has forwarded out. A lot can be both in_progress AND
-    // ready at the same time (stitching trickling in while finisher
-    // ships what's done) — that's intentional.
+    // Retained for compatibility / detail diagnostics: "stitching has
+    // sent more than finisher has forwarded out". NOTE: this no longer
+    // gates the `in_progress` bucket — a lot now stays in_progress until
+    // it is actually dispatched/closed (see classifyForFilters), so it
+    // doesn't drop out the moment everything is finishing-forwarded.
     hasInProgress: stitchForwarded > finishingForwarded,
   };
 }
@@ -76,8 +77,14 @@ function classifyForFilters(lot: Lot, m: LotMetrics): FinFilter[] {
   }
   if (status === 'in_rework') return ['rework'];
   if (status === 'in_finishing') {
-    const out: FinFilter[] = [];
-    if (m.hasInProgress) out.push('in_progress');
+    // A lot stays in `in_progress` as long as it is at finishing and the
+    // order status is NOT terminal (dispatched / closed /
+    // closed_with_adjustment) — reaching this branch already means the
+    // status is none of those, so it is always in_progress here. It can
+    // ALSO be `ready` at the same time (finisher shipping what's done
+    // while more trickles in). Only the dispatched/closed transition
+    // (the early-return above) removes it from in_progress.
+    const out: FinFilter[] = ['in_progress'];
     if (m.hasReady) out.push('ready');
     return out;
   }
@@ -175,13 +182,15 @@ export default function FinishingHome() {
 
   return (
     <FloorShell title={t('finishing.title')}>
-      <div className="mb-4">
-        <h1 className="font-semibold text-[30px] leading-none tracking-[-0.02em] text-[var(--color-foreground)]">
-          {t('finishing.title')}
-        </h1>
-        <p className="mt-1.5 font-mono text-[11px] uppercase tracking-[0.08em] text-[var(--color-muted-foreground)]">
-          {todayLabel(i18n.language)}
-        </p>
+      <div className="mb-4 flex items-start justify-between gap-3 flex-wrap">
+        <div>
+          <h1 className="font-semibold text-[30px] leading-none tracking-[-0.02em] text-[var(--color-foreground)]">
+            {t('finishing.title')}
+          </h1>
+          <p className="mt-1.5 font-mono text-[11px] uppercase tracking-[0.08em] text-[var(--color-muted-foreground)]">
+            {todayLabel(i18n.language)}
+          </p>
+        </div>
       </div>
 
       <HomePillFilters<FinFilter>
@@ -225,7 +234,7 @@ export default function FinishingHome() {
         ]}
       />
 
-      <div className="flex items-baseline justify-between px-1 pb-3">
+      <div className="flex items-baseline justify-between px-1 pb-2">
         <div className="text-[13px] font-semibold text-[var(--color-foreground)]">
           {t('finishing.queue', { defaultValue: 'In your queue' })}
         </div>
@@ -290,10 +299,10 @@ function FinishingLotCard({ lot, onOpen }: CardProps) {
   return (
     <div
       className={cn(
-        'rounded-[14px] bg-[var(--color-surface)] border-l-[3px] shadow-[0_1px_2px_rgba(14,23,48,0.04)] hover:shadow-[0_1px_2px_rgba(14,23,48,0.06),0_4px_12px_rgba(14,23,48,0.05)] transition-shadow p-4',
+        'rounded-[14px] bg-[var(--color-surface)] border-l-[3px] shadow-[0_1px_2px_rgba(14,23,48,0.04)] hover:shadow-[0_1px_2px_rgba(14,23,48,0.06),0_4px_12px_rgba(14,23,48,0.05)] hover:-translate-y-px transition-all p-4',
         m.hasReady
           ? 'border-l-[var(--color-success)]'
-          : 'border-l-[var(--stage-finish-acc)]',
+          : 'border-l-[var(--color-primary)]',
       )}
     >
       <button

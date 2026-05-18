@@ -255,6 +255,7 @@
     "lot": {
       "title": "Receive at finishing",
       "submit": "Submit",
+      "submitN": "Send {{n}} {{unit}} →",
       "confirmTitle": "Confirm",
       "confirmForward": "{{forward}} to forward",
       "confirmRework": "{{rework}} to rework",
