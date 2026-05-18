@@ -234,7 +234,7 @@ export default function FloorHome() {
       } else if (s === 'in_stitching' || s === 'in_rework')
         buckets.inStitching.push(l);
       else if (s === 'receiving' || s == null) {
-        if (l.assignedUserId == null) buckets.pending.push(l);
+        if (l.assignedStitcherUserId == null) buckets.pending.push(l);
         else buckets.inStitching.push(l);
       }
     }
@@ -249,7 +249,7 @@ export default function FloorHome() {
     const pickAssignee = (l: Lot) =>
       assignSlot === 'finishing_master'
         ? (l.assignedFinisherUserId ?? null)
-        : (l.assignedUserId ?? null);
+        : (l.assignedStitcherUserId ?? null);
     const ids = new Set(assignLots.map(pickAssignee));
     if (ids.size > 1) return null;
     const [only] = [...ids];
@@ -612,14 +612,14 @@ export default function FloorHome() {
           id: l.id,
           lotNo: l.lotNo,
           units: totalUnits(l.qtyIn),
-          assignedUserId:
+          assignedStitcherUserId:
             assignSlot === 'finishing_master'
               ? l.assignedFinisherUserId
-              : l.assignedUserId,
-          assignedUserName:
+              : l.assignedStitcherUserId,
+          assignedStitcherName:
             assignSlot === 'finishing_master'
               ? (l.assignedFinisher?.name ?? null)
-              : (l.assignedUser?.name ?? null),
+              : (l.assignedStitcher?.name ?? null),
         }))}
         masters={masters}
         excludeMasterId={sharedAssignee}
@@ -637,7 +637,7 @@ function matchesFilter(lot: Lot, filter: Filter): boolean {
     // Either slot empty + waiting on FM action.
     const status = lot.order?.status;
     if (status === 'in_finishing') return lot.assignedFinisherUserId == null;
-    return lot.assignedUserId == null;
+    return lot.assignedStitcherUserId == null;
   }
   if (filter === 'in_stitching')
     return ['receiving', 'in_stitching', 'in_rework'].includes(
@@ -784,13 +784,20 @@ function FloorLotRow({
   // Which slot (if any) the next assign action targets. Drives the
   // CTA label + the "needs X" chip on pending cards.
   const pendingSlot: 'stitching_master' | 'finishing_master' | null =
-    lot.assignedUserId == null
+    lot.assignedStitcherUserId == null
       ? 'stitching_master'
       : status === 'in_finishing' && lot.assignedFinisherUserId == null
         ? 'finishing_master'
         : null;
   const isAssigned = pendingSlot == null;
   const isAnomaly = status === 'in_rework' || status === 'stuck';
+  // Whoever physically holds the product right now: once it's in
+  // finishing the finisher has it, otherwise the stitcher does. (Null
+  // while the next slot is still pending — pendingSlot shows "Needs X".)
+  const currentHolder =
+    status === 'in_finishing'
+      ? (lot.assignedFinisher ?? null)
+      : (lot.assignedStitcher ?? null);
 
   // Long-press handlers — kick into selection mode on touch hold >500ms.
   let pressTimer: number | null = null;
@@ -881,7 +888,7 @@ function FloorLotRow({
             <span className="font-mono bg-[var(--color-muted)] px-1.5 py-0.5 rounded text-[var(--color-foreground)] tabular-nums text-[12px]">
               {units}u
             </span>
-            {lot.assignedUser && (
+            {currentHolder && (
               <>
                 <span className="text-[var(--color-muted-foreground-2)]">·</span>
                 <span className="text-[var(--color-muted-foreground)] italic text-[12px] flex items-center gap-1">
@@ -889,7 +896,7 @@ function FloorLotRow({
                     className="inline-block w-1.5 h-1.5 rounded-full bg-[var(--color-muted-foreground-2)]"
                     aria-hidden
                   />
-                  {lot.assignedUser.name}
+                  {currentHolder.name}
                 </span>
               </>
             )}
@@ -1024,7 +1031,7 @@ function DenseLotRow({
 
   // status → { label, swatch color }. Mirrors the bucket logic.
   const statusInfo = (() => {
-    if (lot.assignedUserId == null) {
+    if (lot.assignedStitcherUserId == null) {
       return { label: t('floor.filters.pending'), color: 'var(--color-foreground-2)' };
     }
     if (status === 'stuck') {
@@ -1040,6 +1047,12 @@ function DenseLotRow({
   })();
 
   const ageLabel = formatAge(lot.createdAt, i18n.language);
+  // Whoever physically holds the product now (finisher once in
+  // finishing, otherwise the stitcher).
+  const currentHolder =
+    status === 'in_finishing'
+      ? (lot.assignedFinisher ?? null)
+      : (lot.assignedStitcher ?? null);
 
   return (
     <li>
@@ -1069,9 +1082,9 @@ function DenseLotRow({
           </span>
         </div>
         {/* Assignee */}
-        {lot.assignedUser && (
+        {currentHolder && (
           <span className="hidden sm:inline text-[11px] text-[var(--color-muted-foreground)] italic truncate max-w-[80px]">
-            {lot.assignedUser.name}
+            {currentHolder.name}
           </span>
         )}
         {/* Age */}

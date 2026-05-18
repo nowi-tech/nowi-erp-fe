@@ -102,7 +102,7 @@ export default function FloorLotDetail() {
   const inEditWindow = lot
     ? Date.now() - new Date(lot.createdAt).getTime() <= EDIT_WINDOW_MS
     : false;
-  const isAssigned = lot?.assignedUserId != null;
+  const isAssigned = lot?.assignedStitcherUserId != null;
   const productLabel = lot?.style
     ? [
         t(`stitching.gender.${lot.style.gender}`, {
@@ -277,7 +277,7 @@ export default function FloorLotDetail() {
                   })}
                 </div>
                 <div className="mt-1 text-[15px] font-medium text-[var(--color-foreground)]">
-                  {lot.assignedUser?.name ?? '—'}
+                  {lot.assignedStitcher?.name ?? '—'}
                 </div>
               </div>
               {(() => {
@@ -407,14 +407,14 @@ export default function FloorLotDetail() {
                   id: lot.id,
                   lotNo: lot.lotNo,
                   units,
-                  assignedUserId:
+                  assignedStitcherUserId:
                     assignSlot === 'finishing_master'
                       ? lot.assignedFinisherUserId
-                      : lot.assignedUserId,
-                  assignedUserName:
+                      : lot.assignedStitcherUserId,
+                  assignedStitcherName:
                     assignSlot === 'finishing_master'
                       ? (lot.assignedFinisher?.name ?? null)
-                      : (lot.assignedUser?.name ?? null),
+                      : (lot.assignedStitcher?.name ?? null),
                 },
               ]
             : []
@@ -423,7 +423,7 @@ export default function FloorLotDetail() {
         excludeMasterId={
           assignSlot === 'finishing_master'
             ? (lot?.assignedFinisherUserId ?? null)
-            : (lot?.assignedUserId ?? null)
+            : (lot?.assignedStitcherUserId ?? null)
         }
         busy={assigning !== null}
         onConfirm={doAssign}

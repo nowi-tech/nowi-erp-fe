@@ -6,7 +6,7 @@ export interface ListLotsParams {
   status?: string;
   vendorId?: string;
   /** Filter to lots assigned to a specific user (stitching slot). */
-  assignedUserId?: number;
+  assignedStitcherUserId?: number;
   /** Floor manager view: only unassigned (stitching) lots. */
   unassigned?: boolean;
   /** Stitching home: lots assigned to me (stitching slot). */
@@ -69,7 +69,7 @@ export interface EditRequestRow {
     lotNo: string;
     vendorLotNo: string | null;
     createdAt: string;
-    assignedUser?: { id: number; name: string } | null;
+    assignedStitcher?: { id: number; name: string } | null;
     style?: { styleId: string } | null;
     vendor?: { name: string } | null;
   } | null;

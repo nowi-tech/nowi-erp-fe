@@ -9,8 +9,8 @@ export interface AssignSheetLot {
   id: number;
   lotNo: string;
   units: number;
-  assignedUserId?: number | null;
-  assignedUserName?: string | null;
+  assignedStitcherUserId?: number | null;
+  assignedStitcherName?: string | null;
 }
 
 interface AssignSheetProps {
@@ -49,7 +49,7 @@ export default function AssignSheet({
 
   const isBulk = lots.length > 1;
   const single = lots[0];
-  const isReassign = !isBulk && single?.assignedUserId != null;
+  const isReassign = !isBulk && single?.assignedStitcherUserId != null;
 
   useEffect(() => {
     if (!open) {
@@ -154,11 +154,11 @@ export default function AssignSheet({
                 })}
               </span>
             </div>
-            {!isBulk && isReassign && single?.assignedUserName && (
+            {!isBulk && isReassign && single?.assignedStitcherName && (
               <div className="text-sm text-[var(--color-muted-foreground)] mt-1">
                 {t('floor.currentlyAssigned', {
                   defaultValue: 'Currently {{name}}',
-                  name: single.assignedUserName,
+                  name: single.assignedStitcherName,
                 })}
               </div>
             )}
