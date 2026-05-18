@@ -30,6 +30,9 @@ const FinishingHome = lazy(() => import('./pages/finishing/FinishingHome'));
 const FinishingReceiveLot = lazy(
   () => import('./pages/finishing/FinishingReceiveLot'),
 );
+const FinishingWorkedOnDetail = lazy(
+  () => import('./pages/finishing/FinishingWorkedOnDetail'),
+);
 const FloorHome = lazy(() => import('./pages/floor/FloorHome'));
 const FloorEditLot = lazy(() => import('./pages/floor/FloorEditLot'));
 const FloorLotDetail = lazy(() => import('./pages/floor/FloorLotDetail'));
@@ -270,6 +273,16 @@ function App() {
                 <ProtectedRoute allowedRoles={['finishing_master', 'admin']}>
                   <S>
                     <FinishingReceiveLot />
+                  </S>
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/finishing/worked-on/:lotId"
+              element={
+                <ProtectedRoute allowedRoles={['finishing_master', 'admin', 'viewer']}>
+                  <S>
+                    <FinishingWorkedOnDetail />
                   </S>
                 </ProtectedRoute>
               }

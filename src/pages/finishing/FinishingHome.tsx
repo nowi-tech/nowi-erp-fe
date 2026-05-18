@@ -1,20 +1,16 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { useNavigate, useSearchParams } from 'react-router-dom';
+import { useNavigate } from 'react-router-dom';
 import { ChevronRight, Truck } from 'lucide-react';
 import FloorShell from '@/components/layout/FloorShell';
 import { Badge } from '@/components/ui/badge';
-import HomePillFilters from '@/components/floor/HomePillFilters';
+import { useAuth } from '@/context/auth';
 import { listLots } from '@/api/lots';
-import type { Lot } from '@/api/types';
+import { listReceipts, type ReceiptRow } from '@/api/receipts';
+import { listScraps, type ScrapRow } from '@/api/scrap';
+import { orderStatusVariant } from '@/lib/statusBadge';
 import { cn } from '@/lib/utils';
-
-type FinFilter =
-  | 'in_progress'
-  | 'ready'
-  | 'rework'
-  | 'dispatched'
-  | 'all';
+import type { Lot, OrderStatus } from '@/api/types';
 
 function totalUnits(matrix: Record<string, number> | null | undefined): number {
   if (!matrix) return 0;
@@ -29,156 +25,168 @@ function todayLabel(locale: string): string {
   });
 }
 
-interface LotMetrics {
-  units: number;
-  stitchForwarded: number;
-  finishingForwarded: number;
-  /** Has any forwarded-out-of-finishing units waiting to ship. */
-  hasReady: boolean;
-  /** Has units forwarded by stitching that finisher hasn't processed yet. */
-  hasInProgress: boolean;
-}
+// A lot belongs in the finisher's active queue while it's at finishing
+// and not yet shipped out. Once the order is dispatched/closed it lives
+// in the "Worked on" history tab instead (mirrors StitchingHome).
+const FINISHING_QUEUE_STATUSES: OrderStatus[] = [
+  'in_finishing',
+  'in_rework',
+];
 
-function metricsFor(lot: Lot): LotMetrics {
-  const units = totalUnits(lot.qtyIn);
-  const stitchForwarded = lot.stageForwarded?.stitching ?? 0;
-  const finishingForwarded = lot.stageForwarded?.finishing ?? 0;
-  return {
-    units,
-    stitchForwarded,
-    finishingForwarded,
-    // "Ready to Dispatch" = anything-ready: at least one unit forwarded
-    // out of finishing. Once the order flips to `dispatched` the lot
-    // moves to the Dispatched bucket via classifyForFilters.
-    hasReady: finishingForwarded > 0,
-    // Retained for compatibility / detail diagnostics: "stitching has
-    // sent more than finisher has forwarded out". NOTE: this no longer
-    // gates the `in_progress` bucket — a lot now stays in_progress until
-    // it is actually dispatched/closed (see classifyForFilters), so it
-    // doesn't drop out the moment everything is finishing-forwarded.
-    hasInProgress: stitchForwarded > finishingForwarded,
-  };
-}
-
-/**
- * Returns ALL filter buckets the lot belongs to. A single lot can be
- * both `in_progress` and `ready` simultaneously — that matches the
- * real workflow (units arriving from stitching while finisher already
- * has a pile to ship).
- */
-function classifyForFilters(lot: Lot, m: LotMetrics): FinFilter[] {
+function isInQueue(lot: Lot): boolean {
   const status = lot.order?.status;
-  if (
-    status === 'dispatched' ||
-    status === 'closed' ||
-    status === 'closed_with_adjustment'
-  ) {
-    return ['dispatched'];
+  if (status && !FINISHING_QUEUE_STATUSES.includes(status)) return false;
+  // No stitching forward yet ⇒ nothing for the finisher to do. Status=
+  // in_finishing without any forward shouldn't happen via the receipt
+  // path (BE only flips status on a real forward) but corrupt seed/test
+  // data can land here.
+  return (lot.stageForwarded?.stitching ?? 0) > 0;
+}
+
+type Tab = 'queue' | 'history';
+const PAGE_SIZE = 20;
+
+type HistoryItem =
+  | { type: 'receipt'; id: string; at: string; row: ReceiptRow }
+  | { type: 'scrap'; id: string; at: string; row: ScrapRow };
+
+interface LotHistoryGroup {
+  lotId: number;
+  lot?: Lot;
+  lastAt: string;
+  items: HistoryItem[];
+  scrapped: number;
+}
+
+function sortHistory(items: HistoryItem[]): HistoryItem[] {
+  return [...items].sort(
+    (a, b) => new Date(b.at).getTime() - new Date(a.at).getTime(),
+  );
+}
+
+function groupHistoryByLot(items: HistoryItem[]): LotHistoryGroup[] {
+  const byLot = new Map<number, LotHistoryGroup>();
+  for (const item of sortHistory(items)) {
+    const lotId = Number(item.row.lot?.id ?? item.row.lotId);
+    const existing = byLot.get(lotId);
+    const group =
+      existing ??
+      ({
+        lotId,
+        lot: item.row.lot,
+        lastAt: item.at,
+        items: [],
+        scrapped: 0,
+      } satisfies LotHistoryGroup);
+
+    if (!group.lot && item.row.lot) group.lot = item.row.lot;
+    if (new Date(item.at).getTime() > new Date(group.lastAt).getTime()) {
+      group.lastAt = item.at;
+    }
+    group.items.push(item);
+    if (item.type === 'scrap') group.scrapped += item.row.qty;
+    byLot.set(lotId, group);
   }
-  if (status === 'in_rework') return ['rework'];
-  if (status === 'in_finishing') {
-    // A lot stays in `in_progress` as long as it is at finishing and the
-    // order status is NOT terminal (dispatched / closed /
-    // closed_with_adjustment) — reaching this branch already means the
-    // status is none of those, so it is always in_progress here. It can
-    // ALSO be `ready` at the same time (finisher shipping what's done
-    // while more trickles in). Only the dispatched/closed transition
-    // (the early-return above) removes it from in_progress.
-    const out: FinFilter[] = ['in_progress'];
-    if (m.hasReady) out.push('ready');
-    return out;
-  }
-  // receiving / in_stitching / stuck shouldn't reach here (queue is
-  // pre-filtered to lots with stitchForwarded > 0), but if one does
-  // we drop it from filter pills.
-  return [];
+  return Array.from(byLot.values()).sort(
+    (a, b) => new Date(b.lastAt).getTime() - new Date(a.lastAt).getTime(),
+  );
 }
 
 export default function FinishingHome() {
   const { t, i18n } = useTranslation();
   const navigate = useNavigate();
+  const { user } = useAuth();
+  const [tab, setTab] = useState<Tab>('queue');
+
+  // Lots scoped to the finishing master. Admin/viewer get all (no
+  // assignedFinisherToMe), since they don't have lots assigned to them.
   const [lots, setLots] = useState<Lot[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [lotsLoading, setLotsLoading] = useState(true);
+  const filterToMe = user?.role === 'finishing_master';
 
-  // Filter persists in the URL so back-from-detail and reload restore it.
-  const [searchParams, setSearchParams] = useSearchParams();
-  const filter: FinFilter = (() => {
-    const raw = searchParams.get('tab');
-    if (
-      raw === 'in_progress' ||
-      raw === 'ready' ||
-      raw === 'rework' ||
-      raw === 'dispatched' ||
-      raw === 'all'
-    ) {
-      return raw;
-    }
-    return 'in_progress';
-  })();
-  const setFilter = (next: FinFilter) => {
-    const params = new URLSearchParams(searchParams);
-    if (next === 'in_progress') params.delete('tab');
-    else params.set('tab', next);
-    setSearchParams(params, { replace: true });
-  };
-
-  // Queue = lots whose finishing slot is me. Today this is a single
-  // page; the finisher's load is rarely > 30 lots so we don't paginate.
-  // Switch to the FloorHome infinite-scroll pattern if/when that
-  // assumption breaks.
-  const refresh = useCallback(async () => {
-    setLoading(true);
+  const refreshLots = useCallback(async () => {
+    setLotsLoading(true);
     try {
-      const all = await listLots({ assignedFinisherToMe: true });
-      // Defensive filter: a lot with zero stitching-forwards has no
-      // work for the finisher. Status=in_finishing without any forward
-      // shouldn't happen via the receipt path (BE only flips status on
-      // a real forward) but corrupt seed/test data can land here.
-      const actionable = all.filter((l) => (l.stageForwarded?.stitching ?? 0) > 0);
-      setLots(actionable);
+      const all = await listLots(
+        filterToMe ? { assignedFinisherToMe: true } : {},
+      );
+      setLots(all.filter(isInQueue));
     } catch {
       setLots([]);
     } finally {
-      setLoading(false);
+      setLotsLoading(false);
     }
-  }, []);
+  }, [filterToMe]);
+
+  // "Worked on" — paginated receipts + scraps authored by the current
+  // user. Each stream paginates independently so a drained stream
+  // doesn't stall the other (mirrors StitchingHome).
+  const [history, setHistory] = useState<HistoryItem[]>([]);
+  const [historyLoading, setHistoryLoading] = useState(false);
+  const [receiptSkip, setReceiptSkip] = useState(0);
+  const [scrapSkip, setScrapSkip] = useState(0);
+  const [hasMoreReceipts, setHasMoreReceipts] = useState(true);
+  const [hasMoreScraps, setHasMoreScraps] = useState(true);
+
+  const loadHistory = useCallback(
+    async (reset: boolean) => {
+      setHistoryLoading(true);
+      try {
+        const nextReceiptSkip = reset ? 0 : receiptSkip;
+        const nextScrapSkip = reset ? 0 : scrapSkip;
+        const fetchReceipts = reset || hasMoreReceipts;
+        const fetchScraps = reset || hasMoreScraps;
+        const [receipts, scraps] = await Promise.all([
+          fetchReceipts
+            ? listReceipts({ take: PAGE_SIZE, byMe: true, skip: nextReceiptSkip })
+            : Promise.resolve([] as ReceiptRow[]),
+          fetchScraps
+            ? listScraps({ take: PAGE_SIZE, byMe: true, skip: nextScrapSkip })
+            : Promise.resolve([] as ScrapRow[]),
+        ]);
+        const rows = sortHistory([
+          ...receipts.map((row): HistoryItem => ({
+            type: 'receipt',
+            id: `receipt-${row.id}`,
+            at: row.receivedAt,
+            row,
+          })),
+          ...scraps.map((row): HistoryItem => ({
+            type: 'scrap',
+            id: `scrap-${row.id}`,
+            at: row.scrappedAt,
+            row,
+          })),
+        ]);
+        if (reset) {
+          setHistory(rows);
+          setReceiptSkip(receipts.length);
+          setScrapSkip(scraps.length);
+        } else {
+          setHistory((prev) => sortHistory([...prev, ...rows]));
+          setReceiptSkip(nextReceiptSkip + receipts.length);
+          setScrapSkip(nextScrapSkip + scraps.length);
+        }
+        if (fetchReceipts) setHasMoreReceipts(receipts.length === PAGE_SIZE);
+        if (fetchScraps) setHasMoreScraps(scraps.length === PAGE_SIZE);
+      } catch {
+        if (reset) setHistory([]);
+      } finally {
+        setHistoryLoading(false);
+      }
+    },
+    [receiptSkip, scrapSkip, hasMoreReceipts, hasMoreScraps],
+  );
 
   useEffect(() => {
-    void refresh();
-  }, [refresh]);
+    void refreshLots();
+  }, [refreshLots]);
 
-  // Compute counts client-side from the loaded lots — no separate BE
-  // endpoint. The queue is small enough that the bookkeeping is cheap
-  // and we always agree with what the cards show. A lot can land in
-  // multiple buckets (e.g. in_progress AND ready) — duplicates by lotId
-  // collapse via the Set when rendering.
-  const { counts, byBucket } = useMemo(() => {
-    const byBucket = {
-      in_progress: [] as Lot[],
-      ready: [] as Lot[],
-      rework: [] as Lot[],
-      dispatched: [] as Lot[],
-    };
-    for (const lot of lots) {
-      const m = metricsFor(lot);
-      const buckets = classifyForFilters(lot, m);
-      for (const b of buckets) {
-        if (b !== 'all') byBucket[b].push(lot);
-      }
+  useEffect(() => {
+    if (tab === 'history' && history.length === 0) {
+      void loadHistory(true);
     }
-    return {
-      counts: {
-        in_progress: byBucket.in_progress.length,
-        ready: byBucket.ready.length,
-        rework: byBucket.rework.length,
-        dispatched: byBucket.dispatched.length,
-        all: lots.length,
-      },
-      byBucket,
-    };
-  }, [lots]);
-
-  const visible: Lot[] = filter === 'all' ? lots : byBucket[filter];
+  }, [tab, history.length, loadHistory]);
 
   return (
     <FloorShell title={t('finishing.title')}>
@@ -193,76 +201,274 @@ export default function FinishingHome() {
         </div>
       </div>
 
-      <HomePillFilters<FinFilter>
-        ariaLabel={t('finishing.filters.ariaLabel', {
-          defaultValue: 'Finishing queue filters',
-        })}
-        active={filter}
-        onChange={setFilter}
-        tabs={[
-          {
-            id: 'in_progress',
-            label: t('finishing.filters.inProgress', {
-              defaultValue: 'In Progress',
-            }),
-            count: counts.in_progress,
-          },
-          {
-            id: 'ready',
-            label: t('finishing.filters.ready', {
-              defaultValue: 'Ready to Dispatch',
-            }),
-            count: counts.ready,
-          },
-          {
-            id: 'rework',
-            label: t('finishing.filters.rework', { defaultValue: 'Rework' }),
-            count: counts.rework,
-          },
-          {
-            id: 'dispatched',
-            label: t('finishing.filters.dispatched', {
-              defaultValue: 'Dispatched',
-            }),
-            count: counts.dispatched,
-          },
-          {
-            id: 'all',
-            label: t('finishing.filters.all', { defaultValue: 'All' }),
-            count: counts.all,
-          },
-        ]}
-      />
-
-      <div className="flex items-baseline justify-between px-1 pb-2">
-        <div className="text-[13px] font-semibold text-[var(--color-foreground)]">
-          {t('finishing.queue', { defaultValue: 'In your queue' })}
-        </div>
-        <div className="font-mono text-[12px] text-[var(--color-muted-foreground)] tabular-nums">
-          {visible.length} lots ·{' '}
-          {visible.reduce((a, l) => a + totalUnits(l.qtyIn), 0)}u
-        </div>
+      {/* Tab bar — pill-style segmented control, identical to StitchingHome */}
+      <div className="mb-4 inline-flex p-[3px] rounded-full bg-[var(--color-muted)] border border-[var(--color-border)]">
+        {([
+          { id: 'queue' as const, label: t('floor.yourLots') },
+          { id: 'history' as const, label: t('floor.workedOn') },
+        ]).map((opt) => (
+          <button
+            key={opt.id}
+            type="button"
+            onClick={() => setTab(opt.id)}
+            className={cn(
+              'px-4 py-1.5 text-[13px] font-semibold rounded-full transition-colors',
+              tab === opt.id
+                ? 'bg-[var(--color-surface)] text-[var(--color-primary)] shadow-[0_1px_2px_rgba(14,23,48,0.08),0_0_0_1px_var(--color-border)]'
+                : 'text-[var(--color-muted-foreground)]',
+            )}
+          >
+            {opt.label}
+          </button>
+        ))}
       </div>
 
-      <div className="space-y-2.5">
-        {loading ? (
-          <div className="h-12 animate-pulse rounded bg-[var(--color-muted)]" />
-        ) : visible.length === 0 ? (
-          <p className="text-[var(--color-muted-foreground)] px-1">
-            {t('finishing.empty')}
-          </p>
-        ) : (
-          visible.map((lot) => (
-            <FinishingLotCard
-              key={lot.id}
-              lot={lot}
-              onOpen={() => navigate(`/finishing/lot/${lot.id}`)}
-            />
-          ))
-        )}
-      </div>
+      {tab === 'queue' ? (
+        <QueueTab
+          lots={lots}
+          loading={lotsLoading}
+          forMaster={filterToMe}
+          onOpen={(id) => navigate(`/finishing/lot/${id}`)}
+        />
+      ) : (
+        <HistoryTab
+          rows={history}
+          loading={historyLoading}
+          hasMore={hasMoreReceipts || hasMoreScraps}
+          onLoadMore={() => loadHistory(false)}
+        />
+      )}
     </FloorShell>
   );
+}
+
+function productLabelOf(
+  lot: Lot,
+  t: ReturnType<typeof useTranslation>['t'],
+): string | null {
+  if (!lot.style) return null;
+  return [
+    t(`stitching.gender.${lot.style.gender}`, {
+      defaultValue:
+        lot.style.gender === 'W'
+          ? "Women's"
+          : lot.style.gender === 'M'
+            ? "Men's"
+            : 'Unisex',
+    }),
+    lot.style.category?.name,
+  ]
+    .filter(Boolean)
+    .join(' ');
+}
+
+function TestBadge() {
+  const { t } = useTranslation();
+  return (
+    <span
+      className="text-[10px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded-full bg-[var(--color-warning-bg)] text-[var(--color-warning)] border border-[color:color-mix(in_srgb,var(--color-warning)_30%,transparent)]"
+      title={t('common.testDataTooltip', {
+        defaultValue: 'Training / test data — not a real lot',
+      })}
+    >
+      {t('common.testData', { defaultValue: 'Test' })}
+    </span>
+  );
+}
+
+function QueueTab({
+  lots,
+  loading,
+  forMaster,
+  onOpen,
+}: {
+  lots: Lot[];
+  loading: boolean;
+  forMaster: boolean;
+  onOpen: (lotId: number) => void;
+}) {
+  const { t } = useTranslation();
+
+  if (loading) {
+    return <div className="h-12 animate-pulse rounded bg-[var(--color-muted)]" />;
+  }
+  if (lots.length === 0) {
+    return (
+      <p className="text-[var(--color-muted-foreground)] px-1">
+        {t('finishing.empty')}
+      </p>
+    );
+  }
+
+  return (
+    <div>
+      <div className="flex items-baseline justify-between px-1 pb-2">
+        <div className="text-[13px] font-semibold text-[var(--color-foreground)]">
+          {forMaster
+            ? t('finishing.queue', { defaultValue: 'In your queue' })
+            : t('finishing.allLots', {
+                defaultValue: 'All lots in finishing',
+              })}
+        </div>
+        <div className="font-mono text-[12px] text-[var(--color-muted-foreground)] tabular-nums">
+          {lots.length} · {lots.reduce((a, l) => a + totalUnits(l.qtyIn), 0)}u
+        </div>
+      </div>
+      <div className="space-y-2.5">
+        {lots.map((lot) => (
+          <FinishingLotCard key={lot.id} lot={lot} onOpen={() => onOpen(lot.id)} />
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function HistoryTab({
+  rows,
+  loading,
+  hasMore,
+  onLoadMore,
+}: {
+  rows: HistoryItem[];
+  loading: boolean;
+  hasMore: boolean;
+  onLoadMore: () => void;
+}) {
+  const { t } = useTranslation();
+  const navigate = useNavigate();
+  const groups = groupHistoryByLot(rows);
+
+  if (groups.length === 0 && !loading) {
+    return (
+      <p className="text-[var(--color-muted-foreground)] px-1">
+        {t('floor.workedOnEmpty')}
+      </p>
+    );
+  }
+
+  return (
+    <div className="space-y-2.5">
+      <ul className="space-y-2.5">
+        {groups.map((group) => {
+          const lot = group.lot;
+          const units = totalUnits(lot?.qtyIn);
+          const productLabel = lot ? productLabelOf(lot, t) : null;
+          const status = lot?.order?.status;
+          return (
+            <li key={group.lotId}>
+              <button
+                type="button"
+                onClick={() => navigate(`/finishing/worked-on/${group.lotId}`)}
+                className="w-full text-left rounded-[14px] bg-[var(--color-surface)] border-l-[3px] border-l-[var(--color-primary)] shadow-[0_1px_2px_rgba(15,26,54,0.04)] hover:shadow-[0_1px_2px_rgba(14,23,48,0.06),0_4px_12px_rgba(14,23,48,0.05)] hover:-translate-y-px transition-all p-4"
+              >
+                <div className="flex items-start gap-3">
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="min-w-0">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <span className="font-semibold text-[22px] leading-[1.1] tracking-[-0.01em] text-[var(--color-foreground)] break-all">
+                            {lot?.lotNo ?? `#${group.lotId}`}
+                          </span>
+                          {lot?.isTestData && <TestBadge />}
+                        </div>
+                        <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-[13px] text-[var(--color-foreground-2)]">
+                          {productLabel && (
+                            <span className="font-medium text-[var(--color-foreground)]">
+                              {productLabel}
+                            </span>
+                          )}
+                          {productLabel && (
+                            <span className="text-[var(--color-muted-foreground-2)]">·</span>
+                          )}
+                          {lot && <span>{lot.vendor?.name ?? lot.vendorId}</span>}
+                          {lot && (
+                            <span className="text-[var(--color-muted-foreground-2)]">·</span>
+                          )}
+                          {units > 0 && (
+                            <span className="font-mono tabular-nums">{units}u</span>
+                          )}
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-2 shrink-0">
+                        {status && (
+                          <Badge variant={orderStatusVariant(status)} dot>
+                            {t(`order.status.${status}`, { defaultValue: status })}
+                          </Badge>
+                        )}
+                        <div className="w-9 h-9 rounded-full bg-[var(--color-background)] flex items-center justify-center text-[var(--color-foreground)]">
+                          <ChevronRight size={18} />
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="mt-3 flex flex-wrap items-center gap-x-2 gap-y-1 text-[12px] text-[var(--color-muted-foreground)]">
+                      <span className="font-mono uppercase tracking-wide">
+                        {group.items.length}{' '}
+                        {t('common.activities', { defaultValue: 'activities' })}
+                      </span>
+                      {group.scrapped > 0 && (
+                        <>
+                          <span>·</span>
+                          <span className="font-semibold text-[var(--status-stuck-ink)]">
+                            {t('finishing.lot.scrap', { defaultValue: 'Scrap' })}{' '}
+                            {group.scrapped}u
+                          </span>
+                        </>
+                      )}
+                      <span>·</span>
+                      <span className="font-mono">
+                        {new Date(group.lastAt).toLocaleString(undefined, {
+                          month: 'short',
+                          day: 'numeric',
+                          hour: '2-digit',
+                          minute: '2-digit',
+                        })}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+              </button>
+            </li>
+          );
+        })}
+      </ul>
+      {loading && (
+        <div className="rounded-[14px] bg-[var(--color-surface)] px-4 py-3 text-xs text-[var(--color-muted-foreground)]">
+          {t('common.loading')}
+        </div>
+      )}
+      {hasMore && !loading && (
+        <div className="px-1 py-2">
+          <button
+            type="button"
+            onClick={onLoadMore}
+            className="text-[13px] font-semibold text-[var(--color-primary)] hover:underline"
+          >
+            {t('common.more', { defaultValue: 'More' })}
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
+
+interface LotMetrics {
+  units: number;
+  stitchForwarded: number;
+  finishingForwarded: number;
+  hasReady: boolean;
+}
+
+function metricsFor(lot: Lot): LotMetrics {
+  const units = totalUnits(lot.qtyIn);
+  const stitchForwarded = lot.stageForwarded?.stitching ?? 0;
+  const finishingForwarded = lot.stageForwarded?.finishing ?? 0;
+  return {
+    units,
+    stitchForwarded,
+    finishingForwarded,
+    hasReady: finishingForwarded > 0,
+  };
 }
 
 interface CardProps {
@@ -273,21 +479,7 @@ interface CardProps {
 function FinishingLotCard({ lot, onOpen }: CardProps) {
   const { t } = useTranslation();
   const m = metricsFor(lot);
-  const productLabel = lot.style
-    ? [
-        t(`stitching.gender.${lot.style.gender}`, {
-          defaultValue:
-            lot.style.gender === 'W'
-              ? "Women's"
-              : lot.style.gender === 'M'
-                ? "Men's"
-                : 'Unisex',
-        }),
-        lot.style.category?.name,
-      ]
-        .filter(Boolean)
-        .join(' ')
-    : null;
+  const productLabel = productLabelOf(lot, t);
 
   const anomaly =
     lot.order?.status === 'in_rework'
@@ -327,7 +519,11 @@ function FinishingLotCard({ lot, onOpen }: CardProps) {
             )}
             {anomaly && (
               <Badge variant={anomaly === 'stuck' ? 'stuck' : 'rework'} dot>
-                {anomaly === 'stuck' ? 'Stuck' : 'Rework'}
+                {anomaly === 'stuck'
+                  ? t('common.error', { defaultValue: 'Stuck' })
+                  : t('admin.locator.filters.rework', {
+                      defaultValue: 'Rework',
+                    })}
               </Badge>
             )}
           </div>
@@ -337,9 +533,7 @@ function FinishingLotCard({ lot, onOpen }: CardProps) {
               screen; surfacing it here just adds noise on every card. */}
           <div className="pt-1.5">
             <ProgressRow
-              label={t('finishing.lot.progress', {
-                defaultValue: 'Dispatched',
-              })}
+              label={t('finishing.lot.progress', { defaultValue: 'Dispatched' })}
               value={m.finishingForwarded}
               max={m.units}
               tone={m.hasReady ? 'success' : 'neutral'}
@@ -360,9 +554,7 @@ function FinishingLotCard({ lot, onOpen }: CardProps) {
           className="mt-3 w-full inline-flex items-center justify-center gap-2 h-11 rounded-[10px] text-[14px] font-semibold text-white bg-gradient-to-b from-[var(--color-primary)] to-[var(--color-primary-hover)] shadow-[inset_0_1px_0_rgba(255,255,255,0.18),0_0_0_1px_var(--color-primary-hover),0_4px_10px_rgba(34,64,196,0.28)] active:translate-y-px transition-transform"
         >
           <Truck size={16} />
-          {t('finishing.lot.createDispatch', {
-            defaultValue: 'Create Dispatch',
-          })}
+          {t('finishing.lot.createDispatch', { defaultValue: 'Create Dispatch' })}
         </button>
       )}
     </div>
