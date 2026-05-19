@@ -28,6 +28,8 @@
     "by": "by",
     "clear": "Clear",
     "more": "More",
+    "collapseSidebar": "Collapse sidebar",
+    "expandSidebar": "Expand sidebar",
     "filters": "Filters",
     "filtersActive": "{{count}} active",
     "showFilters": "Show filters",

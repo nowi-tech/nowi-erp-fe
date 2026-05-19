@@ -1,5 +1,11 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
-import { Plus, Search, ExternalLink } from 'lucide-react';
+import { Fragment, useCallback, useEffect, useMemo, useState } from 'react';
+import {
+  Plus,
+  Search,
+  ExternalLink,
+  ChevronRight,
+  ChevronDown,
+} from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Select } from '@/components/ui/select';
@@ -81,6 +87,53 @@ export default function ArticlesList() {
     setDrawerOpen(true);
   };
 
+  // Group colour/size variants under their parent style so the table
+  // reads as "one style → its variants" instead of a flat wall of
+  // near-empty rows. Orphan variants (parent not in the result set)
+  // surface as their own standalone entries.
+  const families = useMemo(() => {
+    const parents = rows.filter((r) => !r.parentSku);
+    const parentSkus = new Set(parents.map((p) => p.sku));
+    const childrenBy = new Map<string, Article[]>();
+    const orphans: Article[] = [];
+    for (const r of rows) {
+      if (!r.parentSku) continue;
+      if (parentSkus.has(r.parentSku)) {
+        const arr = childrenBy.get(r.parentSku) ?? [];
+        arr.push(r);
+        childrenBy.set(r.parentSku, arr);
+      } else {
+        orphans.push(r);
+      }
+    }
+    const fam = parents
+      .map((p) => ({ parent: p, children: childrenBy.get(p.sku) ?? [] }))
+      .sort((a, b) => a.parent.sku.localeCompare(b.parent.sku));
+    for (const orf of orphans) fam.push({ parent: orf, children: [] });
+    return fam;
+  }, [rows]);
+
+  const [expanded, setExpanded] = useState<Set<string>>(new Set());
+  const toggle = (sku: string) =>
+    setExpanded((prev) => {
+      const next = new Set(prev);
+      if (next.has(sku)) next.delete(sku);
+      else next.add(sku);
+      return next;
+    });
+  const groupsWithChildren = families.filter((f) => f.children.length > 0);
+  const allExpanded =
+    groupsWithChildren.length > 0 &&
+    groupsWithChildren.every((f) => expanded.has(f.parent.sku));
+  const toggleAll = () =>
+    setExpanded(
+      allExpanded
+        ? new Set()
+        : new Set(groupsWithChildren.map((f) => f.parent.sku)),
+    );
+  // Collapse everything whenever the underlying list changes.
+  useEffect(() => setExpanded(new Set()), [rows]);
+
   const o = options;
   // Responsive columns — phones keep only SKU / Sampling / Production /
   // Live; the rest progressively appear at sm / md / lg (mirrors the
@@ -107,19 +160,100 @@ export default function ArticlesList() {
     [],
   );
 
+  // The 12 data cells after the identity column — identical for a
+  // parent style and its variants, so share one renderer.
+  const dataCells = (a: Article) =>
+    o && (
+      <>
+        <td className="px-3 py-2 whitespace-nowrap hidden md:table-cell">
+          {a.colour ?? '—'}
+        </td>
+        <td className="px-3 py-2 whitespace-nowrap hidden md:table-cell">
+          {a.fabric?.name ?? '—'}
+        </td>
+        <td className="px-3 py-2 whitespace-nowrap">
+          {a.samplingStatus ? (
+            <StatusBadge text={labelOf(o.samplingStatus, a.samplingStatus)} />
+          ) : (
+            '—'
+          )}
+        </td>
+        <td className="px-3 py-2 hidden lg:table-cell">
+          {labelOf(o.modelFitSession, a.modelFitSession)}
+        </td>
+        <td className="px-3 py-2 hidden lg:table-cell">
+          {labelOf(o.dxfApproved, a.dxfApproved)}
+        </td>
+        <td className="px-3 py-2 whitespace-nowrap hidden md:table-cell">
+          {a.sampleApproval ? (
+            <StatusBadge text={labelOf(o.sampleApproval, a.sampleApproval)} />
+          ) : (
+            '—'
+          )}
+        </td>
+        <td className="px-3 py-2 whitespace-nowrap">
+          {a.productionStatus ? (
+            <StatusBadge
+              text={labelOf(o.productionStatus, a.productionStatus)}
+            />
+          ) : (
+            '—'
+          )}
+        </td>
+        <td className="px-3 py-2 text-right tabular-nums hidden lg:table-cell">
+          {a.cuttingQty ?? '—'}
+        </td>
+        <td className="px-3 py-2 text-right tabular-nums hidden lg:table-cell">
+          {a.stitchingOutput ?? '—'}
+        </td>
+        <td className="px-3 py-2 text-right tabular-nums hidden lg:table-cell">
+          {a.packagingQty ?? '—'}
+        </td>
+        <td className="px-3 py-2">
+          <StatusBadge text={labelOf(o.websiteLive, a.websiteLive)} />
+        </td>
+        <td className="px-3 py-2 hidden sm:table-cell">
+          {a.referenceLink && /^https?:/.test(a.referenceLink) ? (
+            <a
+              href={a.referenceLink}
+              target="_blank"
+              rel="noreferrer"
+              onClick={(e) => e.stopPropagation()}
+              className="text-[var(--color-primary)] inline-flex"
+              aria-label="Open reference link"
+            >
+              <ExternalLink size={14} />
+            </a>
+          ) : (
+            '—'
+          )}
+        </td>
+      </>
+    );
+
+  const rowClasses =
+    'border-t border-[var(--color-border)] cursor-pointer hover:bg-[var(--color-muted)] focus:outline-none focus-visible:bg-[var(--color-muted)]';
+
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between gap-3 flex-wrap">
         <div>
           <h1 className="font-serif text-2xl">Article Tracker</h1>
           <p className="text-sm text-[var(--color-muted-foreground)]">
-            New article development — {total} in this category
+            {families.length} styles · {total} SKUs in this category
           </p>
         </div>
-        <Button onClick={openCreate}>
-          <Plus size={16} />
-          <span className="ml-1">Add article</span>
-        </Button>
+        <div className="flex items-center gap-2">
+          {groupsWithChildren.length > 0 && (
+            <Button variant="outline" size="sm" onClick={toggleAll}>
+              {allExpanded ? 'Collapse all' : 'Expand all'}
+            </Button>
+          )}
+          <Button onClick={openCreate}>
+            <Plus size={16} />
+            <span className="ml-1">Add article</span>
+          </Button>
+        </div>
       </div>
 
       {/* Category tabs */}
@@ -222,85 +356,104 @@ export default function ArticlesList() {
             )}
             {!loading &&
               o &&
-              rows.map((a) => {
-                const isChild = !!a.parentSku;
+              families.map(({ parent, children }) => {
+                const has = children.length > 0;
+                const isOpen = expanded.has(parent.sku);
                 return (
-                  <tr
-                    key={a.id}
-                    role="button"
-                    tabIndex={0}
-                    aria-label={`Edit ${a.sku}`}
-                    onClick={() => openEdit(a)}
-                    onKeyDown={(e) => {
-                      if (e.key === 'Enter' || e.key === ' ') {
-                        e.preventDefault();
-                        openEdit(a);
-                      }
-                    }}
-                    className={cn(
-                      'border-t border-[var(--color-border)] cursor-pointer hover:bg-[var(--color-muted)] focus:outline-none focus-visible:bg-[var(--color-muted)]',
-                      isChild && 'bg-[var(--color-surface-2)]/40',
-                    )}
-                  >
-                    <td className="px-3 py-2 font-medium">
-                      <span className={cn(isChild && 'pl-4 text-[var(--color-muted-foreground)]')}>
-                        {isChild && '↳ '}
-                        {a.sku}
-                      </span>
-                      {/* Mobile fallback — colour / fabric are hidden < md. */}
-                      <div className="md:hidden mt-0.5 text-xs text-[var(--color-muted-foreground)] truncate max-w-[42vw]">
-                        {[a.colour, a.fabric?.name].filter(Boolean).join(' · ') ||
-                          '—'}
-                      </div>
-                    </td>
-                    <td className="px-3 py-2 whitespace-nowrap hidden md:table-cell">{a.colour ?? '—'}</td>
-                    <td className="px-3 py-2 whitespace-nowrap hidden md:table-cell">{a.fabric?.name ?? '—'}</td>
-                    <td className="px-3 py-2 whitespace-nowrap">
-                      {a.samplingStatus ? (
-                        <StatusBadge text={labelOf(o.samplingStatus, a.samplingStatus)} />
-                      ) : (
-                        '—'
-                      )}
-                    </td>
-                    <td className="px-3 py-2 hidden lg:table-cell">{labelOf(o.modelFitSession, a.modelFitSession)}</td>
-                    <td className="px-3 py-2 hidden lg:table-cell">{labelOf(o.dxfApproved, a.dxfApproved)}</td>
-                    <td className="px-3 py-2 whitespace-nowrap hidden md:table-cell">
-                      {a.sampleApproval ? (
-                        <StatusBadge text={labelOf(o.sampleApproval, a.sampleApproval)} />
-                      ) : (
-                        '—'
-                      )}
-                    </td>
-                    <td className="px-3 py-2 whitespace-nowrap">
-                      {a.productionStatus ? (
-                        <StatusBadge text={labelOf(o.productionStatus, a.productionStatus)} />
-                      ) : (
-                        '—'
-                      )}
-                    </td>
-                    <td className="px-3 py-2 text-right tabular-nums hidden lg:table-cell">{a.cuttingQty ?? '—'}</td>
-                    <td className="px-3 py-2 text-right tabular-nums hidden lg:table-cell">{a.stitchingOutput ?? '—'}</td>
-                    <td className="px-3 py-2 text-right tabular-nums hidden lg:table-cell">{a.packagingQty ?? '—'}</td>
-                    <td className="px-3 py-2">
-                      <StatusBadge text={labelOf(o.websiteLive, a.websiteLive)} />
-                    </td>
-                    <td className="px-3 py-2 hidden sm:table-cell">
-                      {a.referenceLink && /^https?:/.test(a.referenceLink) ? (
-                        <a
-                          href={a.referenceLink}
-                          target="_blank"
-                          rel="noreferrer"
-                          onClick={(e) => e.stopPropagation()}
-                          className="text-[var(--color-primary)] inline-flex"
-                          aria-label="Open reference link"
+                  <Fragment key={parent.id}>
+                    {/* Parent style */}
+                    <tr
+                      role="button"
+                      tabIndex={0}
+                      aria-label={`Edit ${parent.sku}`}
+                      onClick={() => openEdit(parent)}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter' || e.key === ' ') {
+                          e.preventDefault();
+                          openEdit(parent);
+                        }
+                      }}
+                      className={cn(rowClasses, 'font-medium')}
+                    >
+                      <td className="px-3 py-2">
+                        <div className="flex items-center gap-1.5">
+                          {has ? (
+                            <button
+                              type="button"
+                              aria-label={isOpen ? 'Collapse' : 'Expand'}
+                              aria-expanded={isOpen}
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                toggle(parent.sku);
+                              }}
+                              className="shrink-0 p-0.5 -ml-1 rounded hover:bg-[var(--color-border)] text-[var(--color-muted-foreground)]"
+                            >
+                              {isOpen ? (
+                                <ChevronDown size={15} />
+                              ) : (
+                                <ChevronRight size={15} />
+                              )}
+                            </button>
+                          ) : (
+                            <span className="w-[15px] shrink-0" aria-hidden />
+                          )}
+                          <span>{parent.sku}</span>
+                          {parent.colour && (
+                            <span className="text-[var(--color-muted-foreground)] font-normal">
+                              · {parent.colour}
+                            </span>
+                          )}
+                          {has && (
+                            <Badge variant="outline" className="ml-1">
+                              {children.length} variant
+                              {children.length > 1 ? 's' : ''}
+                            </Badge>
+                          )}
+                        </div>
+                        <div className="md:hidden mt-0.5 ml-[21px] text-xs text-[var(--color-muted-foreground)] truncate max-w-[42vw]">
+                          {[parent.colour, parent.fabric?.name]
+                            .filter(Boolean)
+                            .join(' · ') || '—'}
+                        </div>
+                      </td>
+                      {dataCells(parent)}
+                    </tr>
+
+                    {/* Variants — colour-led so they're identifiable */}
+                    {has &&
+                      isOpen &&
+                      children.map((c) => (
+                        <tr
+                          key={c.id}
+                          role="button"
+                          tabIndex={0}
+                          aria-label={`Edit ${c.colour ?? c.sku}`}
+                          onClick={() => openEdit(c)}
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter' || e.key === ' ') {
+                              e.preventDefault();
+                              openEdit(c);
+                            }
+                          }}
+                          className={cn(
+                            rowClasses,
+                            'bg-[var(--color-surface-2)]/40',
+                          )}
                         >
-                          <ExternalLink size={14} />
-                        </a>
-                      ) : (
-                        '—'
-                      )}
-                    </td>
-                  </tr>
+                          <td className="px-3 py-2">
+                            <div className="pl-[21px]">
+                              <span className="font-medium">
+                                {c.colour || c.sku}
+                              </span>
+                              <div className="text-xs text-[var(--color-muted-foreground)] truncate max-w-[60vw] sm:max-w-none">
+                                {c.colour ? c.sku : c.fabric?.name ?? ''}
+                              </div>
+                            </div>
+                          </td>
+                          {dataCells(c)}
+                        </tr>
+                      ))}
+                  </Fragment>
                 );
               })}
           </tbody>

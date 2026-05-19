@@ -14,6 +14,8 @@ import {
   Scissors,
   Sparkles,
   Shirt,
+  PanelLeftClose,
+  PanelLeft,
   MoreHorizontal,
   X,
 } from 'lucide-react';
@@ -68,6 +70,7 @@ const NAV_ITEMS: NavItem[] = [
 ];
 
 const TEST_DATA_KEY = 'nowi.showTestData';
+const SIDEBAR_KEY = 'nowi.sidebarCollapsed';
 const PRIMARY_BOTTOM_COUNT = 3;
 
 function TrainingModeToggle() {
@@ -127,6 +130,13 @@ export default function AdminShell() {
   const { t } = useTranslation();
   const { user, logout } = useAuth();
   const [moreOpen, setMoreOpen] = useState(false);
+  const [collapsed, setCollapsed] = useState<boolean>(
+    () => localStorage.getItem(SIDEBAR_KEY) === '1',
+  );
+  useEffect(() => {
+    if (collapsed) localStorage.setItem(SIDEBAR_KEY, '1');
+    else localStorage.removeItem(SIDEBAR_KEY);
+  }, [collapsed]);
   const location = useLocation();
 
   const role: UserRole | undefined = user?.role;
@@ -150,13 +160,21 @@ export default function AdminShell() {
   return (
     <div className="min-h-screen flex bg-[var(--color-background)] text-[var(--color-foreground)]">
       {/* Desktop sidebar */}
-      <aside className="hidden lg:flex w-60 shrink-0 border-r border-[var(--color-border)] flex-col bg-[var(--color-background-2)]">
+      <aside
+        className={cn(
+          'hidden lg:flex shrink-0 border-r border-[var(--color-border)] flex-col bg-[var(--color-background-2)] transition-[width] duration-200',
+          collapsed ? 'w-16' : 'w-60',
+        )}
+      >
         <Link
           to={homePath}
           aria-label={t('common.appName')}
-          className="px-5 py-5 border-b border-[var(--color-border)] block hover:bg-[var(--color-muted)] transition-colors"
+          className={cn(
+            'border-b border-[var(--color-border)] flex items-center hover:bg-[var(--color-muted)] transition-colors',
+            collapsed ? 'justify-center px-2 py-5' : 'px-5 py-5',
+          )}
         >
-          <Logo size="md" />
+          <Logo size={collapsed ? 'sm' : 'md'} />
         </Link>
         <nav className="flex-1 p-3 space-y-1">
           {visibleNav.map((item) => {
@@ -167,11 +185,16 @@ export default function AdminShell() {
                 key={item.to}
                 to={item.to}
                 end={item.end}
+                title={collapsed ? t(item.labelKey) : undefined}
                 style={{ ['--nav-acc' as string]: stageVars.acc, ['--nav-bg' as string]: stageVars.bg }}
                 className={({ isActive }) =>
                   cn(
-                    'relative w-full flex items-center gap-3 pl-4 pr-3 py-2.5 rounded-[var(--radius-md)] text-sm transition-colors',
+                    'relative w-full flex items-center rounded-[var(--radius-md)] text-sm transition-colors',
+                    collapsed
+                      ? 'justify-center px-0 py-2.5'
+                      : 'gap-3 pl-4 pr-3 py-2.5',
                     'before:absolute before:left-1 before:top-2 before:bottom-2 before:w-[3px] before:rounded-full before:bg-[var(--nav-acc)] before:transition-opacity',
+                    collapsed && 'before:hidden',
                     isActive
                       ? 'bg-[var(--nav-bg)] text-[var(--color-foreground)] font-medium before:opacity-100'
                       : 'text-[var(--color-foreground-3)] hover:bg-[var(--color-muted)] hover:text-[var(--color-foreground)] before:opacity-0',
@@ -190,16 +213,45 @@ export default function AdminShell() {
                     >
                       {item.icon}
                     </span>
-                    <span>{t(item.labelKey)}</span>
+                    {!collapsed && <span>{t(item.labelKey)}</span>}
                   </>
                 )}
               </NavLink>
             );
           })}
         </nav>
-        <div className="p-3 border-t border-[var(--color-border)] text-xs text-[var(--color-muted-foreground)]">
-          {user?.name} · {user && t(`roles.${user.role}` as const)}
-        </div>
+        <button
+          type="button"
+          onClick={() => setCollapsed((v) => !v)}
+          aria-label={
+            collapsed
+              ? t('common.expandSidebar')
+              : t('common.collapseSidebar')
+          }
+          title={
+            collapsed
+              ? t('common.expandSidebar')
+              : t('common.collapseSidebar')
+          }
+          className={cn(
+            'flex items-center gap-2 border-t border-[var(--color-border)] px-4 py-3 text-xs text-[var(--color-muted-foreground)] hover:bg-[var(--color-muted)] hover:text-[var(--color-foreground)] transition-colors',
+            collapsed && 'justify-center px-0',
+          )}
+        >
+          {collapsed ? (
+            <PanelLeft size={18} />
+          ) : (
+            <>
+              <PanelLeftClose size={18} />
+              <span>{t('common.collapseSidebar')}</span>
+            </>
+          )}
+        </button>
+        {!collapsed && (
+          <div className="p-3 border-t border-[var(--color-border)] text-xs text-[var(--color-muted-foreground)]">
+            {user?.name} · {user && t(`roles.${user.role}` as const)}
+          </div>
+        )}
       </aside>
 
       {/* Main column */}
