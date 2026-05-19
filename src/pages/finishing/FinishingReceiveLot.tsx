@@ -1270,7 +1270,7 @@ function FinishSizeRow({
   const set = (v: number) => onForwardChange(Math.max(0, Math.min(fwdCap, v)));
 
   return (
-    <div className="border-b border-[#efeee9] last:border-b-0 py-2.5">
+    <div className="border-b border-[var(--color-border)] last:border-b-0 py-2.5">
       <div className="flex items-center gap-2.5">
         <button
           type="button"
@@ -1282,7 +1282,7 @@ function FinishSizeRow({
             'min-w-[44px] h-10 px-2.5 rounded-[10px] flex items-center justify-center font-semibold text-[17px] transition-colors disabled:opacity-40 disabled:cursor-not-allowed',
             active
               ? 'text-white bg-gradient-to-b from-[var(--color-primary)] to-[var(--color-primary-hover)] shadow-[inset_0_1px_0_rgba(255,255,255,0.2),0_4px_10px_rgba(34,64,196,0.25)]'
-              : 'text-[var(--color-foreground)] bg-[#f1efe8] shadow-[inset_0_-1px_0_rgba(14,23,48,0.04),inset_0_1px_0_rgba(255,255,255,0.6)] hover:bg-[var(--color-primary-soft)]',
+              : 'text-[var(--color-foreground)] bg-[var(--color-muted)] shadow-[inset_0_-1px_0_rgba(14,23,48,0.04),inset_0_1px_0_rgba(255,255,255,0.6)] hover:bg-[var(--color-primary-soft)]',
           )}
         >
           {size}
@@ -1299,7 +1299,7 @@ function FinishSizeRow({
             onClick={() => set(row.forwardQty - 1)}
             disabled={disabled || row.forwardQty <= 0}
             aria-label="−"
-            className="w-8 h-8 rounded-[9px] bg-[#f1efe8] text-[var(--color-foreground)] flex items-center justify-center disabled:opacity-40 shadow-[inset_0_-1px_0_rgba(14,23,48,0.04),inset_0_1px_0_rgba(255,255,255,0.6)]"
+            className="w-8 h-8 rounded-[9px] bg-[var(--color-muted)] text-[var(--color-foreground)] flex items-center justify-center disabled:opacity-40 shadow-[inset_0_-1px_0_rgba(14,23,48,0.04),inset_0_1px_0_rgba(255,255,255,0.6)]"
           >
             <Minus size={16} strokeWidth={2.4} />
           </button>
@@ -1313,7 +1313,7 @@ function FinishSizeRow({
               'w-[42px] h-9 text-center rounded-[9px] border bg-[var(--color-surface)] text-[16px] font-semibold tabular-nums outline-none transition-colors',
               row.forwardQty > 0
                 ? 'border-[var(--color-primary)]'
-                : 'border-[#e3e2dc]',
+                : 'border-[var(--color-border-strong)]',
             )}
           />
           <button
@@ -1321,7 +1321,7 @@ function FinishSizeRow({
             onClick={() => set(row.forwardQty + 1)}
             disabled={disabled || row.forwardQty >= fwdCap}
             aria-label="+"
-            className="w-8 h-8 rounded-[9px] bg-[#f1efe8] text-[var(--color-foreground)] flex items-center justify-center disabled:opacity-40 shadow-[inset_0_-1px_0_rgba(14,23,48,0.04),inset_0_1px_0_rgba(255,255,255,0.6)]"
+            className="w-8 h-8 rounded-[9px] bg-[var(--color-muted)] text-[var(--color-foreground)] flex items-center justify-center disabled:opacity-40 shadow-[inset_0_-1px_0_rgba(14,23,48,0.04),inset_0_1px_0_rgba(255,255,255,0.6)]"
           >
             <Plus size={16} strokeWidth={2.4} />
           </button>

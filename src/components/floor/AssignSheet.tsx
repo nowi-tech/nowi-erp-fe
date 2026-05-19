@@ -228,7 +228,7 @@ export default function AssignSheet({
                           className={cn(
                             'text-sm font-medium',
                             isAvailable
-                              ? 'text-[var(--color-success,#16a34a)]'
+                              ? 'text-[var(--color-success)]'
                               : 'text-[var(--color-muted-foreground)]',
                           )}
                         >

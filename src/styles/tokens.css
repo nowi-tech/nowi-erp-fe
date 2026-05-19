@@ -1,47 +1,52 @@
-/* Design tokens — NOWI ERP
-   Palette mirrors the Claude Design "Stitching" handoff 1:1.
-   Token names = the design's `C.xxx` names so reading the JSX matches
-   reading the handoff. No derived tokens; if you need a shade not listed
-   here, write the hex inline.
+/* Design tokens — NOWI ERP — SINGLE design system for the whole app.
 
-   Stage accents on admin keep their differentiation (cobalt / vermilion /
-   marigold); the floor app uses --color-primary everywhere. */
+   One palette everywhere. The floor app's blue/semantic theme is the global
+   theme; the admin per-stage colour differentiation (cobalt / vermilion /
+   marigold) has been retired — every stage token now resolves to the brand
+   primary so admin and floor look identical.
+
+   Surface/background ramp follows DESIGN.md ("Industrial Precision"):
+   cool light-grey canvas (#f7f9fb) with pure-white raised cards. Primary,
+   semantic status colours, fonts, radii and elevation keep the floor theme.
+
+   Token names are stable contracts — 18+ files reference these. Recolour by
+   editing values here; don't add derived tokens or inline hex in JSX. */
 :root {
-  /* ── Surfaces (design `C.bg` / `C.bgRaised` / `C.bgChip`) ── */
-  --color-background: #f4f3ee;     /* warm canvas (`C.bg`) — cards float on this */
-  --color-background-2: #e9e7e0;   /* slightly darker (android frame in design) */
-  --color-surface: #ffffff;        /* cards / sheets (`C.bgRaised`) */
-  --color-surface-2: #faf9f5;      /* table head, subtle row alt */
+  /* ── Surfaces (DESIGN.md surface ramp) ── */
+  --color-background: #f7f9fb;     /* cool canvas (DESIGN `background`/`surface`) */
+  --color-background-2: #eceef0;   /* darker frame (DESIGN `surface-container`) */
+  --color-surface: #ffffff;        /* cards / sheets (DESIGN `surface-container-lowest`) */
+  --color-surface-2: #f2f4f6;      /* table head, subtle row alt (DESIGN `surface-container-low`) */
 
-  /* ── Ink (design `C.ink` / `C.ink2` / `C.muted`) ── */
+  /* ── Ink ── */
   --color-foreground: #0e1730;     /* primary text */
   --color-foreground-2: #3a4358;   /* secondary text */
-  --color-foreground-3: #4d5670;   /* admin nav (legacy — not in floor design) */
-  --color-muted: #f1efe8;          /* chip / step btn bg (`C.bgChip`) */
+  --color-foreground-3: #3a4358;   /* (was admin-nav legacy — unified to ink-2) */
+  --color-muted: #f2f4f6;          /* chip / step btn bg */
   --color-muted-foreground: #71788b;
-  --color-muted-foreground-2: #cbd0d8;  /* separator dot color (design uses #cbd0d8 inline) */
-  --color-border: #e6e6e0;         /* hairline (`C.hairline`) */
-  --color-border-strong: #d0cec5;
-  --color-input: #d6d4cb;
+  --color-muted-foreground-2: #cbd0d8;  /* separator dot color */
+  --color-border: #e2e8f0;         /* hairline (DESIGN card border) */
+  --color-border-strong: #c3c6d7;  /* DESIGN `outline-variant` */
+  --color-input: #c3c6d7;
   --color-ring: #2240c4;
 
-  /* ── Primary — brand blue (design `C.accent`) ── */
+  /* ── Primary — brand blue (floor theme `C.accent`) ── */
   --color-primary: #2240c4;
   --color-primary-foreground: #ffffff;
-  --color-primary-hover: #1a2f96;       /* design `C.accentDeep` (pressed) */
-  --color-primary-soft: #eef1ff;        /* design `C.accentSoft` */
+  --color-primary-hover: #1a2f96;       /* pressed */
+  --color-primary-soft: #eef1ff;
 
   /* Accent — secondary brand chips / occasional callouts (kept marigold) */
   --color-accent: #c79224;
   --color-accent-foreground: #0e1730;
 
-  --color-secondary: #e9e7e0;
+  --color-secondary: #eceef0;
   --color-secondary-foreground: #0e1730;
 
-  /* ── Semantic status colors ── */
-  --color-destructive: #dc2626;         /* design `C.danger` */
-  --color-destructive-bg: #fdecec;      /* design `C.dangerSoft` */
-  --color-destructive-strong: #a8201d;  /* design `C.dangerDeep` (pressed) */
+  /* ── Semantic status colors (floor theme) ── */
+  --color-destructive: #dc2626;
+  --color-destructive-bg: #fdecec;
+  --color-destructive-strong: #a8201d;  /* pressed */
   --color-destructive-foreground: #ffffff;
   --color-success: #5d8a5f;
   --color-success-bg: #dfe9da;
@@ -51,29 +56,32 @@
   --color-info-bg: #dbe5ed;
 
   /* Disabled */
-  --color-disabled-bg: #d3d1c8;
+  --color-disabled-bg: #d8dadc;     /* DESIGN `surface-dim` */
   --color-disabled-foreground: #ffffff;
 
-  /* ── Stage tokens ──
-     The floor app uses --color-primary directly; these stay for admin
-     screens that still benefit from cobalt / vermilion / marigold
-     differentiation. Stitching accent is bumped to match the new primary. */
-  --stage-stitch-acc: #2240c4;     /* match primary */
+  /* ── Stage tokens — UNIFIED ──
+     Previously cobalt / vermilion / marigold per stage on admin. The app now
+     uses one design system: every stage resolves to the brand primary, so
+     admin screens render the same as the floor app. Names kept so the 18+
+     consuming files need no edits. */
+  --stage-stitch-acc: #2240c4;
   --stage-stitch-ink: #1a2f96;
   --stage-stitch-bg:  #eef1ff;
   --stage-stitch-bd:  #b3c0e2;
 
-  --stage-finish-acc: #c4452e;     /* vermilion */
-  --stage-finish-ink: #7e2818;
-  --stage-finish-bg:  #f8dad0;
-  --stage-finish-bd:  #ecb29f;
+  --stage-finish-acc: #2240c4;
+  --stage-finish-ink: #1a2f96;
+  --stage-finish-bg:  #eef1ff;
+  --stage-finish-bd:  #b3c0e2;
 
-  --stage-disp-acc:   #c79224;     /* marigold */
-  --stage-disp-ink:   #7e5a10;
-  --stage-disp-bg:    #f6e6c0;
-  --stage-disp-bd:    #e5c884;
+  --stage-disp-acc:   #2240c4;
+  --stage-disp-ink:   #1a2f96;
+  --stage-disp-bg:    #eef1ff;
+  --stage-disp-bd:    #b3c0e2;
 
-  /* Anomaly / state tokens (re-using the semantic palette under stage-style names) */
+  /* Anomaly / state tokens — these encode operational *status* (ready /
+     rework / stuck / transit), not stage identity, so they keep their
+     semantic differentiation. */
   --status-ready-acc:   #5d8a5f;
   --status-ready-bg:    #dfe9da;
   --status-ready-ink:   #355a37;
@@ -92,12 +100,12 @@
   --font-hi:    'Noto Sans Devanagari', 'Plus Jakarta Sans', system-ui, sans-serif;
   --font-mono:  'JetBrains Mono', ui-monospace, SFMono-Regular, monospace;
 
-  /* ── Elevation (rgba uses design ink #0e1730 = 14,23,48) ── */
+  /* ── Elevation (rgba uses ink #0e1730 = 14,23,48) ── */
   --shadow-card: 0 1px 2px rgba(14, 23, 48, 0.04);
   --shadow-pop:  0 12px 32px -16px rgba(14, 23, 48, 0.18), 0 1px 0 rgba(14, 23, 48, 0.04);
 
   /* ── Radii ── */
   --radius-sm: 0.25rem;       /* 4px */
-  --radius-md: 0.625rem;      /* 10px — matches design inputs/buttons */
-  --radius-lg: 0.875rem;      /* 14px — matches design cards */
+  --radius-md: 0.625rem;      /* 10px — inputs/buttons */
+  --radius-lg: 0.875rem;      /* 14px — cards */
 }

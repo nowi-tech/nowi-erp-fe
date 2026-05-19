@@ -13,18 +13,18 @@ const buttonVariants = cva(
         // Primary: blue gradient + inset highlight + tinted blue shadow
         // (matches design `C.accent` → `C.accentDeep`).
         default:
-          'text-white bg-gradient-to-b from-[#2240c4] to-[#1a2f96] shadow-[inset_0_1px_0_rgba(255,255,255,0.18),0_0_0_1px_#1a2f96,0_4px_12px_rgba(34,64,196,0.28)]',
+          'text-white bg-gradient-to-b from-[var(--color-primary)] to-[var(--color-primary-hover)] shadow-[inset_0_1px_0_rgba(255,255,255,0.18),0_0_0_1px_#1a2f96,0_4px_12px_rgba(34,64,196,0.28)]',
         // Destructive: red gradient (design `C.danger` → `C.dangerDeep`).
         destructive:
-          'text-white bg-gradient-to-b from-[#dc2626] to-[#a8201d] shadow-[inset_0_1px_0_rgba(255,255,255,0.2),0_0_0_1px_#a8201d,0_4px_12px_rgba(220,38,38,0.32)]',
+          'text-white bg-gradient-to-b from-[var(--color-destructive)] to-[var(--color-destructive-strong)] shadow-[inset_0_1px_0_rgba(255,255,255,0.2),0_0_0_1px_#a8201d,0_4px_12px_rgba(220,38,38,0.32)]',
         // Ghost-y outline with hairline border + subtle hover.
         outline:
-          'border border-[#e6e6e0] bg-white text-[#0e1730] shadow-[0_1px_1px_rgba(14,23,48,0.03)] hover:bg-[#f1efe8]',
+          'border border-[var(--color-border)] bg-[var(--color-surface)] text-[var(--color-foreground)] shadow-[0_1px_1px_rgba(14,23,48,0.03)] hover:bg-[var(--color-muted)]',
         secondary:
-          'bg-[#f1efe8] text-[#0e1730] hover:bg-[#e7e5dc]',
+          'bg-[var(--color-muted)] text-[var(--color-foreground)] hover:bg-[var(--color-secondary)]',
         ghost:
-          'text-[#0e1730] hover:bg-[#f1efe8]',
-        link: 'text-[#2240c4] underline-offset-4 hover:underline',
+          'text-[var(--color-foreground)] hover:bg-[var(--color-muted)]',
+        link: 'text-[var(--color-primary)] underline-offset-4 hover:underline',
       },
       size: {
         default: 'h-11 px-4 py-2 text-[15px]',   // 44px tap target
