@@ -32,33 +32,13 @@ body.lang-hi,
 }
 
 @supports (padding: env(safe-area-inset-top)) {
-  /* Push the whole app clear of the status bar and gesture bar. */
+  /* Only pad the TOP for the status bar. body's own background fills
+     that strip, so no opaque cover is needed (a cover would paint over
+     fixed modals/drawers). Bottom is intentionally NOT padded — the
+     bottom nav already self-insets with pb-[env(safe-area-inset-bottom)],
+     and padding the body too would double-space it. Left/right insets
+     are 0 in portrait, the only orientation this app runs in. */
   html.native-app body {
     padding-top: var(--safe-area-inset-top);
-    padding-bottom: var(--safe-area-inset-bottom);
-    padding-left: var(--safe-area-inset-left);
-    padding-right: var(--safe-area-inset-right);
-    box-sizing: border-box;
-  }
-
-  /* Opaque strips so any position:fixed element (sticky headers,
-     toasts) can't bleed into the status / gesture bar areas. */
-  html.native-app body::before,
-  html.native-app body::after {
-    content: '';
-    position: fixed;
-    left: 0;
-    right: 0;
-    background: var(--color-background);
-    z-index: 2147483647;
-    pointer-events: none;
-  }
-  html.native-app body::before {
-    top: 0;
-    height: var(--safe-area-inset-top);
-  }
-  html.native-app body::after {
-    bottom: 0;
-    height: var(--safe-area-inset-bottom);
   }
 }

@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Link, NavLink, Outlet, useLocation } from 'react-router-dom';
+import { RefreshButton } from '@/components/RefreshButton';
 import {
   LayoutDashboard,
   Users,
@@ -66,7 +67,16 @@ const NAV_ITEMS: NavItem[] = [
 const TEST_DATA_KEY = 'nowi.showTestData';
 const PRIMARY_BOTTOM_COUNT = 3;
 
+// Test-data visibility is a dev/training affordance only. The prod build
+// never renders the toggle (and the API ignores the header in production
+// regardless). `import.meta.env.PROD` is a build-time constant, so this
+// early return is evaluated before any hooks — Rules of Hooks safe.
 function TrainingModeToggle() {
+  if (import.meta.env.PROD) return null;
+  return <TrainingModeToggleInner />;
+}
+
+function TrainingModeToggleInner() {
   const { t } = useTranslation();
   const toast = useToast();
   const [on, setOn] = useState<boolean>(
@@ -206,6 +216,10 @@ export default function AdminShell() {
               <Logo size="md" />
             </Link>
             <div className="flex items-center gap-1">
+              <RefreshButton
+                size={18}
+                className="p-2 rounded-[var(--radius-sm)] hover:bg-[var(--color-muted)] text-[var(--color-muted-foreground)]"
+              />
               <LanguageToggle />
               <button
                 type="button"
@@ -229,6 +243,10 @@ export default function AdminShell() {
             </div>
             <div className="flex items-center gap-3">
               {role === 'admin' && <TrainingModeToggle />}
+              <RefreshButton
+                size={16}
+                className="flex items-center gap-1 px-2 py-1 rounded-[var(--radius-sm)] hover:bg-[var(--color-muted)] text-sm text-[var(--color-muted-foreground)]"
+              />
               <LanguageToggle />
               <span className="text-sm text-[var(--color-muted-foreground)] max-w-[14ch] truncate">
                 {user?.name}

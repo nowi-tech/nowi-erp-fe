@@ -36,6 +36,12 @@ const config: CapacitorConfig = {
       style: 'LIGHT',
       backgroundColor: '#ffffff',
     },
+    Keyboard: {
+      // Resize the WebView body when the soft keyboard opens so input
+      // fields aren't hidden behind it — critical for data entry.
+      resize: 'body',
+      resizeOnFullScreen: true,
+    },
   },
 };
 

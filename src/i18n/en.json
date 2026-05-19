@@ -2,6 +2,9 @@
   "common": {
     "appName": "NOWI ERP",
     "loading": "Loading…",
+    "pullToRefresh": "Pull to refresh",
+    "releaseToRefresh": "Release to refresh",
+    "refreshing": "Refreshing…",
     "save": "Save",
     "cancel": "Cancel",
     "confirm": "Confirm",

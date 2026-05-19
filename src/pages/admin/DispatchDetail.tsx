@@ -11,7 +11,12 @@ import { Textarea } from '@/components/ui/textarea';
 import { Dialog } from '@/components/ui/dialog';
 import { useToast } from '@/components/ui/toast';
 import { useAuth } from '@/context/auth';
-import { editItemQty, getDispatch, retrySync } from '@/api/dispatches';
+import {
+  downloadDispatchChallan,
+  editItemQty,
+  getDispatch,
+  retrySync,
+} from '@/api/dispatches';
 import { FeatureUnavailableError } from '@/api/_errors';
 import { dispatchStatusVariant } from '@/lib/statusBadge';
 import type { DispatchDetail as DispatchDetailT, DispatchItem } from '@/api/types';
@@ -53,6 +58,7 @@ export default function DispatchDetail() {
   const [data, setData] = useState<DispatchDetailT | null>(null);
   const [loading, setLoading] = useState(true);
   const [retrying, setRetrying] = useState(false);
+  const [downloading, setDownloading] = useState(false);
   const [edit, setEdit] = useState<EditState>(INITIAL_EDIT);
   const cancelRef = useRef<HTMLButtonElement>(null);
 
@@ -94,6 +100,22 @@ export default function DispatchDetail() {
       }
     } finally {
       setRetrying(false);
+    }
+  }
+
+  async function handleDownload() {
+    if (!data) return;
+    setDownloading(true);
+    try {
+      await downloadDispatchChallan(String(data.id), data.dispatchNo);
+    } catch (err) {
+      if (err instanceof FeatureUnavailableError) {
+        toast.show(t('common.featureUnavailable'), 'info');
+      } else {
+        toast.show(t('common.error'), 'error');
+      }
+    } finally {
+      setDownloading(false);
     }
   }
 
@@ -186,6 +208,18 @@ export default function DispatchDetail() {
                   {t('admin.dispatchDetail.printChallan', {
                     defaultValue: 'Print challan',
                   })}
+                </Button>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => void handleDownload()}
+                  disabled={downloading}
+                >
+                  {downloading
+                    ? t('common.loading', { defaultValue: 'Loading…' })
+                    : t('admin.dispatchDetail.downloadChallan', {
+                        defaultValue: 'Download PDF',
+                      })}
                 </Button>
               </CardTitle>
             </CardHeader>

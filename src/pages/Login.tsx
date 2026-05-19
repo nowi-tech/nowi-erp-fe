@@ -234,8 +234,8 @@ async function handleSendOtp(e: FormEvent) {
 
   return (
     <div className="min-h-screen grid grid-cols-1 lg:grid-cols-[1.1fr_1fr] bg-[var(--color-background)]">
-      {/* Brand panel — full bleed on desktop, compact logo strip on mobile */}
-      <div className="relative overflow-hidden border-b border-white/10 bg-[var(--color-primary)] text-[var(--color-primary-foreground)] lg:border-b-0">
+      {/* Brand panel — desktop only; mobile gets a clean centered card */}
+      <div className="relative hidden overflow-hidden border-b border-white/10 bg-[var(--color-primary)] text-[var(--color-primary-foreground)] lg:block lg:border-b-0">
         {/* Decorative blurs only on desktop — keep mobile clean */}
         <div
           aria-hidden
@@ -266,13 +266,19 @@ async function handleSendOtp(e: FormEvent) {
         </div>
       </div>
 
-      {/* Form panel */}
-      <div className="relative flex items-center justify-center px-5 py-10 lg:py-0">
+      {/* Form panel — full-height, vertically centered on mobile */}
+      <div className="relative flex min-h-screen items-center justify-center px-5 py-10 lg:min-h-0 lg:py-0">
         <div className="absolute top-4 right-4">
           <LanguageToggle />
         </div>
         <div className="w-full max-w-sm">
-          <div className="mb-8">
+          {/* Mobile-only brand mark (the side panel is hidden on mobile) */}
+          <div className="mb-8 flex justify-center lg:hidden">
+            <div className="inline-flex items-center rounded-2xl bg-white/95 px-5 py-3 shadow-lg ring-1 ring-black/5">
+              <Logo size="lg" />
+            </div>
+          </div>
+          <div className="mb-8 hidden lg:block">
             <h1 className="font-serif text-3xl text-[var(--color-foreground)]">
               {t("auth.title")}
             </h1>

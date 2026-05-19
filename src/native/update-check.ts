@@ -94,13 +94,13 @@ export async function checkForUpdate(): Promise<void> {
       (forced ? '\n\nThis update is required to continue.' : '');
 
     if (forced) {
-      // Block until they go install it. Re-prompt if they back out.
-      // eslint-disable-next-line no-constant-condition
-      while (true) {
-        await Dialog.alert({ title: 'Update required', message: body, buttonTitle: 'Update now' });
-        await Browser.open({ url: apkUrl });
-        break;
-      }
+      // Single non-dismissable prompt → straight to the install page.
+      await Dialog.alert({
+        title: 'Update required',
+        message: body,
+        buttonTitle: 'Update now',
+      });
+      await Browser.open({ url: apkUrl });
       return;
     }
 

@@ -6,12 +6,15 @@ import './index.css';
 import './i18n';
 import App from './App';
 import { initNativeShell, markNativeApp } from './native/capacitor-init';
+import { initNativeFeatures } from './native/native-features';
 import { checkForUpdate } from './native/update-check';
 
 // Must run synchronously BEFORE first paint so the safe-area CSS engages.
 markNativeApp();
 // Configure the native shell (status bar, splash) on the APK; no-op on web.
 void initNativeShell();
+// Back button, offline banner, resume handling; no-op on web.
+void initNativeFeatures();
 // Update check: defer past the splash so the Capacitor bridge is fully
 // injected on the remote-loaded page before the first plugin call.
 setTimeout(() => {
