@@ -19,6 +19,17 @@ const config: CapacitorConfig = {
     url: 'https://erp.nowi.fashion',
     androidScheme: 'https',
   },
+  plugins: {
+    SplashScreen: {
+      // White splash with the centered NOWI logo (res/drawable*/splash.png).
+      // Auto-hides; initNativeShell() also hides it once the web app loads.
+      launchShowDuration: 3000,
+      launchAutoHide: true,
+      backgroundColor: '#ffffff',
+      androidScaleType: 'CENTER_INSIDE',
+      showSpinner: false,
+    },
+  },
 };
 
 export default config;
