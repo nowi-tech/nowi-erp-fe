@@ -1,8 +1,28 @@
 apply plugin: 'com.android.application'
 
+// Release signing: read from android/keystore.properties when present
+// (gitignored, never committed). Absent → release falls back to debug
+// signing so anyone can still produce an installable build.
+def keystorePropsFile = rootProject.file("keystore.properties")
+def hasReleaseKeystore = keystorePropsFile.exists()
+def keystoreProps = new Properties()
+if (hasReleaseKeystore) {
+    keystoreProps.load(new FileInputStream(keystorePropsFile))
+}
+
 android {
     namespace = "fashion.nowi.erp"
     compileSdk = rootProject.ext.compileSdkVersion
+    signingConfigs {
+        release {
+            if (hasReleaseKeystore) {
+                storeFile rootProject.file(keystoreProps['storeFile'])
+                storePassword keystoreProps['storePassword']
+                keyAlias keystoreProps['keyAlias']
+                keyPassword keystoreProps['keyPassword']
+            }
+        }
+    }
     defaultConfig {
         applicationId "fashion.nowi.erp"
         minSdkVersion rootProject.ext.minSdkVersion
@@ -20,6 +40,7 @@ android {
         release {
             minifyEnabled false
             proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.pro'
+            signingConfig hasReleaseKeystore ? signingConfigs.release : signingConfigs.debug
         }
     }
 }
