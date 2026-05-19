@@ -3,26 +3,40 @@ import { StatusBar, Style } from '@capacitor/status-bar';
 import { SplashScreen } from '@capacitor/splash-screen';
 
 /**
- * Native shell setup (Capacitor APK only). No-op on the plain website.
+ * Adds `native-app` (+ platform) to <html> so the APK-only safe-area CSS
+ * in index.css engages, while the plain website stays untouched.
  *
- * Fixes the status-bar overlap: `overlay: false` makes the WebView start
- * BELOW the Android status bar instead of drawing under it, so the app's
- * top bar is never covered. Status bar is painted with the brand slate
- * so it blends with the app chrome.
+ * MUST run synchronously before first paint — call it at the very top of
+ * main.tsx, not inside the async init below.
+ */
+export function markNativeApp(): void {
+  if (!Capacitor.isNativePlatform()) return;
+  const el = document.documentElement;
+  el.classList.add('native-app');
+  el.classList.add(Capacitor.getPlatform()); // 'android' | 'ios'
+}
+
+/**
+ * Native shell setup (Capacitor APK only). No-op on the website.
+ *
+ * On targetSdk 36 the app is edge-to-edge regardless, so we do NOT use
+ * `setOverlaysWebView` (no-op) — the visual fix is the safe-area CSS.
+ * Here we only set status-bar icon contrast + colour and drop the splash.
  */
 export async function initNativeShell(): Promise<void> {
   if (!Capacitor.isNativePlatform()) return;
 
   try {
-    await StatusBar.setOverlaysWebView({ overlay: false });
-    await StatusBar.setBackgroundColor({ color: '#0f172a' });
-    await StatusBar.setStyle({ style: Style.Dark }); // light icons on dark bar
+    // Light style = dark icons, legible on the light ERP background.
+    await StatusBar.setStyle({ style: Style.Light });
+    if (Capacitor.getPlatform() === 'android') {
+      await StatusBar.setBackgroundColor({ color: '#ffffff' });
+    }
   } catch {
-    // StatusBar unavailable (e.g. older webview) — non-fatal.
+    /* StatusBar unavailable on this build — non-fatal. */
   }
 
   try {
-    // Web app is up by the time this runs; drop the splash.
     await SplashScreen.hide();
   } catch {
     /* no-op */

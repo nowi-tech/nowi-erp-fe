@@ -29,6 +29,13 @@ const config: CapacitorConfig = {
       androidScaleType: 'CENTER_INSIDE',
       showSpinner: false,
     },
+    StatusBar: {
+      // Edge-to-edge (Android 15). Light = dark icons on the light app
+      // background; the safe-area CSS in index.css handles the inset.
+      overlaysWebView: true,
+      style: 'LIGHT',
+      backgroundColor: '#ffffff',
+    },
   },
 };
 
