@@ -7,6 +7,22 @@ export interface UploadUrlPayload {
   contentType?: string;
 }
 
+/**
+ * Resolve GCS object paths to short-lived signed read URLs. In noop
+ * dev mode the BE returns `noop://…` strings — callers should treat
+ * any non-http(s) value as "no displayable image".
+ */
+export async function getReadUrls(
+  objectPaths: string[],
+): Promise<Record<string, string>> {
+  if (objectPaths.length === 0) return {};
+  const res = await apiClient.post<{ urls: Record<string, string> }>(
+    '/api/storage/read-urls',
+    { objectPaths },
+  );
+  return res.data.urls;
+}
+
 export async function requestUploadUrl(payload: UploadUrlPayload): Promise<UploadUrlResponse> {
   const res = await apiClient.post<UploadUrlResponse>('/api/storage/upload-url', payload);
   return res.data;

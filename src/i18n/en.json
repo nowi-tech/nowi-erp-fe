@@ -81,7 +81,8 @@
     "stitching_master": "Stitching",
     "finishing_master": "Finishing",
     "data_manager": "Data",
-    "viewer": "Viewer"
+    "viewer": "Viewer",
+    "sampling_editor": "Sampling"
   },
   "floor": {
     "title": "Floor",
@@ -291,7 +292,9 @@
       "editRequests": "Edit requests",
       "floor": "Floor",
       "stitching": "Stitching",
-      "finishing": "Finishing"
+      "finishing": "Finishing",
+      "articles": "Article Dashboard",
+      "articlesList": "Article Tracker"
     },
     "editRequests": {
       "title": "Edit requests",

@@ -40,6 +40,8 @@ const DataHome = lazy(() => import('./pages/data/DataHome'));
 const UsersPage = lazy(() => import('./pages/admin/Users'));
 const EditRequestsPage = lazy(() => import('./pages/admin/EditRequests'));
 const DispatchPrint = lazy(() => import('./pages/dispatches/DispatchPrint'));
+const ArticlesSummary = lazy(() => import('./pages/articles/ArticlesSummary'));
+const ArticlesList = lazy(() => import('./pages/articles/ArticlesList'));
 
 function PageSkeleton() {
   return (
@@ -302,6 +304,37 @@ function App() {
                 element={
                   <S>
                     <DataHome />
+                  </S>
+                }
+              />
+            </Route>
+
+            {/* New Article Development (Kotty sampling tracker).
+                Dedicated sampling_editor role + admin; viewer read path
+                handled by the BE role guard. */}
+            <Route
+              path="/articles"
+              element={
+                <ProtectedRoute allowedRoles={['sampling_editor', 'admin', 'viewer']}>
+                  <S>
+                    <AdminShell />
+                  </S>
+                </ProtectedRoute>
+              }
+            >
+              <Route
+                index
+                element={
+                  <S>
+                    <ArticlesSummary />
+                  </S>
+                }
+              />
+              <Route
+                path="list"
+                element={
+                  <S>
+                    <ArticlesList />
                   </S>
                 }
               />

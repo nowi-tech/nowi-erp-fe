@@ -6,7 +6,8 @@ export type UserRole =
   | 'stitching_master'
   | 'finishing_master'
   | 'data_manager'
-  | 'viewer';
+  | 'viewer'
+  | 'sampling_editor';
 
 export interface User {
   id: string;

@@ -13,6 +13,7 @@ import {
   Boxes,
   Scissors,
   Sparkles,
+  Shirt,
   MoreHorizontal,
   X,
 } from 'lucide-react';
@@ -56,6 +57,9 @@ const NAV_ITEMS: NavItem[] = [
   { to: '/stitching', icon: <Scissors size={20} />, labelKey: 'admin.nav.stitching', roles: ['admin'], stage: 'stitch' },
   { to: '/finishing', icon: <Sparkles size={20} />, labelKey: 'admin.nav.finishing', roles: ['admin'], stage: 'finish' },
   { to: '/data', icon: <Database size={20} />, labelKey: 'admin.nav.masterData', roles: ['data_manager'], stage: 'ink' },
+  // New Article Development (Kotty sampling tracker).
+  { to: '/articles', end: true, icon: <LayoutDashboard size={20} />, labelKey: 'admin.nav.articles', roles: ['sampling_editor', 'admin'], stage: 'ink' },
+  { to: '/articles/list', icon: <Shirt size={20} />, labelKey: 'admin.nav.articlesList', roles: ['sampling_editor', 'admin'], stage: 'stitch' },
   { to: '/admin/users', icon: <Users size={20} />, labelKey: 'admin.nav.users', roles: ['admin'], stage: 'ink' },
   // TODO: build — surface once admin Vendors / SKUs / Settings pages exist.
   // { to: '/admin/vendors', icon: <Truck size={20} />, labelKey: 'admin.nav.vendors', roles: ['admin', 'viewer', 'data_manager'] },
@@ -129,7 +133,12 @@ export default function AdminShell() {
   const visibleNav = NAV_ITEMS.filter((it) =>
     role ? it.roles.includes(role) : false,
   );
-  const homePath = role === 'data_manager' ? '/data' : '/admin';
+  const homePath =
+    role === 'data_manager'
+      ? '/data'
+      : role === 'sampling_editor'
+        ? '/articles'
+        : '/admin';
 
   const primary = visibleNav.slice(0, PRIMARY_BOTTOM_COUNT);
   const overflow = visibleNav.slice(PRIMARY_BOTTOM_COUNT);

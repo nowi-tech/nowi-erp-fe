@@ -9,6 +9,7 @@ const ROLE_HOMES: Record<UserRole, string> = {
   finishing_master: '/finishing',
   data_manager: '/data',
   viewer: '/admin',
+  sampling_editor: '/articles',
 };
 
 // Legacy roles still present in dev DB → fall through to admin so the user lands somewhere usable.
