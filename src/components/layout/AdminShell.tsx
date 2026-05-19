@@ -166,16 +166,43 @@ export default function AdminShell() {
           collapsed ? 'w-16' : 'w-60',
         )}
       >
-        <Link
-          to={homePath}
-          aria-label={t('common.appName')}
+        <div
           className={cn(
-            'border-b border-[var(--color-border)] flex items-center hover:bg-[var(--color-muted)] transition-colors',
-            collapsed ? 'justify-center px-2 py-5' : 'px-5 py-5',
+            'border-b border-[var(--color-border)] flex items-center h-14 shrink-0',
+            collapsed ? 'justify-center px-2' : 'justify-between px-4',
           )}
         >
-          <Logo size={collapsed ? 'sm' : 'md'} />
-        </Link>
+          {!collapsed && (
+            <Link
+              to={homePath}
+              aria-label={t('common.appName')}
+              className="rounded-[var(--radius-sm)] hover:opacity-80 transition-opacity"
+            >
+              <Logo size="md" />
+            </Link>
+          )}
+          <button
+            type="button"
+            onClick={() => setCollapsed((v) => !v)}
+            aria-label={
+              collapsed
+                ? t('common.expandSidebar')
+                : t('common.collapseSidebar')
+            }
+            title={
+              collapsed
+                ? t('common.expandSidebar')
+                : t('common.collapseSidebar')
+            }
+            className="p-2 rounded-[var(--radius-sm)] text-[var(--color-muted-foreground)] hover:bg-[var(--color-muted)] hover:text-[var(--color-foreground)] transition-colors"
+          >
+            {collapsed ? (
+              <PanelLeft size={18} />
+            ) : (
+              <PanelLeftClose size={18} />
+            )}
+          </button>
+        </div>
         <nav className="flex-1 p-3 space-y-1">
           {visibleNav.map((item) => {
             const stage: NavStage = item.stage ?? 'ink';
@@ -220,35 +247,8 @@ export default function AdminShell() {
             );
           })}
         </nav>
-        <button
-          type="button"
-          onClick={() => setCollapsed((v) => !v)}
-          aria-label={
-            collapsed
-              ? t('common.expandSidebar')
-              : t('common.collapseSidebar')
-          }
-          title={
-            collapsed
-              ? t('common.expandSidebar')
-              : t('common.collapseSidebar')
-          }
-          className={cn(
-            'flex items-center gap-2 border-t border-[var(--color-border)] px-4 py-3 text-xs text-[var(--color-muted-foreground)] hover:bg-[var(--color-muted)] hover:text-[var(--color-foreground)] transition-colors',
-            collapsed && 'justify-center px-0',
-          )}
-        >
-          {collapsed ? (
-            <PanelLeft size={18} />
-          ) : (
-            <>
-              <PanelLeftClose size={18} />
-              <span>{t('common.collapseSidebar')}</span>
-            </>
-          )}
-        </button>
         {!collapsed && (
-          <div className="p-3 border-t border-[var(--color-border)] text-xs text-[var(--color-muted-foreground)]">
+          <div className="p-3 border-t border-[var(--color-border)] text-xs text-[var(--color-muted-foreground)] truncate">
             {user?.name} · {user && t(`roles.${user.role}` as const)}
           </div>
         )}
