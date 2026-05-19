@@ -32,13 +32,29 @@ body.lang-hi,
 }
 
 @supports (padding: env(safe-area-inset-top)) {
-  /* Only pad the TOP for the status bar. body's own background fills
-     that strip, so no opaque cover is needed (a cover would paint over
-     fixed modals/drawers). Bottom is intentionally NOT padded — the
-     bottom nav already self-insets with pb-[env(safe-area-inset-bottom)],
-     and padding the body too would double-space it. Left/right insets
-     are 0 in portrait, the only orientation this app runs in. */
+  /* padding-top keeps the FIRST screenful (and the header's tappable
+     controls) below the status bar. But once you scroll, a sticky/fixed
+     header re-pins to the scrollport top (y=0, under the status bar) —
+     padding can't prevent that. So an opaque strip masks the status-bar
+     band on scroll.
+
+     z-index 35: ABOVE app chrome (AdminShell header z-20, bottom nav
+     z-30) so it masks them on scroll, but BELOW modals/drawers (z-40+)
+     so it never paints a band over a dialog. Bottom is intentionally
+     left alone — the bottom nav already self-insets, padding/covering
+     it too would double-space. */
   html.native-app body {
     padding-top: var(--safe-area-inset-top);
+  }
+  html.native-app body::before {
+    content: '';
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: var(--safe-area-inset-top);
+    background: var(--color-background);
+    z-index: 35;
+    pointer-events: none;
   }
 }

@@ -5,7 +5,7 @@ import { reactErrorHandler } from '@sentry/react';
 import './index.css';
 import './i18n';
 import App from './App';
-import { initNativeShell, markNativeApp } from './native/capacitor-init';
+import { initNativeShell, markNativeApp, hideSplash } from './native/capacitor-init';
 import { initNativeFeatures } from './native/native-features';
 import { checkForUpdate } from './native/update-check';
 
@@ -33,3 +33,15 @@ createRoot(rootEl, {
     <App />
   </StrictMode>,
 );
+
+// Hide the native splash only AFTER the app has painted (two frames),
+// so there's never a blank flash between splash and first render. Hard
+// fallback at 12s so a hung/offline load can't strand the splash.
+requestAnimationFrame(() =>
+  requestAnimationFrame(() => {
+    void hideSplash();
+  }),
+);
+setTimeout(() => {
+  void hideSplash();
+}, 12000);

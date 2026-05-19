@@ -36,6 +36,17 @@ export async function initNativeShell(): Promise<void> {
     /* StatusBar unavailable on this build — non-fatal. */
   }
 
+  // NOTE: splash is hidden separately by hideSplash(), called after the
+  // app has actually painted — hiding here (module-load) would briefly
+  // flash blank before React mounts.
+}
+
+let splashHidden = false;
+
+/** Hide the native splash once — after first paint. Safe to call twice. */
+export async function hideSplash(): Promise<void> {
+  if (splashHidden || !Capacitor.isNativePlatform()) return;
+  splashHidden = true;
   try {
     await SplashScreen.hide();
   } catch {
