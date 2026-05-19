@@ -1,0 +1,24 @@
+#!/usr/bin/env sh
+# Block signing/credential files from ever being committed.
+# Activate once per clone:  git config core.hooksPath scripts/git-hooks
+set -e
+
+staged=$(git diff --cached --name-only --diff-filter=ACM)
+[ -z "$staged" ] && exit 0
+
+bad=$(printf '%s\n' "$staged" | grep -E '(\.jks$|\.keystore$|(^|/)keystore\.properties$)' || true)
+if [ -n "$bad" ]; then
+  echo "✗ commit blocked — signing/secret files staged:" >&2
+  echo "$bad" >&2
+  echo "  The release keystore lives only in Secret Manager + gitignored locally." >&2
+  exit 1
+fi
+
+for f in $staged; do
+  [ -f "$f" ] || continue
+  if git show ":$f" 2>/dev/null | grep -q '"private_key": *"-----BEGIN'; then
+    echo "✗ commit blocked — $f looks like a GCP service-account key." >&2
+    exit 1
+  fi
+done
+exit 0

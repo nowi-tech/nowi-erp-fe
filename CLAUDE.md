@@ -4,6 +4,21 @@ React 19 + Vite 7 SPA. Tailwind CSS 4 for styles, Axios for HTTP, React Router 7
 
 For the full reference, see `DOCUMENTATION.md` in this folder and the system-wide `../DOCUMENTATION.md`.
 
+> ⚠️ Parts of this file below describe the **pre-revamp plain-JS app** and are stale. The live code is TypeScript (`src/*.tsx`, `@/` alias, opaque sessions). Trust the code + the workspace-root `../CLAUDE.md` over the stale sections here.
+
+## Releasing the Android APK
+
+The app is a Capacitor thin shell over `erp.nowi.fashion`, distributed as a public GCS link (no Play Store). To ship a new APK version:
+
+```bash
+./scripts/release-apk.sh <versionName> "release notes"
+# e.g.  ./scripts/release-apk.sh 1.3 "Faster dispatch screen"
+```
+
+This bumps `versionCode` (auto) + `versionName` in `android/app/build.gradle`, builds the signed APK, uploads it to the **stable** link `https://storage.googleapis.com/nowi-erp-apk/nowi-erp.apk`, and updates `latest.json` so installed apps prompt to update on next launch. Then **commit the build.gradle bump and deploy the FE to Vercel** — the in-app update prompt + status-bar fix run from the deployed bundle, not the freshly built APK. Signing keystore is gitignored locally and backed up in Secret Manager (`ANDROID_KEYSTORE_*`, project `nowi-erp-496406`); losing it forces every user to reinstall. Native shell code lives in `src/native/`.
+
+Git hooks (activate once: `git config core.hooksPath scripts/git-hooks`) block committing signing/credential files and gate pushes to `main` on a clean build.
+
 ## Layout in one glance
 
 ```

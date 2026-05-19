@@ -1,0 +1,30 @@
+#!/usr/bin/env sh
+# On push to main/master: warn if the APK version is out of sync with the
+# published manifest, then gate the push on a clean build.
+set -e
+
+gate=0
+while read -r _l _ls remote_ref _rs; do
+  case "$remote_ref" in
+    refs/heads/main|refs/heads/master) gate=1 ;;
+  esac
+done
+[ "$gate" -eq 1 ] || exit 0
+
+# Non-blocking release-sync reminder.
+if command -v curl >/dev/null 2>&1; then
+  gv=$(grep -E 'versionCode[[:space:]]+[0-9]+' android/app/build.gradle 2>/dev/null | grep -oE '[0-9]+' | head -1)
+  mv=$(curl -fsS "https://storage.googleapis.com/nowi-erp-apk/latest.json?t=$(date +%s)" 2>/dev/null | grep -oE '"versionCode"[: ]*[0-9]+' | grep -oE '[0-9]+' | head -1)
+  if [ -n "$gv" ] && [ -n "$mv" ] && [ "$gv" != "$mv" ]; then
+    echo "⚠ build.gradle versionCode=$gv but published latest.json=$mv —" >&2
+    echo "  run scripts/release-apk.sh if you're shipping a new APK (not blocking)." >&2
+  fi
+fi
+
+echo "[pre-push] pnpm build before main…"
+if ! pnpm build >/dev/null 2>&1; then
+  echo "✗ push aborted — pnpm build failed. Fix the build before pushing to main." >&2
+  exit 1
+fi
+echo "[pre-push] build OK"
+exit 0
