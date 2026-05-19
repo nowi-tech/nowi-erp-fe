@@ -179,7 +179,7 @@ export default function ArticleDrawer({
       }
     >
       <div className="space-y-4">
-        <div className="grid grid-cols-2 gap-3">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
           <div>
             <Label>SKU *</Label>
             <Input
@@ -252,7 +252,7 @@ export default function ArticleDrawer({
           />
         </div>
 
-        <div className="grid grid-cols-2 gap-3">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
           {enumSelect('samplingStatus', 'Sampling status', options.samplingStatus)}
           <div>
             <Label>Sampling timeline</Label>

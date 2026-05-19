@@ -191,7 +191,13 @@ export default function ReferenceImageInput({
         ) : (
           <>
             <Upload size={22} className="text-[var(--color-muted-foreground)]" />
-            <div className="text-sm text-[var(--color-foreground)]">
+            {/* Touch devices can't Ctrl/⌘V into a div — lead with the
+                tap-to-upload affordance there, keep the paste hint for
+                pointer devices. */}
+            <div className="text-sm text-[var(--color-foreground)] sm:hidden">
+              <span className="underline">Tap to upload</span> or take a photo
+            </div>
+            <div className="text-sm text-[var(--color-foreground)] hidden sm:block">
               Paste <kbd className="font-mono font-semibold">{PASTE_HINT}</kbd>,
               drop, or <span className="underline">click to upload</span>
             </div>

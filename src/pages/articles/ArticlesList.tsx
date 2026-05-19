@@ -82,22 +82,28 @@ export default function ArticlesList() {
   };
 
   const o = options;
-  const headers = useMemo(
-    () => [
-      'SKU',
-      'Colour',
-      'Fabric',
-      'Sampling',
-      'Fit',
-      'DXF',
-      'Approval',
-      'Production',
-      'Cut',
-      'Stitch',
-      'Pack',
-      'Live',
-      'Link',
-    ],
+  // Responsive columns — phones keep only SKU / Sampling / Production /
+  // Live; the rest progressively appear at sm / md / lg (mirrors the
+  // Users.tsx convention of `hidden …:table-cell` instead of a wide
+  // horizontal scroll). Secondary data is shown inline under the SKU
+  // on small screens so nothing is lost.
+  const COLS = useMemo(
+    () =>
+      [
+        { label: 'SKU', cls: '' },
+        { label: 'Colour', cls: 'hidden md:table-cell' },
+        { label: 'Fabric', cls: 'hidden md:table-cell' },
+        { label: 'Sampling', cls: '' },
+        { label: 'Fit', cls: 'hidden lg:table-cell' },
+        { label: 'DXF', cls: 'hidden lg:table-cell' },
+        { label: 'Approval', cls: 'hidden md:table-cell' },
+        { label: 'Production', cls: '' },
+        { label: 'Cut', cls: 'hidden lg:table-cell text-right' },
+        { label: 'Stitch', cls: 'hidden lg:table-cell text-right' },
+        { label: 'Pack', cls: 'hidden lg:table-cell text-right' },
+        { label: 'Live', cls: '' },
+        { label: 'Link', cls: 'hidden sm:table-cell' },
+      ] as const,
     [],
   );
 
@@ -110,8 +116,8 @@ export default function ArticlesList() {
             New article development — {total} in this category
           </p>
         </div>
-        <Button size="sm" onClick={openCreate}>
-          <Plus size={15} />
+        <Button onClick={openCreate}>
+          <Plus size={16} />
           <span className="ml-1">Add article</span>
         </Button>
       </div>
@@ -186,9 +192,15 @@ export default function ArticlesList() {
         <table className="w-full text-[13px]">
           <thead className="bg-[var(--color-surface-2)] text-[var(--color-muted-foreground)]">
             <tr>
-              {headers.map((h) => (
-                <th key={h} className="text-left font-medium px-3 py-2 whitespace-nowrap">
-                  {h}
+              {COLS.map((c) => (
+                <th
+                  key={c.label}
+                  className={cn(
+                    'text-left font-medium px-3 py-2 whitespace-nowrap',
+                    c.cls,
+                  )}
+                >
+                  {c.label}
                 </th>
               ))}
             </tr>
@@ -196,14 +208,14 @@ export default function ArticlesList() {
           <tbody>
             {loading && (
               <tr>
-                <td colSpan={headers.length} className="px-3 py-8 text-center text-[var(--color-muted-foreground)]">
+                <td colSpan={COLS.length} className="px-3 py-8 text-center text-[var(--color-muted-foreground)]">
                   Loading…
                 </td>
               </tr>
             )}
             {!loading && rows.length === 0 && (
               <tr>
-                <td colSpan={headers.length} className="px-3 py-8 text-center text-[var(--color-muted-foreground)]">
+                <td colSpan={COLS.length} className="px-3 py-8 text-center text-[var(--color-muted-foreground)]">
                   No articles. Click “Add article” to create one.
                 </td>
               </tr>
@@ -215,20 +227,34 @@ export default function ArticlesList() {
                 return (
                   <tr
                     key={a.id}
+                    role="button"
+                    tabIndex={0}
+                    aria-label={`Edit ${a.sku}`}
                     onClick={() => openEdit(a)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter' || e.key === ' ') {
+                        e.preventDefault();
+                        openEdit(a);
+                      }
+                    }}
                     className={cn(
-                      'border-t border-[var(--color-border)] cursor-pointer hover:bg-[var(--color-muted)]',
+                      'border-t border-[var(--color-border)] cursor-pointer hover:bg-[var(--color-muted)] focus:outline-none focus-visible:bg-[var(--color-muted)]',
                       isChild && 'bg-[var(--color-surface-2)]/40',
                     )}
                   >
-                    <td className="px-3 py-2 whitespace-nowrap font-medium">
+                    <td className="px-3 py-2 font-medium">
                       <span className={cn(isChild && 'pl-4 text-[var(--color-muted-foreground)]')}>
                         {isChild && '↳ '}
                         {a.sku}
                       </span>
+                      {/* Mobile fallback — colour / fabric are hidden < md. */}
+                      <div className="md:hidden mt-0.5 text-xs text-[var(--color-muted-foreground)] truncate max-w-[42vw]">
+                        {[a.colour, a.fabric?.name].filter(Boolean).join(' · ') ||
+                          '—'}
+                      </div>
                     </td>
-                    <td className="px-3 py-2 whitespace-nowrap">{a.colour ?? '—'}</td>
-                    <td className="px-3 py-2 whitespace-nowrap">{a.fabric?.name ?? '—'}</td>
+                    <td className="px-3 py-2 whitespace-nowrap hidden md:table-cell">{a.colour ?? '—'}</td>
+                    <td className="px-3 py-2 whitespace-nowrap hidden md:table-cell">{a.fabric?.name ?? '—'}</td>
                     <td className="px-3 py-2 whitespace-nowrap">
                       {a.samplingStatus ? (
                         <StatusBadge text={labelOf(o.samplingStatus, a.samplingStatus)} />
@@ -236,9 +262,9 @@ export default function ArticlesList() {
                         '—'
                       )}
                     </td>
-                    <td className="px-3 py-2">{labelOf(o.modelFitSession, a.modelFitSession)}</td>
-                    <td className="px-3 py-2">{labelOf(o.dxfApproved, a.dxfApproved)}</td>
-                    <td className="px-3 py-2 whitespace-nowrap">
+                    <td className="px-3 py-2 hidden lg:table-cell">{labelOf(o.modelFitSession, a.modelFitSession)}</td>
+                    <td className="px-3 py-2 hidden lg:table-cell">{labelOf(o.dxfApproved, a.dxfApproved)}</td>
+                    <td className="px-3 py-2 whitespace-nowrap hidden md:table-cell">
                       {a.sampleApproval ? (
                         <StatusBadge text={labelOf(o.sampleApproval, a.sampleApproval)} />
                       ) : (
@@ -252,13 +278,13 @@ export default function ArticlesList() {
                         '—'
                       )}
                     </td>
-                    <td className="px-3 py-2 text-right tabular-nums">{a.cuttingQty ?? '—'}</td>
-                    <td className="px-3 py-2 text-right tabular-nums">{a.stitchingOutput ?? '—'}</td>
-                    <td className="px-3 py-2 text-right tabular-nums">{a.packagingQty ?? '—'}</td>
+                    <td className="px-3 py-2 text-right tabular-nums hidden lg:table-cell">{a.cuttingQty ?? '—'}</td>
+                    <td className="px-3 py-2 text-right tabular-nums hidden lg:table-cell">{a.stitchingOutput ?? '—'}</td>
+                    <td className="px-3 py-2 text-right tabular-nums hidden lg:table-cell">{a.packagingQty ?? '—'}</td>
                     <td className="px-3 py-2">
                       <StatusBadge text={labelOf(o.websiteLive, a.websiteLive)} />
                     </td>
-                    <td className="px-3 py-2">
+                    <td className="px-3 py-2 hidden sm:table-cell">
                       {a.referenceLink && /^https?:/.test(a.referenceLink) ? (
                         <a
                           href={a.referenceLink}
