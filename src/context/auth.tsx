@@ -7,6 +7,7 @@ import {
   type ReactNode,
 } from 'react';
 import { me as fetchMe, logout as apiLogout } from '@/api/auth';
+import { registerPush, unregisterPush } from '@/services/push-notifications';
 import type { User } from '@/api/types';
 
 interface AuthContextValue {
@@ -47,6 +48,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         if (cancelled) return;
         setUser(u);
         localStorage.setItem(USER_KEY, JSON.stringify(u));
+        // Returning user with a live session (e.g. reopened the APK):
+        // re-register the device so token rotation is picked up.
+        void registerPush();
       })
       .catch(() => {
         if (cancelled) return;
@@ -66,9 +70,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     localStorage.setItem(TOKEN_KEY, token);
     localStorage.setItem(USER_KEY, JSON.stringify(nextUser));
     setUser(nextUser);
+    // Fire-and-forget: ask for notification permission + register the
+    // device. No-op on the plain website (non-native).
+    void registerPush();
   }, []);
 
   const logout = useCallback(async () => {
+    // Drop the device token while the session is still valid — doing it
+    // after apiLogout() would 401 and trip the axios redirect.
+    await unregisterPush();
     await apiLogout();
     localStorage.removeItem(TOKEN_KEY);
     localStorage.removeItem(USER_KEY);

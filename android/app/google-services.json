@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "167631720356",
+    "project_id": "nowi-firebase",
+    "storage_bucket": "nowi-firebase.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:167631720356:android:fabc9551dfac974c43fb31",
+        "android_client_info": {
+          "package_name": "fashion.nowi.erp"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDnTKl2vf7jQZFejplKnz57AoagjHOTHg0"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
