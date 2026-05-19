@@ -162,7 +162,7 @@ export default function AdminShell() {
       {/* Desktop sidebar */}
       <aside
         className={cn(
-          'hidden lg:flex shrink-0 border-r border-[var(--color-border)] flex-col bg-[var(--color-background-2)] transition-[width] duration-200',
+          'hidden lg:flex lg:sticky lg:top-0 lg:h-screen shrink-0 border-r border-[var(--color-border)] flex-col bg-[var(--color-background-2)] transition-[width] duration-200',
           collapsed ? 'w-16' : 'w-60',
         )}
       >
@@ -203,7 +203,7 @@ export default function AdminShell() {
             )}
           </button>
         </div>
-        <nav className="flex-1 p-3 space-y-1">
+        <nav className="flex-1 min-h-0 overflow-y-auto p-3 space-y-1">
           {visibleNav.map((item) => {
             const stage: NavStage = item.stage ?? 'ink';
             const stageVars = STAGE_VARS[stage];
