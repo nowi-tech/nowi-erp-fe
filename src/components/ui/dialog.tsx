@@ -26,10 +26,18 @@ export function Dialog({
 }: DialogProps) {
   const overlayRef = useRef<HTMLDivElement>(null);
 
+  // Keep the latest onClose without putting it in effect deps — otherwise
+  // a parent re-render (e.g. typing in a field inside the dialog) gives
+  // onClose a new identity, re-runs the effect, and the deferred
+  // initialFocusRef.focus() STEALS focus from the input after one
+  // keystroke. The effect must run only on the open→close transition.
+  const onCloseRef = useRef(onClose);
+  onCloseRef.current = onClose;
+
   useEffect(() => {
     if (!open) return;
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') onClose();
+      if (e.key === 'Escape') onCloseRef.current();
     };
     window.addEventListener('keydown', onKey);
     // Defer focus until next paint so the element exists.
@@ -40,7 +48,10 @@ export function Dialog({
       window.removeEventListener('keydown', onKey);
       window.clearTimeout(t);
     };
-  }, [open, onClose, initialFocusRef]);
+    // Only re-run when the dialog actually opens/closes. initialFocusRef
+    // is a stable ref; onClose is read via onCloseRef.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open]);
 
   if (!open) return null;
 
