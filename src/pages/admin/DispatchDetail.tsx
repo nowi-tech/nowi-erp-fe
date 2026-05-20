@@ -10,6 +10,7 @@ import { Select } from '@/components/ui/select';
 import { Textarea } from '@/components/ui/textarea';
 import { Dialog } from '@/components/ui/dialog';
 import { useToast } from '@/components/ui/toast';
+import { Skeleton } from '@/components/ui/skeleton';
 import { useAuth } from '@/context/auth';
 import {
   downloadDispatchChallan,
@@ -171,7 +172,10 @@ export default function DispatchDetail() {
       </Button>
 
       {loading && !data ? (
-        <div className="h-32 animate-pulse rounded bg-[var(--color-muted)]" />
+        <div className="space-y-3">
+          <Skeleton className="h-24 w-full" />
+          <Skeleton className="h-48 w-full" />
+        </div>
       ) : data ? (
         <>
           <Card>

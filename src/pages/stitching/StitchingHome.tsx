@@ -4,6 +4,7 @@ import { useNavigate } from 'react-router-dom';
 import { ChevronRight } from 'lucide-react';
 import FloorShell from '@/components/layout/FloorShell';
 import { Badge } from '@/components/ui/badge';
+import { Skeleton } from '@/components/ui/skeleton';
 import { useAuth } from '@/context/auth';
 import { listLots } from '@/api/lots';
 import { listReceipts, type ReceiptRow } from '@/api/receipts';
@@ -374,7 +375,12 @@ function QueueTab({
   // we don't stack a second loader next to a sibling list that's also
   // refreshing.
   if (loading && lots.length === 0) {
-    return <div className="h-12 animate-pulse rounded bg-[var(--color-muted)]" />;
+    return (
+      <div className="space-y-2">
+        <Skeleton className="h-16 w-full" />
+        <Skeleton className="h-16 w-full" />
+      </div>
+    );
   }
   if (lots.length === 0) {
     return (

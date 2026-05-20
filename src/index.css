@@ -18,6 +18,15 @@ body.lang-hi,
   opacity: 0.5;
 }
 
+/* Shimmer skeleton — a single sliding-gradient sweep across a muted
+   block. Used by <Skeleton> in src/components/ui/skeleton.tsx as the
+   one loading placeholder across the app. */
+@keyframes shimmer {
+  100% {
+    transform: translateX(100%);
+  }
+}
+
 /* ── Native (Capacitor APK) safe-area handling ───────────────────────
    Android 15 / targetSdk 36 forces edge-to-edge — the WebView draws
    under the status bar (`StatusBar.setOverlaysWebView(false)` is a

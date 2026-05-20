@@ -1,4 +1,5 @@
 import { lazy, Suspense, type ReactNode } from 'react';
+import { Skeleton } from '@/components/ui/skeleton';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider } from './context/auth';
 import { AppToaster, ToastProvider } from './components/ui/toast';
@@ -43,9 +44,14 @@ const EditRequestsPage = lazy(() => import('./pages/admin/EditRequests'));
 const DispatchPrint = lazy(() => import('./pages/dispatches/DispatchPrint'));
 
 function PageSkeleton() {
+  // Inline shimmer — calm, sits inside whatever shell already rendered
+  // (AdminShell sidebar, FloorShell header). Replaces the old fullscreen
+  // centered pulse-bar that visually competed with the sidebar logo.
   return (
-    <div className="min-h-screen flex items-center justify-center">
-      <div className="animate-pulse h-4 w-32 rounded bg-[var(--color-muted)]" />
+    <div className="space-y-3 p-4">
+      <Skeleton className="h-6 w-40" />
+      <Skeleton className="h-32 w-full" />
+      <Skeleton className="h-32 w-full" />
     </div>
   );
 }

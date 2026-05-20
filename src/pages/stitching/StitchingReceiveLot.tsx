@@ -10,6 +10,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Dialog } from '@/components/ui/dialog';
 import { useToast } from '@/components/ui/toast';
+import { Skeleton } from '@/components/ui/skeleton';
 import { createScrap, listScraps, type ScrapRow } from '@/api/scrap';
 import { toast as sonnerToast } from 'sonner';
 import { getAvailability, getLot } from '@/api/lots';
@@ -292,7 +293,10 @@ export default function StitchingReceiveLot() {
       <div className="space-y-0 mt-2">{/* sections handle their own spacing */}
 
         {loading && !lot ? (
-          <div className="h-32 animate-pulse rounded bg-[var(--color-muted)]" />
+          <div className="space-y-3">
+            <Skeleton className="h-24 w-full" />
+            <Skeleton className="h-48 w-full" />
+          </div>
         ) : lot ? (
           <>
             <div

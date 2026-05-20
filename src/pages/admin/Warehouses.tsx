@@ -7,6 +7,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
 import { Dialog } from '@/components/ui/dialog';
+import { Skeleton } from '@/components/ui/skeleton';
 import { useToast } from '@/components/ui/toast';
 import {
   createDestinationWarehouse,
@@ -125,7 +126,11 @@ export default function Warehouses() {
         </CardHeader>
         <CardContent>
           {loading && rows.length === 0 ? (
-            <div className="h-24 animate-pulse rounded bg-[var(--color-muted)]" />
+            <div className="space-y-2">
+              <Skeleton className="h-10 w-full" />
+              <Skeleton className="h-10 w-full" />
+              <Skeleton className="h-10 w-full" />
+            </div>
           ) : rows.length === 0 ? (
             <p className="py-6 text-center text-sm text-[var(--color-muted-foreground)]">
               {t('admin.warehouses.empty', {

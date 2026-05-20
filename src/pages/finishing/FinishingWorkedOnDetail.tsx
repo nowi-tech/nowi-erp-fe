@@ -5,6 +5,7 @@ import { ChevronLeft } from 'lucide-react';
 import { toast as sonnerToast } from 'sonner';
 import FloorShell from '@/components/layout/FloorShell';
 import { Badge } from '@/components/ui/badge';
+import { Skeleton } from '@/components/ui/skeleton';
 import { getLot } from '@/api/lots';
 import { listReceipts, type ReceiptRow } from '@/api/receipts';
 import { listScraps, type ScrapRow } from '@/api/scrap';
@@ -124,7 +125,7 @@ export default function FinishingWorkedOnDetail() {
 
       <div className="mt-3 space-y-3">
         {loading ? (
-          <div className="h-32 animate-pulse rounded bg-[var(--color-muted)]" />
+          <Skeleton className="h-32 w-full" />
         ) : lot ? (
           <>
             <div className="rounded-[14px] bg-[var(--color-surface)] border-l-[3px] border-l-[var(--color-primary)] shadow-[0_1px_2px_rgba(15,26,54,0.04)] p-[16px_18px_14px]">

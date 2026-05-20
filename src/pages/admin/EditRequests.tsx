@@ -3,6 +3,7 @@ import { useTranslation } from 'react-i18next';
 import { Check } from 'lucide-react';
 import { toast as sonnerToast } from 'sonner';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Skeleton } from '@/components/ui/skeleton';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import {
@@ -89,7 +90,7 @@ export default function EditRequests() {
         </CardHeader>
         <CardContent>
           {loading ? (
-            <div className="h-12 animate-pulse rounded bg-[var(--color-muted)]" />
+            <Skeleton className="h-12 w-full" />
           ) : pending.length === 0 ? (
             <p className="text-sm text-[var(--color-muted-foreground)]">
               {t('admin.editRequests.empty', { defaultValue: 'No pending requests.' })}

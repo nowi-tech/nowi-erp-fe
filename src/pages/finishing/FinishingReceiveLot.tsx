@@ -16,6 +16,7 @@ import { Label } from '@/components/ui/label';
 import { Select } from '@/components/ui/select';
 import { Textarea } from '@/components/ui/textarea';
 import { Dialog } from '@/components/ui/dialog';
+import { Skeleton } from '@/components/ui/skeleton';
 import { cn } from '@/lib/utils';
 import { getAvailability, getLot } from '@/api/lots';
 import {
@@ -507,7 +508,10 @@ export default function FinishingReceiveLot() {
       </div>
 
       {!lot || !metrics ? (
-        <div className="mt-4 h-32 animate-pulse rounded bg-[var(--color-muted)]" />
+        <div className="mt-4 space-y-3">
+          <Skeleton className="h-24 w-full" />
+          <Skeleton className="h-48 w-full" />
+        </div>
       ) : (
         <div className="mt-3">
           <LotHeader lot={lot} metrics={metrics} />

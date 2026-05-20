@@ -3,6 +3,7 @@ import { useTranslation } from 'react-i18next';
 import { useNavigate, useParams } from 'react-router-dom';
 import { ChevronLeft, Pencil, Share2, UserPlus } from 'lucide-react';
 import { toast as sonnerToast } from 'sonner';
+import { Skeleton } from '@/components/ui/skeleton';
 import FloorShell from '@/components/layout/FloorShell';
 import StageTimeline from '@/components/StageTimeline';
 import AssignSheet from '@/components/floor/AssignSheet';
@@ -139,7 +140,7 @@ export default function FloorLotDetail() {
       </div>
 
       {loading || !lot ? (
-        <div className="mt-3 h-32 animate-pulse rounded bg-[var(--color-muted)]" />
+        <div className="mt-3"><Skeleton className="h-32 w-full" /></div>
       ) : (
         <div className="mt-3 space-y-3.5">
           {/* Identity */}

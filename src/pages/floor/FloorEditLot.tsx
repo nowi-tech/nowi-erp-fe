@@ -8,6 +8,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Button } from '@/components/ui/button';
 import { Dialog } from '@/components/ui/dialog';
+import { Skeleton } from '@/components/ui/skeleton';
 import { getLot, patchLot, requestLotEdit } from '@/api/lots';
 import type { Lot, SizeMatrix } from '@/api/types';
 
@@ -109,7 +110,7 @@ export default function FloorEditLot() {
       </div>
 
       {loading ? (
-        <div className="mt-3 h-32 animate-pulse rounded bg-[var(--color-muted)]" />
+        <div className="mt-3"><Skeleton className="h-32 w-full" /></div>
       ) : !lot ? null : (
         <div className="mt-3 space-y-3.5">
           <div className="rounded-[14px] bg-[var(--color-surface)] border-l-[3px] border-l-[var(--color-primary)] shadow-[0_1px_2px_rgba(15,26,54,0.04)] p-[16px_18px]">
