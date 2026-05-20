@@ -450,7 +450,7 @@ export default function ReceiveFromKottyPage() {
                   <div>
                     <Label htmlFor={`vstyle-${row.key}`} required>
                       {t('stitching.receiveFromKotty.vendorStyleId', {
-                        defaultValue: 'Vendor style ID',
+                        defaultValue: 'Vendor style ID (SKU)',
                       })}
                     </Label>
                     <Input

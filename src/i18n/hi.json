@@ -181,7 +181,7 @@
       "lotNo": "Lot ID",
       "lotN": "Lot {{n}}",
       "vendorLotNo": "Vendor Lot No.",
-      "vendorStyleId": "Vendor Style ID",
+      "vendorStyleId": "Vendor Style ID (SKU)",
       "gender": "Gender",
       "genderW": "Women",
       "genderM": "Men",
