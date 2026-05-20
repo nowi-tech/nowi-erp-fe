@@ -14,6 +14,7 @@ import {
   Boxes,
   Scissors,
   Sparkles,
+  Warehouse,
   MoreHorizontal,
   X,
 } from 'lucide-react';
@@ -58,6 +59,7 @@ const NAV_ITEMS: NavItem[] = [
   { to: '/finishing', icon: <Sparkles size={20} />, labelKey: 'admin.nav.finishing', roles: ['admin'], stage: 'finish' },
   { to: '/data', icon: <Database size={20} />, labelKey: 'admin.nav.masterData', roles: ['data_manager'], stage: 'ink' },
   { to: '/admin/users', icon: <Users size={20} />, labelKey: 'admin.nav.users', roles: ['admin'], stage: 'ink' },
+  { to: '/admin/warehouses', icon: <Warehouse size={20} />, labelKey: 'admin.nav.warehouses', roles: ['admin', 'data_manager'], stage: 'disp' },
   // TODO: build — surface once admin Vendors / SKUs / Settings pages exist.
   // { to: '/admin/vendors', icon: <Truck size={20} />, labelKey: 'admin.nav.vendors', roles: ['admin', 'viewer', 'data_manager'] },
   // { to: '/admin/skus', icon: <Package size={20} />, labelKey: 'admin.nav.skus', roles: ['admin', 'viewer', 'data_manager'] },

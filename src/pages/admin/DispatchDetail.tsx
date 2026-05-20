@@ -170,7 +170,7 @@ export default function DispatchDetail() {
         ← {t('common.back')}
       </Button>
 
-      {loading ? (
+      {loading && !data ? (
         <div className="h-32 animate-pulse rounded bg-[var(--color-muted)]" />
       ) : data ? (
         <>

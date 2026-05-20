@@ -20,9 +20,10 @@ import {
   type ReceiptRow,
 } from '@/api/receipts';
 import { ActivityLog, type ActivityItem } from '@/components/floor/ActivityLog';
+import { issueReadUrls } from '@/api/storage';
 import { orderStatusVariant } from '@/lib/statusBadge';
 import { useStageId } from '@/lib/useStageId';
-import type { Lot, SizeMatrix } from '@/api/types';
+import type { Lot, ReworkIssue, SizeMatrix } from '@/api/types';
 
 function totalOf(m: SizeMatrix): number {
   return Object.values(m).reduce((a, b) => a + (Number(b) || 0), 0);
@@ -49,6 +50,22 @@ export default function StitchingReceiveLot() {
   const [activity, setActivity] = useState<ActivityItem[]>([]);
   const [confirmOpen, setConfirmOpen] = useState(false);
   const cancelRef = useRef<HTMLButtonElement>(null);
+
+  // Defect photos the finishing master attached when sending this lot
+  // back for rework. objectPath → signed read URL.
+  const [reworkPhotoUrls, setReworkPhotoUrls] = useState<
+    Record<string, string>
+  >({});
+
+  // Open rework issues the assigned stitcher must address before redoing
+  // the work. Resolved/exceeded issues are historical — not shown here.
+  const openReworks: ReworkIssue[] = useMemo(
+    () =>
+      (lot?.reworkIssues ?? []).filter(
+        (r) => r.status === 'open' || r.status === 'in_progress',
+      ),
+    [lot],
+  );
 
   // Scrap modal state — opened by the per-row trash button.
   const [scrapSize, setScrapSize] = useState<string | null>(null);
@@ -124,6 +141,28 @@ export default function StitchingReceiveLot() {
   useEffect(() => {
     void refresh();
   }, [refresh]);
+
+  // Mint signed read URLs for every defect photo across the open reworks.
+  // Best-effort: a failure just means no thumbnails, not a broken page.
+  useEffect(() => {
+    const paths = openReworks.flatMap((r) => r.photoPaths ?? []);
+    if (paths.length === 0) {
+      setReworkPhotoUrls({});
+      return;
+    }
+    let cancelled = false;
+    void (async () => {
+      try {
+        const urls = await issueReadUrls(paths);
+        if (!cancelled) setReworkPhotoUrls(urls);
+      } catch {
+        if (!cancelled) setReworkPhotoUrls({});
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [openReworks]);
 
   const sizes = useMemo(() => {
     const keys = new Set<string>([
@@ -252,7 +291,7 @@ export default function StitchingReceiveLot() {
       </div>
       <div className="space-y-0 mt-2">{/* sections handle their own spacing */}
 
-        {loading ? (
+        {loading && !lot ? (
           <div className="h-32 animate-pulse rounded bg-[var(--color-muted)]" />
         ) : lot ? (
           <>
@@ -299,6 +338,91 @@ export default function StitchingReceiveLot() {
                 </div>
               )}
             </div>
+
+            {openReworks.length > 0 && (
+              <div className="mt-3.5 rounded-[14px] border border-[var(--status-rework-bg)] bg-[var(--status-rework-bg)] p-[14px_16px]">
+                <div className="font-semibold text-[15px] text-[var(--status-rework-ink)]">
+                  {t('stitching.rework.needsRework', {
+                    count: openReworks.length,
+                    defaultValue:
+                      '{{count}} item(s) need rework — sent back from finishing',
+                  })}
+                </div>
+                <ul className="mt-2 space-y-3">
+                  {openReworks.map((r) => (
+                    <li
+                      key={r.id}
+                      className="rounded-[10px] bg-[var(--color-surface)] p-3 text-[13px]"
+                    >
+                      <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
+                        <span className="font-mono font-semibold">
+                          {r.sizeLabel} × {r.qty}
+                        </span>
+                        <span className="text-[12px] text-[var(--color-muted-foreground)]">
+                          {t('stitching.rework.attempt', {
+                            n: r.attemptNumber,
+                            defaultValue: 'attempt {{n}}',
+                          })}
+                        </span>
+                      </div>
+                      <p className="mt-1 text-[var(--color-foreground)]">
+                        <span className="text-[var(--color-muted-foreground)]">
+                          {t('stitching.rework.reason', {
+                            defaultValue: 'Reason',
+                          })}
+                          :{' '}
+                        </span>
+                        {r.reason}
+                      </p>
+                      {(r.photoPaths ?? []).length > 0 && (
+                        <div className="mt-2 flex flex-wrap gap-2">
+                          {(r.photoPaths ?? []).map((p) => {
+                            const url = reworkPhotoUrls[p];
+                            // Only real http(s) signed URLs are viewable.
+                            // In a non-GCS env the URL is `noop://…` (or
+                            // absent) — show a chip so the stitcher still
+                            // knows a defect photo was attached, instead
+                            // of a broken image.
+                            const viewable =
+                              !!url && /^https?:\/\//i.test(url);
+                            if (!viewable) {
+                              return (
+                                <span
+                                  key={p}
+                                  className="inline-flex h-20 w-20 items-center justify-center rounded-[8px] bg-[var(--color-muted)] px-2 text-center text-[10px] leading-tight text-[var(--color-muted-foreground)] ring-1 ring-[var(--color-border)]"
+                                >
+                                  {t('stitching.rework.photoUnavailable', {
+                                    defaultValue:
+                                      'Photo attached (not viewable here)',
+                                  })}
+                                </span>
+                              );
+                            }
+                            return (
+                              <a
+                                key={p}
+                                href={url}
+                                target="_blank"
+                                rel="noreferrer"
+                                className="block"
+                              >
+                                <img
+                                  src={url}
+                                  alt={t('stitching.rework.photoAlt', {
+                                    defaultValue: 'Defect photo',
+                                  })}
+                                  className="h-20 w-20 rounded-[8px] object-cover ring-1 ring-[var(--color-border)]"
+                                />
+                              </a>
+                            );
+                          })}
+                        </div>
+                      )}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
 
             <div className="rounded-[14px] bg-[var(--color-surface)] shadow-[0_1px_2px_rgba(15,26,54,0.04)] p-[16px_18px_6px] mt-3.5">
               <div className="flex items-baseline justify-between">

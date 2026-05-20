@@ -16,6 +16,7 @@ const Locator = lazy(() => import('./pages/admin/Locator'));
 const SkuDetail = lazy(() => import('./pages/admin/SkuDetail'));
 const Dispatches = lazy(() => import('./pages/admin/Dispatches'));
 const DispatchDetail = lazy(() => import('./pages/admin/DispatchDetail'));
+const Warehouses = lazy(() => import('./pages/admin/Warehouses'));
 const StitchingHome = lazy(() => import('./pages/stitching/StitchingHome'));
 const StitchingReceiveLot = lazy(
   () => import('./pages/stitching/StitchingReceiveLot'),
@@ -144,6 +145,14 @@ function App() {
                 element={
                   <S>
                     <UsersPage />
+                  </S>
+                }
+              />
+              <Route
+                path="warehouses"
+                element={
+                  <S>
+                    <Warehouses />
                   </S>
                 }
               />

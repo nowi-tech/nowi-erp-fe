@@ -289,7 +289,11 @@ function QueueTab({
 }) {
   const { t } = useTranslation();
 
-  if (loading) {
+  // Stale-while-revalidate: only show the skeleton on first load (no
+  // data yet). Subsequent refreshes keep showing the previous lots so
+  // we don't stack a second loader next to a sibling list that's also
+  // refreshing.
+  if (loading && lots.length === 0) {
     return <div className="h-12 animate-pulse rounded bg-[var(--color-muted)]" />;
   }
   if (lots.length === 0) {
