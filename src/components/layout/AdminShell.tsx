@@ -14,6 +14,7 @@ import {
   Scissors,
   Sparkles,
   Shirt,
+  Layers,
   PanelLeftClose,
   PanelLeft,
   MoreHorizontal,
@@ -59,9 +60,11 @@ const NAV_ITEMS: NavItem[] = [
   { to: '/stitching', icon: <Scissors size={20} />, labelKey: 'admin.nav.stitching', roles: ['admin'], stage: 'stitch' },
   { to: '/finishing', icon: <Sparkles size={20} />, labelKey: 'admin.nav.finishing', roles: ['admin'], stage: 'finish' },
   { to: '/data', icon: <Database size={20} />, labelKey: 'admin.nav.masterData', roles: ['data_manager'], stage: 'ink' },
-  // New Article Development (Kotty sampling tracker).
-  { to: '/articles', end: true, icon: <LayoutDashboard size={20} />, labelKey: 'admin.nav.articles', roles: ['sampling_editor', 'admin'], stage: 'ink' },
-  { to: '/articles/list', icon: <Shirt size={20} />, labelKey: 'admin.nav.articlesList', roles: ['sampling_editor', 'admin'], stage: 'stitch' },
+  // Product Development module — Styles + Fabric Library + China Reverse.
+  // China Reverse is the same Styles page pre-filtered via ?source=china_reverse.
+  { to: '/styles', end: true, icon: <Shirt size={20} />, labelKey: 'admin.nav.styles', roles: ['sampling_editor', 'admin'], stage: 'stitch' },
+  { to: '/styles?source=china_reverse', icon: <LayoutDashboard size={20} />, labelKey: 'admin.nav.chinaReverse', roles: ['sampling_editor', 'admin'], stage: 'ink' },
+  { to: '/fabric-library', icon: <Layers size={20} />, labelKey: 'admin.nav.fabricLibrary', roles: ['sampling_editor', 'admin'], stage: 'ink' },
   { to: '/admin/users', icon: <Users size={20} />, labelKey: 'admin.nav.users', roles: ['admin'], stage: 'ink' },
   // TODO: build — surface once admin Vendors / SKUs / Settings pages exist.
   // { to: '/admin/vendors', icon: <Truck size={20} />, labelKey: 'admin.nav.vendors', roles: ['admin', 'viewer', 'data_manager'] },
@@ -147,7 +150,7 @@ export default function AdminShell() {
     role === 'data_manager'
       ? '/data'
       : role === 'sampling_editor'
-        ? '/articles'
+        ? '/styles'
         : '/admin';
 
   const primary = visibleNav.slice(0, PRIMARY_BOTTOM_COUNT);

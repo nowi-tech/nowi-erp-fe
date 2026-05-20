@@ -7,7 +7,14 @@ export type UserRole =
   | 'finishing_master'
   | 'data_manager'
   | 'viewer'
-  | 'sampling_editor';
+  | 'sampling_editor'
+  // ── Product Development (Phase 4-8) multi-role values ──────────────
+  | 'sampling_lead'
+  | 'pattern_master_w'
+  | 'pattern_master_m'
+  | 'china_reverse_approver'
+  | 'data_admin'
+  | 'pd_lead';
 
 export interface User {
   id: string;
@@ -144,13 +151,180 @@ export interface CategoryWithStyleCode {
   isActive: boolean;
 }
 
-export interface Style {
+// The canonical `Style` entity now lives in the Product Development
+// section below — it extends the legacy floor-intake fields (id,
+// styleId, categoryCode, category) with all PD intake / sampling /
+// approval columns. See §6 of docs/PRODUCT_DEV_MODULE_PLAN.md.
+
+// ─── Product Development — Styles, variants, inspections, channels ──
+// Source of truth: docs/PRODUCT_DEV_MODULE_PLAN.md §6.
+
+export type StyleSource = 'sampling' | 'china_reverse' | 'legacy_floor_intake';
+
+export type StyleLifecycle =
+  | 'draft'
+  | 'parked'
+  | 'in_sampling'
+  | 'sample_approved'
+  | 'archived'
+  // v2 lifecycle states (kept for forward compat / type completeness):
+  | 'in_pd'
+  | 'qc'
+  | 'dispatched';
+
+export type ChannelName = 'myntra' | 'nykaa' | 'nowi_shopify' | 'other';
+export type ChannelState = 'off' | 'draft' | 'live';
+export type InspectionVerdict = 'pending' | 'corrections_needed' | 'approved';
+export type Gender = 'women' | 'men' | 'unisex';
+
+export interface Collection {
   id: number;
-  styleId: string;
-  gender: StyleGender;
+  name: string;
+  gender: Gender | null;
+  description: string | null;
+  isActive: boolean;
+}
+
+export interface FabricType {
+  id: number;
+  name: string;
+}
+
+export interface Fabric {
+  id: number;
+  name: string;
+  fabricTypeId: number | null;
+  fabricType?: FabricType | null;
+  pricePerUnit: string | null;
+  status: string | null;
+  notes: string | null;
+  isActive: boolean;
+  updatedAt?: string;
+}
+
+export interface StyleVariant {
+  id: number;
+  styleId: number;
+  colour: string;
+  fabricId: number | null;
+  fabric?: Pick<Fabric, 'id' | 'name'> | null;
+  samplingStatus: string | null;
+  sampleApproval: string | null;
+  cuttingQty: number | null;
+  stitchingOutput: number | null;
+  packagingQty: number | null;
+  websiteLive: 'live' | 'not_live' | null;
+  isArchived: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface StyleInspection {
+  id: number;
+  styleId: number;
+  roundNo: number;
+  inspectorId: number | null;
+  inspector?: { id: number; name: string } | null;
+  remarks: string;
+  verdict: InspectionVerdict;
+  isArchived: boolean;
+  inspectedAt: string;
+}
+
+export interface StyleChannelListing {
+  id: number;
+  styleId: number;
+  channel: ChannelName;
+  state: ChannelState;
+  virtualInventoryQty: number | null;
+  notes: string | null;
+  updatedBy: number | null;
+  updatedAt: string;
+}
+
+/**
+ * Product-Development view of the Style entity.
+ *
+ * Extends the existing floor-intake Style with intake / sampling /
+ * approval / parking / channel fields. The legacy floor-intake fields
+ * (categoryCode, gender, sequenceNo) are kept for cross-system continuity
+ * — same `styleId` column the Lots/Stages/Dispatch screens use.
+ */
+export interface Style {
+  // Existing ERP fields (legacy floor-intake)
+  id: number;
+  /** Style # — null while in `draft`. Assigned at first approval. */
+  styleId: string | null;
+  /** Letter form used by the floor system: W / M / U. */
+  legacyGender?: StyleGender | null;
   categoryCode: string;
-  sequenceNo: number;
+  sequenceNo?: number;
   category?: CategoryWithStyleCode;
+
+  // New PD intake fields
+  source: StyleSource;
+  lifecycle: StyleLifecycle;
+  workingName: string | null;
+  collectionId: number | null;
+  collection?: Collection | null;
+  gender: Gender | null;
+  fabricTypeId: number | null;
+  fabricType?: FabricType | null;
+  fabricId: number | null;
+  fabric?: Fabric | null;
+  primaryColour: string | null;
+
+  // References
+  referenceLink: string | null;
+  referenceImage: string | null;
+  referenceImageUrl: string | null;
+
+  // Sampling state
+  samplingStatus: string | null;
+  samplingTimeline: string | null;
+  patternMasterId: number | null;
+  patternMaster?: { id: number; name: string } | null;
+  modelFitSession: 'yes' | 'pending' | 'no' | null;
+  dxfApproved: 'yes' | 'no' | null;
+
+  // Approval #2
+  sampleApproval: string | null;
+  sampleApprovedBy: number | null;
+  sampleApprovedAt: string | null;
+
+  // Production (v2)
+  productionStatus: string | null;
+  productionTimeline: string | null;
+  factoryId: number | null;
+  pdNote: string | null;
+
+  // Approval #1
+  approvedBy: number | null;
+  approvedAt: string | null;
+
+  // Park
+  parkedBy: number | null;
+  parkedAt: string | null;
+  parkedReason: string | null;
+
+  // Dispatch (v2)
+  dispatchedAt: string | null;
+  easyecomDispatchId: string | null;
+
+  // Catch-all
+  remark: string | null;
+
+  // Audit / housekeeping
+  createdBy: number | null;
+  updatedBy: number | null;
+  createdAt: string;
+  updatedAt: string;
+  isTestData?: boolean;
+
+  // Nested children (included on getStyle)
+  variants?: StyleVariant[];
+  inspections?: StyleInspection[];
+  channelListings?: StyleChannelListing[];
 }
 
 // ─── Inbound ──────────────────────────────────────────────────────────────

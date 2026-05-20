@@ -40,8 +40,10 @@ const DataHome = lazy(() => import('./pages/data/DataHome'));
 const UsersPage = lazy(() => import('./pages/admin/Users'));
 const EditRequestsPage = lazy(() => import('./pages/admin/EditRequests'));
 const DispatchPrint = lazy(() => import('./pages/dispatches/DispatchPrint'));
-const ArticlesSummary = lazy(() => import('./pages/articles/ArticlesSummary'));
-const ArticlesList = lazy(() => import('./pages/articles/ArticlesList'));
+const StylesRegistry = lazy(() => import('./pages/styles/StylesRegistry'));
+const NewIntake = lazy(() => import('./pages/styles/NewIntake'));
+const StyleWorkspace = lazy(() => import('./pages/styles/StyleWorkspace'));
+const FabricLibrary = lazy(() => import('./pages/fabric-library/FabricLibrary'));
 
 function PageSkeleton() {
   return (
@@ -309,11 +311,11 @@ function App() {
               />
             </Route>
 
-            {/* New Article Development (Kotty sampling tracker).
-                Dedicated sampling_editor role + admin; viewer read path
-                handled by the BE role guard. */}
+            {/* Product Development module — Styles + Fabric Library.
+                Gated to sampling_editor + admin + viewer; BE role guard
+                handles the finer-grained multi-role checks. */}
             <Route
-              path="/articles"
+              path="/styles"
               element={
                 <ProtectedRoute allowedRoles={['sampling_editor', 'admin', 'viewer']}>
                   <S>
@@ -326,15 +328,43 @@ function App() {
                 index
                 element={
                   <S>
-                    <ArticlesSummary />
+                    <StylesRegistry />
                   </S>
                 }
               />
               <Route
-                path="list"
+                path="new"
                 element={
                   <S>
-                    <ArticlesList />
+                    <NewIntake />
+                  </S>
+                }
+              />
+              <Route
+                path=":styleId"
+                element={
+                  <S>
+                    <StyleWorkspace />
+                  </S>
+                }
+              />
+            </Route>
+
+            <Route
+              path="/fabric-library"
+              element={
+                <ProtectedRoute allowedRoles={['sampling_editor', 'admin', 'viewer']}>
+                  <S>
+                    <AdminShell />
+                  </S>
+                </ProtectedRoute>
+              }
+            >
+              <Route
+                index
+                element={
+                  <S>
+                    <FabricLibrary />
                   </S>
                 }
               />
