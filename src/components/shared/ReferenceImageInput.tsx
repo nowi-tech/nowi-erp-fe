@@ -3,7 +3,7 @@ import { ImageOff, Link2, Loader2, Upload, X } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useToast } from '@/components/ui/toast';
 import { uploadPhoto, getReadUrls } from '@/api/storage';
-import { extractLink } from '@/api/articles';
+import { extractLink } from '@/api/styles';
 import { cn } from '@/lib/utils';
 
 const IS_MAC =
@@ -21,7 +21,7 @@ interface Props {
   referenceImageUrl: string | null;
   /** The product/reference link — used by "Fetch from link". */
   referenceLink: string | null;
-  /** Article id when editing; 'new' while creating (upload entity id). */
+  /** Entity id when editing; 'new' while creating (upload entity id). */
   entityId: string | number;
   onChange: (patch: {
     referenceImage?: string | null;
@@ -74,7 +74,7 @@ export default function ReferenceImageInput({
       }
       setBusy('upload');
       try {
-        const { objectPath } = await uploadPhoto('article', entityId, file);
+        const { objectPath } = await uploadPhoto('style', entityId, file);
         onChange({ referenceImage: objectPath, referenceImageUrl: null });
         // Local instant preview (works even in GCS noop dev mode).
         setPreview(URL.createObjectURL(file));
