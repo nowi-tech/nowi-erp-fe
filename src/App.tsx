@@ -6,6 +6,7 @@ import ProtectedRoute from './components/ProtectedRouteV2';
 // import PlaceholderSection from './components/PlaceholderSection'; // TODO: re-enable when commented stub routes return
 import PwaInstallPrompt from './components/PwaInstallPrompt';
 import Onboarding from './components/Onboarding';
+import { ErrorBoundary } from './components/ErrorBoundary';
 
 import Login from './pages/Login';
 import Dashboard from './pages/Dashboard';
@@ -70,6 +71,7 @@ function App() {
         <PwaInstallPrompt />
         <Onboarding />
         <BrowserRouter>
+          <ErrorBoundary>
           <Routes>
             <Route path="/login" element={<Login />} />
 
@@ -373,6 +375,7 @@ function App() {
             <Route path="/dashboard" element={<Navigate to="/" replace />} />
             <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>
+          </ErrorBoundary>
         </BrowserRouter>
       </ToastProvider>
     </AuthProvider>
