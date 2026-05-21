@@ -1,15 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
-import {
-  ArrowLeft,
-  Edit,
-  Pause,
-  Play,
-  Printer,
-  Send,
-  CheckCircle2,
-} from 'lucide-react';
+import { ArrowLeft, Pause, Play, Send, CheckCircle2 } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { useToast } from '@/components/ui/toast';
@@ -152,16 +144,6 @@ export default function StyleWorkspace() {
           </div>
         </div>
         <div className="flex flex-wrap items-center gap-2">
-          <Button variant="outline" size="sm">
-            <Edit size={14} />
-            <span className="ml-1">{t('admin.styles.workspace.edit')}</span>
-          </Button>
-          <Button variant="outline" size="sm">
-            <Printer size={14} />
-            <span className="ml-1">
-              {t('admin.styles.workspace.printTechPack')}
-            </span>
-          </Button>
           {canPark && (
             <Button
               variant="outline"
