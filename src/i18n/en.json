@@ -35,9 +35,18 @@
     "showFilters": "Show filters",
     "hideFilters": "Hide filters",
     "clearAll": "Clear all",
+    "columnFilter": {
+      "label": "Filter {{column}}",
+      "selectAll": "Select all",
+      "clearAll": "Clear",
+      "noValues": "No values"
+    },
     "testData": "Test",
     "testDataTooltip": "Training / test data — not a real lot",
-    "showingFirstN": "Showing the most recent {{n}} — older rows are not loaded."
+    "showingFirstN": "Showing the most recent {{n}} — older rows are not loaded.",
+    "openMenu": "Open menu",
+    "navigation": "Navigation",
+    "create": "Create"
   },
   "auth": {
     "title": "Sign in",
@@ -88,7 +97,7 @@
     "sampling_lead": "Sampling lead",
     "pattern_master_w": "Pattern master (W)",
     "pattern_master_m": "Pattern master (M)",
-    "china_reverse_approver": "China Reverse",
+    "china_import_approver": "China Import",
     "data_admin": "Data admin",
     "pd_lead": "Production lead"
   },
@@ -303,14 +312,28 @@
       "finishing": "Finishing",
       "productDev": "Product development",
       "styles": "Styles",
-      "chinaReverse": "China Reverse",
-      "fabricLibrary": "Fabric library"
+      "chinaImport": "China Import",
+      "fabricLibrary": "Fabric library",
+      "sections": {
+        "overview": "Overview",
+        "production": "Production",
+        "productDevelopment": "Product Development",
+        "administration": "Administration"
+      }
+    },
+    "home": {
+      "approvalCta": {
+        "title": "{{count}} styles awaiting your approval",
+        "subtitle": "Approval #1 — review intake checks and mint the Style #.",
+        "action": "Review",
+        "allCaughtUp": "No styles awaiting your approval — all caught up."
+      }
     },
     "styles": {
       "title": "Styles",
       "subtitle": "Every design in flight — submitted, in sampling, parked, or sent to production.",
       "newDesign": "New design submission",
-      "newChinaReverse": "New China Reverse intake",
+      "newChinaImport": "New China Import intake",
       "attention": {
         "awaitingApproval1": "{{n}} awaiting Approval #1 (Parul)",
         "awaitingApproval2": "{{n}} awaiting Approval #2 (Parul)",
@@ -335,8 +358,7 @@
         "in_sampling": "In sampling",
         "parked": "Parked",
         "in_pd": "In PD",
-        "all": "All",
-        "china_reverse": "China Reverse"
+        "all": "All"
       },
       "filters": {
         "search": "Search style #, name, fabric…",
@@ -348,6 +370,7 @@
       "table": {
         "styleNo": "Style #",
         "workingName": "Working name / Article type",
+        "colour": "Colour",
         "patternMaster": "Pattern master",
         "stage": "Stage",
         "fit": "Model / Live fit",
@@ -363,7 +386,7 @@
       "draft": "Draft",
       "source": {
         "sampling": "Sampling",
-        "china_reverse": "China Reverse",
+        "china_import": "China Import",
         "legacy_floor_intake": "Floor"
       },
       "lifecycle": {
@@ -379,13 +402,11 @@
       "intake": {
         "title": "New intake",
         "sourceToggle": "Source",
-        "sourceHelp": "Switching to China Reverse will hide the Pattern Master section and skip the gender-routing step.",
+        "sourceHelp": "Switching to China Import shows a simplified intake form — no sampling workflow.",
         "articleDetails": "Article details",
         "workingName": "Working name",
         "workingNamePh": "e.g. High-waist pleated trouser",
-        "fabricType": "Fabric type",
         "fabric": "Fabric",
-        "fabricHelp": "Pick a fabric type first",
         "collection": "Collection",
         "gender": "Gender",
         "genderWomen": "Women",
@@ -410,7 +431,11 @@
         "submitToDheeraj": "Submit to Dheeraj",
         "saveError": "Could not save. Try again.",
         "createdToast": "Draft created.",
-        "submittedToast": "Submitted for approval."
+        "submittedToast": "Submitted for approval.",
+        "sampleFabricRequired": "Sample fabric required",
+        "sampleFabricRequiredHelp": "Quantity consumed per sample",
+        "developmentReason": "Why develop this style?",
+        "developmentReasonPh": "e.g. Filling a gap in the women's bottom-wear range for AW26"
       },
       "workspace": {
         "edit": "Edit",
@@ -435,6 +460,21 @@
         "inspiration": "Inspiration & references",
         "lastUpdated": "Updated {{when}}",
         "notFound": "Style not found."
+      },
+      "approval1": {
+        "dialogTitle": "Approve intake",
+        "dialogIntro": "Confirm the intake checks before approving this style.",
+        "fabricFeasible": "Fabric feasible",
+        "priceOk": "Price OK",
+        "collectionFit": "Fits the collection (design fit)",
+        "note": "Note (optional)",
+        "notePlaceholder": "Anything worth recording about this approval…",
+        "confirm": "Approve",
+        "cancel": "Cancel",
+        "recordedTitle": "Intake approval (Approval #1)",
+        "checkYes": "Yes",
+        "checkNo": "No",
+        "checkUnset": "Not recorded"
       },
       "samplingSteps": {
         "in_progress_pattern_dev": "Pattern dev",
@@ -463,27 +503,154 @@
         "pending": "Pending",
         "corrections_needed": "Corrections needed",
         "approved": "Approved"
+      },
+      "drawer": {
+        "edit": "Edit",
+        "save": "Save changes",
+        "saving": "Saving…",
+        "cancel": "Cancel",
+        "create": "Create",
+        "newStyle": "New style",
+        "updatedToast": "Style updated.",
+        "createdToast": "Style created.",
+        "saveError": "Save failed.",
+        "loadError": "Could not load style history.",
+        "sections": {
+          "details": "Details",
+          "sampling": "Sampling",
+          "pattern": "Pattern & approvals",
+          "history": "History"
+        },
+        "fields": {
+          "styleNo": "Style #",
+          "workingName": "Working name",
+          "gender": "Gender",
+          "collection": "Collection",
+          "fabric": "Fabric",
+          "primaryColour": "Primary colour",
+          "referenceLink": "Reference link",
+          "referenceImage": "Reference image",
+          "samplingStatus": "Sampling status",
+          "samplingTimeline": "Sampling timeline",
+          "patternMaster": "Pattern master",
+          "dxfApproved": "DXF approved",
+          "sampleApproval": "Sample approval",
+          "productionStatus": "Production status",
+          "patternCad": "Pattern / CAD file",
+          "remark": "Remark",
+          "developmentReason": "Development rationale",
+          "sampleFabricRequired": "Sample fabric required",
+          "sampleFabricRequiredHelp": "Quantity consumed per sample"
+        },
+        "empty": "—",
+        "patternCad": {
+          "upload": "Upload CAD file",
+          "uploadMore": "Add another file",
+          "uploading": "Uploading…",
+          "hint": ".dxf, .pdf, .png, .jpg — multiple files allowed",
+          "remove": "Remove",
+          "open": "Open / Download",
+          "print": "Print",
+          "printAll": "Print all",
+          "uploaded": "CAD file attached.",
+          "uploadError": "Upload failed — try again.",
+          "badType": "Unsupported file — use .dxf, .pdf, .png or .jpg.",
+          "none": "No CAD file uploaded.",
+          "dxfRendering": "Rendering DXF…",
+          "dxfError": "Could not render this DXF — open or download the file."
+        },
+        "history": {
+          "empty": "No history yet.",
+          "by": "by {{name}}",
+          "system": "system",
+          "note": "Note",
+          "changes": "Changes",
+          "from": "from",
+          "to": "to"
+        }
       }
+    },
+    "chinaImport": {
+      "title": "China Import",
+      "subtitle": "Imported styles (NW- prefixed) — a simple, separate flow.",
+      "new": "New China Import",
+      "search": "Search style #, name…"
     },
     "fabricLibrary": {
       "title": "Fabric Library",
       "subtitle": "Master list of fabrics and types used across all styles.",
       "newFabric": "New fabric",
+      "editFabric": "Edit fabric",
       "types": "Fabric types",
       "allFabrics": "All fabrics",
+      "blended": "Blended",
       "cols": {
         "name": "Fabric name",
-        "type": "Type",
+        "content": "Content",
+        "gsm": "GSM",
+        "width": "Width",
         "price": "Price",
-        "status": "Status",
         "updated": "Last updated",
-        "actions": "Actions"
+        "actions": "Actions",
+        "available": "Available"
       },
-      "empty": "No fabrics in this type.",
-      "all": "All",
+      "empty": "No fabrics match these filters.",
       "addedToast": "Fabric added.",
       "updatedToast": "Fabric updated.",
-      "addError": "Could not save. Try again."
+      "addError": "Could not save. Try again.",
+      "uom": {
+        "meter": "Meter",
+        "kg": "Kilogram",
+        "oz": "Ounce"
+      },
+      "form": {
+        "name": "Name",
+        "count": "Count",
+        "construction": "Construction",
+        "gsm": "GSM",
+        "cuttableWidth": "Cuttable width (in)",
+        "unitOfMeasure": "Unit of measure",
+        "pricePerUnit": "Price per unit",
+        "notes": "Notes"
+      },
+      "comp": {
+        "title": "Content / composition",
+        "unknown": "Composition unknown",
+        "sumIndicator": "Sums to {{sum}}% / 100%",
+        "fibrePlaceholder": "Fibre (e.g. Cotton)",
+        "addFibre": "Add fibre",
+        "addOther": "Add 'Other' row",
+        "addOtherHint": "Adds a row for unaccounted content, pre-filled to reach 100%.",
+        "remove": "Remove row",
+        "help": "Leave empty if composition is unknown. Otherwise rows must sum to exactly 100%.",
+        "errEmptyFibre": "Every composition row needs a fibre name.",
+        "errDuplicate": "Composition has duplicate fibres — combine them into one row.",
+        "errSum": "Composition must sum to 100% (currently {{sum}}%)."
+      },
+      "filters": {
+        "searchPlaceholder": "Search by fabric name…",
+        "content": "Content",
+        "clear": "Clear filters",
+        "activeSummary_one": "{{count}} fabric matches",
+        "activeSummary_other": "{{count}} fabrics match",
+        "activeOf": "{{count}} of {{total}}"
+      },
+      "noStock": "no stock",
+      "available": "available",
+      "addStock": "Add stock",
+      "edit": "Edit",
+      "stockSavedToast": "Stock entry recorded.",
+      "stockSaveError": "Could not record stock. Try again.",
+      "stockHelp": "Record a fabric receipt or adjustment. Consumption is deducted automatically when a design is approved.",
+      "stock": {
+        "entryType": "Entry type",
+        "quantity": "Quantity",
+        "note": "Note",
+        "receipt": "Receipt (add stock)",
+        "adjustment": "Adjustment",
+        "consumption": "Consumption (remove stock)",
+        "record": "Record entry"
+      }
     },
     "editRequests": {
       "title": "Edit requests",
@@ -687,6 +854,11 @@
         "generic": "Could not save user. Please try again."
       },
       "deactivateConfirm": "Deactivate {{name}}? They will no longer be able to sign in."
+    },
+    "header": {
+      "accountMenu": "Account menu",
+      "signedInAs": "Signed in as",
+      "home": "Home"
     }
   },
   "profile": {

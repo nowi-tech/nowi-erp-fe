@@ -9,6 +9,7 @@ import type {
   StyleVariant,
   StyleInspection,
   StyleChannelListing,
+  StyleAuditLog,
   StyleSource,
   StyleLifecycle,
   ChannelName,
@@ -16,8 +17,10 @@ import type {
   InspectionVerdict,
   Gender,
   Collection,
-  FabricType,
   Fabric,
+  FabricStockEntry,
+  FabricStockEntryType,
+  CreateFabricStockEntryInput,
 } from './types';
 
 // ── enum unions (mirror prisma/schema.prisma) ──────────────────────────
@@ -28,7 +31,7 @@ export type ArticleCategory =
   | 'womens_top_wear'
   | 'mens_top_wear'
   | 'mens_suit'
-  | 'china_reverse';
+  | 'china_import';
 
 export type SamplingStatus =
   | 'in_progress_pattern_dev'
@@ -63,7 +66,7 @@ export type StyleTab =
   | 'parked'
   | 'sample_approved'
   | 'all'
-  | 'china_reverse'
+  | 'china_import'
   | 'in_pd';
 
 export interface ListStylesParams {
@@ -189,9 +192,17 @@ export async function hardDeleteStyle(styleId: number): Promise<void> {
 }
 
 // ─── Style actions ────────────────────────────────────────────────────
+/** Optional body for Approval #1 — the merchandiser's intake checks. */
+export interface ApproveStyleBody {
+  approval1FabricFeasible?: boolean;
+  approval1PriceOk?: boolean;
+  approval1CollectionFit?: boolean;
+  approval1Note?: string;
+}
+
 export async function approveStyle(
   styleId: number,
-  body: { note?: string } = {},
+  body: ApproveStyleBody = {},
 ): Promise<Style> {
   const res = await apiClient.post<Style>(
     `/api/styles/${styleId}/actions/approve`,
@@ -313,18 +324,27 @@ export async function listCollections(): Promise<Collection[]> {
   return res.data;
 }
 
-export async function listFabricTypes(): Promise<FabricType[]> {
-  const res = await apiClient.get<FabricType[]>('/api/fabric-types');
+export async function listFabrics(): Promise<Fabric[]> {
+  const res = await apiClient.get<Fabric[]>('/api/fabrics');
   return res.data;
 }
 
-export async function listFabrics(params: { fabricTypeId?: number } = {}): Promise<Fabric[]> {
-  const res = await apiClient.get<Fabric[]>('/api/fabrics', { params });
-  return res.data;
+/** Shape accepted by create/update — `compositions` percent may be number or string. */
+export interface FabricUpsertBody {
+  name?: string;
+  pricePerUnit?: string | number | null;
+  notes?: string | null;
+  isActive?: boolean;
+  count?: string | null;
+  construction?: string | null;
+  gsm?: number | null;
+  cuttableWidth?: string | number | null;
+  unitOfMeasure?: 'meter' | 'kg' | 'oz' | null;
+  compositions?: { fibre: string; percent: number }[];
 }
 
 export async function createFabric(
-  body: Partial<Fabric> & { name: string },
+  body: FabricUpsertBody & { name: string },
 ): Promise<Fabric> {
   const res = await apiClient.post<Fabric>('/api/fabrics', body);
   return res.data;
@@ -332,7 +352,7 @@ export async function createFabric(
 
 export async function patchFabric(
   id: number,
-  body: Partial<Fabric>,
+  body: FabricUpsertBody,
 ): Promise<Fabric> {
   const res = await apiClient.patch<Fabric>(`/api/fabrics/${id}`, body);
   return res.data;
@@ -342,12 +362,36 @@ export async function deleteFabric(id: number): Promise<void> {
   await apiClient.delete(`/api/fabrics/${id}`);
 }
 
+// ─── Fabric stock ledger ──────────────────────────────────────────────
+export async function listFabricStock(
+  fabricId: number,
+): Promise<FabricStockEntry[]> {
+  const res = await apiClient.get<FabricStockEntry[]>(
+    `/api/fabrics/${fabricId}/stock`,
+  );
+  return res.data;
+}
+
+/** Record a stock entry (receipt / adjustment / consumption). Returns the
+ * refreshed fabric with its new `availableQuantity`. */
+export async function addFabricStock(
+  fabricId: number,
+  body: CreateFabricStockEntryInput,
+): Promise<Fabric> {
+  const res = await apiClient.post<Fabric>(
+    `/api/fabrics/${fabricId}/stock`,
+    body,
+  );
+  return res.data;
+}
+
 // Re-export common types so screens don't need to reach into types.ts.
 export type {
   Style,
   StyleVariant,
   StyleInspection,
   StyleChannelListing,
+  StyleAuditLog,
   StyleSource,
   StyleLifecycle,
   ChannelName,
@@ -355,6 +399,8 @@ export type {
   InspectionVerdict,
   Gender,
   Collection,
-  FabricType,
   Fabric,
+  FabricStockEntry,
+  FabricStockEntryType,
+  CreateFabricStockEntryInput,
 };

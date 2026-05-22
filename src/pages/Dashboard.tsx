@@ -14,7 +14,7 @@ const ROLE_HOMES: Record<UserRole, string> = {
   sampling_lead: '/styles',
   pattern_master_w: '/styles',
   pattern_master_m: '/styles',
-  china_reverse_approver: '/styles',
+  china_import_approver: '/styles',
   data_admin: '/admin',
   pd_lead: '/styles',
 };

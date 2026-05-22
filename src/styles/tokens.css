@@ -36,6 +36,23 @@
   --color-primary-hover: #1a2f96;       /* pressed */
   --color-primary-soft: #eef1ff;
 
+  /* ── Sidebar / navigation ──
+     The rail is a tinted cool-white panel (slightly cooler than the canvas)
+     so it reads as distinct chrome without going full dark — the brand logo
+     PNG is dark ink and must stay legible. */
+  --color-sidebar:           #fbfcfe;  /* rail panel surface */
+  --color-sidebar-header:    #f4f6fb;  /* logo strip / footer wash */
+  --color-nav-active-bg:     #eef1ff;  /* active row tint */
+  --color-nav-active-ink:    #1a2f96;  /* active row text/icon */
+  --color-nav-hover-bg:      #f1f3f9;  /* row hover */
+  --color-nav-section:       #8a91a6;  /* section header label */
+
+  /* ── Header chrome ──
+     The top header owns global/contextual controls only (no nav links).
+     These tokens style the breadcrumb context label and the account menu. */
+  --color-header-crumb:      #8a91a6;  /* breadcrumb parent segment / separator */
+  --color-header-menu-bg:    #ffffff;  /* account-menu dropdown surface */
+
   /* Accent — secondary brand chips / occasional callouts (kept marigold) */
   --color-accent: #c79224;
   --color-accent-foreground: #0e1730;

@@ -42,6 +42,9 @@ const UsersPage = lazy(() => import('./pages/admin/Users'));
 const EditRequestsPage = lazy(() => import('./pages/admin/EditRequests'));
 const DispatchPrint = lazy(() => import('./pages/dispatches/DispatchPrint'));
 const StylesRegistry = lazy(() => import('./pages/styles/StylesRegistry'));
+const ChinaImportRegistry = lazy(
+  () => import('./pages/china-import/ChinaImportRegistry'),
+);
 const NewIntake = lazy(() => import('./pages/styles/NewIntake'));
 const StyleWorkspace = lazy(() => import('./pages/styles/StyleWorkspace'));
 const FabricLibrary = lazy(() => import('./pages/fabric-library/FabricLibrary'));
@@ -347,6 +350,34 @@ function App() {
                 element={
                   <S>
                     <StyleWorkspace />
+                  </S>
+                }
+              />
+            </Route>
+
+            {/* China Import — its own first-class destination, a simple
+                flat registry for NW- prefixed imported styles. */}
+            <Route
+              path="/china-import"
+              element={
+                <ProtectedRoute
+                  allowedRoles={[
+                    'sampling_editor',
+                    'admin',
+                    'china_import_approver',
+                  ]}
+                >
+                  <S>
+                    <AdminShell />
+                  </S>
+                </ProtectedRoute>
+              }
+            >
+              <Route
+                index
+                element={
+                  <S>
+                    <ChinaImportRegistry />
                   </S>
                 }
               />

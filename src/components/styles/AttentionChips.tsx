@@ -5,7 +5,6 @@ interface Props {
   awaitingApproval1: number;
   awaitingApproval2: number;
   readyForQc: number;
-  readyToDispatch: number;
 }
 
 interface Chip {
@@ -21,7 +20,6 @@ export default function AttentionChips({
   awaitingApproval1,
   awaitingApproval2,
   readyForQc,
-  readyToDispatch,
 }: Props) {
   const { t } = useTranslation();
   const chips: Chip[] = [
@@ -45,13 +43,6 @@ export default function AttentionChips({
       bg: 'var(--stage-stitch-bg)',
       fg: 'var(--stage-stitch-ink)',
       dot: 'var(--stage-stitch-acc)',
-    },
-    {
-      i18n: 'admin.styles.attention.readyToDispatch',
-      n: readyToDispatch,
-      bg: 'var(--status-ready-bg)',
-      fg: 'var(--status-ready-ink)',
-      dot: 'var(--status-ready-acc)',
     },
   ];
 

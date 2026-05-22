@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { Link, useNavigate, useSearchParams } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { Plus, Search } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { Button } from '@/components/ui/button';
@@ -13,29 +13,15 @@ import {
   listStyles,
   getStylesSummary,
   listCollections,
-  listFabricTypes,
   listFabrics,
   type ListStylesParams,
   type StyleTab,
   type StylesSummary,
 } from '@/api/styles';
-import type {
-  Style,
-  StyleSource,
-  Collection,
-  Fabric,
-  FabricType,
-} from '@/api/types';
+import type { Style, Collection, Fabric } from '@/api/types';
 import { cn } from '@/lib/utils';
 
-const TABS: StyleTab[] = [
-  'inbox',
-  'in_sampling',
-  'parked',
-  'in_pd',
-  'all',
-  'china_reverse',
-];
+const TABS: StyleTab[] = ['inbox', 'in_sampling', 'parked', 'in_pd', 'all'];
 
 /**
  * Merged Dashboard + Registry page (canonical_styles_registry.html).
@@ -43,19 +29,13 @@ const TABS: StyleTab[] = [
  * Header block: attention chips · KPI strip · collapsible widgets row.
  * Body: tabs + filter bar + parent/variant grouped table.
  *
- * The "China Reverse" sidebar link points at this page with
- * `?source=china_reverse`; we honor that on mount.
+ * Sampling-only — China Import has its own dedicated page (`/china-import`).
  */
 export default function StylesRegistry() {
   const { t } = useTranslation();
   const navigate = useNavigate();
-  const [search] = useSearchParams();
 
-  const sourceFromUrl =
-    (search.get('source') as StyleSource | null) ?? undefined;
-  const [tab, setTab] = useState<StyleTab>(
-    sourceFromUrl === 'china_reverse' ? 'china_reverse' : 'inbox',
-  );
+  const [tab, setTab] = useState<StyleTab>('inbox');
   const [summary, setSummary] = useState<StylesSummary | null>(null);
   const [rows, setRows] = useState<Style[]>([]);
   const [loading, setLoading] = useState(true);
@@ -64,7 +44,6 @@ export default function StylesRegistry() {
   const [collectionId, setCollectionId] = useState<string>('');
   const [samplingStatus, setSamplingStatus] = useState<string>('');
   const [collections, setCollections] = useState<Collection[]>([]);
-  const [fabricTypes, setFabricTypes] = useState<FabricType[]>([]);
   const [fabrics, setFabrics] = useState<Fabric[]>([]);
 
   const [drawerOpen, setDrawerOpen] = useState(false);
@@ -75,21 +54,14 @@ export default function StylesRegistry() {
   useEffect(() => {
     void Promise.all([
       listCollections().catch(() => [] as Collection[]),
-      listFabricTypes().catch(() => [] as FabricType[]),
       listFabrics().catch(() => [] as Fabric[]),
       getStylesSummary().catch(() => null),
-    ]).then(([c, ft, fb, s]) => {
+    ]).then(([c, fb, s]) => {
       setCollections(c);
-      setFabricTypes(ft);
       setFabrics(fb);
       setSummary(s);
     });
   }, []);
-
-  // React to ?source= URL changes.
-  useEffect(() => {
-    if (sourceFromUrl === 'china_reverse') setTab('china_reverse');
-  }, [sourceFromUrl]);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -102,7 +74,6 @@ export default function StylesRegistry() {
         samplingStatus: (samplingStatus || undefined) as any,
         take: 200,
       };
-      if (tab === 'china_reverse') params.source = 'china_reverse';
       const res = await listStyles(params);
       setRows(res.data);
     } catch {
@@ -118,8 +89,6 @@ export default function StylesRegistry() {
   }, [load]);
 
   const openCreateDesign = () => navigate('/styles/new');
-  const openCreateChinaReverse = () =>
-    navigate('/styles/new?source=china_reverse');
 
   const openEdit = (s: Style) => {
     setEditing(s);
@@ -143,16 +112,10 @@ export default function StylesRegistry() {
             {t('admin.styles.subtitle')}
           </p>
         </div>
-        <div className="flex items-center gap-2">
-          <Button variant="outline" onClick={openCreateChinaReverse}>
-            <Plus size={16} />
-            <span className="ml-1">{t('admin.styles.newChinaReverse')}</span>
-          </Button>
-          <Button onClick={openCreateDesign}>
-            <Plus size={16} />
-            <span className="ml-1">{t('admin.styles.newDesign')}</span>
-          </Button>
-        </div>
+        <Button onClick={openCreateDesign}>
+          <Plus size={16} />
+          <span className="ml-1">{t('admin.styles.newDesign')}</span>
+        </Button>
       </div>
 
       {/* Attention chips */}
@@ -161,7 +124,6 @@ export default function StylesRegistry() {
           awaitingApproval1={summary.attention.awaitingApproval1}
           awaitingApproval2={summary.attention.awaitingApproval2}
           readyForQc={summary.attention.readyForQc}
-          readyToDispatch={summary.attention.readyToDispatch}
         />
       )}
 
@@ -284,7 +246,6 @@ export default function StylesRegistry() {
         style={editing}
         defaults={{ source: 'sampling', category: 'womens_top_wear' }}
         collections={collections}
-        fabricTypes={fabricTypes}
         fabrics={fabrics}
         onClose={() => setDrawerOpen(false)}
         onSaved={() => void load()}

@@ -4,6 +4,8 @@ import { useTranslation } from 'react-i18next';
 import { ArrowLeft, Pause, Play, Send, CheckCircle2 } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
+import { Dialog } from '@/components/ui/dialog';
+import { Textarea } from '@/components/ui/textarea';
 import { useToast } from '@/components/ui/toast';
 import SamplingPipelineStepper from '@/components/styles/SamplingPipelineStepper';
 import VariantMatrix from '@/components/styles/VariantMatrix';
@@ -44,6 +46,7 @@ export default function StyleWorkspace() {
   const [style, setStyle] = useState<Style | null>(null);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState<string | null>(null);
+  const [approveOpen, setApproveOpen] = useState(false);
 
   const load = useCallback(async () => {
     if (!idParam) return;
@@ -97,8 +100,12 @@ export default function StyleWorkspace() {
     );
   }
 
+  // China Import is a simple single-approval flow — no sampling stage,
+  // no Approval #2, no inspections. Sampling-only UI is hidden for it.
+  const isChinaImport = style.source === 'china_import';
   const canApproveIntake = style.lifecycle === 'draft';
-  const canSampleApprove = style.lifecycle === 'in_sampling';
+  const canSampleApprove =
+    !isChinaImport && style.lifecycle === 'in_sampling';
   const canPark = style.lifecycle !== 'parked' && style.lifecycle !== 'archived';
   const canRevive = style.lifecycle === 'parked';
   const sourceLabel = t(`admin.styles.source.${style.source}`);
@@ -174,7 +181,14 @@ export default function StyleWorkspace() {
             <Button
               size="sm"
               disabled={busy !== null}
-              onClick={() => void doAction('approve', () => approveStyle(style.id))}
+              onClick={() => {
+                if (isChinaImport) {
+                  // China Import keeps the lightweight single-click approve.
+                  void doAction('approve', () => approveStyle(style.id));
+                } else {
+                  setApproveOpen(true);
+                }
+              }}
             >
               <CheckCircle2 size={14} />
               <span className="ml-1">{t('admin.styles.workspace.approve')}</span>
@@ -203,20 +217,50 @@ export default function StyleWorkspace() {
         </div>
       </div>
 
-      {/* Sampling pipeline */}
-      <section className={cardClasses}>
-        <h2 className="font-serif text-lg mb-3">
-          {t('admin.styles.workspace.samplingPipeline')}
-        </h2>
-        <SamplingPipelineStepper
-          samplingStatus={style.samplingStatus as SamplingStatus | null}
-          onStepClick={(next) =>
-            void doAction('step', () =>
-              patchStyle(style.id, { samplingStatus: next }),
-            )
-          }
-        />
-      </section>
+      {/* Recorded intake approval checks — sampling flow, already approved */}
+      {!isChinaImport && style.approvedAt && (
+        <section className={cardClasses}>
+          <h2 className="font-serif text-lg mb-3">
+            {t('admin.styles.approval1.recordedTitle')}
+          </h2>
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+            <ApprovalCheckRow
+              label={t('admin.styles.approval1.fabricFeasible')}
+              value={style.approval1FabricFeasible}
+            />
+            <ApprovalCheckRow
+              label={t('admin.styles.approval1.priceOk')}
+              value={style.approval1PriceOk}
+            />
+            <ApprovalCheckRow
+              label={t('admin.styles.approval1.collectionFit')}
+              value={style.approval1CollectionFit}
+            />
+          </div>
+          {style.approval1Note && (
+            <p className="mt-3 text-sm whitespace-pre-wrap text-[var(--color-foreground-2)]">
+              {style.approval1Note}
+            </p>
+          )}
+        </section>
+      )}
+
+      {/* Sampling pipeline — not applicable to China Import styles */}
+      {!isChinaImport && (
+        <section className={cardClasses}>
+          <h2 className="font-serif text-lg mb-3">
+            {t('admin.styles.workspace.samplingPipeline')}
+          </h2>
+          <SamplingPipelineStepper
+            samplingStatus={style.samplingStatus as SamplingStatus | null}
+            onStepClick={(next) =>
+              void doAction('step', () =>
+                patchStyle(style.id, { samplingStatus: next }),
+              )
+            }
+          />
+        </section>
+      )}
 
       {/* Bento grid: left (specs + variants + pattern approval), right (production + channels + inspections) */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-4">
@@ -229,23 +273,21 @@ export default function StyleWorkspace() {
             <dl className="grid grid-cols-2 gap-x-4 gap-y-2 text-sm">
               <Spec label="Gender" value={style.gender ?? '—'} />
               <Spec label="Category" value={style.categoryCode ?? '—'} />
-              <Spec
-                label="Fabric type"
-                value={style.fabricType?.name ?? '—'}
-              />
               <Spec label="Fabric" value={style.fabric?.name ?? '—'} />
               <Spec
                 label="Primary colour"
                 value={style.primaryColour ?? '—'}
               />
-              <Spec
-                label="Sampling timeline"
-                value={
-                  style.samplingTimeline
-                    ? new Date(style.samplingTimeline).toLocaleDateString()
-                    : '—'
-                }
-              />
+              {!isChinaImport && (
+                <Spec
+                  label="Sampling timeline"
+                  value={
+                    style.samplingTimeline
+                      ? new Date(style.samplingTimeline).toLocaleDateString()
+                      : '—'
+                  }
+                />
+              )}
             </dl>
           </section>
 
@@ -260,24 +302,26 @@ export default function StyleWorkspace() {
             />
           </section>
 
-          {/* Pattern approval */}
-          <section className={cardClasses}>
-            <h2 className="font-serif text-lg mb-3">
-              {t('admin.styles.workspace.patternApproval')}
-            </h2>
-            <div className="space-y-2">
-              <PatternRow
-                label={t('admin.styles.workspace.patternApprovalWomen')}
-                active={isWomen}
-                value={style.dxfApproved}
-              />
-              <PatternRow
-                label={t('admin.styles.workspace.patternApprovalMen')}
-                active={isMen}
-                value={style.dxfApproved}
-              />
-            </div>
-          </section>
+          {/* Pattern approval — sampling-only */}
+          {!isChinaImport && (
+            <section className={cardClasses}>
+              <h2 className="font-serif text-lg mb-3">
+                {t('admin.styles.workspace.patternApproval')}
+              </h2>
+              <div className="space-y-2">
+                <PatternRow
+                  label={t('admin.styles.workspace.patternApprovalWomen')}
+                  active={isWomen}
+                  value={style.dxfApproved}
+                />
+                <PatternRow
+                  label={t('admin.styles.workspace.patternApprovalMen')}
+                  active={isMen}
+                  value={style.dxfApproved}
+                />
+              </div>
+            </section>
+          )}
         </div>
 
         <div className="lg:col-span-7 space-y-4">
@@ -303,10 +347,12 @@ export default function StyleWorkspace() {
                 label="Factory"
                 value={style.factoryId ? `#${style.factoryId}` : '—'}
               />
-              <Spec
-                label="Sample approval"
-                value={style.sampleApproval ?? '—'}
-              />
+              {!isChinaImport && (
+                <Spec
+                  label="Sample approval"
+                  value={style.sampleApproval ?? '—'}
+                />
+              )}
             </dl>
           </section>
 
@@ -322,17 +368,19 @@ export default function StyleWorkspace() {
             />
           </section>
 
-          {/* Inspection history */}
-          <section className={cardClasses}>
-            <h2 className="font-serif text-lg mb-3">
-              {t('admin.styles.workspace.inspectionHistory')}
-            </h2>
-            <InspectionTimeline
-              styleId={style.id}
-              inspections={style.inspections ?? []}
-              onAdded={() => void load()}
-            />
-          </section>
+          {/* Inspection history — sampling-only */}
+          {!isChinaImport && (
+            <section className={cardClasses}>
+              <h2 className="font-serif text-lg mb-3">
+                {t('admin.styles.workspace.inspectionHistory')}
+              </h2>
+              <InspectionTimeline
+                styleId={style.id}
+                inspections={style.inspections ?? []}
+                onAdded={() => void load()}
+              />
+            </section>
+          )}
         </div>
       </div>
 
@@ -371,6 +419,159 @@ export default function StyleWorkspace() {
           )}
         </section>
       </div>
+
+      {/* Approval #1 checklist dialog — sampling flow only */}
+      <ApproveIntakeDialog
+        open={approveOpen}
+        busy={busy !== null}
+        onClose={() => setApproveOpen(false)}
+        onConfirm={(body) => {
+          setApproveOpen(false);
+          void doAction('approve', () => approveStyle(style.id, body));
+        }}
+      />
+    </div>
+  );
+}
+
+function ApproveIntakeDialog({
+  open,
+  busy,
+  onClose,
+  onConfirm,
+}: {
+  open: boolean;
+  busy: boolean;
+  onClose: () => void;
+  onConfirm: (body: {
+    approval1FabricFeasible: boolean;
+    approval1PriceOk: boolean;
+    approval1CollectionFit: boolean;
+    approval1Note?: string;
+  }) => void;
+}) {
+  const { t } = useTranslation();
+  const [fabricFeasible, setFabricFeasible] = useState(false);
+  const [priceOk, setPriceOk] = useState(false);
+  const [collectionFit, setCollectionFit] = useState(false);
+  const [note, setNote] = useState('');
+
+  // Reset the checklist each time the dialog opens.
+  useEffect(() => {
+    if (open) {
+      setFabricFeasible(false);
+      setPriceOk(false);
+      setCollectionFit(false);
+      setNote('');
+    }
+  }, [open]);
+
+  return (
+    <Dialog
+      open={open}
+      onClose={onClose}
+      title={t('admin.styles.approval1.dialogTitle')}
+      footer={
+        <>
+          <Button variant="outline" size="sm" disabled={busy} onClick={onClose}>
+            {t('admin.styles.approval1.cancel')}
+          </Button>
+          <Button
+            size="sm"
+            disabled={busy}
+            onClick={() =>
+              onConfirm({
+                approval1FabricFeasible: fabricFeasible,
+                approval1PriceOk: priceOk,
+                approval1CollectionFit: collectionFit,
+                approval1Note: note.trim() || undefined,
+              })
+            }
+          >
+            <CheckCircle2 size={14} />
+            <span className="ml-1">{t('admin.styles.approval1.confirm')}</span>
+          </Button>
+        </>
+      }
+    >
+      <p className="text-sm text-[var(--color-muted-foreground)] mb-4">
+        {t('admin.styles.approval1.dialogIntro')}
+      </p>
+      <div className="space-y-2">
+        <CheckboxRow
+          label={t('admin.styles.approval1.fabricFeasible')}
+          checked={fabricFeasible}
+          onChange={setFabricFeasible}
+        />
+        <CheckboxRow
+          label={t('admin.styles.approval1.priceOk')}
+          checked={priceOk}
+          onChange={setPriceOk}
+        />
+        <CheckboxRow
+          label={t('admin.styles.approval1.collectionFit')}
+          checked={collectionFit}
+          onChange={setCollectionFit}
+        />
+      </div>
+      <div className="mt-4">
+        <label className="block text-xs text-[var(--color-muted-foreground)] mb-1">
+          {t('admin.styles.approval1.note')}
+        </label>
+        <Textarea
+          value={note}
+          onChange={(e) => setNote(e.target.value)}
+          placeholder={t('admin.styles.approval1.notePlaceholder')}
+        />
+      </div>
+    </Dialog>
+  );
+}
+
+function CheckboxRow({
+  label,
+  checked,
+  onChange,
+}: {
+  label: string;
+  checked: boolean;
+  onChange: (v: boolean) => void;
+}) {
+  return (
+    <label className="flex items-center gap-2.5 rounded-[var(--radius-sm)] border border-[var(--color-border)] px-3 py-2 cursor-pointer hover:bg-[var(--color-surface-2)]/40">
+      <input
+        type="checkbox"
+        checked={checked}
+        onChange={(e) => onChange(e.target.checked)}
+        className="h-4 w-4 accent-[var(--color-primary)]"
+      />
+      <span className="text-sm">{label}</span>
+    </label>
+  );
+}
+
+function ApprovalCheckRow({
+  label,
+  value,
+}: {
+  label: string;
+  value: boolean | null;
+}) {
+  const { t } = useTranslation();
+  return (
+    <div className="flex items-center justify-between rounded-[var(--radius-sm)] border border-[var(--color-border)] px-3 py-2 bg-[var(--color-surface-2)]/40">
+      <span className="text-sm">{label}</span>
+      <Badge
+        variant={
+          value === true ? 'success' : value === false ? 'outline' : 'outline'
+        }
+      >
+        {value === true
+          ? t('admin.styles.approval1.checkYes')
+          : value === false
+            ? t('admin.styles.approval1.checkNo')
+            : t('admin.styles.approval1.checkUnset')}
+      </Badge>
     </div>
   );
 }

@@ -33,9 +33,18 @@
     "showFilters": "Filters दिखाएँ",
     "hideFilters": "Filters छिपाएँ",
     "clearAll": "सब हटाएँ",
+    "columnFilter": {
+      "label": "{{column}} फ़िल्टर करें",
+      "selectAll": "सब चुनें",
+      "clearAll": "क्लियर",
+      "noValues": "कोई value नहीं"
+    },
     "testData": "Test",
     "testDataTooltip": "Test data — असली लॉट नहीं",
-    "showingFirstN": "हाल के {{n}} दिखा रहे हैं — पुरानी rows load नहीं हुईं।"
+    "showingFirstN": "हाल के {{n}} दिखा रहे हैं — पुरानी rows load नहीं हुईं।",
+    "openMenu": "मेनू खोलें",
+    "navigation": "नेविगेशन",
+    "create": "बनाएँ"
   },
   "auth": {
     "title": "Sign in",
@@ -291,7 +300,96 @@
       "editRequests": "Edit Requests",
       "floor": "Floor",
       "stitching": "Stitching",
-      "finishing": "Finishing"
+      "finishing": "Finishing",
+      "chinaImport": "China Import",
+      "sections": {
+        "overview": "अवलोकन",
+        "production": "उत्पादन",
+        "productDevelopment": "उत्पाद विकास",
+        "administration": "प्रशासन"
+      }
+    },
+    "chinaImport": {
+      "title": "China Import",
+      "subtitle": "आयातित स्टाइल (NW- उपसर्ग) — एक सरल, अलग प्रवाह।",
+      "new": "नया China Import",
+      "search": "स्टाइल #, नाम खोजें…"
+    },
+    "fabricLibrary": {
+      "title": "फैब्रिक लाइब्रेरी",
+      "subtitle": "सभी स्टाइल में उपयोग किए जाने वाले फैब्रिक और प्रकारों की मास्टर सूची।",
+      "newFabric": "नया फैब्रिक",
+      "editFabric": "फैब्रिक संपादित करें",
+      "types": "फैब्रिक प्रकार",
+      "allFabrics": "सभी फैब्रिक",
+      "blended": "मिश्रित",
+      "cols": {
+        "name": "फैब्रिक नाम",
+        "content": "सामग्री",
+        "gsm": "जीएसएम",
+        "width": "चौड़ाई",
+        "price": "मूल्य",
+        "updated": "अंतिम अपडेट",
+        "actions": "क्रियाएँ",
+        "available": "उपलब्ध"
+      },
+      "empty": "इन फ़िल्टर से कोई फैब्रिक मेल नहीं खाता।",
+      "addedToast": "फैब्रिक जोड़ा गया।",
+      "updatedToast": "फैब्रिक अपडेट किया गया।",
+      "addError": "सहेजा नहीं जा सका। पुनः प्रयास करें।",
+      "uom": {
+        "meter": "मीटर",
+        "kg": "किलोग्राम",
+        "oz": "औंस"
+      },
+      "form": {
+        "name": "नाम",
+        "count": "काउंट",
+        "construction": "बुनाई",
+        "gsm": "जीएसएम",
+        "cuttableWidth": "कटाई योग्य चौड़ाई (इंच)",
+        "unitOfMeasure": "माप की इकाई",
+        "pricePerUnit": "प्रति इकाई मूल्य",
+        "notes": "टिप्पणियाँ"
+      },
+      "comp": {
+        "title": "सामग्री / संरचना",
+        "unknown": "संरचना अज्ञात",
+        "sumIndicator": "योग {{sum}}% / 100%",
+        "fibrePlaceholder": "रेशा (जैसे कॉटन)",
+        "addFibre": "रेशा जोड़ें",
+        "addOther": "'अन्य' पंक्ति जोड़ें",
+        "addOtherHint": "बिना हिसाब वाली सामग्री के लिए पंक्ति जोड़ता है, 100% तक पहुँचने हेतु पूर्व-भरी।",
+        "remove": "पंक्ति हटाएँ",
+        "help": "संरचना अज्ञात होने पर खाली छोड़ें। अन्यथा पंक्तियों का योग ठीक 100% होना चाहिए।",
+        "errEmptyFibre": "प्रत्येक संरचना पंक्ति में रेशे का नाम आवश्यक है।",
+        "errDuplicate": "संरचना में दोहराए गए रेशे हैं — उन्हें एक पंक्ति में मिलाएँ।",
+        "errSum": "संरचना का योग 100% होना चाहिए (वर्तमान में {{sum}}%)।"
+      },
+      "filters": {
+        "searchPlaceholder": "फैब्रिक नाम से खोजें…",
+        "content": "सामग्री",
+        "clear": "फ़िल्टर साफ़ करें",
+        "activeSummary_one": "{{count}} फैब्रिक मेल खाता है",
+        "activeSummary_other": "{{count}} फैब्रिक मेल खाते हैं",
+        "activeOf": "{{total}} में से {{count}}"
+      },
+      "noStock": "स्टॉक नहीं",
+      "available": "उपलब्ध",
+      "addStock": "स्टॉक जोड़ें",
+      "edit": "संपादित करें",
+      "stockSavedToast": "स्टॉक प्रविष्टि दर्ज की गई।",
+      "stockSaveError": "स्टॉक दर्ज नहीं हो सका। पुनः प्रयास करें।",
+      "stockHelp": "कपड़े की प्राप्ति या समायोजन दर्ज करें। डिज़ाइन स्वीकृत होने पर खपत स्वतः घटाई जाती है।",
+      "stock": {
+        "entryType": "प्रविष्टि प्रकार",
+        "quantity": "मात्रा",
+        "note": "टिप्पणी",
+        "receipt": "प्राप्ति (स्टॉक जोड़ें)",
+        "adjustment": "समायोजन",
+        "consumption": "खपत (स्टॉक हटाएं)",
+        "record": "प्रविष्टि दर्ज करें"
+      }
     },
     "editRequests": {
       "title": "Edit Requests",
@@ -495,6 +593,34 @@
         "generic": "User save नहीं हो पाया"
       },
       "deactivateConfirm": "{{name}} को deactivate करें? वे login नहीं कर पाएँगे।"
+    },
+    "header": {
+      "accountMenu": "अकाउंट मेनू",
+      "signedInAs": "साइन-इन",
+      "home": "होम"
+    },
+    "home": {
+      "approvalCta": {
+        "title": "{{count}} स्टाइल आपकी स्वीकृति की प्रतीक्षा में",
+        "subtitle": "स्वीकृति #1 — इनटेक जाँच की समीक्षा करें और स्टाइल # बनाएं।",
+        "action": "समीक्षा करें",
+        "allCaughtUp": "कोई स्टाइल आपकी स्वीकृति की प्रतीक्षा में नहीं — सब पूरा।"
+      }
+    },
+    "styles": {
+      "intake": {
+        "sampleFabricRequired": "सैंपल के लिए आवश्यक कपड़ा",
+        "sampleFabricRequiredHelp": "प्रति सैंपल खपत मात्रा",
+        "developmentReason": "यह style क्यों बनाई जा रही है?",
+        "developmentReasonPh": "जैसे: AW26 women's bottom-wear range में कमी पूरी करना"
+      },
+      "drawer": {
+        "fields": {
+          "sampleFabricRequired": "सैंपल के लिए आवश्यक कपड़ा",
+          "sampleFabricRequiredHelp": "प्रति सैंपल खपत मात्रा",
+          "developmentReason": "विकास का कारण"
+        }
+      }
     }
   },
   "profile": {

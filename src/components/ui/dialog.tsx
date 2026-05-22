@@ -9,6 +9,8 @@ interface DialogProps {
   footer?: ReactNode;
   /** Element id (or ref) to autofocus when the dialog opens. */
   initialFocusRef?: React.RefObject<HTMLElement | null>;
+  /** Tailwind max-width class for the dialog panel. Defaults to `max-w-md`. */
+  maxWidthClassName?: string;
 }
 
 /**
@@ -23,6 +25,7 @@ export function Dialog({
   children,
   footer,
   initialFocusRef,
+  maxWidthClassName = 'max-w-md',
 }: DialogProps) {
   const overlayRef = useRef<HTMLDivElement>(null);
 
@@ -57,8 +60,9 @@ export function Dialog({
     >
       <div
         className={cn(
-          'w-full max-w-md rounded-[var(--radius-lg)] border border-[var(--color-border)] bg-[var(--color-background)] text-[var(--color-foreground)] shadow-lg',
+          'w-full rounded-[var(--radius-lg)] border border-[var(--color-border)] bg-[var(--color-background)] text-[var(--color-foreground)] shadow-lg',
           'flex flex-col max-h-[90vh]',
+          maxWidthClassName,
         )}
       >
         {title && (

@@ -15,7 +15,7 @@ interface Props {
 
 const DEFAULT_OPTIONS: Option[] = [
   { value: 'sampling', label: 'Design submission' },
-  { value: 'china_reverse', label: 'China Reverse' },
+  { value: 'china_import', label: 'China Import' },
 ];
 
 /** Segmented control — drives the New Intake "Source" toggle. */

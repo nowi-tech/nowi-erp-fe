@@ -12,7 +12,7 @@ export type UserRole =
   | 'sampling_lead'
   | 'pattern_master_w'
   | 'pattern_master_m'
-  | 'china_reverse_approver'
+  | 'china_import_approver'
   | 'data_admin'
   | 'pd_lead';
 
@@ -159,7 +159,7 @@ export interface CategoryWithStyleCode {
 // ─── Product Development — Styles, variants, inspections, channels ──
 // Source of truth: docs/PRODUCT_DEV_MODULE_PLAN.md §6.
 
-export type StyleSource = 'sampling' | 'china_reverse' | 'legacy_floor_intake';
+export type StyleSource = 'sampling' | 'china_import' | 'legacy_floor_intake';
 
 export type StyleLifecycle =
   | 'draft'
@@ -185,21 +185,54 @@ export interface Collection {
   isActive: boolean;
 }
 
-export interface FabricType {
-  id: number;
-  name: string;
+export type FabricUnitOfMeasure = 'meter' | 'kg' | 'oz';
+
+export interface FabricComposition {
+  id?: number;
+  fibre: string;
+  percent: string;
 }
 
 export interface Fabric {
   id: number;
   name: string;
-  fabricTypeId: number | null;
-  fabricType?: FabricType | null;
   pricePerUnit: string | null;
-  status: string | null;
+  /** Derived classification from the dominant fibre in `compositions`. */
+  typeLabel?: string | null;
   notes: string | null;
   isActive: boolean;
+  count: string | null;
+  construction: string | null;
+  gsm: number | null;
+  cuttableWidth: string | null;
+  unitOfMeasure: FabricUnitOfMeasure | null;
+  isBlended: boolean;
+  compositions: FabricComposition[];
+  /** Computed: SUM of all stock-ledger entries (signed). */
+  availableQuantity?: number;
   updatedAt?: string;
+}
+
+export type FabricStockEntryType = 'receipt' | 'consumption' | 'adjustment';
+
+export interface FabricStockEntry {
+  id: number;
+  fabricId: number;
+  /** Signed: positive for receipt, negative for consumption. */
+  quantity: string;
+  entryType: FabricStockEntryType;
+  note: string | null;
+  styleId: number | null;
+  createdBy: number | null;
+  createdAt: string;
+  isTestData?: boolean;
+}
+
+export interface CreateFabricStockEntryInput {
+  /** Positive magnitude — the server signs it. */
+  quantity: number;
+  entryType: FabricStockEntryType;
+  note?: string | null;
 }
 
 export interface StyleVariant {
@@ -243,6 +276,23 @@ export interface StyleChannelListing {
 }
 
 /**
+ * One append-only entry in a Style's history (`style_audit_log`).
+ * `before` / `after` are partial field snapshots; `notes` is free text.
+ * Returned (newest-first) on `getStyle` only.
+ */
+export interface StyleAuditLog {
+  id: number;
+  styleId: number;
+  action: string;
+  actorUserId: number | null;
+  actor?: { id: number; name: string } | null;
+  before: Record<string, unknown> | null;
+  after: Record<string, unknown> | null;
+  notes: string | null;
+  createdAt: string;
+}
+
+/**
  * Product-Development view of the Style entity.
  *
  * Extends the existing floor-intake Style with intake / sampling /
@@ -265,13 +315,15 @@ export interface Style {
   source: StyleSource;
   lifecycle: StyleLifecycle;
   workingName: string | null;
+  /** Free-text rationale for why this style is being developed. Captured at intake. */
+  developmentReason: string | null;
   collectionId: number | null;
   collection?: Collection | null;
   gender: Gender | null;
-  fabricTypeId: number | null;
-  fabricType?: FabricType | null;
   fabricId: number | null;
   fabric?: Fabric | null;
+  /** Fabric quantity consumed to make one sample (fabric's unit). */
+  sampleFabricRequired: string | number | null;
   primaryColour: string | null;
 
   // References
@@ -286,6 +338,8 @@ export interface Style {
   patternMaster?: { id: number; name: string } | null;
   modelFitSession: 'yes' | 'pending' | 'no' | null;
   dxfApproved: 'yes' | 'no' | null;
+  /** GCS object paths of uploaded pattern / CAD files (.dxf/.pdf/image). */
+  patternCadPaths: string[];
 
   // Approval #2
   sampleApproval: string | null;
@@ -301,6 +355,11 @@ export interface Style {
   // Approval #1
   approvedBy: number | null;
   approvedAt: string | null;
+  /** Approval #1 recorded checks (sampling flow only). */
+  approval1FabricFeasible: boolean | null;
+  approval1PriceOk: boolean | null;
+  approval1CollectionFit: boolean | null;
+  approval1Note: string | null;
 
   // Park
   parkedBy: number | null;
@@ -325,6 +384,7 @@ export interface Style {
   variants?: StyleVariant[];
   inspections?: StyleInspection[];
   channelListings?: StyleChannelListing[];
+  auditLogs?: StyleAuditLog[];
 }
 
 // ─── Inbound ──────────────────────────────────────────────────────────────

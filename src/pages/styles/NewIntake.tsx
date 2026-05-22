@@ -1,26 +1,17 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Select } from '@/components/ui/select';
+import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
 import { useToast } from '@/components/ui/toast';
 import SourceToggle from '@/components/styles/SourceToggle';
 import ReferenceImageInput from '@/components/shared/ReferenceImageInput';
-import {
-  createStyle,
-  listCollections,
-  listFabricTypes,
-  listFabrics,
-} from '@/api/styles';
-import type {
-  StyleSource,
-  Collection,
-  FabricType,
-  Fabric,
-  Gender,
-} from '@/api/types';
+import PatternCadInput from '@/components/shared/PatternCadInput';
+import { createStyle, listCollections, listFabrics } from '@/api/styles';
+import type { StyleSource, Collection, Fabric, Gender } from '@/api/types';
 import { cn } from '@/lib/utils';
 
 const CATEGORY_OPTIONS: { value: string; label: string }[] = [
@@ -30,13 +21,13 @@ const CATEGORY_OPTIONS: { value: string; label: string }[] = [
   { value: 'womens_top_wear', label: "Women's top wear" },
   { value: 'mens_top_wear', label: "Men's top wear" },
   { value: 'mens_suit', label: "Men's suit" },
-  { value: 'china_reverse', label: 'China Reverse' },
 ];
 
 type FormState = {
   workingName: string;
-  fabricTypeId: string;
+  developmentReason: string;
   fabricId: string;
+  sampleFabricRequired: string;
   collectionId: string;
   gender: Gender;
   category: string;
@@ -44,14 +35,18 @@ type FormState = {
   referenceLink: string;
   referenceImage: string | null;
   referenceImageUrl: string | null;
+  patternCadPaths: string[];
+  remark: string;
 };
 
 /**
- * Single consolidated intake form (canonical_new_intake.html).
+ * Style intake form. Two shapes share this page, branched on `source`:
  *
- * The top-level Source toggle switches the visible sections (the
- * Pattern Master block is hidden for China Reverse) and the approval
- * reviewer label/button.
+ *  - `sampling` — the full design-submission form (article details,
+ *    fabric, sampling timeline, Pattern Master routing, Approval #1).
+ *  - `china_import` — a stripped-down form mirroring the China Import
+ *    Excel sheet: working name, category, gender, primary colour,
+ *    reference image + link, and a remark. No sampling-workflow fields.
  */
 export default function NewIntake() {
   const { t } = useTranslation();
@@ -60,18 +55,19 @@ export default function NewIntake() {
   const [params] = useSearchParams();
 
   const initialSource: StyleSource =
-    (params.get('source') as StyleSource | null) === 'china_reverse'
-      ? 'china_reverse'
+    (params.get('source') as StyleSource | null) === 'china_import'
+      ? 'china_import'
       : 'sampling';
 
   const [source, setSource] = useState<StyleSource>(initialSource);
+  const isChinaImport = source === 'china_import';
   const [collections, setCollections] = useState<Collection[]>([]);
-  const [fabricTypes, setFabricTypes] = useState<FabricType[]>([]);
   const [fabrics, setFabrics] = useState<Fabric[]>([]);
   const [form, setForm] = useState<FormState>({
     workingName: '',
-    fabricTypeId: '',
+    developmentReason: '',
     fabricId: '',
+    sampleFabricRequired: '',
     collectionId: '',
     gender: 'women',
     category: 'womens_top_wear',
@@ -79,6 +75,8 @@ export default function NewIntake() {
     referenceLink: '',
     referenceImage: null,
     referenceImageUrl: null,
+    patternCadPaths: [],
+    remark: '',
   });
   const [busy, setBusy] = useState<null | 'draft' | 'submit'>(null);
   const [err, setErr] = useState<string | null>(null);
@@ -86,11 +84,9 @@ export default function NewIntake() {
   useEffect(() => {
     void Promise.all([
       listCollections().catch(() => [] as Collection[]),
-      listFabricTypes().catch(() => [] as FabricType[]),
       listFabrics().catch(() => [] as Fabric[]),
-    ]).then(([c, ft, fb]) => {
+    ]).then(([c, fb]) => {
       setCollections(c);
-      setFabricTypes(ft);
       setFabrics(fb);
     });
   }, []);
@@ -98,34 +94,58 @@ export default function NewIntake() {
   const set = <K extends keyof FormState>(k: K, v: FormState[K]) =>
     setForm((f) => ({ ...f, [k]: v }));
 
-  const filteredFabrics = useMemo(() => {
-    if (!form.fabricTypeId) return fabrics;
-    return fabrics.filter((f) => f.fabricTypeId === Number(form.fabricTypeId));
-  }, [fabrics, form.fabricTypeId]);
+  /** "Cotton Twill — 240 meter available" / "Cotton Twill — no stock". */
+  const fabricOptionLabel = (f: Fabric) => {
+    const qty = f.availableQuantity;
+    if (qty === undefined || qty === null || qty <= 0) {
+      return `${f.name} — ${t('admin.fabricLibrary.noStock')}`;
+    }
+    const unit = f.unitOfMeasure ?? '';
+    return `${f.name} — ${qty} ${unit} ${t('admin.fabricLibrary.available')}`.trim();
+  };
 
-  const reviewerLabel =
-    source === 'china_reverse'
-      ? t('admin.styles.intake.reviewerDheeraj')
-      : t('admin.styles.intake.reviewerParul');
-  const submitLabel =
-    source === 'china_reverse'
-      ? t('admin.styles.intake.submitToDheeraj')
-      : t('admin.styles.intake.submitToParul');
+  const reviewerLabel = isChinaImport
+    ? t('admin.styles.intake.reviewerDheeraj')
+    : t('admin.styles.intake.reviewerParul');
+  const submitLabel = isChinaImport
+    ? t('admin.styles.intake.submitToDheeraj')
+    : t('admin.styles.intake.submitToParul');
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const buildPayload = (): any => ({
-    source,
-    category: source === 'china_reverse' ? 'china_reverse' : form.category,
-    workingName: form.workingName.trim() || null,
-    fabricTypeId: form.fabricTypeId ? Number(form.fabricTypeId) : null,
-    fabricId: form.fabricId ? Number(form.fabricId) : null,
-    collectionId: form.collectionId ? Number(form.collectionId) : null,
-    gender: form.gender,
-    primaryColour: form.primaryColour.trim() || null,
-    referenceLink: form.referenceLink.trim() || null,
-    referenceImage: form.referenceImage,
-    referenceImageUrl: form.referenceImageUrl,
-  });
+  const buildPayload = (): any => {
+    // China Import is a lightweight intake — only the simple-form fields
+    // are sent; sampling-workflow fields are intentionally omitted.
+    if (isChinaImport) {
+      return {
+        source,
+        category: form.category,
+        workingName: form.workingName.trim() || null,
+        gender: form.gender,
+        primaryColour: form.primaryColour.trim() || null,
+        referenceLink: form.referenceLink.trim() || null,
+        referenceImage: form.referenceImage,
+        referenceImageUrl: form.referenceImageUrl,
+        remark: form.remark.trim() || null,
+      };
+    }
+    return {
+      source,
+      category: form.category,
+      workingName: form.workingName.trim() || null,
+      developmentReason: form.developmentReason.trim() || null,
+      fabricId: form.fabricId ? Number(form.fabricId) : null,
+      sampleFabricRequired: form.sampleFabricRequired
+        ? Number(form.sampleFabricRequired)
+        : null,
+      collectionId: form.collectionId ? Number(form.collectionId) : null,
+      gender: form.gender,
+      primaryColour: form.primaryColour.trim() || null,
+      referenceLink: form.referenceLink.trim() || null,
+      referenceImage: form.referenceImage,
+      referenceImageUrl: form.referenceImageUrl,
+      patternCadPaths: form.patternCadPaths,
+    };
+  };
 
   const save = async (mode: 'draft' | 'submit') => {
     if (!form.workingName.trim()) {
@@ -188,56 +208,66 @@ export default function NewIntake() {
               autoFocus
             />
           </div>
-          <div>
-            <Label>{t('admin.styles.intake.fabricType')}</Label>
-            <Select
-              value={form.fabricTypeId}
-              onChange={(e) => {
-                set('fabricTypeId', e.target.value);
-                set('fabricId', '');
-              }}
-            >
-              <option value="">—</option>
-              {fabricTypes.map((ft) => (
-                <option key={ft.id} value={ft.id}>
-                  {ft.name}
-                </option>
-              ))}
-            </Select>
-          </div>
-          <div>
-            <Label>{t('admin.styles.intake.fabric')}</Label>
-            <Select
-              value={form.fabricId}
-              onChange={(e) => set('fabricId', e.target.value)}
-              disabled={!form.fabricTypeId}
-            >
-              <option value="">
-                {form.fabricTypeId
-                  ? '—'
-                  : t('admin.styles.intake.fabricHelp')}
-              </option>
-              {filteredFabrics.map((f) => (
-                <option key={f.id} value={f.id}>
-                  {f.name}
-                </option>
-              ))}
-            </Select>
-          </div>
-          <div>
-            <Label>{t('admin.styles.intake.collection')}</Label>
-            <Select
-              value={form.collectionId}
-              onChange={(e) => set('collectionId', e.target.value)}
-            >
-              <option value="">—</option>
-              {collections.map((c) => (
-                <option key={c.id} value={c.id}>
-                  {c.name}
-                </option>
-              ))}
-            </Select>
-          </div>
+
+          {!isChinaImport && (
+            <div className="md:col-span-2">
+              <Label>{t('admin.styles.intake.developmentReason')}</Label>
+              <Textarea
+                value={form.developmentReason}
+                onChange={(e) => set('developmentReason', e.target.value)}
+                placeholder={t('admin.styles.intake.developmentReasonPh')}
+              />
+            </div>
+          )}
+
+          {!isChinaImport && (
+            <div>
+              <Label>{t('admin.styles.intake.fabric')}</Label>
+              <Select
+                value={form.fabricId}
+                onChange={(e) => set('fabricId', e.target.value)}
+              >
+                <option value="">—</option>
+                {fabrics.map((f) => (
+                  <option key={f.id} value={f.id}>
+                    {fabricOptionLabel(f)}
+                  </option>
+                ))}
+              </Select>
+            </div>
+          )}
+
+          {!isChinaImport && (
+            <div>
+              <Label>{t('admin.styles.intake.sampleFabricRequired')}</Label>
+              <Input
+                type="number"
+                min="0"
+                step="0.01"
+                value={form.sampleFabricRequired}
+                onChange={(e) => set('sampleFabricRequired', e.target.value)}
+                placeholder={t('admin.styles.intake.sampleFabricRequiredHelp')}
+              />
+            </div>
+          )}
+
+          {!isChinaImport && (
+            <div>
+              <Label>{t('admin.styles.intake.collection')}</Label>
+              <Select
+                value={form.collectionId}
+                onChange={(e) => set('collectionId', e.target.value)}
+              >
+                <option value="">—</option>
+                {collections.map((c) => (
+                  <option key={c.id} value={c.id}>
+                    {c.name}
+                  </option>
+                ))}
+              </Select>
+            </div>
+          )}
+
           <div>
             <Label>{t('admin.styles.intake.gender')}</Label>
             <div className="flex gap-1.5 mt-1">
@@ -262,23 +292,21 @@ export default function NewIntake() {
               ))}
             </div>
           </div>
-          {source === 'sampling' && (
-            <div>
-              <Label>{t('admin.styles.intake.category')}</Label>
-              <Select
-                value={form.category}
-                onChange={(e) => set('category', e.target.value)}
-              >
-                {CATEGORY_OPTIONS.filter(
-                  (o) => o.value !== 'china_reverse',
-                ).map((o) => (
-                  <option key={o.value} value={o.value}>
-                    {o.label}
-                  </option>
-                ))}
-              </Select>
-            </div>
-          )}
+
+          <div>
+            <Label>{t('admin.styles.intake.category')}</Label>
+            <Select
+              value={form.category}
+              onChange={(e) => set('category', e.target.value)}
+            >
+              {CATEGORY_OPTIONS.map((o) => (
+                <option key={o.value} value={o.value}>
+                  {o.label}
+                </option>
+              ))}
+            </Select>
+          </div>
+
           <div className="md:col-span-2">
             <Label>{t('admin.styles.intake.primaryColour')}</Label>
             <Input
@@ -326,11 +354,20 @@ export default function NewIntake() {
               }
             />
           </div>
+          {isChinaImport && (
+            <div>
+              <Label>{t('admin.styles.drawer.fields.remark')}</Label>
+              <Textarea
+                value={form.remark}
+                onChange={(e) => set('remark', e.target.value)}
+              />
+            </div>
+          )}
         </div>
       </section>
 
       {/* Section 3: Pattern Master — only shown for sampling */}
-      {source === 'sampling' && (
+      {!isChinaImport && (
         <section className={sectionClasses}>
           <h3 className="font-serif text-lg border-b border-[var(--color-border)] pb-3 mb-5">
             {t('admin.styles.intake.patternMaster')}
@@ -345,6 +382,14 @@ export default function NewIntake() {
               t('admin.styles.intake.patternMasterRoutedM')}
             {form.gender === 'unisex' &&
               t('admin.styles.intake.patternMasterUnisex')}
+          </div>
+          <div className="mt-4">
+            <Label>{t('admin.styles.drawer.fields.patternCad')}</Label>
+            <PatternCadInput
+              entityId="new"
+              patternCadPaths={form.patternCadPaths}
+              onChange={(p) => set('patternCadPaths', p)}
+            />
           </div>
         </section>
       )}

@@ -10,6 +10,13 @@ interface Props {
   loading: boolean;
   onRowClick?: (style: Style) => void;
   onStyleNoClick?: (style: Style) => void;
+  /**
+   * `"full"` (default) — all sampling-workflow columns (Pattern Master, Stage,
+   *   Approval, Web, Updated).
+   * `"compact"` — minimal set for non-sampling flows (China Import): Style #,
+   *   Working Name, Colour, Updated. Hides Pattern Master / Stage / Approval / Web.
+   */
+  variant?: 'full' | 'compact';
 }
 
 function lifecycleVariant(l: Style['lifecycle']) {
@@ -31,8 +38,10 @@ export default function StylesTable({
   loading,
   onRowClick,
   onStyleNoClick,
+  variant = 'full',
 }: Props) {
   const { t } = useTranslation();
+  const isCompact = variant === 'compact';
   const [expanded, setExpanded] = useState<Set<number>>(new Set());
 
   const toggle = (id: number) =>
@@ -62,7 +71,9 @@ export default function StylesTable({
   const rowClasses =
     'border-t border-[var(--color-border)] cursor-pointer hover:bg-[var(--color-muted)] focus:outline-none focus-visible:bg-[var(--color-muted)]';
 
-  const COL_COUNT = 9;
+  // compact = 5 cols (expand + style# + name + colour + updated + chevron)
+  // full    = 9 cols (expand + style# + name + patternMaster + stage + approval + web + updated + chevron)
+  const COL_COUNT = isCompact ? 6 : 9;
 
   return (
     <div className="space-y-2">
@@ -88,18 +99,26 @@ export default function StylesTable({
               <th className="text-left font-medium px-3 py-2">
                 {t('admin.styles.table.workingName')}
               </th>
-              <th className="text-left font-medium px-3 py-2 hidden md:table-cell">
-                {t('admin.styles.table.patternMaster')}
-              </th>
-              <th className="text-left font-medium px-3 py-2 hidden lg:table-cell">
-                {t('admin.styles.table.stage')}
-              </th>
-              <th className="text-left font-medium px-3 py-2 hidden lg:table-cell">
-                {t('admin.styles.table.approval')}
-              </th>
-              <th className="text-left font-medium px-3 py-2 hidden sm:table-cell">
-                {t('admin.styles.table.web')}
-              </th>
+              {isCompact ? (
+                <th className="text-left font-medium px-3 py-2 hidden sm:table-cell">
+                  {t('admin.styles.table.colour')}
+                </th>
+              ) : (
+                <>
+                  <th className="text-left font-medium px-3 py-2 hidden md:table-cell">
+                    {t('admin.styles.table.patternMaster')}
+                  </th>
+                  <th className="text-left font-medium px-3 py-2 hidden lg:table-cell">
+                    {t('admin.styles.table.stage')}
+                  </th>
+                  <th className="text-left font-medium px-3 py-2 hidden lg:table-cell">
+                    {t('admin.styles.table.approval')}
+                  </th>
+                  <th className="text-left font-medium px-3 py-2 hidden sm:table-cell">
+                    {t('admin.styles.table.web')}
+                  </th>
+                </>
+              )}
               <th className="text-left font-medium px-3 py-2 hidden md:table-cell">
                 {t('admin.styles.table.updated')}
               </th>
@@ -208,43 +227,51 @@ export default function StylesTable({
                           </Badge>
                         )}
                       </td>
-                      <td className="px-3 py-2 hidden md:table-cell">
-                        {s.patternMaster?.name ?? '—'}
-                      </td>
-                      <td className="px-3 py-2 hidden lg:table-cell">
-                        {s.samplingStatus ? (
-                          <Badge variant="stitch" className="text-[10px]">
-                            {s.samplingStatus}
-                          </Badge>
-                        ) : (
-                          '—'
-                        )}
-                      </td>
-                      <td className="px-3 py-2 hidden lg:table-cell">
-                        {s.sampleApproval ? (
-                          <Badge variant="success" className="text-[10px]">
-                            {s.sampleApproval}
-                          </Badge>
-                        ) : (
-                          '—'
-                        )}
-                      </td>
-                      <td className="px-3 py-2 hidden sm:table-cell">
-                        {s.referenceLink ? (
-                          <a
-                            href={s.referenceLink}
-                            target="_blank"
-                            rel="noreferrer"
-                            onClick={(e) => e.stopPropagation()}
-                            className="inline-flex text-[var(--color-primary)]"
-                            aria-label="Open reference link"
-                          >
-                            <ExternalLink size={14} />
-                          </a>
-                        ) : (
-                          '—'
-                        )}
-                      </td>
+                      {isCompact ? (
+                        <td className="px-3 py-2 hidden sm:table-cell text-[var(--color-muted-foreground)]">
+                          {s.primaryColour ?? '—'}
+                        </td>
+                      ) : (
+                        <>
+                          <td className="px-3 py-2 hidden md:table-cell">
+                            {s.patternMaster?.name ?? '—'}
+                          </td>
+                          <td className="px-3 py-2 hidden lg:table-cell">
+                            {s.samplingStatus ? (
+                              <Badge variant="stitch" className="text-[10px]">
+                                {s.samplingStatus}
+                              </Badge>
+                            ) : (
+                              '—'
+                            )}
+                          </td>
+                          <td className="px-3 py-2 hidden lg:table-cell">
+                            {s.sampleApproval ? (
+                              <Badge variant="success" className="text-[10px]">
+                                {s.sampleApproval}
+                              </Badge>
+                            ) : (
+                              '—'
+                            )}
+                          </td>
+                          <td className="px-3 py-2 hidden sm:table-cell">
+                            {s.referenceLink ? (
+                              <a
+                                href={s.referenceLink}
+                                target="_blank"
+                                rel="noreferrer"
+                                onClick={(e) => e.stopPropagation()}
+                                className="inline-flex text-[var(--color-primary)]"
+                                aria-label="Open reference link"
+                              >
+                                <ExternalLink size={14} />
+                              </a>
+                            ) : (
+                              '—'
+                            )}
+                          </td>
+                        </>
+                      )}
                       <td className="px-3 py-2 hidden md:table-cell text-xs text-[var(--color-muted-foreground)] tabular-nums">
                         {new Date(s.updatedAt).toLocaleDateString()}
                       </td>
@@ -283,22 +310,28 @@ export default function StylesTable({
                               ? `Cut ${v.cuttingQty}`
                               : '—'}
                           </td>
-                          <td className="px-3 py-2 hidden md:table-cell" />
-                          <td className="px-3 py-2 hidden lg:table-cell">
-                            {v.samplingStatus ?? '—'}
-                          </td>
-                          <td className="px-3 py-2 hidden lg:table-cell">
-                            {v.sampleApproval ?? '—'}
-                          </td>
-                          <td className="px-3 py-2 hidden sm:table-cell">
-                            {v.websiteLive === 'live' ? (
-                              <Badge variant="ready" className="text-[10px]">
-                                Live
-                              </Badge>
-                            ) : (
-                              '—'
-                            )}
-                          </td>
+                          {isCompact ? (
+                            <td className="px-3 py-2 hidden sm:table-cell" />
+                          ) : (
+                            <>
+                              <td className="px-3 py-2 hidden md:table-cell" />
+                              <td className="px-3 py-2 hidden lg:table-cell">
+                                {v.samplingStatus ?? '—'}
+                              </td>
+                              <td className="px-3 py-2 hidden lg:table-cell">
+                                {v.sampleApproval ?? '—'}
+                              </td>
+                              <td className="px-3 py-2 hidden sm:table-cell">
+                                {v.websiteLive === 'live' ? (
+                                  <Badge variant="ready" className="text-[10px]">
+                                    Live
+                                  </Badge>
+                                ) : (
+                                  '—'
+                                )}
+                              </td>
+                            </>
+                          )}
                           <td className="px-3 py-2 hidden md:table-cell" />
                           <td />
                         </tr>
