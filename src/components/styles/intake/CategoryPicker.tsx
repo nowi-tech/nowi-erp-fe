@@ -68,6 +68,9 @@ export default function CategoryPicker({
     styleCounter: '1000',
   });
   const nameRef = useRef<HTMLInputElement>(null);
+  // Frozen once the user manually edits the Code field — stops the
+  // auto-fill from clobbering their typed value.
+  const styleCodeDirty = useRef(false);
 
   const allowedCodes = GENDER_CATEGORIES[gender];
 
@@ -130,17 +133,27 @@ export default function CategoryPicker({
   };
 
   const submit = async () => {
-    if (!form.code.trim() || !form.name.trim()) {
-      toast.show('Code and name are required.', 'error');
+    const nameTrim = form.name.trim();
+    const styleCodeTrim = form.styleCode.trim().toUpperCase();
+    if (!nameTrim) {
+      toast.show('Name is required.', 'error');
       return;
     }
+    if (!styleCodeTrim) {
+      toast.show('Code is required.', 'error');
+      return;
+    }
+    // Legacy `code` is just an uppercase slug derived from the name; the
+    // user-visible "Code" field maps to `styleCode` (the 2-letter prefix
+    // used in NOWI style numbers — DR/PA/BL/…). `styleCounter` is
+    // omitted entirely so the DB default (1000) fires server-side.
+    const derivedCode = nameTrim.toUpperCase().replace(/\s+/g, '_');
     setSaving(true);
     try {
       const created = await createCategory({
-        code: form.code.trim().toUpperCase(),
-        name: form.name.trim(),
-        styleCode: form.styleCode.trim() || null,
-        styleCounter: form.styleCounter ? Number(form.styleCounter) : null,
+        code: derivedCode,
+        name: nameTrim,
+        styleCode: styleCodeTrim,
       });
       onCategoryCreated?.(created);
       onChange({ categoryId: created.id, code: created.code });
@@ -164,15 +177,20 @@ export default function CategoryPicker({
         options={options}
         onChange={handleChange}
         onAddNew={(typed) => {
-          // Prefill the modal's name with whatever the user typed so
-          // "+ Add 'Skirt'" lands them on the create form with the
-          // name already filled in.
+          // Prefill name + derive styleCode (first 2 alphabetic chars,
+          // strips dashes / spaces) so "+ Add 'T-Shirt'" lands on the
+          // create form with name="T-Shirt" + code="TS".
+          const t = typed.trim();
+          const autoCode = t
+            .replace(/[^a-zA-Z]/g, '')
+            .slice(0, 2)
+            .toUpperCase();
+          styleCodeDirty.current = false;
           setForm((f) => ({
             ...f,
-            name: typed || f.name,
-            code: typed
-              ? typed.trim().toUpperCase().replace(/\s+/g, '_')
-              : f.code,
+            name: t || f.name,
+            code: t ? t.toUpperCase().replace(/\s+/g, '_') : f.code,
+            styleCode: autoCode,
           }));
           setModalOpen(true);
         }}
@@ -206,59 +224,61 @@ export default function CategoryPicker({
           <p className="text-[12px] text-[var(--color-muted-foreground)]">
             {t(
               'admin.styles.intake.newCategoryHelp',
-              'Adds a row to the Category master so the Style ID generator can use it.',
+              'Adds a row to the Category master. Counter starts automatically.',
             )}
           </p>
-          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-            <div>
-              <Label>{t('admin.styles.intake.categoryCode', 'Code *')}</Label>
-              <Input
-                value={form.code}
-                onChange={(e) =>
-                  setForm((f) => ({ ...f, code: e.target.value.toUpperCase() }))
-                }
-                placeholder="e.g. SKIRT"
-              />
-            </div>
-            <div>
-              <Label>{t('admin.styles.intake.categoryName', 'Name *')}</Label>
-              <Input
-                ref={nameRef}
-                value={form.name}
-                onChange={(e) =>
-                  setForm((f) => ({ ...f, name: e.target.value }))
-                }
-                placeholder="e.g. Skirt"
-              />
-            </div>
-            <div>
-              <Label>
-                {t('admin.styles.intake.categoryStyleCode', 'Style code')}
-              </Label>
-              <Input
-                value={form.styleCode}
-                onChange={(e) =>
-                  setForm((f) => ({ ...f, styleCode: e.target.value }))
-                }
-                placeholder="e.g. SK"
-              />
-            </div>
-            <div>
-              <Label>
-                {t(
-                  'admin.styles.intake.categoryStyleCounter',
-                  'Style counter start',
-                )}
-              </Label>
-              <Input
-                type="number"
-                min={0}
-                value={form.styleCounter}
-                onChange={(e) =>
-                  setForm((f) => ({ ...f, styleCounter: e.target.value }))
-                }
-              />
-            </div>
+          <div>
+            <Label>{t('admin.styles.intake.categoryName', 'Name *')}</Label>
+            <Input
+              ref={nameRef}
+              value={form.name}
+              onChange={(e) => {
+                const next = e.target.value;
+                // Auto-fill Code from the first two alphabetic chars
+                // of the name (strips dashes / spaces so "T-Shirt"
+                // becomes "TS", "Co-ord" becomes "CO"). Freezes once
+                // the user manually edits the Code field via
+                // `styleCodeDirty`. On UNIQUE collisions the BE
+                // returns a clean 409 and the user picks a new code.
+                setForm((f) => {
+                  const autoCode = next
+                    .replace(/[^a-zA-Z]/g, '')
+                    .slice(0, 2)
+                    .toUpperCase();
+                  return {
+                    ...f,
+                    name: next,
+                    styleCode: styleCodeDirty.current
+                      ? f.styleCode
+                      : autoCode,
+                  };
+                });
+              }}
+              placeholder="e.g. Skirt"
+            />
+          </div>
+          <div>
+            <Label>
+              {t('admin.styles.intake.categoryStyleCode', 'Code *')}
+            </Label>
+            <Input
+              value={form.styleCode}
+              onChange={(e) => {
+                styleCodeDirty.current = true;
+                setForm((f) => ({
+                  ...f,
+                  styleCode: e.target.value.toUpperCase().slice(0, 4),
+                }));
+              }}
+              placeholder="e.g. SK"
+              maxLength={4}
+            />
+            <p className="mt-1 text-[11px] text-[var(--color-muted-foreground)]">
+              {t(
+                'admin.styles.intake.categoryStyleCodeHint',
+                '2-letter prefix used in style numbers (e.g. NOWI-W-SK-1001).',
+              )}
+            </p>
           </div>
         </div>
       </Dialog>
