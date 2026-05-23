@@ -242,6 +242,15 @@ export default function StyleWorkspace() {
           workflow state. Empty when the style has no images / link. */}
       <InspirationCard style={style} cardClasses={cardClasses} />
 
+      {/* China Import: simple "Approved by X on DATE" record card.
+          Gurukul flow has no sampling phase — just the single intake
+          approval by Dheeraj that mints the NW- number. Shown only
+          after approval; pre-approval the only thing on the page is
+          Inspiration + Specs + Activity. */}
+      {isChinaImport && style.approvedAt && (
+        <ChinaImportApprovalCard style={style} cardClasses={cardClasses} />
+      )}
+
       {/* Recorded intake approval checks — sampling flow, already approved */}
       {!isChinaImport && style.approvedAt && (
         <section className={cardClasses}>
@@ -339,9 +348,14 @@ export default function StyleWorkspace() {
         </section>
 
         {/* Colour family chips — siblings + parent linked via
-            parentStyleId. Replaces the old Variants matrix (which was
-            the pre-Gurukul fabric × colour table). */}
-        <ColourFamilyCard style={style} />
+            parentStyleId. The "+ Add colour" chip inside is the primary
+            entry point; mirrors the header button. China Import has
+            no colour-family flow, so the card hides itself there. */}
+        <ColourFamilyCard
+          style={style}
+          canAddColour={!!style.styleId && !isChinaImport}
+          onAddColour={() => setColourModalOpen(true)}
+        />
       </div>
 
       {/* Activity timeline — surfaces who did what when. Reads
@@ -1113,8 +1127,23 @@ function InspirationCard({
  * variants (linked via parentStyleId / colourVariants). Click a chip
  * to navigate to that variant's detail page. Replaces the old
  * fabric-×-colour Variants matrix which was the pre-Gurukul model.
+ *
+ * The "+ Add colour" chip at the end of the variant strip opens the
+ * AddColourModal — the primary entry point for adding a new colour
+ * to the family, more discoverable than the header action button.
+ * Hidden for china_import (no colour-family flow there) and pre-mint
+ * drafts (need a styleId on the parent to spawn).
  */
-function ColourFamilyCard({ style }: { style: Style }) {
+function ColourFamilyCard({
+  style,
+  canAddColour,
+  onAddColour,
+}: {
+  style: Style;
+  /** True for sample-approved sampling styles with a minted styleId. */
+  canAddColour: boolean;
+  onAddColour: () => void;
+}) {
   const { t } = useTranslation();
   const navigate = useNavigate();
   // Family = the parent's family if I'm a variant, else my own.
@@ -1125,8 +1154,10 @@ function ColourFamilyCard({ style }: { style: Style }) {
     primaryColour: style.primaryColour,
   };
   const variants = style.colourVariants ?? [];
-  // Show family only when there's more than one member.
-  if (variants.length === 0 && !style.parentStyleId) return null;
+  const hasFamily = variants.length > 0 || !!style.parentStyleId;
+  // Hide entirely when there's no family AND no add affordance — keeps
+  // pre-approval drafts uncluttered.
+  if (!hasFamily && !canAddColour) return null;
   return (
     <section className="lg:col-span-5 rounded-[var(--radius-md)] border border-[var(--color-border)] bg-[var(--color-surface)] p-4">
       <h2 className="font-serif text-lg mb-3">
@@ -1134,47 +1165,133 @@ function ColourFamilyCard({ style }: { style: Style }) {
           defaultValue: 'Colour family',
         })}
       </h2>
-      <div className="text-[11px] uppercase tracking-[0.06em] text-[var(--color-muted-foreground)] mb-1.5">
-        {t('admin.styles.workspace.colourFamilyParent', {
-          defaultValue: 'Parent',
-        })}
-      </div>
-      <button
-        type="button"
-        onClick={() => parent.styleId && navigate(`/styles/${parent.styleId}`)}
-        className="w-full text-left rounded-[var(--radius-sm)] border border-[var(--color-border)] bg-[var(--color-surface-2)]/40 px-3 py-2 hover:bg-[var(--color-muted)] mb-3"
-      >
-        <div className="font-mono text-sm text-[var(--color-primary)]">
-          {parent.styleId ?? `#${parent.id}`}
-        </div>
-        <div className="text-xs text-[var(--color-muted-foreground)]">
-          {parent.workingName ?? '—'} · {parent.primaryColour ?? '—'}
-        </div>
-      </button>
-      {variants.length > 0 && (
+      {hasFamily && (
         <>
           <div className="text-[11px] uppercase tracking-[0.06em] text-[var(--color-muted-foreground)] mb-1.5">
-            {t('admin.styles.workspace.colourFamilyVariants', {
-              defaultValue: 'Variants ({{count}})',
-              count: variants.length,
+            {t('admin.styles.workspace.colourFamilyParent', {
+              defaultValue: 'Parent',
             })}
           </div>
-          <div className="flex flex-wrap gap-1.5">
-            {variants.map((v) => (
-              <button
-                key={v.id}
-                type="button"
-                onClick={() =>
-                  v.styleId && navigate(`/styles/${v.styleId}`)
-                }
-                className="inline-flex items-center gap-1.5 rounded-full bg-white border border-[var(--color-border)] px-2.5 py-1 text-xs hover:bg-[var(--color-muted)]"
-              >
-                <span className="inline-block h-2 w-2 rounded-full bg-[var(--color-muted-foreground)]" />
-                {v.primaryColour ?? '—'}
-              </button>
-            ))}
-          </div>
+          <button
+            type="button"
+            onClick={() => parent.styleId && navigate(`/styles/${parent.styleId}`)}
+            className="w-full text-left rounded-[var(--radius-sm)] border border-[var(--color-border)] bg-[var(--color-surface-2)]/40 px-3 py-2 hover:bg-[var(--color-muted)] mb-3"
+          >
+            <div className="font-mono text-sm text-[var(--color-primary)]">
+              {parent.styleId ?? `#${parent.id}`}
+            </div>
+            <div className="text-xs text-[var(--color-muted-foreground)]">
+              {parent.workingName ?? '—'} · {parent.primaryColour ?? '—'}
+            </div>
+          </button>
         </>
+      )}
+
+      <div className="text-[11px] uppercase tracking-[0.06em] text-[var(--color-muted-foreground)] mb-1.5">
+        {variants.length > 0
+          ? t('admin.styles.workspace.colourFamilyVariants', {
+              defaultValue: 'Variants ({{count}})',
+              count: variants.length,
+            })
+          : t('admin.styles.workspace.colourFamilyNoVariants', {
+              defaultValue: 'No variants yet',
+            })}
+      </div>
+      <div className="flex flex-wrap gap-1.5">
+        {variants.map((v) => (
+          <button
+            key={v.id}
+            type="button"
+            onClick={() => v.styleId && navigate(`/styles/${v.styleId}`)}
+            className="inline-flex items-center gap-1.5 rounded-full bg-white border border-[var(--color-border)] px-2.5 py-1 text-xs hover:bg-[var(--color-muted)]"
+          >
+            <span className="inline-block h-2 w-2 rounded-full bg-[var(--color-muted-foreground)]" />
+            {v.primaryColour ?? '—'}
+          </button>
+        ))}
+        {canAddColour && (
+          // Primary add-colour entry point — sits inline with the
+          // existing colour chips so it reads as "add another one"
+          // contextually. Header still has the same button for users
+          // who haven't scrolled to this card yet.
+          <button
+            type="button"
+            onClick={onAddColour}
+            className="inline-flex items-center gap-1.5 rounded-full border border-dashed border-[var(--color-primary)]/60 bg-[var(--color-primary)]/5 text-[var(--color-primary)] px-2.5 py-1 text-xs hover:bg-[var(--color-primary)]/10"
+          >
+            <Palette size={12} />
+            {t('admin.styles.workspace.addColour', { defaultValue: 'Add colour' })}
+          </button>
+        )}
+      </div>
+    </section>
+  );
+}
+
+/**
+ * China Import approval card. Gurukul flow has no sampling phase —
+ * just a single intake approval by Dheeraj that mints the NW- number
+ * and takes the style to terminal lifecycle. This card surfaces the
+ * approver + when + the (optional) remark; that's the entire workflow
+ * record for a china_import style.
+ */
+function ChinaImportApprovalCard({
+  style,
+  cardClasses,
+}: {
+  style: Style;
+  cardClasses: string;
+}) {
+  const { t } = useTranslation();
+  const approvedAt = style.approvedAt ? new Date(style.approvedAt) : null;
+  return (
+    <section className={cardClasses}>
+      <div className="flex items-baseline justify-between mb-3">
+        <h2 className="font-serif text-lg">
+          {t('admin.styles.workspace.chinaImportApproval.title', {
+            defaultValue: 'Approval',
+          })}
+        </h2>
+        <Badge variant="success" className="text-[10px]">
+          <CheckCircle2 size={11} className="mr-1" />
+          {t('admin.styles.workspace.chinaImportApproval.approved', {
+            defaultValue: 'Approved',
+          })}
+        </Badge>
+      </div>
+      <dl className="grid grid-cols-1 sm:grid-cols-3 gap-x-4 gap-y-2 text-sm">
+        <Spec
+          label={t('admin.styles.workspace.chinaImportApproval.approvedBy', {
+            defaultValue: 'Approved by',
+          })}
+          value={style.approver?.name ?? '—'}
+        />
+        <Spec
+          label={t('admin.styles.workspace.chinaImportApproval.approvedOn', {
+            defaultValue: 'Approved on',
+          })}
+          value={approvedAt ? approvedAt.toLocaleString() : '—'}
+        />
+        <Spec
+          label={t('admin.styles.workspace.chinaImportApproval.styleNumber', {
+            defaultValue: 'Style # minted',
+          })}
+          value={
+            <span className="font-mono">{style.styleId ?? '—'}</span>
+          }
+        />
+      </dl>
+      {style.remark && (
+        <div className="mt-3 pt-3 border-t border-[var(--color-border)]">
+          <div className="text-[10px] uppercase tracking-[0.06em] text-[var(--color-muted-foreground)] mb-1">
+            {t('admin.styles.workspace.chinaImportApproval.remark', {
+              defaultValue: 'Remark',
+            })}
+          </div>
+          <p className="text-sm italic whitespace-pre-wrap text-[var(--color-foreground-2)]">
+            {style.remark}
+          </p>
+        </div>
       )}
     </section>
   );
