@@ -4,6 +4,7 @@ import { useTranslation } from 'react-i18next';
 import { ClipboardCheck, ArrowRight, CheckCircle2 } from 'lucide-react';
 import { useAuth } from '@/context/auth';
 import { getStylesSummary } from '@/api/styles';
+import { hasAnyRole } from '@/lib/userRoles';
 import type { UserRole } from '@/api/types';
 
 /**
@@ -11,14 +12,14 @@ import type { UserRole } from '@/api/types';
  * gating on `POST /styles/:id/actions/approve` in the backend
  * (styles-actions.controller.ts).
  */
-const APPROVAL1_ROLES = new Set<UserRole>([
+const APPROVAL1_ROLES: readonly UserRole[] = [
   'admin',
   'sampling_editor',
   'sampling_lead',
   'pattern_master_w',
   'pattern_master_m',
   'china_import_approver',
-]);
+] as const;
 
 /**
  * Dashboard call-to-action: when the signed-in user can perform Approval #1,
@@ -30,15 +31,9 @@ export default function ApprovalCtaCard() {
   const { user } = useAuth();
   const [count, setCount] = useState<number | null>(null);
 
-  // A user may carry multiple roles on the BE; the FE `User` exposes a
-  // single `role`, but defensively read an optional `roles` array too.
-  const roles: UserRole[] = user
-    ? [
-        user.role,
-        ...((user as { roles?: UserRole[] }).roles ?? []),
-      ]
-    : [];
-  const canApprove = roles.some((r) => APPROVAL1_ROLES.has(r));
+  // Multi-role: passes if any of the user's roles (primary OR
+  // UserRoleAssignment) is in the approver set.
+  const canApprove = hasAnyRole(user, APPROVAL1_ROLES);
 
   useEffect(() => {
     if (!canApprove) return;

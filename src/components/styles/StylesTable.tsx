@@ -2,8 +2,42 @@ import { Fragment, useEffect, useMemo, useState } from 'react';
 import { ChevronDown, ChevronRight, ExternalLink } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { Badge } from '@/components/ui/badge';
+import { ColumnFilter, type ColumnFilterOption } from '@/components/ui/column-filter';
 import type { Style } from '@/api/types';
 import { cn } from '@/lib/utils';
+
+/**
+ * Distinct values + per-value row counts for a column. Used to populate
+ * the column-filter popover. `getKey` is what we filter on (string, or
+ * the empty token below for nulls), `getLabel` is what we render.
+ */
+const NONE_TOKEN = '__none__';
+
+function distinct(
+  rows: Style[],
+  getKey: (s: Style) => string | null | undefined,
+  getLabel: (key: string) => string,
+): ColumnFilterOption[] {
+  const counts = new Map<string, number>();
+  for (const s of rows) {
+    const raw = getKey(s);
+    const key = raw == null || raw === '' ? NONE_TOKEN : String(raw);
+    counts.set(key, (counts.get(key) ?? 0) + 1);
+  }
+  return Array.from(counts.entries())
+    .map(([value, count]) => ({
+      value,
+      label: value === NONE_TOKEN ? '— (none)' : getLabel(value),
+      count,
+    }))
+    .sort((a, b) =>
+      a.value === NONE_TOKEN
+        ? 1
+        : b.value === NONE_TOKEN
+          ? -1
+          : (a.label ?? a.value).localeCompare(b.label ?? b.value),
+    );
+}
 
 interface Props {
   rows: Style[];
@@ -52,12 +86,77 @@ export default function StylesTable({
       return next;
     });
 
+  // ── Per-column filters ─────────────────────────────────────────
+  // Excel-style: each column's funnel popover lists distinct values
+  // in the current row set; checked = include, unchecked = exclude.
+  // Empty excluded list = filter inactive. Filters apply to top-level
+  // (parent) rows only; nested variant rows always render with their
+  // parent for now.
+  const [excPatternMaster, setExcPatternMaster] = useState<string[]>([]);
+  const [excLifecycle, setExcLifecycle] = useState<string[]>([]);
+  const [excSamplingStatus, setExcSamplingStatus] = useState<string[]>([]);
+  const [excSampleApproval, setExcSampleApproval] = useState<string[]>([]);
+  const [excColour, setExcColour] = useState<string[]>([]);
+
+  // Distinct values come from the unfiltered rows so the popover lists
+  // every value even when other filters narrow the visible set.
+  const patternMasterOptions = useMemo(
+    () => distinct(rows, (s) => s.patternMaster?.name ?? null, (v) => v),
+    [rows],
+  );
+  const lifecycleOptions = useMemo(
+    () =>
+      distinct(rows, (s) => s.lifecycle, (v) =>
+        t(`admin.styles.lifecycle.${v}` as const, { defaultValue: v }),
+      ),
+    [rows, t],
+  );
+  const samplingStatusOptions = useMemo(
+    () => distinct(rows, (s) => s.samplingStatus, (v) => v),
+    [rows],
+  );
+  const sampleApprovalOptions = useMemo(
+    () => distinct(rows, (s) => s.sampleApproval, (v) => v),
+    [rows],
+  );
+  const colourOptions = useMemo(
+    () => distinct(rows, (s) => s.primaryColour, (v) => v),
+    [rows],
+  );
+
+  // Apply filters. NONE_TOKEN is the key for missing values.
+  const filteredRows = useMemo(() => {
+    const checkExcl = (
+      val: string | null | undefined,
+      excluded: string[],
+    ) => {
+      if (excluded.length === 0) return true;
+      const key = val == null || val === '' ? NONE_TOKEN : String(val);
+      return !excluded.includes(key);
+    };
+    return rows.filter(
+      (s) =>
+        checkExcl(s.patternMaster?.name, excPatternMaster) &&
+        checkExcl(s.lifecycle, excLifecycle) &&
+        checkExcl(s.samplingStatus, excSamplingStatus) &&
+        checkExcl(s.sampleApproval, excSampleApproval) &&
+        checkExcl(s.primaryColour, excColour),
+    );
+  }, [
+    rows,
+    excPatternMaster,
+    excLifecycle,
+    excSamplingStatus,
+    excSampleApproval,
+    excColour,
+  ]);
+
   // Collapse when the row set changes (filter / tab change).
   useEffect(() => setExpanded(new Set()), [rows]);
 
   const groupsWithChildren = useMemo(
-    () => rows.filter((r) => (r.variants?.length ?? 0) > 0),
-    [rows],
+    () => filteredRows.filter((r) => (r.variants?.length ?? 0) > 0),
+    [filteredRows],
   );
   const allExpanded =
     groupsWithChildren.length > 0 &&
@@ -101,21 +200,64 @@ export default function StylesTable({
               </th>
               {isCompact ? (
                 <th className="text-left font-medium px-3 py-2 hidden sm:table-cell">
-                  {t('admin.styles.table.colour')}
+                  <span className="inline-flex items-center gap-1">
+                    {t('admin.styles.table.colour')}
+                    <ColumnFilter
+                      title={t('admin.styles.table.colour')}
+                      options={colourOptions}
+                      excluded={excColour}
+                      onChange={setExcColour}
+                    />
+                  </span>
                 </th>
               ) : (
                 <>
                   <th className="text-left font-medium px-3 py-2 hidden md:table-cell">
-                    {t('admin.styles.table.patternMaster')}
+                    <span className="inline-flex items-center gap-1">
+                      {t('admin.styles.table.patternMaster')}
+                      <ColumnFilter
+                        title={t('admin.styles.table.patternMaster')}
+                        options={patternMasterOptions}
+                        excluded={excPatternMaster}
+                        onChange={setExcPatternMaster}
+                      />
+                    </span>
                   </th>
                   <th className="text-left font-medium px-3 py-2 hidden lg:table-cell">
-                    {t('admin.styles.table.stage')}
+                    <span className="inline-flex items-center gap-1">
+                      {t('admin.styles.table.stage')}
+                      <ColumnFilter
+                        title={t('admin.styles.table.stage')}
+                        options={lifecycleOptions}
+                        excluded={excLifecycle}
+                        onChange={setExcLifecycle}
+                      />
+                    </span>
                   </th>
                   <th className="text-left font-medium px-3 py-2 hidden lg:table-cell">
-                    {t('admin.styles.table.approval')}
+                    <span className="inline-flex items-center gap-1">
+                      {t('admin.styles.table.approval')}
+                      <ColumnFilter
+                        title={t('admin.styles.table.approval')}
+                        options={sampleApprovalOptions}
+                        excluded={excSampleApproval}
+                        onChange={setExcSampleApproval}
+                      />
+                    </span>
                   </th>
                   <th className="text-left font-medium px-3 py-2 hidden sm:table-cell">
-                    {t('admin.styles.table.web')}
+                    <span className="inline-flex items-center gap-1">
+                      {t('admin.styles.table.web')}
+                      {/* Samplingstatus filter wired here rather than a
+                          separate column — it's the closest column to
+                          "web/sampling stage" in the Gurukul flow. */}
+                      <ColumnFilter
+                        title={t('admin.styles.table.samplingStatus', { defaultValue: 'Sampling status' })}
+                        options={samplingStatusOptions}
+                        excluded={excSamplingStatus}
+                        onChange={setExcSamplingStatus}
+                      />
+                    </span>
                   </th>
                 </>
               )}
@@ -136,7 +278,7 @@ export default function StylesTable({
                 </td>
               </tr>
             )}
-            {!loading && rows.length === 0 && (
+            {!loading && filteredRows.length === 0 && (
               <tr>
                 <td
                   colSpan={COL_COUNT}
@@ -147,7 +289,7 @@ export default function StylesTable({
               </tr>
             )}
             {!loading &&
-              rows.map((s) => {
+              filteredRows.map((s) => {
                 const variants = s.variants ?? [];
                 const hasChildren = variants.length > 0;
                 const isOpen = expanded.has(s.id);

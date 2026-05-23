@@ -20,8 +20,12 @@ import {
   sampleApproveStyle,
   patchStyle,
   type SamplingStatus,
+  type SampleApprovalStatus,
+  type ApproveStyleBody,
+  type SampleApproveStyleBody,
 } from '@/api/styles';
-import type { Style } from '@/api/types';
+import { listUsers } from '@/api/users';
+import type { Style, User as ApiUser } from '@/api/types';
 import { cn } from '@/lib/utils';
 
 /**
@@ -48,6 +52,7 @@ export default function StyleWorkspace() {
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState<string | null>(null);
   const [approveOpen, setApproveOpen] = useState(false);
+  const [sampleApproveOpen, setSampleApproveOpen] = useState(false);
   const [colourModalOpen, setColourModalOpen] = useState(false);
 
   const load = useCallback(async () => {
@@ -200,11 +205,7 @@ export default function StyleWorkspace() {
             <Button
               size="sm"
               disabled={busy !== null}
-              onClick={() =>
-                void doAction('sample-approve', () =>
-                  sampleApproveStyle(style.id),
-                )
-              }
+              onClick={() => setSampleApproveOpen(true)}
             >
               <CheckCircle2 size={14} />
               <span className="ml-1">
@@ -286,6 +287,21 @@ export default function StyleWorkspace() {
               void doAction('step', () =>
                 patchStyle(style.id, { samplingStatus: next }),
               )
+            }
+          />
+        </section>
+      )}
+
+      {/* Inline sample-workflow state editor. Pattern Master updates
+          Sampling Status / DXF / Fit Session without going through
+          either approval dialog. Sampling source only. */}
+      {!isChinaImport && (
+        <section className={cardClasses}>
+          <SampleStateCard
+            style={style}
+            busy={busy !== null}
+            onSave={(patch) =>
+              void doAction('state', () => patchStyle(style.id, patch))
             }
           />
         </section>
@@ -453,47 +469,128 @@ export default function StyleWorkspace() {
       <ApproveIntakeDialog
         open={approveOpen}
         busy={busy !== null}
+        defaultPatternMasterId={style.patternMasterId}
+        gender={style.gender}
         onClose={() => setApproveOpen(false)}
         onConfirm={(body) => {
           setApproveOpen(false);
           void doAction('approve', () => approveStyle(style.id, body));
         }}
       />
+
+      {/* Approval #2 (sample sign-off) dialog — captures the Gurukul
+          enums: verdict, DXF, fit session. Replaces the old single-
+          click sample-approve. */}
+      <SampleApproveDialog
+        open={sampleApproveOpen}
+        busy={busy !== null}
+        currentDxfApproved={style.dxfApproved}
+        currentModelFitSession={style.modelFitSession}
+        onClose={() => setSampleApproveOpen(false)}
+        onConfirm={(body) => {
+          setSampleApproveOpen(false);
+          void doAction('sample-approve', () =>
+            sampleApproveStyle(style.id, body),
+          );
+        }}
+      />
     </div>
   );
 }
 
+// Enum dropdown options — match the Gurukul workbook + BE Prisma enums.
+const SAMPLING_STATUS_OPTIONS: SamplingStatus[] = [
+  'in_progress_pattern_dev',
+  'in_progress_fabric_sourcing',
+  'in_progress_cutting',
+  'in_progress_stitching',
+  'ready_for_inspection',
+  'handed_over_for_inspection',
+  'corrections_needed',
+  'approved_for_production',
+];
+
+const SAMPLE_APPROVAL_OPTIONS: SampleApprovalStatus[] = [
+  'approved_for_production',
+  'under_review_corrections',
+  'pattern_correction_approved',
+];
+
 function ApproveIntakeDialog({
   open,
   busy,
+  gender,
+  defaultPatternMasterId,
   onClose,
   onConfirm,
 }: {
   open: boolean;
   busy: boolean;
+  gender: Style['gender'];
+  defaultPatternMasterId: number | null;
   onClose: () => void;
-  onConfirm: (body: {
-    approval1FabricFeasible: boolean;
-    approval1PriceOk: boolean;
-    approval1CollectionFit: boolean;
-    approval1Note?: string;
-  }) => void;
+  onConfirm: (body: ApproveStyleBody) => void;
 }) {
   const { t } = useTranslation();
   const [fabricFeasible, setFabricFeasible] = useState(false);
   const [priceOk, setPriceOk] = useState(false);
   const [collectionFit, setCollectionFit] = useState(false);
   const [note, setNote] = useState('');
+  const [samplingStatus, setSamplingStatus] = useState<SamplingStatus | ''>('');
+  const [patternMasterId, setPatternMasterId] = useState<number | null>(
+    defaultPatternMasterId,
+  );
+  // Pattern Master picker fetched lazily on open — narrow to the two
+  // PM roles + admin so override choices are sensible.
+  const [pmCandidates, setPmCandidates] = useState<ApiUser[]>([]);
 
-  // Reset the checklist each time the dialog opens.
+  // Reset the checklist each time the dialog opens, and seed the
+  // Pattern Master dropdown with the auto-routed user.
   useEffect(() => {
     if (open) {
       setFabricFeasible(false);
       setPriceOk(false);
       setCollectionFit(false);
       setNote('');
+      setSamplingStatus('');
+      setPatternMasterId(defaultPatternMasterId);
     }
-  }, [open]);
+  }, [open, defaultPatternMasterId]);
+
+  useEffect(() => {
+    if (!open) return;
+    let cancelled = false;
+    void listUsers({ take: 200 })
+      .then((rows) => {
+        if (cancelled) return;
+        // Filter to Pattern Masters; show w/m matching the style's
+        // gender first, then everyone else as fallback.
+        const isPm = (u: ApiUser) =>
+          u.role === 'pattern_master_w' ||
+          u.role === 'pattern_master_m' ||
+          u.role === 'admin';
+        const matchesGender = (u: ApiUser) =>
+          (gender === 'women' && u.role === 'pattern_master_w') ||
+          (gender === 'men' && u.role === 'pattern_master_m') ||
+          gender === 'unisex';
+        const ordered = rows
+          .filter(isPm)
+          .sort((a, b) =>
+            matchesGender(a) === matchesGender(b)
+              ? a.name.localeCompare(b.name)
+              : matchesGender(a)
+                ? -1
+                : 1,
+          );
+        setPmCandidates(ordered);
+      })
+      .catch(() => {
+        if (!cancelled) setPmCandidates([]);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [open, gender]);
 
   return (
     <Dialog
@@ -514,6 +611,8 @@ function ApproveIntakeDialog({
                 approval1PriceOk: priceOk,
                 approval1CollectionFit: collectionFit,
                 approval1Note: note.trim() || undefined,
+                samplingStatus: samplingStatus || undefined,
+                patternMasterId,
               })
             }
           >
@@ -526,6 +625,7 @@ function ApproveIntakeDialog({
       <p className="text-sm text-[var(--color-muted-foreground)] mb-4">
         {t('admin.styles.approval1.dialogIntro')}
       </p>
+
       <div className="space-y-2">
         <CheckboxRow
           label={t('admin.styles.approval1.fabricFeasible')}
@@ -543,6 +643,67 @@ function ApproveIntakeDialog({
           onChange={setCollectionFit}
         />
       </div>
+
+      {/* Workflow state set at Approval #1 — both optional. */}
+      <div className="mt-4 grid grid-cols-1 sm:grid-cols-2 gap-3">
+        <div>
+          <label className="block text-xs text-[var(--color-muted-foreground)] mb-1">
+            {t('admin.styles.approval1.samplingStatus', {
+              defaultValue: 'Initial sampling status',
+            })}
+          </label>
+          <select
+            value={samplingStatus}
+            onChange={(e) =>
+              setSamplingStatus(e.target.value as SamplingStatus | '')
+            }
+            className="flex h-10 w-full rounded-[var(--radius-sm)] border border-[var(--color-border)] bg-white px-2.5 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-ring)]"
+          >
+            <option value="">
+              {t('admin.styles.approval1.samplingStatusUnset', {
+                defaultValue: '—',
+              })}
+            </option>
+            {SAMPLING_STATUS_OPTIONS.map((s) => (
+              <option key={s} value={s}>
+                {t(`admin.styles.samplingStatus.${s}` as const, {
+                  defaultValue: s,
+                })}
+              </option>
+            ))}
+          </select>
+        </div>
+        <div>
+          <label className="block text-xs text-[var(--color-muted-foreground)] mb-1">
+            {t('admin.styles.approval1.patternMaster', {
+              defaultValue: 'Pattern Master',
+            })}
+          </label>
+          <select
+            value={patternMasterId ?? ''}
+            onChange={(e) =>
+              setPatternMasterId(
+                e.target.value ? Number(e.target.value) : null,
+              )
+            }
+            className="flex h-10 w-full rounded-[var(--radius-sm)] border border-[var(--color-border)] bg-white px-2.5 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-ring)]"
+          >
+            <option value="">
+              {t('admin.styles.approval1.patternMasterUnset', {
+                defaultValue: '— Unassigned',
+              })}
+            </option>
+            {pmCandidates.map((u) => (
+              <option key={u.id} value={u.id}>
+                {u.name}
+                {u.role === 'pattern_master_w' ? " (Women's)" : ''}
+                {u.role === 'pattern_master_m' ? " (Men's)" : ''}
+              </option>
+            ))}
+          </select>
+        </div>
+      </div>
+
       <div className="mt-4">
         <label className="block text-xs text-[var(--color-muted-foreground)] mb-1">
           {t('admin.styles.approval1.note')}
@@ -552,6 +713,161 @@ function ApproveIntakeDialog({
           onChange={(e) => setNote(e.target.value)}
           placeholder={t('admin.styles.approval1.notePlaceholder')}
         />
+      </div>
+    </Dialog>
+  );
+}
+
+function SampleApproveDialog({
+  open,
+  busy,
+  currentDxfApproved,
+  currentModelFitSession,
+  onClose,
+  onConfirm,
+}: {
+  open: boolean;
+  busy: boolean;
+  currentDxfApproved: Style['dxfApproved'];
+  currentModelFitSession: Style['modelFitSession'];
+  onClose: () => void;
+  onConfirm: (body: SampleApproveStyleBody) => void;
+}) {
+  const { t } = useTranslation();
+  const [verdict, setVerdict] = useState<SampleApprovalStatus>(
+    'approved_for_production',
+  );
+  const [dxfApproved, setDxfApproved] = useState<'yes' | 'no' | ''>('');
+  const [modelFitSession, setModelFitSession] = useState<
+    'yes' | 'pending' | 'no' | ''
+  >('');
+  const [note, setNote] = useState('');
+
+  useEffect(() => {
+    if (open) {
+      setVerdict('approved_for_production');
+      setDxfApproved((currentDxfApproved as 'yes' | 'no' | null) ?? '');
+      setModelFitSession(
+        (currentModelFitSession as 'yes' | 'pending' | 'no' | null) ?? '',
+      );
+      setNote('');
+    }
+  }, [open, currentDxfApproved, currentModelFitSession]);
+
+  return (
+    <Dialog
+      open={open}
+      onClose={onClose}
+      title={t('admin.styles.approval2.dialogTitle', {
+        defaultValue: 'Approve sample',
+      })}
+      footer={
+        <>
+          <Button variant="outline" size="sm" disabled={busy} onClick={onClose}>
+            {t('admin.styles.approval2.cancel', { defaultValue: 'Cancel' })}
+          </Button>
+          <Button
+            size="sm"
+            disabled={busy}
+            onClick={() =>
+              onConfirm({
+                sampleApproval: verdict,
+                dxfApproved: dxfApproved || undefined,
+                modelFitSession: modelFitSession || undefined,
+                note: note.trim() || undefined,
+              })
+            }
+          >
+            <CheckCircle2 size={14} />
+            <span className="ml-1">
+              {t('admin.styles.approval2.confirm', {
+                defaultValue: 'Sign off',
+              })}
+            </span>
+          </Button>
+        </>
+      }
+    >
+      <p className="text-sm text-[var(--color-muted-foreground)] mb-4">
+        {t('admin.styles.approval2.dialogIntro', {
+          defaultValue:
+            'Record the sample verdict. Only "Approved for production" advances the lifecycle — other verdicts log the state and keep the style in sampling for rework.',
+        })}
+      </p>
+      <div className="space-y-3">
+        <div>
+          <label className="block text-xs text-[var(--color-muted-foreground)] mb-1">
+            {t('admin.styles.approval2.verdict', {
+              defaultValue: 'Sample verdict',
+            })}
+          </label>
+          <select
+            value={verdict}
+            onChange={(e) => setVerdict(e.target.value as SampleApprovalStatus)}
+            className="flex h-10 w-full rounded-[var(--radius-sm)] border border-[var(--color-border)] bg-white px-2.5 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-ring)]"
+          >
+            {SAMPLE_APPROVAL_OPTIONS.map((v) => (
+              <option key={v} value={v}>
+                {t(`admin.styles.sampleApproval.${v}` as const, {
+                  defaultValue: v,
+                })}
+              </option>
+            ))}
+          </select>
+        </div>
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <div>
+            <label className="block text-xs text-[var(--color-muted-foreground)] mb-1">
+              {t('admin.styles.approval2.dxfApproved', {
+                defaultValue: 'DXF approved (Karan)',
+              })}
+            </label>
+            <select
+              value={dxfApproved}
+              onChange={(e) =>
+                setDxfApproved(e.target.value as 'yes' | 'no' | '')
+              }
+              className="flex h-10 w-full rounded-[var(--radius-sm)] border border-[var(--color-border)] bg-white px-2.5 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-ring)]"
+            >
+              <option value="">—</option>
+              <option value="yes">Yes</option>
+              <option value="no">No</option>
+            </select>
+          </div>
+          <div>
+            <label className="block text-xs text-[var(--color-muted-foreground)] mb-1">
+              {t('admin.styles.approval2.modelFitSession', {
+                defaultValue: 'Model / live fit session',
+              })}
+            </label>
+            <select
+              value={modelFitSession}
+              onChange={(e) =>
+                setModelFitSession(
+                  e.target.value as 'yes' | 'pending' | 'no' | '',
+                )
+              }
+              className="flex h-10 w-full rounded-[var(--radius-sm)] border border-[var(--color-border)] bg-white px-2.5 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-ring)]"
+            >
+              <option value="">—</option>
+              <option value="yes">Yes</option>
+              <option value="pending">Pending</option>
+              <option value="no">No</option>
+            </select>
+          </div>
+        </div>
+        <div>
+          <label className="block text-xs text-[var(--color-muted-foreground)] mb-1">
+            {t('admin.styles.approval2.note', { defaultValue: 'Note' })}
+          </label>
+          <Textarea
+            value={note}
+            onChange={(e) => setNote(e.target.value)}
+            placeholder={t('admin.styles.approval2.notePlaceholder', {
+              defaultValue: 'Optional context — defects, corrections, …',
+            })}
+          />
+        </div>
       </div>
     </Dialog>
   );
@@ -601,6 +917,213 @@ function ApprovalCheckRow({
             ? t('admin.styles.approval1.checkNo')
             : t('admin.styles.approval1.checkUnset')}
       </Badge>
+    </div>
+  );
+}
+
+/**
+ * Inline "Sample workflow" card — Excel-style. Every field is a live
+ * dropdown; picking a value PATCHes immediately. No edit/save mode.
+ *
+ * Per-field saved/saving status lives next to each dropdown so the user
+ * gets feedback without a blocking spinner. The Sampling Status field
+ * also drives the SamplingPipelineStepper above (same column).
+ */
+function SampleStateCard({
+  style,
+  busy: _busy,
+  onSave,
+}: {
+  style: Style;
+  busy: boolean;
+  onSave: (patch: {
+    samplingStatus?: SamplingStatus | null;
+    dxfApproved?: 'yes' | 'no' | null;
+    modelFitSession?: 'yes' | 'pending' | 'no' | null;
+    patternMasterId?: number | null;
+  }) => void;
+}) {
+  const { t } = useTranslation();
+  // Per-field saving / just-saved state — Excel-like ✓ flash after a
+  // successful PATCH. We track by field key so two simultaneous saves
+  // (e.g. clicking Sampling Status while DXF is still flashing) don't
+  // step on each other.
+  const [savedFlash, setSavedFlash] = useState<Record<string, true>>({});
+  const flash = (key: string) => {
+    setSavedFlash((cur) => ({ ...cur, [key]: true }));
+    window.setTimeout(
+      () =>
+        setSavedFlash((cur) => {
+          const next = { ...cur };
+          delete next[key];
+          return next;
+        }),
+      1500,
+    );
+  };
+
+  const [pmCandidates, setPmCandidates] = useState<ApiUser[]>([]);
+  useEffect(() => {
+    let cancelled = false;
+    void listUsers({ take: 200 })
+      .then((rows) => {
+        if (cancelled) return;
+        setPmCandidates(
+          rows.filter(
+            (u) =>
+              u.role === 'pattern_master_w' ||
+              u.role === 'pattern_master_m' ||
+              u.role === 'admin',
+          ),
+        );
+      })
+      .catch(() => {
+        if (!cancelled) setPmCandidates([]);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  return (
+    <div>
+      <div className="flex items-center justify-between mb-3">
+        <h2 className="font-serif text-lg">
+          {t('admin.styles.workspace.sampleWorkflow', {
+            defaultValue: 'Sample workflow',
+          })}
+        </h2>
+        <span className="text-[11px] text-[var(--color-muted-foreground)]">
+          {t('admin.styles.workspace.sampleWorkflowHint', {
+            defaultValue: 'Picks save instantly',
+          })}
+        </span>
+      </div>
+
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-sm">
+        <FieldDropdown
+          label={t('admin.styles.workspace.samplingStatus', {
+            defaultValue: 'Sampling status',
+          })}
+          value={(style.samplingStatus as SamplingStatus | null) ?? ''}
+          options={SAMPLING_STATUS_OPTIONS.map((s) => ({
+            value: s,
+            label: t(`admin.styles.samplingStatus.${s}` as const, {
+              defaultValue: s,
+            }),
+          }))}
+          flashing={!!savedFlash.samplingStatus}
+          onChange={(v) => {
+            onSave({
+              samplingStatus: (v as SamplingStatus) || null,
+            });
+            flash('samplingStatus');
+          }}
+        />
+        <FieldDropdown
+          label="DXF approved"
+          value={style.dxfApproved ?? ''}
+          options={[
+            { value: 'yes', label: 'Yes' },
+            { value: 'no', label: 'No' },
+          ]}
+          flashing={!!savedFlash.dxfApproved}
+          onChange={(v) => {
+            onSave({ dxfApproved: (v as 'yes' | 'no') || null });
+            flash('dxfApproved');
+          }}
+        />
+        <FieldDropdown
+          label="Model / live fit session"
+          value={style.modelFitSession ?? ''}
+          options={[
+            { value: 'yes', label: 'Yes' },
+            { value: 'pending', label: 'Pending' },
+            { value: 'no', label: 'No' },
+          ]}
+          flashing={!!savedFlash.modelFitSession}
+          onChange={(v) => {
+            onSave({
+              modelFitSession:
+                (v as 'yes' | 'pending' | 'no') || null,
+            });
+            flash('modelFitSession');
+          }}
+        />
+        <FieldDropdown
+          label="Pattern Master"
+          value={style.patternMasterId != null ? String(style.patternMasterId) : ''}
+          options={pmCandidates.map((u) => ({
+            value: String(u.id),
+            label: `${u.name}${
+              u.role === 'pattern_master_w'
+                ? " (Women's)"
+                : u.role === 'pattern_master_m'
+                  ? " (Men's)"
+                  : ''
+            }`,
+          }))}
+          unsetLabel="— Unassigned"
+          flashing={!!savedFlash.patternMasterId}
+          onChange={(v) => {
+            onSave({ patternMasterId: v ? Number(v) : null });
+            flash('patternMasterId');
+          }}
+        />
+      </div>
+    </div>
+  );
+}
+
+/**
+ * Single labelled dropdown that PATCHes on change. Renders a small
+ * "Saved ✓" pill for 1.5s after a successful pick, then fades. Empty
+ * string is the "unset" sentinel — picking it sends null.
+ */
+function FieldDropdown({
+  label,
+  value,
+  options,
+  unsetLabel = '— Unset',
+  flashing,
+  onChange,
+}: {
+  label: string;
+  value: string;
+  options: Array<{ value: string; label: string }>;
+  unsetLabel?: string;
+  flashing: boolean;
+  onChange: (next: string) => void;
+}) {
+  return (
+    <div>
+      <div className="flex items-center justify-between mb-1">
+        <label className="text-xs text-[var(--color-muted-foreground)]">
+          {label}
+        </label>
+        {flashing && (
+          <span className="text-[10px] text-[var(--status-ready-acc)] inline-flex items-center gap-0.5 transition-opacity">
+            <CheckCircle2 size={11} /> Saved
+          </span>
+        )}
+      </div>
+      <select
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        className={cn(
+          'flex h-10 w-full rounded-[var(--radius-sm)] border bg-white px-2.5 transition-colors',
+          flashing
+            ? 'border-[var(--status-ready-acc)]'
+            : 'border-[var(--color-border)]',
+        )}
+      >
+        <option value="">{unsetLabel}</option>
+        {options.map((o) => (
+          <option key={o.value} value={o.value}>
+            {o.label}
+          </option>
+        ))}
+      </select>
     </div>
   );
 }

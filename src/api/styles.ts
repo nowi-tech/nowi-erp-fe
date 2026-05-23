@@ -223,12 +223,31 @@ export async function hardDeleteStyle(styleId: number): Promise<void> {
 }
 
 // ─── Style actions ────────────────────────────────────────────────────
-/** Optional body for Approval #1 — the merchandiser's intake checks. */
+/**
+ * Optional body for Approval #1 — the merchandiser's intake checks plus
+ * the initial sample-workflow state (Sampling Status, Pattern Master).
+ */
 export interface ApproveStyleBody {
   approval1FabricFeasible?: boolean;
   approval1PriceOk?: boolean;
   approval1CollectionFit?: boolean;
   approval1Note?: string;
+  /** Initial Sampling Status set at intake approval. */
+  samplingStatus?: SamplingStatus;
+  /** Pattern Master override — defaults to gender-routed user when null. */
+  patternMasterId?: number | null;
+}
+
+/**
+ * Optional body for Approval #2 — sample sign-off. Captures the
+ * sample-verdict enum plus the Gurukul fit-session / DXF flags.
+ * Defaults to `approved_for_production` server-side when omitted.
+ */
+export interface SampleApproveStyleBody {
+  sampleApproval?: SampleApprovalStatus;
+  dxfApproved?: 'yes' | 'no';
+  modelFitSession?: 'yes' | 'pending' | 'no';
+  note?: string;
 }
 
 export async function approveStyle(
@@ -262,7 +281,7 @@ export async function reviveStyle(styleId: number): Promise<Style> {
 
 export async function sampleApproveStyle(
   styleId: number,
-  body: { note?: string } = {},
+  body: SampleApproveStyleBody = {},
 ): Promise<Style> {
   const res = await apiClient.post<Style>(
     `/api/styles/${styleId}/actions/sample-approve`,

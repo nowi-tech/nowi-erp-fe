@@ -2,6 +2,8 @@ import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useAuth } from '@/context/auth';
 import { Button } from '@/components/ui/button';
+import { hasAnyRole } from '@/lib/userRoles';
+import type { UserRole } from '@/api/types';
 
 interface BeforeInstallPromptEvent extends Event {
   readonly platforms: string[];
@@ -11,11 +13,11 @@ interface BeforeInstallPromptEvent extends Event {
 
 const FIRST_RECEIPT_KEY = 'nowi.firstReceiptDoneAt';
 const DISMISSED_KEY = 'nowi.pwaInstallDismissedAt';
-const FLOOR_ROLES = new Set([
+const FLOOR_ROLES: readonly UserRole[] = [
   'floor_manager',
   'stitching_master',
   'finishing_master',
-]);
+] as const;
 
 export default function PwaInstallPrompt() {
   const { t } = useTranslation();
@@ -37,7 +39,7 @@ export default function PwaInstallPrompt() {
       setVisible(false);
       return;
     }
-    if (!user || !FLOOR_ROLES.has(user.role)) {
+    if (!user || !hasAnyRole(user, FLOOR_ROLES)) {
       setVisible(false);
       return;
     }
@@ -48,7 +50,7 @@ export default function PwaInstallPrompt() {
 
   // Re-check gating periodically — receipts can land while the user is in app.
   useEffect(() => {
-    if (!deferred || !user || !FLOOR_ROLES.has(user.role)) return;
+    if (!deferred || !user || !hasAnyRole(user, FLOOR_ROLES)) return;
     const onStorage = () => {
       const firstReceipt = localStorage.getItem(FIRST_RECEIPT_KEY);
       const dismissed = localStorage.getItem(DISMISSED_KEY);

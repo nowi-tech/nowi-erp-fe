@@ -12,6 +12,7 @@ import { Dialog } from '@/components/ui/dialog';
 import { useToast } from '@/components/ui/toast';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useAuth } from '@/context/auth';
+import { hasAnyRole } from '@/lib/userRoles';
 import {
   downloadDispatchChallan,
   editItemQty,
@@ -63,8 +64,7 @@ export default function DispatchDetail() {
   const [edit, setEdit] = useState<EditState>(INITIAL_EDIT);
   const cancelRef = useRef<HTMLButtonElement>(null);
 
-  const canEdit =
-    !!user && (user.role === 'admin' || user.role === 'finishing_master');
+  const canEdit = hasAnyRole(user, ['admin', 'finishing_master']);
 
   const refresh = useCallback(async () => {
     setLoading(true);

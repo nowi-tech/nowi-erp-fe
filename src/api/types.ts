@@ -19,7 +19,11 @@ export type UserRole =
 export interface User {
   id: string;
   name: string;
+  /** Primary role — the legacy single-role guard reads this. */
   role: UserRole;
+  /** Extra roles granted via UserRoleAssignment rows. Does NOT include
+   *  the primary role; use `userAllRoles(user)` for the union. */
+  roleAssignments?: Array<{ role: UserRole }>;
   isTrainingMode: boolean;
   onboardedAt?: string | null;
   mobileNumber?: string;

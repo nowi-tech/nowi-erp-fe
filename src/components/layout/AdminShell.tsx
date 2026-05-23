@@ -27,6 +27,7 @@ import { useToast } from '@/components/ui/toast';
 import LanguageToggle from '@/components/LanguageToggle';
 import Logo from '@/components/Logo';
 import { cn } from '@/lib/utils';
+import { hasAnyRole, userAllRoles } from '@/lib/userRoles';
 import type { UserRole } from '@/api/types';
 import { RailTooltip, SectionFlyout } from '@/components/ui/sidebar-tooltip';
 
@@ -526,22 +527,34 @@ export default function AdminShell() {
 
   const location = useLocation();
   const role: UserRole | undefined = user?.role;
+  // Multi-role: union of primary + UserRoleAssignment.role rows. The
+  // sidebar shows an item if any of these intersects the item's roles.
+  const allRoles = useMemo(() => userAllRoles(user), [user]);
 
-  // Filter items by role, then drop any section left with no items.
+  // Filter items by allRoles, then drop any section left with no items.
   const sections = useMemo<NavSection[]>(() => {
-    if (!role) return [];
+    if (allRoles.length === 0) return [];
     return NAV_SECTIONS.map((s) => ({
       ...s,
-      items: s.items.filter((it) => it.roles.includes(role)),
+      items: s.items.filter((it) =>
+        it.roles.some((r) => allRoles.includes(r)),
+      ),
     })).filter((s) => s.items.length > 0);
-  }, [role]);
+  }, [allRoles]);
 
-  const homePath =
-    role === 'data_manager'
-      ? '/data'
-      : role === 'sampling_editor'
-        ? '/styles'
-        : '/admin';
+  // Login landing: data_manager → /data; anyone with a PD role → /styles;
+  // otherwise /admin. Checked against allRoles so a secondary PD grant
+  // is honoured too.
+  const homePath = hasAnyRole(user, ['data_manager'])
+    ? '/data'
+    : hasAnyRole(user, [
+          'sampling_editor',
+          'sampling_lead',
+          'pattern_master_w',
+          'pattern_master_m',
+        ])
+      ? '/styles'
+      : '/admin';
 
   // Close the mobile drawer on any navigation.
   useEffect(() => {

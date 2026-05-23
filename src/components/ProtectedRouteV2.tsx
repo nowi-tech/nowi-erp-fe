@@ -3,6 +3,7 @@ import type { ReactNode } from 'react';
 import { useAuth } from '@/context/auth';
 import { Skeleton } from '@/components/ui/skeleton';
 import type { UserRole } from '@/api/types';
+import { hasAnyRole } from '@/lib/userRoles';
 
 interface Props {
   children: ReactNode;
@@ -28,7 +29,9 @@ export default function ProtectedRouteV2({ children, allowedRoles }: Props) {
 
   if (!isAuthenticated) return <Navigate to="/login" replace />;
 
-  if (allowedRoles && (!user?.role || !allowedRoles.includes(user.role))) {
+  // Multi-role: a user passes if any of their roles (primary OR
+  // UserRoleAssignment) is in `allowedRoles`.
+  if (allowedRoles && !hasAnyRole(user, allowedRoles)) {
     return <Navigate to="/" replace />;
   }
 
