@@ -11,6 +11,7 @@ import { getLocator } from '@/api/locator';
 import { Badge } from '@/components/ui/badge';
 import KpiTile from '@/components/KpiTile';
 import ApprovalCtaCard from '@/components/styles/ApprovalCtaCard';
+import RecentStylesSection from '@/components/styles/RecentStylesSection';
 import { getThroughput, getReworkRate } from '@/api/dashboard';
 import { FeatureUnavailableError } from '@/api/_errors';
 import type {
@@ -144,6 +145,11 @@ export default function AdminHome() {
 
       {/* Pending-approval call-to-action — only for approval-capable users */}
       <ApprovalCtaCard />
+
+      {/* PD users see active samples here — inline-edit cells let them
+          flip Pattern Master / Sampling Status / Sample Approval right
+          from the dashboard. Hidden for non-PD roles. */}
+      <RecentStylesSection />
 
       {/* KPI strip — only metrics where we actually have data */}
       <div className="grid gap-3 grid-cols-2 lg:grid-cols-4">
