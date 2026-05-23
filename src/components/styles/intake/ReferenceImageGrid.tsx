@@ -253,72 +253,128 @@ export default function ReferenceImageGrid({
 
   const remaining = MAX_IMAGES - value.length;
 
+  // Featured layout: 3-column grid where the primary tile spans 2×2,
+  // others 1×1. Result on a ~600px form: primary ~400×400, secondary
+  // ~200×200 — vs the old 5-col layout's ~110×110 squares. Mobile uses
+  // the same 3 cols (primary still 2×2 = 2/3 of phone width).
+  //
+  // Layout with N images:
+  //   N=0: just a large add tile (2×2) so the user sees the upload target.
+  //   N≥1: primary tile 2×2 + each extra image 1×1 + add tile 1×1.
+  const primary = entries[0] ?? null;
+  const rest = entries.slice(1);
+  const showAdd = remaining > 0;
+  const addIsLarge = !primary; // when no images yet, add takes the primary slot
+
   return (
     <div className="space-y-2" onPaste={onPaste}>
-      <div className="grid grid-cols-3 gap-2 sm:grid-cols-5">
-        {entries.map((entry, idx) => (
+      <div className="grid grid-cols-3 gap-2">
+        {primary && (
           <div
-            key={`${entry.objectPath ?? entry.externalUrl}-${idx}`}
+            key={`${primary.objectPath ?? primary.externalUrl}-0`}
             draggable
-            onDragStart={onTileDragStart(idx)}
-            onDragOver={onTileDragOver(idx)}
-            onDrop={onTileDrop(idx)}
+            onDragStart={onTileDragStart(0)}
+            onDragOver={onTileDragOver(0)}
+            onDrop={onTileDrop(0)}
             onDragEnd={() => {
               dragFromRef.current = null;
               setDragOverIdx(null);
             }}
             className={cn(
-              'group relative aspect-square overflow-hidden rounded-[var(--radius-md)] border bg-[var(--color-muted)] transition-all',
-              idx === 0
-                ? 'border-2 border-[var(--color-primary)]'
-                : 'border-[var(--color-border)]',
-              dragOverIdx === idx && 'ring-2 ring-[var(--color-primary)]',
+              'group relative col-span-2 row-span-2 aspect-square overflow-hidden rounded-[var(--radius-md)] border-2 border-[var(--color-primary)] bg-[var(--color-muted)] transition-all',
+              dragOverIdx === 0 && 'ring-2 ring-[var(--color-primary)]',
             )}
-            title={
-              idx === 0
-                ? 'Primary image — drag another tile here to swap.'
-                : 'Drag to reorder.'
-            }
+            title="Primary image — drag another tile here to swap."
           >
-            {entry.preview ? (
+            {primary.preview ? (
               <img
-                src={entry.preview}
-                alt={`Reference ${idx + 1}`}
+                src={primary.preview}
+                alt="Reference 1 (primary)"
                 className="h-full w-full object-cover"
                 draggable={false}
               />
             ) : (
               <div className="flex h-full w-full items-center justify-center text-[var(--color-muted-foreground)]">
-                <Loader2 size={16} className="animate-spin" />
+                <Loader2 size={20} className="animate-spin" />
               </div>
             )}
-            {idx === 0 && (
-              <span className="absolute left-1 top-1 inline-flex items-center gap-0.5 rounded-full bg-[var(--color-primary)] px-1.5 py-0.5 text-[10px] font-semibold text-white">
-                <Star size={9} />
-                Primary
-              </span>
-            )}
+            <span className="absolute left-2 top-2 inline-flex items-center gap-1 rounded-full bg-[var(--color-primary)] px-2 py-0.5 text-[11px] font-semibold text-white">
+              <Star size={10} />
+              Primary
+            </span>
             <button
               type="button"
               onClick={(e) => {
                 e.stopPropagation();
-                removeAt(idx);
+                removeAt(0);
               }}
               aria-label="Remove image"
-              className="absolute right-1 top-1 rounded-full bg-black/60 p-1 text-white opacity-0 transition-opacity hover:bg-black/80 group-hover:opacity-100"
+              className="absolute right-2 top-2 rounded-full bg-black/60 p-1.5 text-white opacity-0 transition-opacity hover:bg-black/80 group-hover:opacity-100"
             >
-              <X size={12} />
+              <X size={14} />
             </button>
-            {entry.externalUrl && (
-              <span className="absolute bottom-1 left-1 inline-flex items-center gap-0.5 rounded-full bg-black/60 px-1.5 py-0.5 text-[10px] font-medium text-white">
-                <Sparkles size={9} />
-                Auto
+            {primary.externalUrl && (
+              <span className="absolute bottom-2 left-2 inline-flex items-center gap-1 rounded-full bg-black/60 px-2 py-0.5 text-[11px] font-medium text-white">
+                <Sparkles size={10} />
+                Auto-fetched
               </span>
             )}
           </div>
-        ))}
+        )}
 
-        {remaining > 0 && (
+        {rest.map((entry, i) => {
+          const idx = i + 1;
+          return (
+            <div
+              key={`${entry.objectPath ?? entry.externalUrl}-${idx}`}
+              draggable
+              onDragStart={onTileDragStart(idx)}
+              onDragOver={onTileDragOver(idx)}
+              onDrop={onTileDrop(idx)}
+              onDragEnd={() => {
+                dragFromRef.current = null;
+                setDragOverIdx(null);
+              }}
+              className={cn(
+                'group relative aspect-square overflow-hidden rounded-[var(--radius-md)] border border-[var(--color-border)] bg-[var(--color-muted)] transition-all',
+                dragOverIdx === idx && 'ring-2 ring-[var(--color-primary)]',
+              )}
+              title="Drag to reorder."
+            >
+              {entry.preview ? (
+                <img
+                  src={entry.preview}
+                  alt={`Reference ${idx + 1}`}
+                  className="h-full w-full object-cover"
+                  draggable={false}
+                />
+              ) : (
+                <div className="flex h-full w-full items-center justify-center text-[var(--color-muted-foreground)]">
+                  <Loader2 size={16} className="animate-spin" />
+                </div>
+              )}
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  removeAt(idx);
+                }}
+                aria-label="Remove image"
+                className="absolute right-1 top-1 rounded-full bg-black/60 p-1 text-white opacity-0 transition-opacity hover:bg-black/80 group-hover:opacity-100"
+              >
+                <X size={12} />
+              </button>
+              {entry.externalUrl && (
+                <span className="absolute bottom-1 left-1 inline-flex items-center gap-0.5 rounded-full bg-black/60 px-1.5 py-0.5 text-[10px] font-medium text-white">
+                  <Sparkles size={9} />
+                  Auto
+                </span>
+              )}
+            </div>
+          );
+        })}
+
+        {showAdd && (
           <button
             type="button"
             onClick={() => fileRef.current?.click()}
@@ -329,7 +385,8 @@ export default function ReferenceImageGrid({
             onDragLeave={() => setDragOverIdx(null)}
             onDrop={onEmptyDrop}
             className={cn(
-              'flex aspect-square flex-col items-center justify-center gap-1 rounded-[var(--radius-md)] border-2 border-dashed text-[var(--color-muted-foreground)] transition-colors hover:bg-[var(--color-muted)]',
+              'flex aspect-square flex-col items-center justify-center gap-1.5 rounded-[var(--radius-md)] border-2 border-dashed text-[var(--color-muted-foreground)] transition-colors hover:bg-[var(--color-muted)]',
+              addIsLarge && 'col-span-2 row-span-2',
               dragOverIdx === value.length
                 ? 'border-[var(--color-primary)] bg-[var(--color-primary)]/5'
                 : 'border-[var(--color-input)]',
@@ -337,11 +394,20 @@ export default function ReferenceImageGrid({
             aria-label="Add reference image"
           >
             {busy ? (
-              <Loader2 size={16} className="animate-spin" />
+              <Loader2 size={addIsLarge ? 24 : 18} className="animate-spin" />
             ) : (
               <>
-                <ImagePlus size={18} />
-                <span className="text-[11px]">Add</span>
+                <ImagePlus size={addIsLarge ? 28 : 20} />
+                <span className={addIsLarge ? 'text-sm' : 'text-[11px]'}>
+                  {addIsLarge
+                    ? 'Click, drop, or paste an image'
+                    : 'Add'}
+                </span>
+                {addIsLarge && (
+                  <span className="text-[11px] text-[var(--color-muted-foreground)]/80">
+                    or paste a product link below
+                  </span>
+                )}
               </>
             )}
           </button>
