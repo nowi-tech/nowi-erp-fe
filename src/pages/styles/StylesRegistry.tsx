@@ -8,17 +8,15 @@ import { Select } from '@/components/ui/select';
 import AttentionChips from '@/components/styles/AttentionChips';
 import StyleKpiStrip from '@/components/styles/StyleKpiStrip';
 import StylesTable from '@/components/styles/StylesTable';
-import StyleQuickEditDrawer from '@/components/styles/StyleQuickEditDrawer';
 import {
   listStyles,
   getStylesSummary,
   listCollections,
-  listFabrics,
   type ListStylesParams,
   type StyleTab,
   type StylesSummary,
 } from '@/api/styles';
-import type { Style, Collection, Fabric } from '@/api/types';
+import type { Style, Collection } from '@/api/types';
 import { cn } from '@/lib/utils';
 
 const TABS: StyleTab[] = ['inbox', 'in_sampling', 'parked', 'in_pd', 'all'];
@@ -44,21 +42,17 @@ export default function StylesRegistry() {
   const [collectionId, setCollectionId] = useState<string>('');
   const [samplingStatus, setSamplingStatus] = useState<string>('');
   const [collections, setCollections] = useState<Collection[]>([]);
-  const [fabrics, setFabrics] = useState<Fabric[]>([]);
-
-  const [drawerOpen, setDrawerOpen] = useState(false);
-  const [editing, setEditing] = useState<Style | null>(null);
   const [showWidgets, setShowWidgets] = useState(true);
 
-  // Load master data once.
+  // Load master data once. The previous drawer flow also fetched the
+  // fabric master here; not needed anymore since the drawer is gone
+  // and the detail page fetches its own.
   useEffect(() => {
     void Promise.all([
       listCollections().catch(() => [] as Collection[]),
-      listFabrics().catch(() => [] as Fabric[]),
       getStylesSummary().catch(() => null),
-    ]).then(([c, fb, s]) => {
+    ]).then(([c, s]) => {
       setCollections(c);
-      setFabrics(fb);
       setSummary(s);
     });
   }, []);
@@ -89,11 +83,6 @@ export default function StylesRegistry() {
   }, [load]);
 
   const openCreateDesign = () => navigate('/styles/new');
-
-  const openEdit = (s: Style) => {
-    setEditing(s);
-    setDrawerOpen(true);
-  };
 
   const TAB_COUNTS = useMemo(() => {
     // Best-effort client-side counts pending a BE summary endpoint.
@@ -235,21 +224,16 @@ export default function StylesRegistry() {
           <StylesTable
             rows={rows}
             loading={loading}
-            onRowClick={openEdit}
+            // Single click target: every click (row OR style #) opens
+            // the full Style detail page. The old QuickEditDrawer was a
+            // second surface that's now redundant — inline-edit cells
+            // cover quick status flips, and the detail page has the
+            // always-editable SampleStateCard + full audit log.
+            onRowClick={(s) => navigate(`/styles/${s.styleId ?? s.id}`)}
             onStyleNoClick={(s) => navigate(`/styles/${s.styleId ?? s.id}`)}
           />
         </div>
       </div>
-
-      <StyleQuickEditDrawer
-        open={drawerOpen}
-        style={editing}
-        defaults={{ source: 'sampling', category: 'womens_top_wear' }}
-        collections={collections}
-        fabrics={fabrics}
-        onClose={() => setDrawerOpen(false)}
-        onSaved={() => void load()}
-      />
 
       {/* Hidden link kept for screen-reader / route prefetching. */}
       <Link to="/styles/new" className="sr-only">
