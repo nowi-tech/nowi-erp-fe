@@ -31,13 +31,19 @@ function titleCase(s: string): string {
 }
 
 interface Props {
-  /** When set, the form is in edit mode and PATCHes on save. */
+  /** When set with a real `id`, the form is in edit mode (PATCHes on
+   *  save). Pass null / undefined / an object without an id for create
+   *  mode — use `initialName` to prefill in that case. */
   editing?: Fabric | null;
+  /** Optional name prefill for create mode (e.g. the typed search term
+   *  in the intake's "+ Add fabric" picker). Ignored when `editing`
+   *  is set with a real id. */
+  initialName?: string;
   /** Called after a successful create or patch. */
   onSaved: (fabric: Fabric) => void;
   /** Called when the user hits Cancel. */
   onCancel: () => void;
-  /** Toast on success. Defaults to a generic "Saved." */
+  /** Toast on success. Defaults to localised "Updated." / "Added." */
   successMessage?: string;
 }
 
@@ -54,6 +60,7 @@ interface Props {
  */
 export default function FabricEditorForm({
   editing,
+  initialName,
   onSaved,
   onCancel,
   successMessage,
@@ -61,8 +68,14 @@ export default function FabricEditorForm({
   const { t } = useTranslation();
   const toast = useToast();
 
+  // Edit mode is determined by `editing.id` being a real positive
+  // number — NOT by `editing` truthiness. Callers may pass a partial
+  // `Fabric`-shaped object for prefill in create mode; we only PATCH
+  // when an actual id is present.
+  const isEditing = editing?.id != null && editing.id > 0;
+
   const [form, setForm] = useState(() => ({
-    name: editing?.name ?? '',
+    name: editing?.name ?? initialName ?? '',
     pricePerUnit: editing?.pricePerUnit ?? '',
     notes: editing?.notes ?? '',
     count: editing?.count ?? '',
@@ -155,12 +168,12 @@ export default function FabricEditorForm({
           percent: Number(r.percent),
         })),
       };
-      const saved = editing
-        ? await patchFabric(editing.id, payload)
+      const saved = isEditing
+        ? await patchFabric(editing!.id, payload)
         : await createFabric(payload);
       toast.show(
         successMessage ??
-          (editing
+          (isEditing
             ? t('admin.fabricLibrary.updatedToast', { defaultValue: 'Updated.' })
             : t('admin.fabricLibrary.addedToast', { defaultValue: 'Added.' })),
         'success',
@@ -369,7 +382,7 @@ export default function FabricEditorForm({
         >
           {saving
             ? t('common.saving', { defaultValue: 'Saving…' })
-            : editing
+            : isEditing
               ? t('admin.fabricLibrary.save', { defaultValue: 'Save' })
               : t('admin.fabricLibrary.add', { defaultValue: 'Add fabric' })}
         </Button>
