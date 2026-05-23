@@ -71,20 +71,6 @@ export default function FabricPicker({
     });
   }, [fabrics]);
 
-  // Make a "synthetic editing" object purely so FabricEditorForm
-  // prefills its `name` field. We don't pass an id (create mode) — the
-  // form's `editing` is typed as Fabric | null and reads only the
-  // scalar fields, so a partial-shape minimal object is enough.
-  // When seedName is empty (modal opened via overflow / other paths
-  // — none today but defensive) we pass null to skip prefill.
-  const seedEditing = seedName
-    ? ({
-        id: undefined as unknown as number,
-        name: seedName,
-        compositions: [],
-      } as unknown as Fabric)
-    : null;
-
   return (
     <>
       <Combobox<number>
@@ -110,11 +96,16 @@ export default function FabricPicker({
         title={t('admin.styles.intake.newFabricTitle', 'New fabric')}
         maxWidthClassName="max-w-3xl"
       >
-        {/* Mount key includes seedName so reopening with a fresh typed
-            value re-initialises the form state with the prefilled name. */}
+        {/* Always create mode (editing=null). `initialName` carries
+            the search term the user typed in the combobox; `key`
+            resets form state when the modal reopens with a new seed. */}
         <FabricEditorForm
           key={`new-${seedName}`}
-          editing={seedEditing}
+          editing={null}
+          initialName={seedName}
+          successMessage={t('admin.styles.intake.fabricAddedToast', {
+            defaultValue: 'Fabric added.',
+          })}
           onCancel={() => {
             setOpen(false);
             setSeedName('');
