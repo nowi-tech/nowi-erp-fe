@@ -78,11 +78,13 @@ const NAV_SECTIONS: NavSection[] = [
     items: [
       // Product Development module — Styles + China Import + Fabric Library.
       // China Import is its own first-class destination (a simple, separate
-      // flow for NW- prefixed imported styles).
-      { to: '/styles', end: true, icon: <Shirt size={18} />, labelKey: 'admin.nav.styles', roles: ['sampling_editor', 'admin'] },
-      { to: '/china-import', icon: <Container size={18} />, labelKey: 'admin.nav.chinaImport', roles: ['sampling_editor', 'admin', 'china_import_approver'] },
-      { to: '/fabric-library', icon: <Layers size={18} />, labelKey: 'admin.nav.fabricLibrary', roles: ['sampling_editor', 'admin'] },
-      { to: '/data', icon: <Database size={18} />, labelKey: 'admin.nav.masterData', roles: ['data_manager'] },
+      // flow for NW- prefixed imported styles). Visibility matches the BE
+      // styles WRITE set so everyone who can submit an intake can see the
+      // entries — sampling_editor, sampling_lead, pattern_master_w/m, admin.
+      { to: '/styles', end: true, icon: <Shirt size={18} />, labelKey: 'admin.nav.styles', roles: ['admin', 'sampling_editor', 'sampling_lead', 'pattern_master_w', 'pattern_master_m'] },
+      { to: '/china-import', icon: <Container size={18} />, labelKey: 'admin.nav.chinaImport', roles: ['admin', 'sampling_editor', 'sampling_lead', 'pattern_master_w', 'pattern_master_m', 'china_import_approver'] },
+      { to: '/fabric-library', icon: <Layers size={18} />, labelKey: 'admin.nav.fabricLibrary', roles: ['admin', 'sampling_editor', 'sampling_lead', 'pattern_master_w', 'pattern_master_m'] },
+      { to: '/data', icon: <Database size={18} />, labelKey: 'admin.nav.masterData', roles: ['admin', 'data_manager'] },
     ],
   },
   {

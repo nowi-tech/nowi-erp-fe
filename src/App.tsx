@@ -332,12 +332,21 @@ function App() {
             </Route>
 
             {/* Product Development module — Styles + Fabric Library.
-                Gated to sampling_editor + admin + viewer; BE role guard
-                handles the finer-grained multi-role checks. */}
+                Gating mirrors the BE styles WRITE set + viewer for read.
+                BE role guard still enforces the finer-grained checks. */}
             <Route
               path="/styles"
               element={
-                <ProtectedRoute allowedRoles={['sampling_editor', 'admin', 'viewer']}>
+                <ProtectedRoute
+                  allowedRoles={[
+                    'admin',
+                    'sampling_editor',
+                    'sampling_lead',
+                    'pattern_master_w',
+                    'pattern_master_m',
+                    'viewer',
+                  ]}
+                >
                   <S>
                     <AdminShell />
                   </S>
@@ -377,8 +386,11 @@ function App() {
               element={
                 <ProtectedRoute
                   allowedRoles={[
-                    'sampling_editor',
                     'admin',
+                    'sampling_editor',
+                    'sampling_lead',
+                    'pattern_master_w',
+                    'pattern_master_m',
                     'china_import_approver',
                   ]}
                 >
@@ -401,7 +413,16 @@ function App() {
             <Route
               path="/fabric-library"
               element={
-                <ProtectedRoute allowedRoles={['sampling_editor', 'admin', 'viewer']}>
+                <ProtectedRoute
+                  allowedRoles={[
+                    'admin',
+                    'sampling_editor',
+                    'sampling_lead',
+                    'pattern_master_w',
+                    'pattern_master_m',
+                    'viewer',
+                  ]}
+                >
                   <S>
                     <AdminShell />
                   </S>

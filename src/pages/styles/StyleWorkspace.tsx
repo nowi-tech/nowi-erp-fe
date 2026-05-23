@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
-import { ArrowLeft, Pause, Play, Send, CheckCircle2 } from 'lucide-react';
+import { ArrowLeft, Palette, Pause, Play, Send, CheckCircle2 } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Dialog } from '@/components/ui/dialog';
@@ -11,6 +11,7 @@ import SamplingPipelineStepper from '@/components/styles/SamplingPipelineStepper
 import VariantMatrix from '@/components/styles/VariantMatrix';
 import ChannelListingsPanel from '@/components/styles/ChannelListingsPanel';
 import InspectionTimeline from '@/components/styles/InspectionTimeline';
+import AddColourModal from '@/components/styles/AddColourModal';
 import {
   getStyle,
   parkStyle,
@@ -47,6 +48,7 @@ export default function StyleWorkspace() {
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState<string | null>(null);
   const [approveOpen, setApproveOpen] = useState(false);
+  const [colourModalOpen, setColourModalOpen] = useState(false);
 
   const load = useCallback(async () => {
     if (!idParam) return;
@@ -210,12 +212,39 @@ export default function StyleWorkspace() {
               </span>
             </Button>
           )}
+          {/* + Add colour — spawns a sibling Style inheriting fabric/CAD
+              from this one. Only meaningful once the parent style number
+              is minted (i.e. past draft). */}
+          {style.styleId && !isChinaImport && (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setColourModalOpen(true)}
+            >
+              <Palette size={14} />
+              <span className="ml-1">
+                {t('admin.styles.workspace.addColour', 'Add colour')}
+              </span>
+            </Button>
+          )}
           <Button variant="outline" size="sm" disabled>
             <Send size={14} />
             <span className="ml-1">{t('admin.styles.workspace.sendToPd')}</span>
           </Button>
         </div>
       </div>
+
+      <AddColourModal
+        parent={style}
+        open={colourModalOpen}
+        onClose={() => setColourModalOpen(false)}
+        onCreated={(created) => {
+          // Navigate to the new variant so the designer can pick up the
+          // sample flow from there. Use numeric id when no styleId is
+          // minted yet (it's a draft).
+          navigate(`/styles/${created.styleId ?? created.id}`);
+        }}
+      />
 
       {/* Recorded intake approval checks — sampling flow, already approved */}
       {!isChinaImport && style.approvedAt && (

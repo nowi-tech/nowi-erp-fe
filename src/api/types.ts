@@ -338,8 +338,29 @@ export interface Style {
 
   // References
   referenceLink: string | null;
+  /** Legacy single image; mirrors `referenceImages[0]`. Read-only on new code. */
   referenceImage: string | null;
   referenceImageUrl: string | null;
+  /** Multi-image board, up to 5. First entry is the "primary". */
+  referenceImages: string[];
+
+  /** Self-FK to the "designed-as-a-family" parent style. Set when this
+   *  style was spawned via the Add Colour modal. */
+  parentStyleId: number | null;
+  /** Hydrated by detail reads when present. */
+  parentStyle?: {
+    id: number;
+    styleId: string | null;
+    workingName: string | null;
+    primaryColour: string | null;
+  } | null;
+  /** Hydrated by detail reads — sibling colours for the "Existing colours"
+   *  chip strip on the variant-spawn modal. */
+  colourVariants?: Array<{
+    id: number;
+    styleId: string | null;
+    primaryColour: string | null;
+  }>;
 
   // Sampling state
   samplingStatus: string | null;

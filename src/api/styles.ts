@@ -168,8 +168,39 @@ export async function getStylesSummary(): Promise<StylesSummary> {
   return res.data;
 }
 
+/** Distinct primaryColour values from existing styles — feeds the
+ *  Colour picker's suggestion list. Free-text under the hood, no
+ *  master table; "+ Add 'X'" just commits whatever the user typed. */
+export async function listDistinctColours(): Promise<string[]> {
+  const res = await apiClient.get<string[]>('/api/styles/colours');
+  return res.data;
+}
+
 export async function createStyle(body: CreateStyleRequest): Promise<Style> {
   const res = await apiClient.post<Style>('/api/styles', body);
+  return res.data;
+}
+
+/** Payload for POST /api/styles/:id/colour-variants. Only the colour is
+ * required — everything else inherits from the parent style. */
+export interface CreateColourVariantRequest {
+  primaryColour: string;
+  referenceLink?: string | null;
+  referenceImages?: string[];
+  referenceImageUrl?: string | null;
+}
+
+/** Spawn a draft colour variant inheriting fabric/gender/category/CAD
+ * from the parent. The new style gets its own minted styleId on
+ * Approval #1; parent/child are linked via `parentStyleId`. */
+export async function spawnColourVariant(
+  parentId: number,
+  body: CreateColourVariantRequest,
+): Promise<Style> {
+  const res = await apiClient.post<Style>(
+    `/api/styles/${parentId}/colour-variants`,
+    body,
+  );
   return res.data;
 }
 
