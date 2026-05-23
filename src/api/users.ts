@@ -42,6 +42,41 @@ export async function deleteUser(userId: string | number): Promise<void> {
   await apiClient.delete(`/api/users/${userId}`);
 }
 
+// ── Multi-role assignments ────────────────────────────────────────
+// A user has a primary `role` column plus a stack of additional roles
+// via `UserRoleAssignment`. These endpoints manage the stack.
+
+/** List a user's extra roles (does not include their primary role). */
+export async function listUserRoles(
+  userId: string | number,
+): Promise<UserRole[]> {
+  const res = await apiClient.get<UserRole[]>(`/api/users/${userId}/roles`);
+  return res.data;
+}
+
+/** Grant an extra role. Returns the updated list of extra roles. */
+export async function grantUserRole(
+  userId: string | number,
+  role: UserRole,
+): Promise<UserRole[]> {
+  const res = await apiClient.post<UserRole[]>(
+    `/api/users/${userId}/roles`,
+    { role },
+  );
+  return res.data;
+}
+
+/** Revoke an extra role. Returns the updated list of extra roles. */
+export async function revokeUserRole(
+  userId: string | number,
+  role: UserRole,
+): Promise<UserRole[]> {
+  const res = await apiClient.delete<UserRole[]>(
+    `/api/users/${userId}/roles/${role}`,
+  );
+  return res.data;
+}
+
 export async function markOnboarded(): Promise<User> {
   const res = await apiClient.post<User>('/api/auth/me/onboarded');
   return res.data;

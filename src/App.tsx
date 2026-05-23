@@ -7,6 +7,7 @@ import ProtectedRoute from './components/ProtectedRouteV2';
 // import PlaceholderSection from './components/PlaceholderSection'; // TODO: re-enable when commented stub routes return
 import PwaInstallPrompt from './components/PwaInstallPrompt';
 import Onboarding from './components/Onboarding';
+import { ErrorBoundary } from './components/ErrorBoundary';
 
 import Login from './pages/Login';
 import Dashboard from './pages/Dashboard';
@@ -42,6 +43,13 @@ const DataHome = lazy(() => import('./pages/data/DataHome'));
 const UsersPage = lazy(() => import('./pages/admin/Users'));
 const EditRequestsPage = lazy(() => import('./pages/admin/EditRequests'));
 const DispatchPrint = lazy(() => import('./pages/dispatches/DispatchPrint'));
+const StylesRegistry = lazy(() => import('./pages/styles/StylesRegistry'));
+const ChinaImportRegistry = lazy(
+  () => import('./pages/china-import/ChinaImportRegistry'),
+);
+const NewIntake = lazy(() => import('./pages/styles/NewIntake'));
+const StyleWorkspace = lazy(() => import('./pages/styles/StyleWorkspace'));
+const FabricLibrary = lazy(() => import('./pages/fabric-library/FabricLibrary'));
 
 function PageSkeleton() {
   // Inline shimmer — calm, sits inside whatever shell already rendered
@@ -73,6 +81,7 @@ function App() {
         <PwaInstallPrompt />
         <Onboarding />
         <BrowserRouter>
+          <ErrorBoundary>
           <Routes>
             <Route path="/login" element={<Login />} />
 
@@ -322,9 +331,118 @@ function App() {
               />
             </Route>
 
+            {/* Product Development module — Styles + Fabric Library.
+                Gating mirrors the BE styles WRITE set + viewer for read.
+                BE role guard still enforces the finer-grained checks. */}
+            <Route
+              path="/styles"
+              element={
+                <ProtectedRoute
+                  allowedRoles={[
+                    'admin',
+                    'sampling_editor',
+                    'sampling_lead',
+                    'pattern_master_w',
+                    'pattern_master_m',
+                    'viewer',
+                  ]}
+                >
+                  <S>
+                    <AdminShell />
+                  </S>
+                </ProtectedRoute>
+              }
+            >
+              <Route
+                index
+                element={
+                  <S>
+                    <StylesRegistry />
+                  </S>
+                }
+              />
+              <Route
+                path="new"
+                element={
+                  <S>
+                    <NewIntake />
+                  </S>
+                }
+              />
+              <Route
+                path=":styleId"
+                element={
+                  <S>
+                    <StyleWorkspace />
+                  </S>
+                }
+              />
+            </Route>
+
+            {/* China Import — its own first-class destination, a simple
+                flat registry for NW- prefixed imported styles. */}
+            <Route
+              path="/china-import"
+              element={
+                <ProtectedRoute
+                  allowedRoles={[
+                    'admin',
+                    'sampling_editor',
+                    'sampling_lead',
+                    'pattern_master_w',
+                    'pattern_master_m',
+                    'china_import_approver',
+                  ]}
+                >
+                  <S>
+                    <AdminShell />
+                  </S>
+                </ProtectedRoute>
+              }
+            >
+              <Route
+                index
+                element={
+                  <S>
+                    <ChinaImportRegistry />
+                  </S>
+                }
+              />
+            </Route>
+
+            <Route
+              path="/fabric-library"
+              element={
+                <ProtectedRoute
+                  allowedRoles={[
+                    'admin',
+                    'sampling_editor',
+                    'sampling_lead',
+                    'pattern_master_w',
+                    'pattern_master_m',
+                    'viewer',
+                  ]}
+                >
+                  <S>
+                    <AdminShell />
+                  </S>
+                </ProtectedRoute>
+              }
+            >
+              <Route
+                index
+                element={
+                  <S>
+                    <FabricLibrary />
+                  </S>
+                }
+              />
+            </Route>
+
             <Route path="/dashboard" element={<Navigate to="/" replace />} />
             <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>
+          </ErrorBoundary>
         </BrowserRouter>
       </ToastProvider>
     </AuthProvider>

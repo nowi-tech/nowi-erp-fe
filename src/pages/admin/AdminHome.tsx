@@ -10,6 +10,7 @@ import { listOrders } from '@/api/orders';
 import { getLocator } from '@/api/locator';
 import { Badge } from '@/components/ui/badge';
 import KpiTile from '@/components/KpiTile';
+import ApprovalCtaCard from '@/components/styles/ApprovalCtaCard';
 import { getThroughput, getReworkRate } from '@/api/dashboard';
 import { FeatureUnavailableError } from '@/api/_errors';
 import type {
@@ -140,6 +141,9 @@ export default function AdminHome() {
           )}
         </p>
       </header>
+
+      {/* Pending-approval call-to-action — only for approval-capable users */}
+      <ApprovalCtaCard />
 
       {/* KPI strip — only metrics where we actually have data */}
       <div className="grid gap-3 grid-cols-2 lg:grid-cols-4">

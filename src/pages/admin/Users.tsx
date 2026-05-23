@@ -16,16 +16,28 @@ import {
   createUser,
   updateUser,
   deleteUser,
+  grantUserRole,
+  revokeUserRole,
 } from '@/api/users';
 import type { User, UserRole } from '@/api/types';
 
+// Primary role dropdown — every UserRole the FE knows about. Order
+// roughly groups production roles, PD roles, then admin/data.
 const ROLES: UserRole[] = [
   'admin',
   'floor_manager',
   'stitching_master',
   'finishing_master',
   'data_manager',
+  'data_admin',
   'viewer',
+  // Product Development module
+  'sampling_editor',
+  'sampling_lead',
+  'pattern_master_w',
+  'pattern_master_m',
+  'china_import_approver',
+  'pd_lead',
 ];
 
 interface ApiErrorShape {
@@ -174,9 +186,16 @@ export default function UsersPage() {
                         {u.mobileNumber}
                       </td>
                       <td className="px-3 py-2">
-                        <Badge variant="secondary">
-                          {t(`roles.${u.role}` as const)}
-                        </Badge>
+                        <div className="flex flex-wrap items-center gap-1">
+                          <Badge variant="secondary">
+                            {t(`roles.${u.role}` as const)}
+                          </Badge>
+                          {u.roleAssignments?.map((ra) => (
+                            <Badge key={ra.role} variant="outline">
+                              + {t(`roles.${ra.role}` as const)}
+                            </Badge>
+                          ))}
+                        </div>
                       </td>
                       <td className="px-3 py-2 hidden md:table-cell">
                         {u.isActive === false ? (
@@ -286,8 +305,22 @@ function UserForm({
   const [trainingMode, setTrainingMode] = useState<boolean>(
     initial?.isTrainingMode ?? false,
   );
+  // Extra roles (UserRoleAssignment rows). The primary `role` above is
+  // implicit and not part of this set. Initial snapshot is diffed
+  // against the latest state on submit to produce grant/revoke calls.
+  const initialExtraRoles = useMemo<UserRole[]>(
+    () => initial?.roleAssignments?.map((r) => r.role) ?? [],
+    [initial],
+  );
+  const [extraRoles, setExtraRoles] = useState<UserRole[]>(initialExtraRoles);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  const toggleExtraRole = (r: UserRole) => {
+    setExtraRoles((cur) =>
+      cur.includes(r) ? cur.filter((x) => x !== r) : [...cur, r],
+    );
+  };
 
   const canSubmit = useMemo(() => {
     if (!name.trim()) return false;
@@ -301,20 +334,41 @@ function UserForm({
     setBusy(true);
     setError(null);
     try {
+      let userId: string | number;
       if (editing && initial) {
         await updateUser(initial.id, {
           name: name.trim(),
           role,
           isTrainingMode: trainingMode,
         });
+        userId = initial.id;
       } else {
-        await createUser({
+        const created = await createUser({
           name: name.trim(),
           mobileNumber: `+91${mobile}`,
           role,
           isTrainingMode: trainingMode,
         });
+        userId = created.id;
       }
+
+      // Diff extra-role state against the snapshot and emit
+      // grant/revoke calls. Run grants first so a flip (revoke A + grant
+      // B) doesn't briefly drop the user below their needed access.
+      const desiredExtras = extraRoles.filter((r) => r !== role);
+      const toGrant = desiredExtras.filter(
+        (r) => !initialExtraRoles.includes(r),
+      );
+      const toRevoke = initialExtraRoles.filter(
+        (r) => r !== role && !desiredExtras.includes(r),
+      );
+      for (const r of toGrant) {
+        await grantUserRole(userId, r);
+      }
+      for (const r of toRevoke) {
+        await revokeUserRole(userId, r);
+      }
+
       toast.show(t('common.saved' as const, { defaultValue: 'Saved' }), 'success');
       onSaved();
     } catch (err) {
@@ -391,6 +445,44 @@ function UserForm({
             ))}
           </Select>
         </div>
+
+        {/* Multi-role: extra roles granted via UserRoleAssignment.
+            Hidden on create — the user has to exist first. */}
+        {editing && (
+          <div>
+            <Label>
+              {t('admin.users.form.extraRoles', {
+                defaultValue: 'Additional roles',
+              })}
+            </Label>
+            <p className="mb-1.5 text-xs text-[var(--color-muted-foreground)]">
+              {t('admin.users.form.extraRolesHelp', {
+                defaultValue:
+                  'Unlocks extra access on top of the primary role above.',
+              })}
+            </p>
+            <div className="flex flex-wrap gap-1.5">
+              {ROLES.filter((r) => r !== role).map((r) => {
+                const active = extraRoles.includes(r);
+                return (
+                  <button
+                    key={r}
+                    type="button"
+                    onClick={() => toggleExtraRole(r)}
+                    className={
+                      active
+                        ? 'rounded-full px-2.5 py-1 text-xs font-medium bg-[var(--color-primary)] text-[var(--color-primary-foreground)] border border-[var(--color-primary)]'
+                        : 'rounded-full px-2.5 py-1 text-xs bg-white border border-[var(--color-border)] text-[var(--color-foreground-3)] hover:bg-[var(--color-muted)]'
+                    }
+                  >
+                    {t(`roles.${r}` as const)}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        )}
+
         <label className="flex items-center gap-2 text-sm select-none cursor-pointer">
           <input
             type="checkbox"
