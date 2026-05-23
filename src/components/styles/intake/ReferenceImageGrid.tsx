@@ -279,7 +279,9 @@ export default function ReferenceImageGrid({
       <div className="grid grid-cols-3 gap-2">
         {primary && (
           <div
-            key={`${primary.objectPath ?? primary.externalUrl}-0`}
+            // Stable key — no index suffix so drag-to-reorder doesn't
+            // remount + flicker the tile. Fallback for transient loading.
+            key={primary.objectPath ?? primary.externalUrl ?? 'primary-pending'}
             draggable
             onDragStart={onTileDragStart(0)}
             onDragOver={onTileDragOver(0)}
@@ -334,7 +336,11 @@ export default function ReferenceImageGrid({
           const idx = i + 1;
           return (
             <div
-              key={`${entry.objectPath ?? entry.externalUrl}-${idx}`}
+              // Stable key derived only from the entry URL — no index
+              // suffix, so reorder doesn't remount/flicker.
+              key={
+                entry.objectPath ?? entry.externalUrl ?? `secondary-${idx}`
+              }
               draggable
               onDragStart={onTileDragStart(idx)}
               onDragOver={onTileDragOver(idx)}
@@ -399,7 +405,14 @@ export default function ReferenceImageGrid({
                 ? 'border-[var(--color-primary)] bg-[var(--color-primary)]/5'
                 : 'border-[var(--color-input)]',
             )}
-            aria-label="Add reference image"
+            // aria-label mirrors the visible instructional copy so
+            // assistive tech announces the full set of input methods
+            // in the empty state (Copilot review on PR #8).
+            aria-label={
+              addIsLarge
+                ? 'Add reference image — click to upload, drop a file, paste an image, or paste a product link below'
+                : 'Add reference image'
+            }
           >
             {busy ? (
               <Loader2 size={addIsLarge ? 24 : 18} className="animate-spin" />
