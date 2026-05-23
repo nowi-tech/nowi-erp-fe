@@ -390,6 +390,8 @@ export interface Style {
   // Approval #1
   approvedBy: number | null;
   approvedAt: string | null;
+  /** Hydrated by detail reads (BE `detailInclude.approver`). */
+  approver?: { id: number; name: string } | null;
   /** Approval #1 recorded checks (sampling flow only). */
   approval1FabricFeasible: boolean | null;
   approval1PriceOk: boolean | null;
