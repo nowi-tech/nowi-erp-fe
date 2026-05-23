@@ -3,8 +3,44 @@ import { ChevronDown, ChevronRight, ExternalLink } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { Badge } from '@/components/ui/badge';
 import { ColumnFilter, type ColumnFilterOption } from '@/components/ui/column-filter';
-import type { Style } from '@/api/types';
+import InlineStatusCell from '@/components/styles/InlineStatusCell';
+import { useToast } from '@/components/ui/toast';
+import { useAuth } from '@/context/auth';
+import { hasAnyRole } from '@/lib/userRoles';
+import { patchStyle } from '@/api/styles';
+import { listUsers } from '@/api/users';
+import type { Style, User as ApiUser, UserRole } from '@/api/types';
 import { cn } from '@/lib/utils';
+
+// Enum option labels — mirror the BE Prisma enums and the same set the
+// approval dialogs + SampleStateCard already use. Kept here so the
+// table doesn't need to round-trip to `/api/styles/options`.
+const SAMPLING_STATUS_OPTIONS = [
+  'in_progress_pattern_dev',
+  'in_progress_fabric_sourcing',
+  'in_progress_cutting',
+  'in_progress_stitching',
+  'ready_for_inspection',
+  'handed_over_for_inspection',
+  'corrections_needed',
+  'approved_for_production',
+] as const;
+
+const SAMPLE_APPROVAL_OPTIONS = [
+  'approved_for_production',
+  'under_review_corrections',
+  'pattern_correction_approved',
+] as const;
+
+// Roles allowed to flip status cells inline — matches the styles WRITE
+// set on the BE. Viewers see plain read-only badges.
+const WRITE_ROLES: readonly UserRole[] = [
+  'admin',
+  'sampling_editor',
+  'sampling_lead',
+  'pattern_master_w',
+  'pattern_master_m',
+] as const;
 
 /**
  * Distinct values + per-value row counts for a column. Used to populate
@@ -75,8 +111,54 @@ export default function StylesTable({
   variant = 'full',
 }: Props) {
   const { t } = useTranslation();
+  const { user } = useAuth();
+  const toast = useToast();
   const isCompact = variant === 'compact';
   const [expanded, setExpanded] = useState<Set<number>>(new Set());
+  // Inline-edit gating + Pattern Master picker source.
+  const canEdit = hasAnyRole(user, WRITE_ROLES);
+  const [pmCandidates, setPmCandidates] = useState<ApiUser[]>([]);
+  useEffect(() => {
+    if (!canEdit) return;
+    let cancelled = false;
+    listUsers({ take: 200 })
+      .then((rows) => {
+        if (cancelled) return;
+        setPmCandidates(
+          rows.filter(
+            (u) =>
+              u.role === 'pattern_master_w' ||
+              u.role === 'pattern_master_m' ||
+              u.role === 'admin',
+          ),
+        );
+      })
+      .catch(() => {
+        // Soft-fail — picker will just have an empty list. Non-blocking.
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [canEdit]);
+
+  /**
+   * Wrapper around `patchStyle` that emits a toast on failure and
+   * re-throws so InlineStatusCell rolls back the optimistic update.
+   */
+  const commitStylePatch = async (
+    styleId: number,
+    patch: Parameters<typeof patchStyle>[1],
+  ) => {
+    try {
+      await patchStyle(styleId, patch);
+    } catch (e: unknown) {
+      const m =
+        (e as { response?: { data?: { message?: string | string[] } } })
+          ?.response?.data?.message ?? 'Could not save change.';
+      toast.show(Array.isArray(m) ? m.join(', ') : String(m), 'error');
+      throw e;
+    }
+  };
 
   const toggle = (id: number) =>
     setExpanded((prev) => {
@@ -375,26 +457,82 @@ export default function StylesTable({
                         </td>
                       ) : (
                         <>
-                          <td className="px-3 py-2 hidden md:table-cell">
-                            {s.patternMaster?.name ?? '—'}
+                          <td
+                            className="px-3 py-2 hidden md:table-cell"
+                            onClick={(e) => e.stopPropagation()}
+                          >
+                            <InlineStatusCell
+                              value={
+                                s.patternMasterId != null
+                                  ? String(s.patternMasterId)
+                                  : ''
+                              }
+                              displayLabel={s.patternMaster?.name ?? '—'}
+                              options={pmCandidates.map((u) => ({
+                                value: String(u.id),
+                                label: `${u.name}${
+                                  u.role === 'pattern_master_w'
+                                    ? " (W)"
+                                    : u.role === 'pattern_master_m'
+                                      ? " (M)"
+                                      : ''
+                                }`,
+                              }))}
+                              badgeVariant="outline"
+                              unsetLabel="— Unassigned"
+                              editable={canEdit}
+                              onCommit={(next) =>
+                                commitStylePatch(s.id, {
+                                  patternMasterId: next ? Number(next) : null,
+                                })
+                              }
+                            />
                           </td>
-                          <td className="px-3 py-2 hidden lg:table-cell">
-                            {s.samplingStatus ? (
-                              <Badge variant="stitch" className="text-[10px]">
-                                {s.samplingStatus}
-                              </Badge>
-                            ) : (
-                              '—'
-                            )}
+                          <td
+                            className="px-3 py-2 hidden lg:table-cell"
+                            onClick={(e) => e.stopPropagation()}
+                          >
+                            <InlineStatusCell
+                              value={s.samplingStatus ?? ''}
+                              displayLabel={s.samplingStatus ?? '—'}
+                              options={SAMPLING_STATUS_OPTIONS.map((v) => ({
+                                value: v,
+                                label: t(
+                                  `admin.styles.samplingStatus.${v}` as const,
+                                  { defaultValue: v },
+                                ),
+                              }))}
+                              badgeVariant="stitch"
+                              editable={canEdit}
+                              onCommit={(next) =>
+                                commitStylePatch(s.id, {
+                                  samplingStatus: (next || null) as never,
+                                })
+                              }
+                            />
                           </td>
-                          <td className="px-3 py-2 hidden lg:table-cell">
-                            {s.sampleApproval ? (
-                              <Badge variant="success" className="text-[10px]">
-                                {s.sampleApproval}
-                              </Badge>
-                            ) : (
-                              '—'
-                            )}
+                          <td
+                            className="px-3 py-2 hidden lg:table-cell"
+                            onClick={(e) => e.stopPropagation()}
+                          >
+                            <InlineStatusCell
+                              value={s.sampleApproval ?? ''}
+                              displayLabel={s.sampleApproval ?? '—'}
+                              options={SAMPLE_APPROVAL_OPTIONS.map((v) => ({
+                                value: v,
+                                label: t(
+                                  `admin.styles.sampleApproval.${v}` as const,
+                                  { defaultValue: v },
+                                ),
+                              }))}
+                              badgeVariant="success"
+                              editable={canEdit}
+                              onCommit={(next) =>
+                                commitStylePatch(s.id, {
+                                  sampleApproval: (next || null) as never,
+                                })
+                              }
+                            />
                           </td>
                           <td className="px-3 py-2 hidden sm:table-cell">
                             {s.referenceLink ? (
