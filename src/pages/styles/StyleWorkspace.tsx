@@ -1,16 +1,13 @@
 import { useCallback, useEffect, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
-import { ArrowLeft, Palette, Pause, Play, Send, CheckCircle2 } from 'lucide-react';
+import { ArrowLeft, Palette, Pause, Play, CheckCircle2, ExternalLink } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Dialog } from '@/components/ui/dialog';
 import { Textarea } from '@/components/ui/textarea';
 import { useToast } from '@/components/ui/toast';
 import SamplingPipelineStepper from '@/components/styles/SamplingPipelineStepper';
-import VariantMatrix from '@/components/styles/VariantMatrix';
-import ChannelListingsPanel from '@/components/styles/ChannelListingsPanel';
-import InspectionTimeline from '@/components/styles/InspectionTimeline';
 import AddColourModal from '@/components/styles/AddColourModal';
 import {
   getStyle,
@@ -116,8 +113,6 @@ export default function StyleWorkspace() {
   const canPark = style.lifecycle !== 'parked' && style.lifecycle !== 'archived';
   const canRevive = style.lifecycle === 'parked';
   const sourceLabel = t(`admin.styles.source.${style.source}`);
-  const isWomen = style.gender === 'women' || style.gender === 'unisex';
-  const isMen = style.gender === 'men';
 
   const cardClasses =
     'bg-[var(--color-surface)] border border-[var(--color-border)] rounded-[var(--radius-md)] p-5 shadow-sm';
@@ -228,10 +223,6 @@ export default function StyleWorkspace() {
               </span>
             </Button>
           )}
-          <Button variant="outline" size="sm" disabled>
-            <Send size={14} />
-            <span className="ml-1">{t('admin.styles.workspace.sendToPd')}</span>
-          </Button>
         </div>
       </div>
 
@@ -246,6 +237,10 @@ export default function StyleWorkspace() {
           navigate(`/styles/${created.styleId ?? created.id}`);
         }}
       />
+
+      {/* Inspiration — visual anchor at the top of the body, above the
+          workflow state. Empty when the style has no images / link. */}
+      <InspirationCard style={style} cardClasses={cardClasses} />
 
       {/* Recorded intake approval checks — sampling flow, already approved */}
       {!isChinaImport && style.approvedAt && (
@@ -307,163 +302,52 @@ export default function StyleWorkspace() {
         </section>
       )}
 
-      {/* Bento grid: left (specs + variants + pattern approval), right (production + channels + inspections) */}
+      {/* Specs + colour family — a slim two-up below the workflow state. */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-4">
-        <div className="lg:col-span-5 space-y-4">
-          {/* Core specifications */}
-          <section className={cardClasses}>
-            <h2 className="font-serif text-lg mb-3">
-              {t('admin.styles.workspace.coreSpecs')}
-            </h2>
-            <dl className="grid grid-cols-2 gap-x-4 gap-y-2 text-sm">
-              <Spec label="Gender" value={style.gender ?? '—'} />
-              <Spec label="Category" value={style.categoryCode ?? '—'} />
-              <Spec label="Fabric" value={style.fabric?.name ?? '—'} />
-              <Spec
-                label="Primary colour"
-                value={style.primaryColour ?? '—'}
-              />
-              {!isChinaImport && (
-                <Spec
-                  label="Sampling timeline"
-                  value={
-                    style.samplingTimeline
-                      ? new Date(style.samplingTimeline).toLocaleDateString()
-                      : '—'
-                  }
-                />
-              )}
-            </dl>
-          </section>
-
-          {/* Variants matrix */}
-          <section className={cardClasses}>
-            <h2 className="font-serif text-lg mb-3">
-              {t('admin.styles.workspace.variantsMatrix')}
-            </h2>
-            <VariantMatrix
-              variants={style.variants ?? []}
-              onAddVariant={() => toast.show('Add variant — coming soon.', 'info')}
+        <section className={cn(cardClasses, 'lg:col-span-7')}>
+          <h2 className="font-serif text-lg mb-3">
+            {t('admin.styles.workspace.coreSpecs')}
+          </h2>
+          <dl className="grid grid-cols-2 sm:grid-cols-3 gap-x-4 gap-y-2 text-sm">
+            <Spec label="Gender" value={style.gender ?? '—'} />
+            <Spec label="Category" value={style.categoryCode ?? '—'} />
+            <Spec label="Fabric" value={style.fabric?.name ?? '—'} />
+            <Spec
+              label="Primary colour"
+              value={style.primaryColour ?? '—'}
             />
-          </section>
-
-          {/* Pattern approval — sampling-only */}
-          {!isChinaImport && (
-            <section className={cardClasses}>
-              <h2 className="font-serif text-lg mb-3">
-                {t('admin.styles.workspace.patternApproval')}
-              </h2>
-              <div className="space-y-2">
-                <PatternRow
-                  label={t('admin.styles.workspace.patternApprovalWomen')}
-                  active={isWomen}
-                  value={style.dxfApproved}
-                />
-                <PatternRow
-                  label={t('admin.styles.workspace.patternApprovalMen')}
-                  active={isMen}
-                  value={style.dxfApproved}
-                />
-              </div>
-            </section>
-          )}
-        </div>
-
-        <div className="lg:col-span-7 space-y-4">
-          {/* Production status */}
-          <section className={cardClasses}>
-            <h2 className="font-serif text-lg mb-3">
-              {t('admin.styles.workspace.productionStatus')}
-            </h2>
-            <dl className="grid grid-cols-2 gap-x-4 gap-y-2 text-sm">
+            {!isChinaImport && (
               <Spec
-                label="Status"
-                value={style.productionStatus ?? '—'}
-              />
-              <Spec
-                label="Timeline"
+                label="Sampling timeline"
                 value={
-                  style.productionTimeline
-                    ? new Date(style.productionTimeline).toLocaleDateString()
+                  style.samplingTimeline
+                    ? new Date(style.samplingTimeline).toLocaleDateString()
                     : '—'
                 }
               />
-              <Spec
-                label="Factory"
-                value={style.factoryId ? `#${style.factoryId}` : '—'}
-              />
-              {!isChinaImport && (
+            )}
+            {!isChinaImport &&
+              style.sampleFabricRequired != null && (
                 <Spec
-                  label="Sample approval"
-                  value={style.sampleApproval ?? '—'}
+                  label="Sample fabric required"
+                  value={`${style.sampleFabricRequired} ${
+                    style.fabric?.unitOfMeasure ?? ''
+                  }`}
                 />
               )}
-            </dl>
-          </section>
+          </dl>
+        </section>
 
-          {/* Channels & virtual inventory */}
-          <section className={cardClasses}>
-            <h2 className="font-serif text-lg mb-3">
-              {t('admin.styles.workspace.channels')}
-            </h2>
-            <ChannelListingsPanel
-              styleId={style.id}
-              listings={style.channelListings ?? []}
-              onChanged={() => void load()}
-            />
-          </section>
-
-          {/* Inspection history — sampling-only */}
-          {!isChinaImport && (
-            <section className={cardClasses}>
-              <h2 className="font-serif text-lg mb-3">
-                {t('admin.styles.workspace.inspectionHistory')}
-              </h2>
-              <InspectionTimeline
-                styleId={style.id}
-                inspections={style.inspections ?? []}
-                onAdded={() => void load()}
-              />
-            </section>
-          )}
-        </div>
+        {/* Colour family chips — siblings + parent linked via
+            parentStyleId. Replaces the old Variants matrix (which was
+            the pre-Gurukul fabric × colour table). */}
+        <ColourFamilyCard style={style} />
       </div>
 
-      {/* Fabric quality + inspiration */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-        <section className={cardClasses}>
-          <h2 className="font-serif text-lg mb-3">
-            {t('admin.styles.workspace.techNotes')}
-          </h2>
-          <p className="text-sm whitespace-pre-wrap text-[var(--color-foreground-2)]">
-            {style.pdNote ?? '—'}
-          </p>
-        </section>
-        <section className={cardClasses}>
-          <h2 className="font-serif text-lg mb-3">
-            {t('admin.styles.workspace.inspiration')}
-          </h2>
-          {style.referenceImageUrl ? (
-            // eslint-disable-next-line jsx-a11y/img-redundant-alt
-            <img
-              src={style.referenceImageUrl}
-              alt="Reference"
-              className="max-h-64 w-auto rounded-md object-contain"
-            />
-          ) : style.referenceLink ? (
-            <a
-              href={style.referenceLink}
-              target="_blank"
-              rel="noreferrer"
-              className="text-sm text-[var(--color-primary)] hover:underline break-all"
-            >
-              {style.referenceLink}
-            </a>
-          ) : (
-            <p className="text-sm text-[var(--color-muted-foreground)]">—</p>
-          )}
-        </section>
-      </div>
+      {/* Activity timeline — surfaces who did what when. Reads
+          straight from style.auditLogs (already hydrated by the
+          detail include). Replaces the old InspectionTimeline. */}
+      <ActivityTimelineCard style={style} cardClasses={cardClasses} />
 
       {/* Approval #1 checklist dialog — sampling flow only */}
       <ApproveIntakeDialog
@@ -1139,28 +1023,211 @@ function Spec({ label, value }: { label: string; value: React.ReactNode }) {
   );
 }
 
-function PatternRow({
-  label,
-  active,
-  value,
+/**
+ * Inspiration card — visual anchor for the page. Shows the multi-image
+ * grid (referenceImages[] up to 5) with the primary tile larger, plus
+ * the reference link. Replaces the small bottom-row "Inspiration"
+ * section that was easy to miss.
+ */
+function InspirationCard({
+  style,
+  cardClasses,
 }: {
-  label: string;
-  active: boolean;
-  value: 'yes' | 'no' | null;
+  style: Style;
+  cardClasses: string;
 }) {
+  const { t } = useTranslation();
+  const images = (
+    style.referenceImages && style.referenceImages.length > 0
+      ? style.referenceImages
+      : style.referenceImageUrl
+        ? [style.referenceImageUrl]
+        : []
+  ).slice(0, 5);
+  if (images.length === 0 && !style.referenceLink) return null;
+  const [primary, ...rest] = images;
   return (
-    <div
-      className={cn(
-        'flex items-center justify-between rounded-[var(--radius-sm)] px-3 py-2 border',
-        active
-          ? 'border-[var(--color-border)] bg-[var(--color-surface-2)]/40'
-          : 'border-[var(--color-border)] opacity-40',
+    <section className={cardClasses}>
+      <div className="flex items-baseline justify-between mb-3">
+        <h2 className="font-serif text-lg">
+          {t('admin.styles.workspace.inspiration', {
+            defaultValue: 'Inspiration & references',
+          })}
+        </h2>
+        {style.referenceLink && (
+          <a
+            href={style.referenceLink}
+            target="_blank"
+            rel="noreferrer"
+            className="text-xs text-[var(--color-primary)] hover:underline inline-flex items-center gap-1"
+          >
+            <ExternalLink size={12} />
+            <span className="truncate max-w-[280px]">
+              {style.referenceLink.replace(/^https?:\/\//, '')}
+            </span>
+          </a>
+        )}
+      </div>
+      {images.length > 0 ? (
+        <div className="grid grid-cols-1 sm:grid-cols-[2fr_1fr_1fr] gap-2">
+          {primary && (
+            <a
+              href={primary}
+              target="_blank"
+              rel="noreferrer"
+              className="block aspect-square overflow-hidden rounded-[var(--radius-md)] border border-[var(--color-border)] bg-[var(--color-surface-2)]/40"
+            >
+              {/* eslint-disable-next-line jsx-a11y/img-redundant-alt */}
+              <img
+                src={primary}
+                alt="Primary reference"
+                className="h-full w-full object-cover"
+              />
+            </a>
+          )}
+          {rest.length > 0 && (
+            <div className="grid grid-cols-2 sm:grid-cols-1 sm:col-span-2 gap-2">
+              {rest.map((u) => (
+                <a
+                  key={u}
+                  href={u}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="block aspect-square overflow-hidden rounded-[var(--radius-md)] border border-[var(--color-border)] bg-[var(--color-surface-2)]/40"
+                >
+                  <img src={u} alt="Reference" className="h-full w-full object-cover" />
+                </a>
+              ))}
+            </div>
+          )}
+        </div>
+      ) : (
+        <p className="text-sm text-[var(--color-muted-foreground)]">—</p>
       )}
-    >
-      <span className="text-sm">{label}</span>
-      <Badge variant={value === 'yes' ? 'success' : 'outline'}>
-        {value === 'yes' ? 'Approved' : value === 'no' ? 'Rejected' : '—'}
-      </Badge>
-    </div>
+    </section>
+  );
+}
+
+/**
+ * Compact "Colour family" card. Lists this style + its sibling colour
+ * variants (linked via parentStyleId / colourVariants). Click a chip
+ * to navigate to that variant's detail page. Replaces the old
+ * fabric-×-colour Variants matrix which was the pre-Gurukul model.
+ */
+function ColourFamilyCard({ style }: { style: Style }) {
+  const { t } = useTranslation();
+  const navigate = useNavigate();
+  // Family = the parent's family if I'm a variant, else my own.
+  const parent = style.parentStyle ?? {
+    id: style.id,
+    styleId: style.styleId,
+    workingName: style.workingName,
+    primaryColour: style.primaryColour,
+  };
+  const variants = style.colourVariants ?? [];
+  // Show family only when there's more than one member.
+  if (variants.length === 0 && !style.parentStyleId) return null;
+  return (
+    <section className="lg:col-span-5 rounded-[var(--radius-md)] border border-[var(--color-border)] bg-[var(--color-surface)] p-4">
+      <h2 className="font-serif text-lg mb-3">
+        {t('admin.styles.workspace.colourFamily', {
+          defaultValue: 'Colour family',
+        })}
+      </h2>
+      <div className="text-[11px] uppercase tracking-[0.06em] text-[var(--color-muted-foreground)] mb-1.5">
+        {t('admin.styles.workspace.colourFamilyParent', {
+          defaultValue: 'Parent',
+        })}
+      </div>
+      <button
+        type="button"
+        onClick={() => parent.styleId && navigate(`/styles/${parent.styleId}`)}
+        className="w-full text-left rounded-[var(--radius-sm)] border border-[var(--color-border)] bg-[var(--color-surface-2)]/40 px-3 py-2 hover:bg-[var(--color-muted)] mb-3"
+      >
+        <div className="font-mono text-sm text-[var(--color-primary)]">
+          {parent.styleId ?? `#${parent.id}`}
+        </div>
+        <div className="text-xs text-[var(--color-muted-foreground)]">
+          {parent.workingName ?? '—'} · {parent.primaryColour ?? '—'}
+        </div>
+      </button>
+      {variants.length > 0 && (
+        <>
+          <div className="text-[11px] uppercase tracking-[0.06em] text-[var(--color-muted-foreground)] mb-1.5">
+            {t('admin.styles.workspace.colourFamilyVariants', {
+              defaultValue: 'Variants ({{count}})',
+              count: variants.length,
+            })}
+          </div>
+          <div className="flex flex-wrap gap-1.5">
+            {variants.map((v) => (
+              <button
+                key={v.id}
+                type="button"
+                onClick={() =>
+                  v.styleId && navigate(`/styles/${v.styleId}`)
+                }
+                className="inline-flex items-center gap-1.5 rounded-full bg-white border border-[var(--color-border)] px-2.5 py-1 text-xs hover:bg-[var(--color-muted)]"
+              >
+                <span className="inline-block h-2 w-2 rounded-full bg-[var(--color-muted-foreground)]" />
+                {v.primaryColour ?? '—'}
+              </button>
+            ))}
+          </div>
+        </>
+      )}
+    </section>
+  );
+}
+
+/**
+ * Activity timeline — surfaces the audit log already hydrated by the
+ * detail include. Compact list of "actor · action · time". Replaces
+ * the old structured InspectionTimeline component (which assumed a
+ * model the Gurukul flow doesn't have).
+ */
+function ActivityTimelineCard({
+  style,
+  cardClasses,
+}: {
+  style: Style;
+  cardClasses: string;
+}) {
+  const { t } = useTranslation();
+  const logs = style.auditLogs ?? [];
+  if (logs.length === 0) return null;
+  return (
+    <section className={cardClasses}>
+      <h2 className="font-serif text-lg mb-3">
+        {t('admin.styles.workspace.activity', {
+          defaultValue: 'Activity',
+        })}
+      </h2>
+      <ol className="space-y-2">
+        {logs.slice(0, 20).map((log) => (
+          <li
+            key={log.id}
+            className="flex items-baseline gap-3 text-sm border-b border-[var(--color-border)] last:border-0 pb-2 last:pb-0"
+          >
+            <span className="text-[11px] text-[var(--color-muted-foreground)] tabular-nums shrink-0 w-32">
+              {new Date(log.createdAt).toLocaleString(undefined, {
+                month: 'short',
+                day: 'numeric',
+                hour: '2-digit',
+                minute: '2-digit',
+              })}
+            </span>
+            <span className="font-medium text-[var(--color-foreground)] shrink-0">
+              {log.actor?.name ?? '—'}
+            </span>
+            <span className="text-[var(--color-muted-foreground)]">
+              {t(`admin.styles.audit.${log.action}` as const, {
+                defaultValue: log.action,
+              })}
+            </span>
+          </li>
+        ))}
+      </ol>
+    </section>
   );
 }
