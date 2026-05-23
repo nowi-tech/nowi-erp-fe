@@ -77,6 +77,29 @@ export default function ReferenceImageGrid({
   // so re-typing the same link doesn't add duplicate tiles.
   const lastFetchedFor = useRef<string | null>(null);
   const debouncedLink = useDebounced(referenceLink ?? '', FETCH_DEBOUNCE_MS);
+  // Refs mirroring the current `value` + `onChange`, so the deferred
+  // extractLink() .then callback can read the latest state without
+  // needing them in the auto-fetch effect's dependency array. Including
+  // them in deps causes the effect to re-run on every parent re-render,
+  // which fires the cleanup's `cancelled = true` before the in-flight
+  // fetch's .then resolves — so the fetch succeeds but onChange is
+  // never called, and the image silently doesn't populate.
+  const valueRef = useRef(value);
+  const onChangeRef = useRef(onChange);
+  useEffect(() => {
+    valueRef.current = value;
+    onChangeRef.current = onChange;
+  });
+  // True until the component unmounts — used to guard async callbacks
+  // from updating state after unmount (replaces the per-effect-run
+  // `cancelled` flag that was incorrectly tripping on re-renders).
+  const mountedRef = useRef(true);
+  useEffect(
+    () => () => {
+      mountedRef.current = false;
+    },
+    [],
+  );
 
   // Resolve signed URLs for any GCS object paths in `value`.
   useEffect(() => {
@@ -116,32 +139,36 @@ export default function ReferenceImageGrid({
     onPrimaryUrlChange?.(primaryUrl);
   }, [primaryUrl, onPrimaryUrlChange]);
 
-  // Debounced background fetch on link change.
+  // Debounced background fetch on link change. Watches ONLY
+  // `debouncedLink` — `value` / `onChange` are read via refs in the
+  // .then so the effect doesn't re-run (and cancel itself) on every
+  // parent re-render. `lastFetchedFor` dedupes against re-typing the
+  // same URL; `mountedRef` guards against post-unmount state writes.
   useEffect(() => {
     const url = debouncedLink.trim();
     if (!url || !isAbsUrl(url)) return;
     if (lastFetchedFor.current === url) return;
-    if (value.length >= MAX_IMAGES) return;
-    let cancelled = false;
+    if (valueRef.current.length >= MAX_IMAGES) return;
     lastFetchedFor.current = url;
     extractLink(url)
       .then((r) => {
-        if (cancelled) return;
-        if (r.ok && r.imageUrl && !value.includes(r.imageUrl)) {
-          onChange([...value, r.imageUrl]);
-          toast.show(
-            `Image fetched${r.source ? ` (${r.source})` : ''}.`,
-            'success',
-          );
-        }
+        if (!mountedRef.current) return;
+        if (!r.ok || !r.imageUrl) return;
+        // Re-read current value from the ref (not the effect closure)
+        // so a tile that landed via upload while extractLink was in
+        // flight isn't clobbered.
+        const cur = valueRef.current;
+        if (cur.includes(r.imageUrl) || cur.length >= MAX_IMAGES) return;
+        onChangeRef.current([...cur, r.imageUrl]);
+        toast.show(
+          `Image fetched${r.source ? ` (${r.source})` : ''}.`,
+          'success',
+        );
       })
       .catch(() => {
         /* silent — non-blocking */
       });
-    return () => {
-      cancelled = true;
-    };
-  }, [debouncedLink, value, onChange, toast]);
+  }, [debouncedLink, toast]);
 
   const doUpload = useCallback(
     async (files: File[]) => {
