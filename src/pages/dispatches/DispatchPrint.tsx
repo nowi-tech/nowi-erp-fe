@@ -3,6 +3,7 @@ import { useTranslation } from 'react-i18next';
 import { useNavigate, useParams } from 'react-router-dom';
 import { getDispatch } from '@/api/dispatches';
 import { FeatureUnavailableError } from '@/api/_errors';
+import { Skeleton } from '@/components/ui/skeleton';
 import type { DispatchDetail as DispatchDetailT } from '@/api/types';
 
 export default function DispatchPrint() {
@@ -58,7 +59,7 @@ export default function DispatchPrint() {
   if (!data) {
     return (
       <div className="p-6">
-        <div className="h-32 animate-pulse rounded bg-[var(--color-muted)]" />
+        <Skeleton className="h-32 w-full" />
       </div>
     );
   }

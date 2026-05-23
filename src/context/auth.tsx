@@ -52,11 +52,23 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         // re-register the device so token rotation is picked up.
         void registerPush();
       })
-      .catch(() => {
+      .catch((err: unknown) => {
         if (cancelled) return;
-        localStorage.removeItem(TOKEN_KEY);
-        localStorage.removeItem(USER_KEY);
-        setUser(null);
+        // Opaque sessions never expire — only a real 401 means the
+        // session was revoked. A network error (flaky factory Wi-Fi,
+        // server blip) must NOT log the worker out: keep the cached
+        // user from localStorage and let requests retry. A genuine 401
+        // is already hard-redirected by the apiClient interceptor.
+        const status =
+          typeof err === 'object' && err !== null && 'response' in err
+            ? (err as { response?: { status?: number } }).response?.status
+            : undefined;
+        if (status === 401) {
+          localStorage.removeItem(TOKEN_KEY);
+          localStorage.removeItem(USER_KEY);
+          setUser(null);
+        }
+        // else: transient — stay signed in with the cached session.
       })
       .finally(() => {
         if (!cancelled) setLoading(false);

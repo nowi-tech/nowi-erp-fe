@@ -7,7 +7,6 @@ import {
   ChevronLeft,
   Minus,
   Plus,
-  Truck,
 } from 'lucide-react';
 import { toast as sonnerToast } from 'sonner';
 import FloorShell from '@/components/layout/FloorShell';
@@ -17,6 +16,7 @@ import { Label } from '@/components/ui/label';
 import { Select } from '@/components/ui/select';
 import { Textarea } from '@/components/ui/textarea';
 import { Dialog } from '@/components/ui/dialog';
+import { Skeleton } from '@/components/ui/skeleton';
 import { cn } from '@/lib/utils';
 import { getAvailability, getLot } from '@/api/lots';
 import {
@@ -118,7 +118,8 @@ export default function FinishingReceiveLot() {
   const [available, setAvailable] = useState<SizeMatrix>({});
   const [rows, setRows] = useState<Record<string, RowState>>({});
   const finishingStageId = useStageId('finishing');
-  const [loading, setLoading] = useState(true);
+  // No separate `loading` flag — the page gates on `!lot || !metrics`
+  // so the skeleton shows only on first load, never on later refreshes.
   const [submitting, setSubmitting] = useState(false);
   const [confirmOpen, setConfirmOpen] = useState(false);
   const cancelRef = useRef<HTMLButtonElement>(null);
@@ -130,6 +131,7 @@ export default function FinishingReceiveLot() {
   // this just moves the editing UI from an inline panel into the shared
   // Dialog shell.
   const [reworkSize, setReworkSize] = useState<string | null>(null);
+  const [reworkSubmitting, setReworkSubmitting] = useState(false);
   const reworkDoneRef = useRef<HTMLButtonElement>(null);
 
   // Dispatch challan state.
@@ -141,8 +143,6 @@ export default function FinishingReceiveLot() {
   const [dispatching, setDispatching] = useState(false);
   const [dispatchError, setDispatchError] = useState<string | null>(null);
   const dispatchCancelRef = useRef<HTMLButtonElement>(null);
-  const dispatchSectionRef = useRef<HTMLDivElement | null>(null);
-  const finishingSectionRef = useRef<HTMLDivElement | null>(null);
 
   // Per-size finishing forwarded — computed from receipts so we can
   // pre-fill the dispatch ship-qty inputs intelligently. The BE auth-
@@ -163,7 +163,6 @@ export default function FinishingReceiveLot() {
 
   const refresh = useCallback(async () => {
     if (finishingStageId == null) return;
-    setLoading(true);
     try {
       const [lotRes, avail] = await Promise.all([
         getLot(lotId),
@@ -197,8 +196,6 @@ export default function FinishingReceiveLot() {
         return;
       }
       sonnerToast.error(t('stitching.lot.loadError'));
-    } finally {
-      setLoading(false);
     }
   }, [lotId, finishingStageId, navigate, t]);
 
@@ -224,13 +221,20 @@ export default function FinishingReceiveLot() {
   }, [rows]);
 
   const allZero = sizes.length > 0 && sizes.every((s) => (available[s] ?? 0) === 0);
-  const canSubmit = !submitting && (totals.forward > 0 || totals.rework > 0);
+  // Forward-only: rework is committed straight from its modal now.
+  const canSubmit = !submitting && totals.forward > 0;
 
   // Dispatch section is always visible — finisher can ship whatever
   // they've forwarded out of finishing at any time. Per-size cap on the
   // input enforces "only what you've processed". The post-dispatch
   // confirmation card replaces the form once the lot is fully shipped.
   const dispatchAlreadyDone = metrics?.stage === 'dispatched';
+  // Anything sitting in finishing's "done" pool, awaiting dispatch.
+  // Drives whether the Dispatch section even renders — an empty
+  // form with all-zero caps is confusing before anything is ready.
+  const hasDispatchable = Object.values(finishingPerSize).some(
+    (v) => (v ?? 0) > 0,
+  );
 
   // Pre-fill ship qty with what's currently forwarded out of finishing.
   // Preserve manual edits — only overwrite empty/zero fields.
@@ -263,18 +267,75 @@ export default function FinishingReceiveLot() {
     setReworkSize(size);
   }
 
-  // Close the dialog. If no qty was actually entered, collapse the row's
-  // rework back to closed so an empty rework isn't carried into submit
-  // (matches the old inline toggle-off behaviour).
+  // Cancel: discard any in-progress rework edits for this size. Rework is
+  // now committed straight from the modal (submitReworkForSize), never
+  // staged into the global forward submit — so closing always resets.
   function closeReworkModal() {
+    if (reworkSubmitting) return;
     const size = reworkSize;
     if (size) {
-      const cur = rows[size];
-      if (!cur || cur.reworkQty <= 0) {
-        updateRow(size, { reworkOpen: false, reworkQty: 0 });
-      }
+      updateRow(size, { reworkOpen: false, reworkQty: 0 });
     }
     setReworkSize(null);
+  }
+
+  // Commit this size's rework immediately (one self-contained step):
+  // POST /rework with qty + reason + photo, then refresh. Forwarding good
+  // units stays a separate action — they are different operations.
+  async function submitReworkForSize() {
+    const size = reworkSize;
+    if (!size || !lot) return;
+    const r = rows[size];
+    if (!r || r.reworkQty <= 0) return;
+    // A defect photo is mandatory — the BE rejects a photo-less rework too.
+    if (!r.photoPath) {
+      sonnerToast.error(
+        t('finishing.photoRequired', {
+          defaultValue: 'A defect photo is required to send a rework.',
+        }),
+      );
+      return;
+    }
+    const reworkStyleId = lot.style?.styleId ?? lot.sku;
+    if (!reworkStyleId) {
+      sonnerToast.error(t('common.error'));
+      return;
+    }
+    setReworkSubmitting(true);
+    try {
+      await openRework({
+        lotId: lot.id,
+        sku: `${reworkStyleId}-${size}`,
+        sizeLabel: size,
+        qty: r.reworkQty,
+        reason: reasonText(r),
+        photoPaths: [r.photoPath],
+      });
+      sonnerToast.warning(
+        t('finishing.lot.reworkToast', {
+          defaultValue: 'Sent {{n}} units back for rework',
+          n: r.reworkQty,
+        }),
+        { duration: 4500 },
+      );
+      // Reset this row's rework fields and close before refreshing.
+      updateRow(size, {
+        reworkOpen: false,
+        reworkQty: 0,
+        photoPath: null,
+        photoNoop: false,
+      });
+      setReworkSize(null);
+      await refresh();
+    } catch (err) {
+      if (err instanceof FeatureUnavailableError) {
+        sonnerToast.info(t('common.featureUnavailable'));
+      } else {
+        sonnerToast.error(t('common.error'));
+      }
+    } finally {
+      setReworkSubmitting(false);
+    }
   }
 
   function setForward(size: string, raw: string) {
@@ -337,25 +398,10 @@ export default function FinishingReceiveLot() {
           receipts: forwardLines,
         });
       }
-      const reworkStyleId = lot.style?.styleId ?? lot.sku;
-      for (const s of sizes) {
-        const r = rows[s];
-        if (!r?.reworkOpen || r.reworkQty <= 0) continue;
-        if (!reworkStyleId) continue;
-        await openRework({
-          lotId: lot.id,
-          sku: `${reworkStyleId}-${s}`,
-          sizeLabel: s,
-          qty: r.reworkQty,
-          reason: reasonText(r),
-          photoPaths: r.photoPath ? [r.photoPath] : undefined,
-        });
-      }
+      // Rework is no longer part of this submit — it commits immediately
+      // from the rework modal (submitReworkForSize). This path forwards
+      // good units only.
       const fwd = forwardLines.reduce((a, l) => a + l.qty, 0);
-      const rework = Object.values(rows).reduce(
-        (a, r) => a + (r.reworkOpen ? r.reworkQty : 0),
-        0,
-      );
       if (fwd > 0) {
         sonnerToast.success(
           t('finishing.lot.forwardedToast', {
@@ -368,15 +414,6 @@ export default function FinishingReceiveLot() {
               .join(' · '),
             duration: 4500,
           },
-        );
-      }
-      if (rework > 0) {
-        sonnerToast.warning(
-          t('finishing.lot.reworkToast', {
-            defaultValue: 'Sent {{n}} units back for rework',
-            n: rework,
-          }),
-          { duration: 4500 },
         );
       }
       setConfirmOpen(false);
@@ -392,9 +429,6 @@ export default function FinishingReceiveLot() {
     }
   }
 
-  const firstReworkRow = Object.values(rows).find(
-    (r) => r.reworkOpen && r.reworkQty > 0,
-  );
 
   // ── Dispatch challan helpers ────────────────────────────────────────────
   const dispatchTotal = useMemo(
@@ -473,25 +507,18 @@ export default function FinishingReceiveLot() {
         </button>
       </div>
 
-      {loading || !lot || !metrics ? (
-        <div className="mt-4 h-32 animate-pulse rounded bg-[var(--color-muted)]" />
+      {!lot || !metrics ? (
+        <div className="mt-4 space-y-3">
+          <Skeleton className="h-24 w-full" />
+          <Skeleton className="h-48 w-full" />
+        </div>
       ) : (
         <div className="mt-3">
           <LotHeader lot={lot} metrics={metrics} />
-          <ChipRow
-            stage={metrics.stage}
-            onJump={(target) => {
-              const ref =
-                target === 'finishing'
-                  ? finishingSectionRef.current
-                  : dispatchSectionRef.current;
-              ref?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-            }}
-          />
 
           {/* FINISHING section — hidden once everything is dispatched. */}
           {metrics.stage !== 'dispatched' && (
-            <div ref={finishingSectionRef}>
+            <div>
               <FinishingSection
                 allZero={allZero}
                 sizes={sizes}
@@ -508,13 +535,14 @@ export default function FinishingReceiveLot() {
             </div>
           )}
 
-          {/* DISPATCH section — always rendered. The per-size cap on the
-              ship-qty input ensures the finisher can only ship what
-              they've actually forwarded out of finishing. */}
-          <div ref={dispatchSectionRef}>
+          {/* DISPATCH section — only renders once something is actually
+              forwarded out of finishing. Before that, a quiet note tells
+              the user *why* there's nothing to dispatch yet, instead of
+              an empty form with all-zero caps. */}
+          <div>
             {dispatchAlreadyDone ? (
               <DispatchDone lot={lot} />
-            ) : (
+            ) : hasDispatchable ? (
               <DispatchSection
                 sizes={sizes}
                 warehouses={warehouses}
@@ -527,6 +555,13 @@ export default function FinishingReceiveLot() {
                 canDispatchSubmit={canDispatchSubmit}
                 onSubmitClick={() => setDispatchConfirmOpen(true)}
               />
+            ) : (
+              <p className="mt-6 text-[13px] text-[var(--color-muted-foreground)]">
+                {t('finishing.dispatch.notReady', {
+                  defaultValue:
+                    'Nothing ready to dispatch yet — finish at least one size first.',
+                })}
+              </p>
             )}
           </div>
         </div>
@@ -634,12 +669,6 @@ export default function FinishingReceiveLot() {
       >
         <div className="space-y-1">
           <p>{t('finishing.lot.confirmForward', { forward: totals.forward })}</p>
-          <p>{t('finishing.lot.confirmRework', { rework: totals.rework })}</p>
-          {firstReworkRow && (
-            <p className="text-sm text-[var(--color-muted-foreground)]">
-              {t('finishing.lot.confirmReasonPrefix')} {reasonText(firstReworkRow)}
-            </p>
-          )}
         </div>
       </Dialog>
 
@@ -661,11 +690,28 @@ export default function FinishingReceiveLot() {
             initialFocusRef={reworkDoneRef}
             footer={
               <>
-                <Button variant="outline" onClick={closeReworkModal}>
+                <Button
+                  variant="outline"
+                  onClick={closeReworkModal}
+                  disabled={reworkSubmitting}
+                >
                   {t('common.cancel')}
                 </Button>
-                <Button ref={reworkDoneRef} onClick={() => setReworkSize(null)}>
-                  {t('common.confirm')}
+                <Button
+                  ref={reworkDoneRef}
+                  onClick={() => void submitReworkForSize()}
+                  disabled={
+                    reworkSubmitting ||
+                    !rs ||
+                    rs.reworkQty <= 0 ||
+                    !rs.photoPath
+                  }
+                >
+                  {reworkSubmitting
+                    ? t('common.saving')
+                    : t('finishing.sendBackForRework', {
+                        defaultValue: 'Send back for rework',
+                      })}
                 </Button>
               </>
             }
@@ -679,7 +725,8 @@ export default function FinishingReceiveLot() {
                     inputMode="numeric"
                     min={0}
                     max={maxRework}
-                    value={rs.reworkQty}
+                    value={rs.reworkQty || ''}
+                    placeholder="0"
                     onChange={(e) => setRework(reworkSize, e.target.value)}
                     className="w-24 h-10 text-center"
                     autoFocus
@@ -750,6 +797,14 @@ export default function FinishingReceiveLot() {
                     </span>
                   )}
                 </div>
+                {!rs.photoPath && (
+                  <p className="text-xs text-[var(--color-destructive)]">
+                    {t('finishing.photoRequired', {
+                      defaultValue:
+                        'A defect photo is required to send a rework.',
+                    })}
+                  </p>
+                )}
               </div>
             )}
           </Dialog>
@@ -864,79 +919,6 @@ function StagePill({ metrics }: { metrics: LotMetrics }) {
       />
       {s.label}
     </span>
-  );
-}
-
-// ─────────────────────────────────────────────────────────────────────
-// Sticky chip row — Finishing · Dispatch (both always tappable)
-// ─────────────────────────────────────────────────────────────────────
-
-interface ChipRowProps {
-  stage: LifeStage;
-  /** Tap a chip → smooth-scroll to its section. */
-  onJump: (target: 'finishing' | 'dispatch') => void;
-}
-
-function ChipRow({ stage, onJump }: ChipRowProps) {
-  const { t } = useTranslation();
-  const isDispatched = stage === 'dispatched';
-  return (
-    <div className="sticky top-0 z-10 mt-3.5 -mx-1 px-1 py-2 bg-[var(--color-background)]/90 backdrop-blur-[6px]">
-      <div className="flex items-center gap-2">
-        <Chip
-          icon={isDispatched ? <CheckCircle2 size={14} /> : null}
-          label={t('finishing.chip.finishing', { defaultValue: 'Finishing' })}
-          tone={
-            isDispatched ? 'done' : stage === 'in_progress' ? 'active' : 'done'
-          }
-          onClick={() => onJump('finishing')}
-        />
-        <Chip
-          icon={<Truck size={14} />}
-          label={
-            isDispatched
-              ? t('finishing.chip.dispatchDone', { defaultValue: 'Dispatch ✓' })
-              : t('finishing.chip.dispatch', { defaultValue: 'Dispatch' })
-          }
-          tone={isDispatched ? 'done' : 'active'}
-          onClick={() => onJump('dispatch')}
-        />
-      </div>
-    </div>
-  );
-}
-
-function Chip({
-  icon,
-  label,
-  tone,
-  onClick,
-}: {
-  icon?: React.ReactNode;
-  label: string;
-  tone: 'active' | 'done' | 'locked';
-  onClick?: () => void;
-}) {
-  const toneClasses =
-    tone === 'active'
-      ? 'bg-[var(--color-primary-soft)] text-[var(--color-primary)]'
-      : tone === 'done'
-        ? 'bg-[var(--color-success-bg)] text-[var(--color-success)]'
-        : 'bg-[var(--color-muted)] text-[var(--color-muted-foreground)] cursor-pointer';
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      // disabled visually only for the locked tone — keep it focusable
-      // so the hint can be triggered by keyboard too.
-      className={cn(
-        'inline-flex items-center gap-1.5 h-9 px-3 rounded-full text-[11px] font-semibold uppercase tracking-[0.06em] transition-colors',
-        toneClasses,
-      )}
-    >
-      {icon}
-      <span>{label}</span>
-    </button>
   );
 }
 
@@ -1073,12 +1055,12 @@ function FinishingSection({
               : 'bg-[var(--color-disabled-bg)] cursor-default',
           )}
         >
-          {totals.forward > 0 || totals.rework > 0
+          {totals.forward > 0
             ? t('finishing.lot.submitN', {
                 defaultValue: 'Send {{n}} {{unit}} →',
-                n: totals.forward + totals.rework,
+                n: totals.forward,
                 unit:
-                  totals.forward + totals.rework === 1
+                  totals.forward === 1
                     ? t('common.unit', { defaultValue: 'unit' })
                     : t('common.units'),
               })
@@ -1175,7 +1157,8 @@ function DispatchSection({
                 inputMode="numeric"
                 min={0}
                 max={ready}
-                value={shipQty[size] ?? 0}
+                value={shipQty[size] || ''}
+                placeholder="0"
                 onChange={(e) => setShip(size, e.target.value)}
                 disabled={ready === 0}
                 className="w-24 text-center disabled:opacity-50"
@@ -1306,7 +1289,8 @@ function FinishSizeRow({
           <input
             type="text"
             inputMode="numeric"
-            value={row.forwardQty}
+            value={row.forwardQty || ''}
+            placeholder="0"
             onChange={(e) => onSetForward(e.target.value)}
             disabled={disabled}
             className={cn(

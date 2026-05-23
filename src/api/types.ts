@@ -116,6 +116,16 @@ export interface Lot {
     kind: 'forward' | 'rework_return' | 'rework_redo';
     receivedAt: string;
   }>;
+  /**
+   * Open rework issues for this lot (`getLot` only) — reason + defect
+   * photos the assigned stitcher must see before redoing the work.
+   */
+  reworkIssues?: ReworkIssue[];
+  /**
+   * Count of open/in-progress rework issues (list endpoint only). Drives
+   * the "N need rework" badge on the stitcher queue without an N+1.
+   */
+  openReworkCount?: number;
   /** Stitching master this lot is assigned to. `null` = pending stitching assignment. */
   assignedStitcherUserId?: number | null;
   /** Finishing master this lot is assigned to. `null` = pending finishing assignment. */
@@ -456,7 +466,8 @@ export interface OpenReworkPayload {
   sizeLabel: string;
   qty: number;
   reason: string;
-  photoPaths?: string[];
+  /** Mandatory — at least one defect photo object path. */
+  photoPaths: string[];
 }
 
 export interface ReworkIssue {
@@ -466,6 +477,8 @@ export interface ReworkIssue {
   sizeLabel: string;
   qty: number;
   reason: string;
+  /** GCS object paths of defect photos attached at finishing. */
+  photoPaths?: string[];
   attemptNumber: number;
   status: 'open' | 'in_progress' | 'resolved' | 'exceeded_limit';
   openedAt: string;
@@ -500,6 +513,34 @@ export interface UploadUrlResponse {
   uploadUrl: string;
   objectPath: string;
   noop?: boolean;
+}
+
+// ─── Destination warehouses ────────────────────────────────────────────────
+
+export interface DestinationWarehouse {
+  id: number;
+  code: string;
+  name: string;
+  easyecomWarehouseId?: string | null;
+  easyecomEnabled: boolean;
+  isActive: boolean;
+  createdAt?: string;
+}
+
+export interface CreateDestinationWarehousePayload {
+  code: string;
+  name: string;
+  easyecomWarehouseId?: string;
+  easyecomEnabled?: boolean;
+  isActive?: boolean;
+}
+
+export type UpdateDestinationWarehousePayload =
+  Partial<CreateDestinationWarehousePayload>;
+
+/** Map of requested objectPath → signed read URL. */
+export interface ReadUrlsResponse {
+  urls: Record<string, string>;
 }
 
 // ─── Filters ──────────────────────────────────────────────────────────────

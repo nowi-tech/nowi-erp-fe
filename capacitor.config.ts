@@ -21,13 +21,29 @@ const config: CapacitorConfig = {
   },
   plugins: {
     SplashScreen: {
-      // White splash with the centered NOWI logo (res/drawable*/splash.png).
-      // Auto-hides; initNativeShell() also hides it once the web app loads.
-      launchShowDuration: 3000,
-      launchAutoHide: true,
+      // Stay up until the REMOTE app is actually loaded — the APK loads
+      // erp.nowi.fashion over the network, so auto-hiding on a timer
+      // leaves a blank screen during that fetch. initNativeShell() calls
+      // SplashScreen.hide() once the bundle runs (with a safety timeout
+      // so a failed load can't strand it forever).
+      launchAutoHide: false,
       backgroundColor: '#ffffff',
       androidScaleType: 'CENTER_INSIDE',
-      showSpinner: false,
+      showSpinner: true,
+      spinnerColor: '#0f172a',
+    },
+    StatusBar: {
+      // Edge-to-edge (Android 15). Light = dark icons on the light app
+      // background; the safe-area CSS in index.css handles the inset.
+      overlaysWebView: true,
+      style: 'LIGHT',
+      backgroundColor: '#ffffff',
+    },
+    Keyboard: {
+      // Resize the WebView body when the soft keyboard opens so input
+      // fields aren't hidden behind it — critical for data entry.
+      resize: 'body',
+      resizeOnFullScreen: true,
     },
   },
 };

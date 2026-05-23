@@ -1,11 +1,22 @@
 #!/usr/bin/env sh
-# Block signing/credential files from ever being committed.
+# Pre-commit guard for the Vite/React frontend. Goal: never commit a
+# change that would break the deployed bundle.
+#
+# Checks (against the STAGED tree):
+#   1. Signing files (.jks/.keystore/keystore.properties) — never in git.
+#   1b. GCP service-account JSON keys.
+#   2. .env (real env files) — only .env.example is allowed.
+#   3. i18n JSON files (src/i18n/*.json) — must parse.
+#   4. `tsc -b --noEmit` — catch type errors before push.
+#
 # Activate once per clone:  git config core.hooksPath scripts/git-hooks
+# Bypass (use sparingly):   git commit --no-verify
 set -e
 
 staged=$(git diff --cached --name-only --diff-filter=ACM)
 [ -z "$staged" ] && exit 0
 
+# ── 1. Signing / keystore files ──────────────────────────────────
 bad=$(printf '%s\n' "$staged" | grep -E '(\.jks$|\.keystore$|(^|/)keystore\.properties$)' || true)
 if [ -n "$bad" ]; then
   echo "✗ commit blocked — signing/secret files staged:" >&2
@@ -14,6 +25,7 @@ if [ -n "$bad" ]; then
   exit 1
 fi
 
+# ── 1b. GCP service-account keys ─────────────────────────────────
 for f in $staged; do
   [ -f "$f" ] || continue
   if git show ":$f" 2>/dev/null | grep -q '"private_key": *"-----BEGIN'; then
@@ -21,4 +33,36 @@ for f in $staged; do
     exit 1
   fi
 done
+
+# ── 2. Real .env files (allow .env.example) ──────────────────────
+envs=$(printf '%s\n' "$staged" | grep -E '(^|/)\.env(\.|$)' | grep -vE '\.env\.example$' || true)
+if [ -n "$envs" ]; then
+  echo "✗ commit blocked — .env files must not be committed:" >&2
+  echo "$envs" >&2
+  echo "  Vercel env lives in the project settings, not the repo." >&2
+  exit 1
+fi
+
+# ── 3. Validate any staged i18n JSON ─────────────────────────────
+json_files=$(printf '%s\n' "$staged" | grep -E '^src/i18n/.+\.json$' || true)
+if [ -n "$json_files" ]; then
+  for j in $json_files; do
+    [ -f "$j" ] || continue
+    if ! node -e "JSON.parse(require('fs').readFileSync('$j','utf8'))" >/dev/null 2>&1; then
+      echo "✗ commit blocked — $j is not valid JSON. Fix it before committing." >&2
+      exit 1
+    fi
+  done
+fi
+
+# ── 4. Typecheck (only if .ts/.tsx files staged) ─────────────────
+if printf '%s\n' "$staged" | grep -qE '\.tsx?$'; then
+  echo "[pre-commit] tsc --noEmit…"
+  if ! pnpm typecheck >/tmp/fe-precommit-tsc.log 2>&1; then
+    echo "✗ commit blocked — TypeScript errors:" >&2
+    tail -40 /tmp/fe-precommit-tsc.log >&2
+    exit 1
+  fi
+fi
+
 exit 0

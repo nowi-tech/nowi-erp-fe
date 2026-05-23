@@ -5,6 +5,7 @@ import { Home, LogOut } from 'lucide-react';
 import { useAuth } from '@/context/auth';
 import LanguageToggle from '@/components/LanguageToggle';
 import Logo from '@/components/Logo';
+import { RefreshButton } from '@/components/RefreshButton';
 import { cn } from '@/lib/utils';
 
 interface FloorShellProps {
@@ -45,7 +46,13 @@ export default function FloorShell({ children }: FloorShellProps) {
           >
             <Logo size="md" />
           </Link>
-          <LanguageToggle />
+          <div className="flex items-center gap-1">
+            <RefreshButton
+              size={18}
+              className="p-2 rounded-[var(--radius-sm)] hover:bg-[var(--color-muted)] text-[var(--color-muted-foreground)]"
+            />
+            <LanguageToggle />
+          </div>
         </div>
       </header>
 
@@ -77,6 +84,10 @@ export default function FloorShell({ children }: FloorShellProps) {
             </NavLink>
           </nav>
           <div className="ml-auto flex items-center gap-2">
+            <RefreshButton
+              size={16}
+              className="flex items-center px-2 py-1 rounded-[var(--radius-sm)] hover:bg-[var(--color-muted)] text-sm text-[var(--color-muted-foreground)]"
+            />
             <LanguageToggle />
             <button
               type="button"

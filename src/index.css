@@ -17,3 +17,53 @@ body.lang-hi,
 ::placeholder {
   opacity: 0.5;
 }
+
+/* Shimmer skeleton — a single sliding-gradient sweep across a muted
+   block. Used by <Skeleton> in src/components/ui/skeleton.tsx as the
+   one loading placeholder across the app. */
+@keyframes shimmer {
+  100% {
+    transform: translateX(100%);
+  }
+}
+
+/* ── Native (Capacitor APK) safe-area handling ───────────────────────
+   Android 15 / targetSdk 36 forces edge-to-edge — the WebView draws
+   under the status bar (`StatusBar.setOverlaysWebView(false)` is a
+   no-op there). We embrace edge-to-edge and inset via env(). Gated by
+   `.native-app` on <html> (added only inside the APK) so the plain
+   website in a browser is completely unaffected. */
+:root {
+  --safe-area-inset-top: env(safe-area-inset-top, 0px);
+  --safe-area-inset-bottom: env(safe-area-inset-bottom, 0px);
+  --safe-area-inset-left: env(safe-area-inset-left, 0px);
+  --safe-area-inset-right: env(safe-area-inset-right, 0px);
+}
+
+@supports (padding: env(safe-area-inset-top)) {
+  /* padding-top keeps the FIRST screenful (and the header's tappable
+     controls) below the status bar. But once you scroll, a sticky/fixed
+     header re-pins to the scrollport top (y=0, under the status bar) —
+     padding can't prevent that. So an opaque strip masks the status-bar
+     band on scroll.
+
+     z-index 35: ABOVE app chrome (AdminShell header z-20, bottom nav
+     z-30) so it masks them on scroll, but BELOW modals/drawers (z-40+)
+     so it never paints a band over a dialog. Bottom is intentionally
+     left alone — the bottom nav already self-insets, padding/covering
+     it too would double-space. */
+  html.native-app body {
+    padding-top: var(--safe-area-inset-top);
+  }
+  html.native-app body::before {
+    content: '';
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: var(--safe-area-inset-top);
+    background: var(--color-background);
+    z-index: 35;
+    pointer-events: none;
+  }
+}

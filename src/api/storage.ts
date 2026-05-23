@@ -1,5 +1,5 @@
 import { apiClient } from './apiClient';
-import type { UploadUrlResponse } from './types';
+import type { ReadUrlsResponse, UploadUrlResponse } from './types';
 
 export interface UploadUrlPayload {
   entityType: string;
@@ -26,6 +26,21 @@ export async function getReadUrls(
 export async function requestUploadUrl(payload: UploadUrlPayload): Promise<UploadUrlResponse> {
   const res = await apiClient.post<UploadUrlResponse>('/api/storage/upload-url', payload);
   return res.data;
+}
+
+/**
+ * Batch-mint signed read URLs for stored GCS object paths (e.g. rework
+ * defect photos). Returns objectPath → signed URL; paths the BE can't
+ * sign are simply absent from the map. Empty input short-circuits.
+ */
+export async function issueReadUrls(
+  objectPaths: string[],
+): Promise<Record<string, string>> {
+  if (objectPaths.length === 0) return {};
+  const res = await apiClient.post<ReadUrlsResponse>('/api/storage/read-urls', {
+    objectPaths,
+  });
+  return res.data.urls ?? {};
 }
 
 /**

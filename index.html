@@ -14,7 +14,32 @@
     <title>NOWI — Production</title>
   </head>
   <body>
-    <div id="root"></div>
+    <div id="root">
+      <!-- First-paint loader. React replaces #root on mount, so this
+           vanishes automatically. Covers the gap between the WebView
+           painting this HTML and the app rendering (and the moment the
+           native splash hands off), so the screen is never blank. -->
+      <div
+        id="app-bootstrap"
+        style="
+          position: fixed;
+          inset: 0;
+          display: flex;
+          flex-direction: column;
+          align-items: center;
+          justify-content: center;
+          gap: 18px;
+          background: #ffffff;
+          font-family: 'Plus Jakarta Sans', system-ui, sans-serif;
+        "
+      >
+        <img
+          src="/logo-bg-removed.png"
+          alt="NOWI ERP"
+          style="height: 44px; width: auto"
+        />
+      </div>
+    </div>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>

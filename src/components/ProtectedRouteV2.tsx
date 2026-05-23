@@ -1,6 +1,7 @@
 import { Navigate } from 'react-router-dom';
 import type { ReactNode } from 'react';
 import { useAuth } from '@/context/auth';
+import { Skeleton } from '@/components/ui/skeleton';
 import type { UserRole } from '@/api/types';
 
 interface Props {
@@ -12,9 +13,15 @@ export default function ProtectedRouteV2({ children, allowedRoles }: Props) {
   const { user, loading, isAuthenticated } = useAuth();
 
   if (loading) {
+    // Same shimmer the rest of the app uses for "we're loading" states,
+    // so this auth gate doesn't render a separate circular spinner on
+    // top of the Suspense PageSkeleton — there is exactly one loader
+    // pattern app-wide.
     return (
-      <div className="min-h-screen flex items-center justify-center">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-[var(--color-primary)]" />
+      <div className="space-y-3 p-4">
+        <Skeleton className="h-6 w-40" />
+        <Skeleton className="h-32 w-full" />
+        <Skeleton className="h-32 w-full" />
       </div>
     );
   }

@@ -2,6 +2,9 @@
   "common": {
     "appName": "NOWI ERP",
     "loading": "लोड हो रहा है…",
+    "pullToRefresh": "रिफ़्रेश करने के लिए खींचें",
+    "releaseToRefresh": "छोड़ने पर रिफ़्रेश होगा",
+    "refreshing": "रिफ़्रेश हो रहा है…",
     "save": "सेव करें",
     "cancel": "रद्द करें",
     "confirm": "पक्का करें",
@@ -146,6 +149,14 @@
   },
   "stitching": {
     "title": "Stitching",
+    "rework": {
+      "needsRework": "{{count}} आइटम का rework बाकी — finishing से वापस आया",
+      "needBadge": "{{count}} का rework बाकी",
+      "reason": "कारण",
+      "attempt": "प्रयास {{n}}",
+      "photoAlt": "खराबी की फ़ोटो",
+      "photoUnavailable": "फ़ोटो जुड़ी है (यहाँ नहीं दिखेगी)"
+    },
     "queue": "आपकी Queue",
     "queueShort": "Queue",
     "allLots": "Stitching में सभी Lots",
@@ -179,7 +190,7 @@
       "lotNo": "Lot ID",
       "lotN": "Lot {{n}}",
       "vendorLotNo": "Vendor Lot No.",
-      "vendorStyleId": "Vendor Style ID",
+      "vendorStyleId": "Vendor Style ID (SKU)",
       "gender": "Gender",
       "genderW": "Women",
       "genderM": "Men",
@@ -249,6 +260,7 @@
     "empty": "कोई lot नहीं है",
     "openLot": "खोलें",
     "markRework": "Rework mark करें",
+    "sendBackForRework": "Rework के लिए वापस भेजें",
     "reworkQty": "Rework qty",
     "reworkReason": "Reason",
     "reasons": {
@@ -261,6 +273,7 @@
     "otherReasonLabel": "Problem बताएँ",
     "addPhoto": "Photo लगाएँ",
     "photoAdded": "Photo लग गई",
+    "photoRequired": "Rework भेजने के लिए खराबी की फ़ोटो ज़रूरी है।",
     "lot": {
       "title": "Finishing में Receive",
       "submit": "Submit",
@@ -272,6 +285,7 @@
     },
     "generateChallan": "Challan बनाएँ",
     "dispatch": {
+      "notReady": "Dispatch के लिए कुछ तैयार नहीं — पहले कम-से-कम एक size finish करें।",
       "generateChallan": "Dispatch Challan बनाएँ",
       "destinationWarehouse": "Warehouse",
       "selectWarehouse": "Warehouse चुनें…",
@@ -295,6 +309,7 @@
       "vendors": "Vendors",
       "skus": "SKUs",
       "users": "Users",
+      "warehouses": "Warehouses",
       "settings": "Settings",
       "masterData": "Master Data",
       "editRequests": "Edit Requests",

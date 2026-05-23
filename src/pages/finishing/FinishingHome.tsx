@@ -4,6 +4,7 @@ import { useNavigate } from 'react-router-dom';
 import { ChevronRight, Truck } from 'lucide-react';
 import FloorShell from '@/components/layout/FloorShell';
 import { Badge } from '@/components/ui/badge';
+import { Skeleton } from '@/components/ui/skeleton';
 import { useAuth } from '@/context/auth';
 import { listLots } from '@/api/lots';
 import { listReceipts, type ReceiptRow } from '@/api/receipts';
@@ -289,8 +290,17 @@ function QueueTab({
 }) {
   const { t } = useTranslation();
 
-  if (loading) {
-    return <div className="h-12 animate-pulse rounded bg-[var(--color-muted)]" />;
+  // Stale-while-revalidate: only show the skeleton on first load (no
+  // data yet). Subsequent refreshes keep showing the previous lots so
+  // we don't stack a second loader next to a sibling list that's also
+  // refreshing.
+  if (loading && lots.length === 0) {
+    return (
+      <div className="space-y-2">
+        <Skeleton className="h-16 w-full" />
+        <Skeleton className="h-16 w-full" />
+      </div>
+    );
   }
   if (lots.length === 0) {
     return (

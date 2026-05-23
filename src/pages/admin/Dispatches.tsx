@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { Card, CardContent } from '@/components/ui/card';
+import { Skeleton } from '@/components/ui/skeleton';
 import CollapsibleFilters from '@/components/CollapsibleFilters';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -217,7 +218,7 @@ export default function Dispatches() {
                   Array.from({ length: 6 }).map((_, i) => (
                     <tr key={`s${i}`} className="border-t border-[var(--color-border)]">
                       <td colSpan={7} className="px-3 py-2">
-                        <div className="h-4 animate-pulse rounded bg-[var(--color-muted)]" />
+                        <Skeleton className="h-4 w-full" />
                       </td>
                     </tr>
                   ))}

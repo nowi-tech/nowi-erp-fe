@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Skeleton } from '@/components/ui/skeleton';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { useToast } from '@/components/ui/toast';
@@ -61,8 +62,8 @@ export default function SkuDetail() {
   if (loading) {
     return (
       <div className="space-y-3">
-        <div className="h-6 w-1/3 animate-pulse rounded bg-[var(--color-muted)]" />
-        <div className="h-24 animate-pulse rounded bg-[var(--color-muted)]" />
+        <Skeleton className="h-6 w-1/3" />
+        <Skeleton className="h-24 w-full" />
       </div>
     );
   }

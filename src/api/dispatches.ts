@@ -46,6 +46,29 @@ export async function getDispatch(id: string): Promise<DispatchDetail> {
   }
 }
 
+export async function downloadDispatchChallan(
+  id: string,
+  dispatchNo?: string,
+): Promise<void> {
+  try {
+    const res = await apiClient.get<Blob>(
+      `/api/dispatches/${encodeURIComponent(id)}/challan`,
+      { responseType: 'blob' },
+    );
+    const url = URL.createObjectURL(res.data);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `challan-${dispatchNo ?? id}.pdf`;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+  } catch (err) {
+    if (is404(err)) throw new FeatureUnavailableError();
+    throw err;
+  }
+}
+
 export async function createDispatch(
   payload: CreateDispatchPayload,
 ): Promise<DispatchDetail> {

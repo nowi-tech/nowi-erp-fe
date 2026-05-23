@@ -6,6 +6,7 @@ import { toast as sonnerToast } from 'sonner';
 import FloorShell from '@/components/layout/FloorShell';
 import StageTimeline from '@/components/StageTimeline';
 import { Button } from '@/components/ui/button';
+import { Skeleton } from '@/components/ui/skeleton';
 import AssignSheet from '@/components/floor/AssignSheet';
 import HomePillFilters from '@/components/floor/HomePillFilters';
 import {
@@ -463,7 +464,7 @@ export default function FloorHome() {
           to open the lot detail. */}
       {filter === 'all' ? (
         initialLoading ? (
-          <div className="h-12 animate-pulse rounded bg-[var(--color-muted)]" />
+          <Skeleton className="h-12 w-full" />
         ) : lots.length === 0 ? (
           <p className="text-[var(--color-muted-foreground)] px-1">
             {t('floor.assignedEmpty')}
@@ -689,7 +690,7 @@ function Section({
         </div>
       </div>
       {loading ? (
-        <div className="h-12 animate-pulse rounded bg-[var(--color-muted)]" />
+        <Skeleton className="h-12 w-full" />
       ) : lots.length === 0 ? (
         <p className="text-[var(--color-muted-foreground)] px-1">{emptyLabel}</p>
       ) : (

@@ -2,6 +2,9 @@
   "common": {
     "appName": "NOWI ERP",
     "loading": "Loading…",
+    "pullToRefresh": "Pull to refresh",
+    "releaseToRefresh": "Release to refresh",
+    "refreshing": "Refreshing…",
     "save": "Save",
     "cancel": "Cancel",
     "confirm": "Confirm",
@@ -155,6 +158,14 @@
   },
   "stitching": {
     "title": "Stitching",
+    "rework": {
+      "needsRework": "{{count}} item(s) need rework — sent back from finishing",
+      "needBadge": "{{count}} need rework",
+      "reason": "Reason",
+      "attempt": "attempt {{n}}",
+      "photoAlt": "Defect photo",
+      "photoUnavailable": "Photo attached (not viewable here)"
+    },
     "queue": "In your queue",
     "queueShort": "Queue",
     "allLots": "All lots in stitching",
@@ -188,7 +199,7 @@
       "lotNo": "Lot ID",
       "lotN": "Lot {{n}}",
       "vendorLotNo": "Vendor lot no",
-      "vendorStyleId": "Vendor style ID",
+      "vendorStyleId": "Vendor style ID (SKU)",
       "gender": "Gender",
       "genderW": "Women",
       "genderM": "Men",
@@ -258,6 +269,7 @@
     "empty": "No lots awaiting finishing.",
     "openLot": "Open",
     "markRework": "Mark rework",
+    "sendBackForRework": "Send back for rework",
     "reworkQty": "Rework qty",
     "reworkReason": "Reason",
     "reasons": {
@@ -270,17 +282,19 @@
     "otherReasonLabel": "Describe the issue",
     "addPhoto": "Add photo",
     "photoAdded": "Photo attached",
+    "photoRequired": "A defect photo is required to send a rework.",
     "lot": {
       "title": "Receive at finishing",
       "submit": "Submit",
-      "submitN": "Send {{n}} {{unit}} →",
+      "submitN": "Mark {{n}} {{unit}} done →",
       "confirmTitle": "Confirm",
-      "confirmForward": "{{forward}} to forward",
-      "confirmRework": "{{rework}} to rework",
+      "confirmForward": "{{forward}} passed finishing (ready to dispatch)",
+      "confirmRework": "{{rework}} sent back for rework",
       "confirmReasonPrefix": "Reason:"
     },
     "generateChallan": "Generate challan",
     "dispatch": {
+      "notReady": "Nothing ready to dispatch yet — finish at least one size first.",
       "generateChallan": "Generate dispatch challan",
       "destinationWarehouse": "Destination warehouse",
       "selectWarehouse": "Select a warehouse…",
@@ -304,6 +318,7 @@
       "vendors": "Vendors",
       "skus": "SKUs",
       "users": "Users",
+      "warehouses": "Warehouses",
       "settings": "Settings",
       "masterData": "Master data",
       "editRequests": "Edit requests",

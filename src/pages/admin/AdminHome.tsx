@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Link, useNavigate } from 'react-router-dom';
 import { Card, CardContent } from '@/components/ui/card';
+import { Skeleton } from '@/components/ui/skeleton';
 import { Button } from '@/components/ui/button';
 import { useToast } from '@/components/ui/toast';
 import { Drawer } from '@/components/ui/drawer';
@@ -120,7 +121,7 @@ export default function AdminHome() {
         </h1>
         <p className="mt-1 text-sm text-[var(--color-muted-foreground)]">
           {orders === null ? (
-            <span className="inline-block h-4 w-72 animate-pulse rounded bg-[var(--color-muted)]" />
+            <Skeleton className="inline-block h-4 w-72 align-middle" />
           ) : (
             <>
               <b className="text-[var(--color-foreground-2)] font-medium tabular-nums">
@@ -244,7 +245,7 @@ export default function AdminHome() {
                     Array.from({ length: 5 }).map((_, i) => (
                       <tr key={`s${i}`} className="border-t border-[var(--color-border)]">
                         <td colSpan={7} className="px-4 py-3">
-                          <div className="h-4 animate-pulse rounded bg-[var(--color-muted)]" />
+                          <Skeleton className="h-4 w-full" />
                         </td>
                       </tr>
                     ))}
