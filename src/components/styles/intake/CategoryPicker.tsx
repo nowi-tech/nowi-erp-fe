@@ -61,12 +61,11 @@ export default function CategoryPicker({
   const toast = useToast();
   const [modalOpen, setModalOpen] = useState(false);
   const [saving, setSaving] = useState(false);
-  const [form, setForm] = useState({
-    code: '',
-    name: '',
-    styleCode: '',
-    styleCounter: '1000',
-  });
+  // Only the fields the modal actually renders. Legacy `code` slug is
+  // derived from the name on submit; `styleCounter` defaults to 1000
+  // on the BE (schema @default). Keeping unused fields in state made
+  // the component harder to reason about (Copilot review on PR #7).
+  const [form, setForm] = useState({ name: '', styleCode: '' });
   const nameRef = useRef<HTMLInputElement>(null);
   // Frozen once the user manually edits the Code field — stops the
   // auto-fill from clobbering their typed value.
@@ -159,7 +158,8 @@ export default function CategoryPicker({
       onChange({ categoryId: created.id, code: created.code });
       toast.show('Category added.', 'success');
       setModalOpen(false);
-      setForm({ code: '', name: '', styleCode: '', styleCounter: '1000' });
+      setForm({ name: '', styleCode: '' });
+      styleCodeDirty.current = false;
     } catch (e: unknown) {
       const m =
         (e as { response?: { data?: { message?: string | string[] } } })
@@ -180,18 +180,22 @@ export default function CategoryPicker({
           // Prefill name + derive styleCode (first 2 alphabetic chars,
           // strips dashes / spaces) so "+ Add 'T-Shirt'" lands on the
           // create form with name="T-Shirt" + code="TS".
+          //
+          // When `typed` is empty (generic "+ Add new" path with no
+          // search query), reset to a clean state — leaving the form
+          // partially filled was producing immediate "Code is required"
+          // validation errors on submit (Copilot review on PR #7).
           const t = typed.trim();
-          const autoCode = t
-            .replace(/[^a-zA-Z]/g, '')
-            .slice(0, 2)
-            .toUpperCase();
           styleCodeDirty.current = false;
-          setForm((f) => ({
-            ...f,
-            name: t || f.name,
-            code: t ? t.toUpperCase().replace(/\s+/g, '_') : f.code,
-            styleCode: autoCode,
-          }));
+          if (!t) {
+            setForm({ name: '', styleCode: '' });
+          } else {
+            const autoCode = t
+              .replace(/[^a-zA-Z]/g, '')
+              .slice(0, 2)
+              .toUpperCase();
+            setForm({ name: t, styleCode: autoCode });
+          }
           setModalOpen(true);
         }}
         addNewLabel={t('admin.styles.intake.addNewCategory', 'Add new category')}
@@ -267,7 +271,14 @@ export default function CategoryPicker({
                 styleCodeDirty.current = true;
                 setForm((f) => ({
                   ...f,
-                  styleCode: e.target.value.toUpperCase().slice(0, 4),
+                  // Strip non-letters + uppercase + cap at 4 chars to
+                  // match the BE regex /^[A-Z]{2,4}$/. The hint copy
+                  // documents the 2-letter convention; 3-4 letters
+                  // accepted for niche codes (e.g. COD for Co-ord set).
+                  styleCode: e.target.value
+                    .replace(/[^a-zA-Z]/g, '')
+                    .toUpperCase()
+                    .slice(0, 4),
                 }));
               }}
               placeholder="e.g. SK"
