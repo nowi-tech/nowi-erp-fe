@@ -26,7 +26,6 @@ import {
   approveStyle,
   sampleApproveStyle,
   patchStyle,
-  listCollections,
   listFabrics,
   type SamplingStatus,
   type SampleApprovalStatus,
@@ -35,7 +34,6 @@ import {
 } from '@/api/styles';
 import { listUsers } from '@/api/users';
 import type {
-  Collection,
   Fabric,
   Style,
   User as ApiUser,
@@ -69,30 +67,20 @@ export default function StyleWorkspace() {
   const [sampleApproveOpen, setSampleApproveOpen] = useState(false);
   const [colourModalOpen, setColourModalOpen] = useState(false);
   const [editOpen, setEditOpen] = useState(false);
-  // Drawer needs the collection + fabric master to render its pickers;
-  // fetched lazily the first time the user opens it (most users on the
-  // page never click Edit, no need to load this on every detail-page
-  // mount).
-  const [collections, setCollections] = useState<Collection[]>([]);
+  // StyleEditModal lazy-loads its own fabric master on first open;
+  // we still pre-warm it here so the user doesn't see the modal
+  // flicker into pickers. Collection was dropped from the schema.
   const [fabrics, setFabrics] = useState<Fabric[]>([]);
   const ensureMasterData = useCallback(async () => {
-    if (collections.length === 0) {
-      try {
-        const c = await listCollections();
-        setCollections(c);
-      } catch {
-        /* empty list is fine — drawer just shows no options */
-      }
-    }
     if (fabrics.length === 0) {
       try {
         const f = await listFabrics();
         setFabrics(f);
       } catch {
-        /* same — soft-fail */
+        /* soft-fail — modal will refetch itself */
       }
     }
-  }, [collections.length, fabrics.length]);
+  }, [fabrics.length]);
 
 
   const load = useCallback(async () => {
@@ -181,9 +169,6 @@ export default function StyleWorkspace() {
             {style.styleId ?? `(${t('admin.styles.draft')})`}
           </h1>
           <div className="flex items-center gap-2 mt-2 flex-wrap">
-            {style.collection && (
-              <Badge variant="outline">{style.collection.name}</Badge>
-            )}
             {/* For China Import styles the source IS the story — surface
                 it. For sampling styles the NOWI prefix already implies
                 source, and the lifecycle chip below carries the same

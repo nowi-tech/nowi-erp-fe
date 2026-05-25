@@ -16,7 +16,6 @@ import type {
   ChannelState,
   InspectionVerdict,
   Gender,
-  Collection,
   Fabric,
   FabricStockEntry,
   FabricStockEntryType,
@@ -368,12 +367,7 @@ export async function extractLink(url: string): Promise<LinkExtractResult> {
   }
 }
 
-// ─── Master data (collections / fabrics / fabric types) ───────────────
-export async function listCollections(): Promise<Collection[]> {
-  const res = await apiClient.get<Collection[]>('/api/collections');
-  return res.data;
-}
-
+// ─── Master data (fabrics / fabric types) ─────────────────────────────
 export async function listFabrics(): Promise<Fabric[]> {
   const res = await apiClient.get<Fabric[]>('/api/fabrics');
   return res.data;
@@ -448,7 +442,6 @@ export type {
   ChannelState,
   InspectionVerdict,
   Gender,
-  Collection,
   Fabric,
   FabricStockEntry,
   FabricStockEntryType,

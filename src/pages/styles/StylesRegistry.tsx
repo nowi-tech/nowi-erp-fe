@@ -13,14 +13,13 @@ import {
   approveStyle,
   listStyles,
   getStylesSummary,
-  listCollections,
   parkStyle,
   reviveStyle,
   type ListStylesParams,
   type StyleTab,
   type StylesSummary,
 } from '@/api/styles';
-import type { Style, Collection } from '@/api/types';
+import type { Style } from '@/api/types';
 import { cn } from '@/lib/utils';
 
 const TABS: StyleTab[] = ['inbox', 'in_sampling', 'parked', 'in_pd', 'all'];
@@ -44,18 +43,7 @@ export default function StylesRegistry() {
   const [loading, setLoading] = useState(true);
 
   const [searchText, setSearchText] = useState('');
-  const [collectionId, setCollectionId] = useState<string>('');
   const [samplingStatus, setSamplingStatus] = useState<string>('');
-  const [collections, setCollections] = useState<Collection[]>([]);
-
-  // Collections master loaded once — they barely change. Summary is
-  // refreshed alongside every list load so KPI counts stay in sync
-  // after approve/park/revive/edit from anywhere in the app.
-  useEffect(() => {
-    void listCollections()
-      .then(setCollections)
-      .catch(() => setCollections([]));
-  }, []);
 
   const reloadSummary = useCallback(async () => {
     try {
@@ -72,7 +60,6 @@ export default function StylesRegistry() {
       const params: ListStylesParams = {
         tab,
         search: searchText.trim() || undefined,
-        collectionId: collectionId ? Number(collectionId) : undefined,
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         samplingStatus: (samplingStatus || undefined) as any,
         take: 200,
@@ -87,7 +74,7 @@ export default function StylesRegistry() {
     // Fire-and-forget — KPI strip refresh in the background while the
     // table renders. Doesn't block the visible list.
     void reloadSummary();
-  }, [tab, searchText, collectionId, samplingStatus, reloadSummary]);
+  }, [tab, searchText, samplingStatus, reloadSummary]);
 
   useEffect(() => {
     const t = setTimeout(() => void load(), 200);
@@ -225,21 +212,6 @@ export default function StylesRegistry() {
               onChange={(e) => setSearchText(e.target.value)}
             />
           </div>
-          <Select
-            className="h-9 text-[13px] w-auto"
-            value={collectionId}
-            onChange={(e) => setCollectionId(e.target.value)}
-          >
-            <option value="">
-              {t('admin.styles.filters.collection')}:{' '}
-              {t('admin.styles.filters.all')}
-            </option>
-            {collections.map((c) => (
-              <option key={c.id} value={c.id}>
-                {c.name}
-              </option>
-            ))}
-          </Select>
           <Select
             className="h-9 text-[13px] w-auto"
             value={samplingStatus}

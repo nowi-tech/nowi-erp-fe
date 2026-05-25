@@ -191,14 +191,6 @@ export type ChannelState = 'off' | 'draft' | 'live';
 export type InspectionVerdict = 'pending' | 'corrections_needed' | 'approved';
 export type Gender = 'women' | 'men' | 'unisex';
 
-export interface Collection {
-  id: number;
-  name: string;
-  gender: Gender | null;
-  description: string | null;
-  isActive: boolean;
-}
-
 export type FabricUnitOfMeasure = 'meter' | 'kg' | 'oz';
 
 export interface FabricComposition {
@@ -331,8 +323,6 @@ export interface Style {
   workingName: string | null;
   /** Free-text rationale for why this style is being developed. Captured at intake. */
   developmentReason: string | null;
-  collectionId: number | null;
-  collection?: Collection | null;
   gender: Gender | null;
   fabricId: number | null;
   fabric?: Fabric | null;
@@ -358,12 +348,16 @@ export interface Style {
     workingName: string | null;
     primaryColour: string | null;
   } | null;
-  /** Hydrated by detail reads — sibling colours for the "Existing colours"
-   *  chip strip on the variant-spawn modal. */
+  /** Hydrated by both list AND detail reads — sibling colours for the
+   *  "Existing colours" chip strip on the variant-spawn modal and the
+   *  parent/variant nesting in the inbox table. `lifecycle` lets the
+   *  inbox row decide whether to show variant counts as "in progress",
+   *  "approved", etc. */
   colourVariants?: Array<{
     id: number;
     styleId: string | null;
     primaryColour: string | null;
+    lifecycle?: StyleLifecycle;
   }>;
 
   // Sampling state
