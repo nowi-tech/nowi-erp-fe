@@ -1,7 +1,15 @@
 import { Fragment, useEffect, useMemo, useState } from 'react';
-import { ChevronDown, ChevronRight, ExternalLink } from 'lucide-react';
+import {
+  CheckCircle2,
+  ChevronDown,
+  ChevronRight,
+  ExternalLink,
+  Pause,
+  Play,
+} from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
 import { ColumnFilter, type ColumnFilterOption } from '@/components/ui/column-filter';
 import InlineStatusCell from '@/components/styles/InlineStatusCell';
 import { useToast } from '@/components/ui/toast';
@@ -80,6 +88,12 @@ interface Props {
   loading: boolean;
   onRowClick?: (style: Style) => void;
   onStyleNoClick?: (style: Style) => void;
+  /** Row-level Approve action — null hides the button. */
+  onApprove?: (style: Style) => void;
+  /** Row-level Park action — null hides the button. */
+  onPark?: (style: Style) => void;
+  /** Row-level Revive action — null hides the button. */
+  onRevive?: (style: Style) => void;
   /**
    * `"full"` (default) — all sampling-workflow columns (Pattern Master, Stage,
    *   Approval, Web, Updated).
@@ -108,6 +122,9 @@ export default function StylesTable({
   loading,
   onRowClick,
   onStyleNoClick,
+  onApprove,
+  onPark,
+  onRevive,
   variant = 'full',
 }: Props) {
   const { t } = useTranslation();
@@ -194,12 +211,22 @@ export default function StylesTable({
     [rows, t],
   );
   const samplingStatusOptions = useMemo(
-    () => distinct(rows, (s) => s.samplingStatus, (v) => v),
-    [rows],
+    () =>
+      distinct(rows, (s) => s.samplingStatus, (v) =>
+        t(`admin.styles.samplingSteps.${v}` as const, {
+          defaultValue: v.replace(/_/g, ' '),
+        }),
+      ),
+    [rows, t],
   );
   const sampleApprovalOptions = useMemo(
-    () => distinct(rows, (s) => s.sampleApproval, (v) => v),
-    [rows],
+    () =>
+      distinct(rows, (s) => s.sampleApproval, (v) =>
+        t(`admin.styles.sampleApproval.${v}` as const, {
+          defaultValue: v.replace(/_/g, ' '),
+        }),
+      ),
+    [rows, t],
   );
   const colourOptions = useMemo(
     () => distinct(rows, (s) => s.primaryColour, (v) => v),
@@ -233,12 +260,56 @@ export default function StylesTable({
     excColour,
   ]);
 
-  // Collapse when the row set changes (filter / tab change).
-  useEffect(() => setExpanded(new Set()), [rows]);
+  /**
+   * Colour-family grouping. Build a parent → child[] index from the
+   * filtered set so each parent style can render its variants as a
+   * nested sub-table below its summary row. A "child" here is any
+   * Style whose `parentStyleId` points at another visible Style;
+   * orphan variants (parent not in the current filter) are promoted
+   * back to the top level so they don't silently vanish.
+   */
+  const colourChildrenByParent = useMemo(() => {
+    const byParent = new Map<number, Style[]>();
+    const presentIds = new Set(filteredRows.map((r) => r.id));
+    for (const s of filteredRows) {
+      if (s.parentStyleId != null && presentIds.has(s.parentStyleId)) {
+        const arr = byParent.get(s.parentStyleId) ?? [];
+        arr.push(s);
+        byParent.set(s.parentStyleId, arr);
+      }
+    }
+    return byParent;
+  }, [filteredRows]);
+
+  /** Top-level rows = anything that isn't already nested under another. */
+  const topLevelRows = useMemo(
+    () =>
+      filteredRows.filter(
+        (s) =>
+          s.parentStyleId == null ||
+          !filteredRows.some((p) => p.id === s.parentStyleId),
+      ),
+    [filteredRows],
+  );
+
+  // Collapse when the row set changes (filter / tab change). Then
+  // pre-expand any family that has children so the variant block is
+  // visible by default — matches the PO-table screenshot pattern where
+  // sub-orders are shown as soon as the family is rendered.
+  useEffect(() => {
+    const next = new Set<number>();
+    for (const [parentId] of colourChildrenByParent) next.add(parentId);
+    setExpanded(next);
+  }, [colourChildrenByParent, rows]);
 
   const groupsWithChildren = useMemo(
-    () => filteredRows.filter((r) => (r.variants?.length ?? 0) > 0),
-    [filteredRows],
+    () =>
+      topLevelRows.filter(
+        (r) =>
+          (r.variants?.length ?? 0) > 0 ||
+          (colourChildrenByParent.get(r.id)?.length ?? 0) > 0,
+      ),
+    [topLevelRows, colourChildrenByParent],
   );
   const allExpanded =
     groupsWithChildren.length > 0 &&
@@ -275,7 +346,17 @@ export default function StylesTable({
             <tr>
               <th className="w-8" />
               <th className="text-left font-medium px-3 py-2">
-                {t('admin.styles.table.styleNo')}
+                <span className="inline-flex items-center gap-1">
+                  {t('admin.styles.table.styleNo')}
+                  <ColumnFilter
+                    title={t('admin.styles.lifecycle.label', {
+                      defaultValue: 'Lifecycle',
+                    })}
+                    options={lifecycleOptions}
+                    excluded={excLifecycle}
+                    onChange={setExcLifecycle}
+                  />
+                </span>
               </th>
               <th className="text-left font-medium px-3 py-2">
                 {t('admin.styles.table.workingName')}
@@ -308,11 +389,15 @@ export default function StylesTable({
                   <th className="text-left font-medium px-3 py-2 hidden lg:table-cell">
                     <span className="inline-flex items-center gap-1">
                       {t('admin.styles.table.stage')}
+                      {/* Stage cell renders samplingStatus — filter
+                          matches what's displayed in the column. */}
                       <ColumnFilter
-                        title={t('admin.styles.table.stage')}
-                        options={lifecycleOptions}
-                        excluded={excLifecycle}
-                        onChange={setExcLifecycle}
+                        title={t('admin.styles.table.samplingStatus', {
+                          defaultValue: 'Sampling status',
+                        })}
+                        options={samplingStatusOptions}
+                        excluded={excSamplingStatus}
+                        onChange={setExcSamplingStatus}
                       />
                     </span>
                   </th>
@@ -328,18 +413,9 @@ export default function StylesTable({
                     </span>
                   </th>
                   <th className="text-left font-medium px-3 py-2 hidden sm:table-cell">
-                    <span className="inline-flex items-center gap-1">
-                      {t('admin.styles.table.web')}
-                      {/* Samplingstatus filter wired here rather than a
-                          separate column — it's the closest column to
-                          "web/sampling stage" in the Gurukul flow. */}
-                      <ColumnFilter
-                        title={t('admin.styles.table.samplingStatus', { defaultValue: 'Sampling status' })}
-                        options={samplingStatusOptions}
-                        excluded={excSamplingStatus}
-                        onChange={setExcSamplingStatus}
-                      />
-                    </span>
+                    {/* Web cell is just an external-link icon — no
+                        filtering needed. */}
+                    {t('admin.styles.table.web')}
                   </th>
                 </>
               )}
@@ -371,9 +447,11 @@ export default function StylesTable({
               </tr>
             )}
             {!loading &&
-              filteredRows.map((s) => {
+              topLevelRows.map((s) => {
                 const variants = s.variants ?? [];
-                const hasChildren = variants.length > 0;
+                const colourChildren = colourChildrenByParent.get(s.id) ?? [];
+                const hasChildren =
+                  variants.length > 0 || colourChildren.length > 0;
                 const isOpen = expanded.has(s.id);
                 return (
                   <Fragment key={s.id}>
@@ -427,11 +505,6 @@ export default function StylesTable({
                             {s.styleId ?? `(${t('admin.styles.draft')})`}
                           </button>
                           <div className="flex gap-1 flex-wrap">
-                            {s.collection && (
-                              <Badge variant="outline" className="text-[10px]">
-                                {s.collection.name}
-                              </Badge>
-                            )}
                             <Badge
                               variant={lifecycleVariant(s.lifecycle)}
                               className="text-[10px]"
@@ -443,11 +516,22 @@ export default function StylesTable({
                       </td>
                       <td className="px-3 py-2">
                         {s.workingName ?? '—'}
-                        {hasChildren && (
+                        {variants.length > 0 && (
                           <Badge variant="outline" className="ml-2 text-[10px]">
                             {t('admin.styles.table.variantsCount', {
                               count: variants.length,
                             })}
+                          </Badge>
+                        )}
+                        {colourChildren.length > 0 && (
+                          <Badge
+                            variant="outline"
+                            className="ml-2 text-[10px]"
+                            title={[s.primaryColour, ...colourChildren.map((c) => c.primaryColour)]
+                              .filter(Boolean)
+                              .join(', ')}
+                          >
+                            {`${1 + colourChildren.length} colours`}
                           </Badge>
                         )}
                       </td>
@@ -494,11 +578,18 @@ export default function StylesTable({
                           >
                             <InlineStatusCell
                               value={s.samplingStatus ?? ''}
-                              displayLabel={s.samplingStatus ?? '—'}
+                              displayLabel={
+                                s.samplingStatus
+                                  ? t(
+                                      `admin.styles.samplingSteps.${s.samplingStatus}` as const,
+                                      { defaultValue: s.samplingStatus },
+                                    )
+                                  : '—'
+                              }
                               options={SAMPLING_STATUS_OPTIONS.map((v) => ({
                                 value: v,
                                 label: t(
-                                  `admin.styles.samplingStatus.${v}` as const,
+                                  `admin.styles.samplingSteps.${v}` as const,
                                   { defaultValue: v },
                                 ),
                               }))}
@@ -517,7 +608,14 @@ export default function StylesTable({
                           >
                             <InlineStatusCell
                               value={s.sampleApproval ?? ''}
-                              displayLabel={s.sampleApproval ?? '—'}
+                              displayLabel={
+                                s.sampleApproval
+                                  ? t(
+                                      `admin.styles.sampleApproval.${s.sampleApproval}` as const,
+                                      { defaultValue: s.sampleApproval },
+                                    )
+                                  : '—'
+                              }
                               options={SAMPLE_APPROVAL_OPTIONS.map((v) => ({
                                 value: v,
                                 label: t(
@@ -555,13 +653,53 @@ export default function StylesTable({
                       <td className="px-3 py-2 hidden md:table-cell text-xs text-[var(--color-muted-foreground)] tabular-nums">
                         {new Date(s.updatedAt).toLocaleDateString()}
                       </td>
-                      <td className="px-3 py-2 text-right">
-                        <ChevronRight
-                          size={16}
-                          className="text-[var(--color-muted-foreground)]"
+                      <td
+                        className="px-3 py-2 text-right whitespace-nowrap"
+                        onClick={(e) => e.stopPropagation()}
+                      >
+                        <RowActions
+                          style={s}
+                          onApprove={onApprove}
+                          onPark={onPark}
+                          onRevive={onRevive}
                         />
                       </td>
                     </tr>
+
+                    {/* Colour-family children rendered as a nested
+                        sub-table — matches the program/orders pattern
+                        from the procurement UI. Parent owns the family
+                        summary (working name + total colours); the
+                        sub-table below carries per-variant Style # /
+                        colour / pattern master / stage / approval /
+                        actions with its own column headers. */}
+                    {isOpen && colourChildren.length > 0 && (
+                      <tr className="bg-[var(--color-surface-2)]/30">
+                        {/* Inset the sub-table from the parent's left
+                            edge so it reads as "inside" the parent
+                            row, not a sibling. Mirrors the procurement
+                            UI's nested-orders block. */}
+                        <td
+                          colSpan={COL_COUNT}
+                          className="pl-10 pr-3 py-2 sm:pl-14"
+                        >
+                          <ColourFamilySubTable
+                            parent={s}
+                            children={colourChildren}
+                            isCompact={isCompact}
+                            canEdit={canEdit}
+                            pmCandidates={pmCandidates}
+                            commitStylePatch={commitStylePatch}
+                            onRowClick={onRowClick}
+                            onStyleNoClick={onStyleNoClick}
+                            onApprove={onApprove}
+                            onPark={onPark}
+                            onRevive={onRevive}
+                          />
+                        </td>
+                      </tr>
+                    )}
+
                     {hasChildren &&
                       isOpen &&
                       variants.map((v) => (
@@ -622,6 +760,294 @@ export default function StylesTable({
           </tbody>
         </table>
       </div>
+    </div>
+  );
+}
+
+/**
+ * Inline action cell at the end of each row. Shows Approve / Park /
+ * Revive contextually based on the style's lifecycle. Falls back to a
+ * chevron when no action applies so the row still reads as a link.
+ *
+ * onApprove/onPark/onRevive are wired by the parent page so callbacks
+ * can navigate into the right dialog (sampling needs a checklist) or
+ * fire a direct API call (china_import + park + revive are one-click).
+ */
+function RowActions({
+  style,
+  onApprove,
+  onPark,
+  onRevive,
+}: {
+  style: Style;
+  onApprove?: (s: Style) => void;
+  onPark?: (s: Style) => void;
+  onRevive?: (s: Style) => void;
+}) {
+  const canApprove = style.lifecycle === 'draft';
+  const canPark =
+    style.lifecycle !== 'parked' &&
+    style.lifecycle !== 'archived' &&
+    style.lifecycle !== 'dispatched';
+  const canRevive = style.lifecycle === 'parked';
+  const hasAny =
+    (canApprove && onApprove) ||
+    (canPark && onPark) ||
+    (canRevive && onRevive);
+
+  if (!hasAny) {
+    return (
+      <ChevronRight
+        size={16}
+        className="text-[var(--color-muted-foreground)] inline-block"
+      />
+    );
+  }
+
+  return (
+    <div className="inline-flex items-center gap-1.5">
+      {canApprove && onApprove && (
+        <Button
+          size="sm"
+          onClick={() => onApprove(style)}
+          className="h-7 px-2.5 text-xs"
+        >
+          <CheckCircle2 size={13} />
+          <span className="ml-1">Approve</span>
+        </Button>
+      )}
+      {canRevive && onRevive && (
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={() => onRevive(style)}
+          className="h-7 px-2.5 text-xs"
+        >
+          <Play size={13} />
+          <span className="ml-1">Revive</span>
+        </Button>
+      )}
+      {canPark && onPark && (
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={() => onPark(style)}
+          className="h-7 px-2.5 text-xs"
+        >
+          <Pause size={13} />
+          <span className="ml-1">Park</span>
+        </Button>
+      )}
+    </div>
+  );
+}
+
+/**
+ * Best-effort colour-name → CSS colour. Free-text `primaryColour`
+ * values come straight from the workbook ("cream", "pink", …) — we
+ * don't have a master swatch table so we map a handful of common
+ * names plus everything CSS recognises natively (the wide
+ * <named-color> list). Unknown values fall back to a neutral grey
+ * so the dot still renders.
+ */
+function colourSwatch(name: string | null | undefined): string {
+  if (!name) return 'var(--color-muted-foreground)';
+  const n = name.trim().toLowerCase();
+  const overrides: Record<string, string> = {
+    cream: '#f5e9c8',
+    'off white': '#f5f1e6',
+    offwhite: '#f5f1e6',
+    natural: '#ece1c8',
+    nude: '#e8c7a0',
+    blush: '#f4c2c2',
+    sage: '#a8b9a0',
+    olive: '#708238',
+    mustard: '#e1b800',
+    rust: '#b7410e',
+    burgundy: '#800020',
+    charcoal: '#36454f',
+    navy: '#0a1f44',
+  };
+  return overrides[n] ?? n;
+}
+
+/**
+ * Nested sub-table for a colour-family. Lives inside the parent's
+ * colspan'd row in the outer styles table. Has its own column header
+ * row so the variant-specific fields (per-colour Style #, colour, etc.)
+ * read clearly without being squeezed into the parent's columns.
+ *
+ * Visual treatment: tinted background + left-border accent so the
+ * block reads as "inside" the parent row rather than a sibling.
+ *
+ * Children are rendered ASCENDING by id (BE's listInclude already
+ * orders them this way); the parent itself is NOT re-rendered here —
+ * it's visible in the row above.
+ */
+function ColourFamilySubTable({
+  parent,
+  children,
+  isCompact,
+  canEdit,
+  pmCandidates,
+  commitStylePatch,
+  onRowClick,
+  onStyleNoClick,
+  onApprove,
+  onPark,
+  onRevive,
+}: {
+  parent: Style;
+  children: Style[];
+  isCompact: boolean;
+  canEdit: boolean;
+  pmCandidates: ApiUser[];
+  commitStylePatch: (
+    styleId: number,
+    patch: Parameters<typeof patchStyle>[1],
+  ) => Promise<void>;
+  onRowClick?: (style: Style) => void;
+  onStyleNoClick?: (style: Style) => void;
+  onApprove?: (style: Style) => void;
+  onPark?: (style: Style) => void;
+  onRevive?: (style: Style) => void;
+}) {
+  const { t } = useTranslation();
+  void parent; // (parent identity is conveyed by the row above the block)
+  return (
+    <div className="rounded-[var(--radius-sm)] border-l-2 border-[var(--color-primary)]/40 bg-[var(--color-background)] overflow-hidden">
+      <table className="w-full text-[12.5px]">
+        <thead className="bg-[var(--color-surface-2)]/60 text-[var(--color-muted-foreground)] text-[10px] uppercase tracking-wider">
+          <tr>
+            <th className="text-left font-medium px-3 py-1.5">
+              {t('admin.styles.table.styleNo')}
+            </th>
+            <th className="text-left font-medium px-3 py-1.5">
+              {t('admin.styles.table.colour', { defaultValue: 'Colour' })}
+            </th>
+            {!isCompact && (
+              <>
+                <th className="text-left font-medium px-3 py-1.5 hidden md:table-cell">
+                  {t('admin.styles.table.patternMaster')}
+                </th>
+                <th className="text-left font-medium px-3 py-1.5 hidden lg:table-cell">
+                  {t('admin.styles.table.stage')}
+                </th>
+                <th className="text-left font-medium px-3 py-1.5 hidden lg:table-cell">
+                  {t('admin.styles.table.approval')}
+                </th>
+              </>
+            )}
+            <th className="text-left font-medium px-3 py-1.5">
+              {t('admin.styles.table.actions', {
+                defaultValue: 'Actions',
+              })}
+            </th>
+          </tr>
+        </thead>
+        <tbody>
+          {children.map((v) => (
+            <tr
+              key={v.id}
+              role="button"
+              tabIndex={0}
+              onClick={() => onRowClick?.(v)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' || e.key === ' ') {
+                  e.preventDefault();
+                  onRowClick?.(v);
+                }
+              }}
+              className="border-t border-[var(--color-border)]/60 cursor-pointer hover:bg-[var(--color-muted)] focus:outline-none focus-visible:bg-[var(--color-muted)]"
+            >
+              <td className="px-3 py-2">
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onStyleNoClick?.(v);
+                  }}
+                  className="text-left font-mono text-[var(--color-primary)] hover:underline"
+                >
+                  {v.styleId ?? `(${t('admin.styles.draft')})`}
+                </button>
+              </td>
+              <td className="px-3 py-2">
+                <span className="inline-flex items-center gap-2">
+                  <span
+                    aria-hidden
+                    className="inline-block h-2.5 w-2.5 rounded-full border border-[var(--color-border)]"
+                    style={{ background: colourSwatch(v.primaryColour) }}
+                  />
+                  {v.primaryColour ?? '—'}
+                </span>
+              </td>
+              {!isCompact && (
+                <>
+                  <td
+                    className="px-3 py-2 hidden md:table-cell"
+                    onClick={(e) => e.stopPropagation()}
+                  >
+                    <InlineStatusCell
+                      value={
+                        v.patternMasterId != null
+                          ? String(v.patternMasterId)
+                          : ''
+                      }
+                      displayLabel={v.patternMaster?.name ?? '—'}
+                      options={pmCandidates.map((u) => ({
+                        value: String(u.id),
+                        label: `${u.name}${
+                          u.role === 'pattern_master_w'
+                            ? ' (W)'
+                            : u.role === 'pattern_master_m'
+                              ? ' (M)'
+                              : ''
+                        }`,
+                      }))}
+                      badgeVariant="outline"
+                      unsetLabel="— Unassigned"
+                      editable={canEdit}
+                      onCommit={(next) =>
+                        commitStylePatch(v.id, {
+                          patternMasterId: next ? Number(next) : null,
+                        })
+                      }
+                    />
+                  </td>
+                  <td className="px-3 py-2 hidden lg:table-cell">
+                    {v.samplingStatus
+                      ? t(
+                          `admin.styles.samplingSteps.${v.samplingStatus}` as const,
+                          { defaultValue: v.samplingStatus },
+                        )
+                      : '—'}
+                  </td>
+                  <td className="px-3 py-2 hidden lg:table-cell">
+                    {v.sampleApproval
+                      ? t(
+                          `admin.styles.sampleApproval.${v.sampleApproval}` as const,
+                          { defaultValue: v.sampleApproval },
+                        )
+                      : '—'}
+                  </td>
+                </>
+              )}
+              <td
+                className="px-3 py-2 whitespace-nowrap"
+                onClick={(e) => e.stopPropagation()}
+              >
+                <RowActions
+                  style={v}
+                  onApprove={onApprove}
+                  onPark={onPark}
+                  onRevive={onRevive}
+                />
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
     </div>
   );
 }

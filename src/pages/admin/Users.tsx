@@ -8,6 +8,7 @@ import { Label } from '@/components/ui/label';
 import { Select } from '@/components/ui/select';
 import { Badge } from '@/components/ui/badge';
 import { Dialog } from '@/components/ui/dialog';
+import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 import { useToast } from '@/components/ui/toast';
 import { useDebounced } from '@/lib/useDebounced';
 import StepupDialog from '@/components/admin/StepupDialog';
@@ -82,13 +83,11 @@ export default function UsersPage() {
   }, [refresh]);
 
   // Step-up gate: BE's @RequireStepup() on DELETE /users/:id rejects
-  // until the session has consumed a fresh OTP within ~60s. Pop the
-  // dialog, run the delete from its onConfirmed callback.
+  // until the session has consumed a fresh OTP within ~60s. Confirm
+  // via the in-app dialog, then pop the step-up OTP dialog.
   const [stepupForUser, setStepupForUser] = useState<User | null>(null);
-  const onDeactivate = (u: User) => {
-    if (!window.confirm(t('admin.users.deactivateConfirm', { name: u.name }))) return;
-    setStepupForUser(u);
-  };
+  const [confirmTarget, setConfirmTarget] = useState<User | null>(null);
+  const onDeactivate = (u: User) => setConfirmTarget(u);
   const doDeactivate = async () => {
     if (!stepupForUser) return;
     try {
@@ -279,6 +278,32 @@ export default function UsersPage() {
         }
         onClose={() => setStepupForUser(null)}
         onConfirmed={doDeactivate}
+      />
+
+      {/* Initial "Deactivate {name}?" confirm — once OK'd, the step-up
+          OTP dialog above takes over. Two-step on purpose: cheap cancel
+          on the typo path, OTP-gated on the actual delete. */}
+      <ConfirmDialog
+        open={confirmTarget != null}
+        title={t('admin.users.deactivateTitle', {
+          defaultValue: 'Deactivate user?',
+        })}
+        message={
+          confirmTarget
+            ? t('admin.users.deactivateConfirm', { name: confirmTarget.name })
+            : ''
+        }
+        confirmLabel={t('admin.users.deactivate', {
+          defaultValue: 'Deactivate',
+        })}
+        cancelLabel={t('common.cancel', { defaultValue: 'Cancel' })}
+        destructive
+        onCancel={() => setConfirmTarget(null)}
+        onConfirm={() => {
+          const target = confirmTarget;
+          setConfirmTarget(null);
+          if (target) setStepupForUser(target);
+        }}
       />
     </div>
   );

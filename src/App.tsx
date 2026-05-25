@@ -43,6 +43,7 @@ const DataHome = lazy(() => import('./pages/data/DataHome'));
 const UsersPage = lazy(() => import('./pages/admin/Users'));
 const EditRequestsPage = lazy(() => import('./pages/admin/EditRequests'));
 const DispatchPrint = lazy(() => import('./pages/dispatches/DispatchPrint'));
+const CadPreviewPage = lazy(() => import('./pages/cad/CadPreviewPage'));
 const StylesRegistry = lazy(() => import('./pages/styles/StylesRegistry'));
 const ChinaImportRegistry = lazy(
   () => import('./pages/china-import/ChinaImportRegistry'),
@@ -100,6 +101,20 @@ function App() {
                 <ProtectedRoute>
                   <S>
                     <DispatchPrint />
+                  </S>
+                </ProtectedRoute>
+              }
+            />
+
+            {/* Full-window Pattern/CAD preview. Linked from the inline
+                PatternCadPreview file rows on every Style detail page;
+                opens in a new tab via target="_blank". */}
+            <Route
+              path="/cad/preview"
+              element={
+                <ProtectedRoute>
+                  <S>
+                    <CadPreviewPage />
                   </S>
                 </ProtectedRoute>
               }

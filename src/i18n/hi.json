@@ -196,7 +196,7 @@
       "genderM": "Men",
       "genderU": "Unisex",
       "category": "Category",
-      "styleIdHint": "नए combo से नया NOWI Style ID बनेगा (जैसे NOWI-W-DR-1001)",
+      "styleIdHint": "नए combo से नया NOWI Style ID बनेगा (जैसे NOWIWDR1001)",
       "sizeMatrix": "Size Matrix",
       "notes": "Notes (optional)",
       "remark": "Remark (optional)",
@@ -635,6 +635,21 @@
           "sampleFabricRequiredHelp": "प्रति सैंपल खपत मात्रा",
           "developmentReason": "विकास का कारण"
         }
+      },
+      "samplingSteps": {
+        "in_progress_pattern_dev": "पैटर्न विकास",
+        "in_progress_fabric_sourcing": "कपड़ा सोर्सिंग",
+        "in_progress_cutting": "कटिंग",
+        "in_progress_stitching": "सिलाई",
+        "ready_for_inspection": "निरीक्षण के लिए तैयार",
+        "handed_over_for_inspection": "निरीक्षण के लिए दिया",
+        "corrections_needed": "सुधार चाहिए",
+        "approved_for_production": "अनुमोदित"
+      },
+      "sampleApproval": {
+        "approved_for_production": "अनुमोदित",
+        "under_review_corrections": "समीक्षा में",
+        "pattern_correction_approved": "पैटर्न सुधार OK"
       }
     }
   },

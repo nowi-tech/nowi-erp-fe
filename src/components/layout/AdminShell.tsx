@@ -7,7 +7,6 @@ import {
   Truck,
   Search,
   LogOut,
-  Database,
   FlaskConical,
   Inbox,
   Boxes,
@@ -18,7 +17,9 @@ import {
   Layers,
   PanelLeftClose,
   PanelLeft,
+  Database,
   Menu,
+  MoreHorizontal,
   X,
   ChevronDown,
 } from 'lucide-react';
@@ -85,7 +86,6 @@ const NAV_SECTIONS: NavSection[] = [
       { to: '/styles', end: true, icon: <Shirt size={18} />, labelKey: 'admin.nav.styles', roles: ['admin', 'sampling_editor', 'sampling_lead', 'pattern_master_w', 'pattern_master_m'] },
       { to: '/china-import', icon: <Container size={18} />, labelKey: 'admin.nav.chinaImport', roles: ['admin', 'sampling_editor', 'sampling_lead', 'pattern_master_w', 'pattern_master_m', 'china_import_approver'] },
       { to: '/fabric-library', icon: <Layers size={18} />, labelKey: 'admin.nav.fabricLibrary', roles: ['admin', 'sampling_editor', 'sampling_lead', 'pattern_master_w', 'pattern_master_m'] },
-      { to: '/data', icon: <Database size={18} />, labelKey: 'admin.nav.masterData', roles: ['admin', 'data_manager'] },
     ],
   },
   {
@@ -94,6 +94,14 @@ const NAV_SECTIONS: NavSection[] = [
     items: [
       { to: '/admin/edit-requests', icon: <Inbox size={18} />, labelKey: 'admin.nav.editRequests', roles: ['admin'] },
       { to: '/admin/users', icon: <Users size={18} />, labelKey: 'admin.nav.users', roles: ['admin'] },
+      // data_manager hub. Lives under Administration so the role still
+      // has a way back to the master-data hub from anywhere in the app.
+      // We removed the generic "Master data" entry from the PD section
+      // earlier because the data_admin destination was just a link to
+      // /admin/users, which had its own entry. The /data hub now hosts
+      // future master-data tables (vendors / skus / settings) so it
+      // earns its own row, scoped to admins + data_manager.
+      { to: '/data', icon: <Database size={18} />, labelKey: 'admin.nav.masterData', roles: ['admin', 'data_manager'] },
     ],
   },
 ];
@@ -706,10 +714,94 @@ export default function AdminShell() {
           </div>
         </header>
 
-        <main className="flex-1 overflow-auto p-4 sm:p-6 lg:p-8 max-w-[1400px] w-full mx-auto">
+        <main className="flex-1 overflow-auto p-4 sm:p-6 lg:p-8 pb-[calc(4rem+env(safe-area-inset-bottom))] lg:pb-8 max-w-[1400px] w-full mx-auto">
           <Outlet />
         </main>
+
+        {/* Mobile bottom nav — restores the pre-redesign pattern: the
+            first 4 role-visible items render as tabs, with a "More"
+            button on the right that opens the same off-canvas drawer
+            the hamburger uses. Hidden on lg+ where the sidebar handles
+            navigation. */}
+        <MobileBottomNav
+          sections={sections}
+          onMore={() => setDrawerOpen(true)}
+        />
       </div>
     </div>
+  );
+}
+
+const PRIMARY_BOTTOM_COUNT = 4;
+
+function MobileBottomNav({
+  sections,
+  onMore,
+}: {
+  sections: NavSection[];
+  onMore: () => void;
+}) {
+  const items = sections.flatMap((s) => s.items);
+  const primary = items.slice(0, PRIMARY_BOTTOM_COUNT);
+  if (primary.length === 0) return null;
+  const overflow = items.slice(PRIMARY_BOTTOM_COUNT);
+  return (
+    <nav
+      className="lg:hidden fixed bottom-0 inset-x-0 z-30 bg-[var(--color-surface)]/95 backdrop-blur border-t border-[var(--color-border)] pb-[env(safe-area-inset-bottom)]"
+      aria-label="primary"
+    >
+      <div className="flex items-stretch justify-around h-16">
+        {primary.map((item) => (
+          <BottomTab key={item.to} item={item} />
+        ))}
+        {overflow.length > 0 && (
+          <button
+            type="button"
+            onClick={onMore}
+            className="flex-1 flex flex-col items-center justify-center gap-0.5 text-[11px] text-[var(--color-muted-foreground)]"
+            aria-label="More"
+          >
+            <span className="flex items-center justify-center h-7 w-12 rounded-full">
+              <MoreHorizontal size={20} />
+            </span>
+            <span className="leading-none">More</span>
+          </button>
+        )}
+      </div>
+    </nav>
+  );
+}
+
+function BottomTab({ item }: { item: NavItem }) {
+  const { t } = useTranslation();
+  return (
+    <NavLink
+      to={item.to}
+      end={item.end}
+      className={({ isActive }) =>
+        cn(
+          'flex-1 flex flex-col items-center justify-center gap-0.5 text-[11px] transition-colors',
+          isActive
+            ? 'text-[var(--color-primary)]'
+            : 'text-[var(--color-muted-foreground)]',
+        )
+      }
+    >
+      {({ isActive }) => (
+        <>
+          <span
+            className={cn(
+              'flex items-center justify-center h-7 w-12 rounded-full transition-colors',
+              isActive && 'bg-[var(--color-primary)]/10',
+            )}
+          >
+            {item.icon}
+          </span>
+          <span className="leading-none truncate max-w-[72px]">
+            {t(item.labelKey)}
+          </span>
+        </>
+      )}
+    </NavLink>
   );
 }
