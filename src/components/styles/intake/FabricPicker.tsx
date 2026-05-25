@@ -1,14 +1,9 @@
-import { useMemo, useRef, useState } from 'react';
+import { useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Button } from '@/components/ui/button';
 import { Combobox, type ComboboxOption } from '@/components/ui/combobox';
 import { Dialog } from '@/components/ui/dialog';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
-import { Select } from '@/components/ui/select';
-import { useToast } from '@/components/ui/toast';
-import { createFabric } from '@/api/styles';
-import type { Fabric, FabricUnitOfMeasure } from '@/api/types';
+import FabricEditorForm from '@/components/fabrics/FabricEditorForm';
+import type { Fabric } from '@/api/types';
 import { cn } from '@/lib/utils';
 
 interface Props {
@@ -40,10 +35,10 @@ function StockPill({ qty }: { qty: number | null | undefined }) {
  * Searchable Fabric picker. Each row shows the fabric name + a stock
  * pill (yellow when there's stock, red when procurement is needed).
  *
- * "+ Add fabric" opens a lightweight inline dialog that captures the
- * minimum fields the BE needs (name + uom) so the designer never has
- * to leave the intake page. The full composition editor still lives
- * in the Fabric Library page — designers can flesh out the row later.
+ * "+ Add fabric" opens the full FabricEditorForm — same form the
+ * Fabric Library page uses, so the picker has every field a designer
+ * needs (name, count, construction, GSM, cuttable width, UoM, price,
+ * composition, notes). Shared component → both surfaces stay in sync.
  */
 export default function FabricPicker({
   fabrics,
@@ -53,21 +48,10 @@ export default function FabricPicker({
   disabled,
 }: Props) {
   const { t } = useTranslation();
-  const toast = useToast();
   const [open, setOpen] = useState(false);
-  const [saving, setSaving] = useState(false);
-  const [form, setForm] = useState<{
-    name: string;
-    unitOfMeasure: '' | FabricUnitOfMeasure;
-    gsm: string;
-    notes: string;
-  }>({
-    name: '',
-    unitOfMeasure: 'meter',
-    gsm: '',
-    notes: '',
-  });
-  const nameRef = useRef<HTMLInputElement>(null);
+  // Prefill name when "+ Add 'Cotton Twill'" is clicked from the
+  // combobox. Cleared whenever the modal closes.
+  const [seedName, setSeedName] = useState<string>('');
 
   const options = useMemo<ComboboxOption<number>[]>(() => {
     return fabrics.map((f) => {
@@ -87,34 +71,6 @@ export default function FabricPicker({
     });
   }, [fabrics]);
 
-  const submit = async () => {
-    if (!form.name.trim()) {
-      toast.show('Fabric name is required.', 'error');
-      return;
-    }
-    setSaving(true);
-    try {
-      const created = await createFabric({
-        name: form.name.trim(),
-        unitOfMeasure: form.unitOfMeasure || null,
-        gsm: form.gsm ? Number(form.gsm) : null,
-        notes: form.notes.trim() || null,
-      });
-      onFabricCreated?.(created);
-      onChange(created.id);
-      toast.show('Fabric added.', 'success');
-      setOpen(false);
-      setForm({ name: '', unitOfMeasure: 'meter', gsm: '', notes: '' });
-    } catch (e: unknown) {
-      const m =
-        (e as { response?: { data?: { message?: string | string[] } } })
-          ?.response?.data?.message ?? 'Could not create fabric.';
-      toast.show(Array.isArray(m) ? m.join(', ') : String(m), 'error');
-    } finally {
-      setSaving(false);
-    }
-  };
-
   return (
     <>
       <Combobox<number>
@@ -122,10 +78,7 @@ export default function FabricPicker({
         options={options}
         onChange={(next) => onChange(next as number | null)}
         onAddNew={(typed) => {
-          // Prefill the new-fabric dialog with whatever the user typed
-          // so "+ Add 'Linen Twill'" lands on the form with the name
-          // already in place.
-          if (typed) setForm((f) => ({ ...f, name: typed }));
+          setSeedName(typed);
           setOpen(true);
         }}
         addNewLabel={t('admin.styles.intake.addFabric', 'Add fabric')}
@@ -136,77 +89,36 @@ export default function FabricPicker({
 
       <Dialog
         open={open}
-        onClose={() => setOpen(false)}
+        onClose={() => {
+          setOpen(false);
+          setSeedName('');
+        }}
         title={t('admin.styles.intake.newFabricTitle', 'New fabric')}
-        initialFocusRef={nameRef}
-        footer={
-          <>
-            <Button variant="outline" size="sm" onClick={() => setOpen(false)}>
-              {t('common.cancel')}
-            </Button>
-            <Button size="sm" disabled={saving} onClick={() => void submit()}>
-              {saving ? t('common.saving') : t('common.create', 'Create')}
-            </Button>
-          </>
-        }
+        maxWidthClassName="max-w-3xl"
       >
-        <div className="space-y-3">
-          <p className="text-[12px] text-[var(--color-muted-foreground)]">
-            {t(
-              'admin.styles.intake.newFabricHelp',
-              'Quick-add a fabric so you can keep submitting. You can flesh out composition and pricing later in the Fabric Library.',
-            )}
-          </p>
-          <div>
-            <Label>{t('admin.styles.intake.fabricName', 'Name *')}</Label>
-            <Input
-              ref={nameRef}
-              value={form.name}
-              onChange={(e) =>
-                setForm((f) => ({ ...f, name: e.target.value }))
-              }
-              placeholder="e.g. Cotton Twill"
-            />
-          </div>
-          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-            <div>
-              <Label>{t('admin.styles.intake.fabricUom', 'Unit of measure')}</Label>
-              <Select
-                value={form.unitOfMeasure}
-                onChange={(e) =>
-                  setForm((f) => ({
-                    ...f,
-                    unitOfMeasure: e.target.value as '' | FabricUnitOfMeasure,
-                  }))
-                }
-              >
-                <option value="meter">Meter</option>
-                <option value="kg">Kilogram</option>
-                <option value="oz">Ounce</option>
-              </Select>
-            </div>
-            <div>
-              <Label>{t('admin.styles.intake.fabricGsm', 'GSM')}</Label>
-              <Input
-                type="number"
-                min={0}
-                value={form.gsm}
-                onChange={(e) =>
-                  setForm((f) => ({ ...f, gsm: e.target.value }))
-                }
-              />
-            </div>
-          </div>
-          <div>
-            <Label>{t('admin.styles.intake.fabricNotes', 'Notes')}</Label>
-            <Input
-              value={form.notes}
-              onChange={(e) =>
-                setForm((f) => ({ ...f, notes: e.target.value }))
-              }
-            />
-          </div>
-        </div>
+        {/* Always create mode (editing=null). `initialName` carries
+            the search term the user typed in the combobox; `key`
+            resets form state when the modal reopens with a new seed. */}
+        <FabricEditorForm
+          key={`new-${seedName}`}
+          editing={null}
+          initialName={seedName}
+          initialUnitOfMeasure="meter"
+          trimNotes
+          successMessage={t('admin.styles.intake.fabricAddedToast', {
+            defaultValue: 'Fabric added.',
+          })}
+          onCancel={() => {
+            setOpen(false);
+            setSeedName('');
+          }}
+          onSaved={(created) => {
+            onFabricCreated?.(created);
+            onChange(created.id);
+            setOpen(false);
+            setSeedName('');
+          }}
+        />
       </Dialog>
     </>
   );

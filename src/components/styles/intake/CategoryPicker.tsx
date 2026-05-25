@@ -61,12 +61,11 @@ export default function CategoryPicker({
   const toast = useToast();
   const [modalOpen, setModalOpen] = useState(false);
   const [saving, setSaving] = useState(false);
-  const [form, setForm] = useState({
-    code: '',
-    name: '',
-    styleCode: '',
-    styleCounter: '1000',
-  });
+  // Only the fields the modal actually renders. Legacy `code` slug is
+  // derived from the name on submit; `styleCounter` defaults to 1000
+  // on the BE (schema @default). Keeping unused fields in state made
+  // the component harder to reason about (Copilot review on PR #7).
+  const [form, setForm] = useState({ name: '', styleCode: '' });
   const nameRef = useRef<HTMLInputElement>(null);
   // Frozen once the user manually edits the Code field — stops the
   // auto-fill from clobbering their typed value.
@@ -143,6 +142,13 @@ export default function CategoryPicker({
       toast.show('Code is required.', 'error');
       return;
     }
+    // BE regex is /^[A-Z]{2,4}$/ — block the round-trip when the user
+    // submits a 1-letter code so they get an inline message instead
+    // of a 400 from the API.
+    if (styleCodeTrim.length < 2 || styleCodeTrim.length > 4) {
+      toast.show('Code must be 2-4 letters.', 'error');
+      return;
+    }
     // Legacy `code` is just an uppercase slug derived from the name; the
     // user-visible "Code" field maps to `styleCode` (the 2-letter prefix
     // used in NOWI style numbers — DR/PA/BL/…). `styleCounter` is
@@ -159,7 +165,8 @@ export default function CategoryPicker({
       onChange({ categoryId: created.id, code: created.code });
       toast.show('Category added.', 'success');
       setModalOpen(false);
-      setForm({ code: '', name: '', styleCode: '', styleCounter: '1000' });
+      setForm({ name: '', styleCode: '' });
+      styleCodeDirty.current = false;
     } catch (e: unknown) {
       const m =
         (e as { response?: { data?: { message?: string | string[] } } })
@@ -180,18 +187,22 @@ export default function CategoryPicker({
           // Prefill name + derive styleCode (first 2 alphabetic chars,
           // strips dashes / spaces) so "+ Add 'T-Shirt'" lands on the
           // create form with name="T-Shirt" + code="TS".
+          //
+          // When `typed` is empty (generic "+ Add new" path with no
+          // search query), reset to a clean state — leaving the form
+          // partially filled was producing immediate "Code is required"
+          // validation errors on submit (Copilot review on PR #7).
           const t = typed.trim();
-          const autoCode = t
-            .replace(/[^a-zA-Z]/g, '')
-            .slice(0, 2)
-            .toUpperCase();
           styleCodeDirty.current = false;
-          setForm((f) => ({
-            ...f,
-            name: t || f.name,
-            code: t ? t.toUpperCase().replace(/\s+/g, '_') : f.code,
-            styleCode: autoCode,
-          }));
+          if (!t) {
+            setForm({ name: '', styleCode: '' });
+          } else {
+            const autoCode = t
+              .replace(/[^a-zA-Z]/g, '')
+              .slice(0, 2)
+              .toUpperCase();
+            setForm({ name: t, styleCode: autoCode });
+          }
           setModalOpen(true);
         }}
         addNewLabel={t('admin.styles.intake.addNewCategory', 'Add new category')}
@@ -214,7 +225,16 @@ export default function CategoryPicker({
             >
               {t('common.cancel')}
             </Button>
-            <Button size="sm" disabled={saving} onClick={() => void submit()}>
+            <Button
+              size="sm"
+              disabled={
+                saving ||
+                !form.name.trim() ||
+                form.styleCode.trim().length < 2 ||
+                form.styleCode.trim().length > 4
+              }
+              onClick={() => void submit()}
+            >
               {saving ? t('common.saving') : t('common.create', 'Create')}
             </Button>
           </>
@@ -267,7 +287,14 @@ export default function CategoryPicker({
                 styleCodeDirty.current = true;
                 setForm((f) => ({
                   ...f,
-                  styleCode: e.target.value.toUpperCase().slice(0, 4),
+                  // Strip non-letters + uppercase + cap at 4 chars to
+                  // match the BE regex /^[A-Z]{2,4}$/. The hint copy
+                  // documents the 2-letter convention; 3-4 letters
+                  // accepted for niche codes (e.g. COD for Co-ord set).
+                  styleCode: e.target.value
+                    .replace(/[^a-zA-Z]/g, '')
+                    .toUpperCase()
+                    .slice(0, 4),
                 }));
               }}
               placeholder="e.g. SK"
@@ -276,7 +303,7 @@ export default function CategoryPicker({
             <p className="mt-1 text-[11px] text-[var(--color-muted-foreground)]">
               {t(
                 'admin.styles.intake.categoryStyleCodeHint',
-                '2-letter prefix used in style numbers (e.g. NOWI-W-SK-1001).',
+                '2-4 letter prefix used in style numbers (e.g. NOWI-W-SK-1001). 2 letters is the convention; 3-4 allowed for niche codes (e.g. COD).',
               )}
             </p>
           </div>
