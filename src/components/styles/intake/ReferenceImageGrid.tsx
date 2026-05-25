@@ -86,9 +86,11 @@ export default function ReferenceImageGrid({
   // never called, and the image silently doesn't populate.
   const valueRef = useRef(value);
   const onChangeRef = useRef(onChange);
+  const onPrimaryUrlChangeRef = useRef(onPrimaryUrlChange);
   useEffect(() => {
     valueRef.current = value;
     onChangeRef.current = onChange;
+    onPrimaryUrlChangeRef.current = onPrimaryUrlChange;
   });
   // True until the component unmounts — used to guard async callbacks
   // from updating state after unmount (replaces the per-effect-run
@@ -135,9 +137,15 @@ export default function ReferenceImageGrid({
   }, [value, previews]);
 
   const primaryUrl = entries[0]?.preview ?? null;
+  // Only re-fire when the URL itself changes. Reading `onPrimaryUrlChange`
+  // via ref decouples this from the parent's closure identity — the
+  // parent typically passes `(u) => set('referenceImageUrl', u)` which
+  // is a fresh function every render, and including it in deps would
+  // cause an infinite setState loop (the effect would fire, set the
+  // parent's state, re-render the parent → new closure → effect re-fires).
   useEffect(() => {
-    onPrimaryUrlChange?.(primaryUrl);
-  }, [primaryUrl, onPrimaryUrlChange]);
+    onPrimaryUrlChangeRef.current?.(primaryUrl);
+  }, [primaryUrl]);
 
   // Debounced background fetch on link change. Watches ONLY
   // `debouncedLink` — `value` / `onChange` are read via refs in the
