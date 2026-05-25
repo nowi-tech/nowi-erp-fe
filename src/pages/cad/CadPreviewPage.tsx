@@ -205,19 +205,41 @@ function DxfFull({ url }: { url: string }) {
       .then(() => {
         if (cancelled) return;
         // dxf-viewer doesn't auto-fit the camera to the loaded
-        // geometry; without this call the patterns render at their
-        // native CAD coordinates, which is almost always off-screen
-        // for the default camera. FitView() (and the lower-case alias
-        // some versions ship with) re-frames the view to the bounding
-        // box of all loaded entities.
-        const v = viewer as unknown as {
-          FitView?: () => void;
-          fitView?: () => void;
-        };
+        // geometry; the default camera sits at the origin while CAD
+        // coordinates can be anywhere in space, so the canvas reads
+        // as empty even though geometry was parsed. Pull the scene
+        // bounds and call FitView(minX, maxX, minY, maxY).
         try {
-          (v.FitView ?? v.fitView)?.call(viewer);
+          const bounds = viewer.GetBounds() as
+            | { minX: number; maxX: number; minY: number; maxY: number }
+            | null;
+          if (
+            bounds &&
+            Number.isFinite(bounds.minX) &&
+            Number.isFinite(bounds.maxX) &&
+            Number.isFinite(bounds.minY) &&
+            Number.isFinite(bounds.maxY)
+          ) {
+            (
+              viewer as unknown as {
+                FitView: (
+                  minX: number,
+                  maxX: number,
+                  minY: number,
+                  maxY: number,
+                  padding?: number,
+                ) => void;
+              }
+            ).FitView(
+              bounds.minX,
+              bounds.maxX,
+              bounds.minY,
+              bounds.maxY,
+              0.1,
+            );
+          }
         } catch {
-          /* older versions or scene with no bbox — fall through */
+          /* no bounds yet — keep default camera */
         }
         setStatus('ready');
       })

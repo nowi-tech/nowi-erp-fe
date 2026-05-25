@@ -276,18 +276,41 @@ function DxfRender({
       .Load({ url })
       .then(() => {
         if (cancelled) return;
-        // Frame the camera on the loaded geometry; without this the
-        // pattern renders at its native CAD coordinates and is
-        // typically far off-screen. See the same note in
-        // pages/cad/CadPreviewPage.tsx.
-        const v = viewer as unknown as {
-          FitView?: () => void;
-          fitView?: () => void;
-        };
+        // Frame the camera on the loaded geometry — dxf-viewer leaves
+        // the camera at origin while CAD coordinates can be anywhere,
+        // so the canvas reads as empty. `FitView` wants 4 floats from
+        // `GetBounds()`'s {minX,maxX,minY,maxY} object.
         try {
-          (v.FitView ?? v.fitView)?.call(viewer);
+          const bounds = viewer.GetBounds() as
+            | { minX: number; maxX: number; minY: number; maxY: number }
+            | null;
+          if (
+            bounds &&
+            Number.isFinite(bounds.minX) &&
+            Number.isFinite(bounds.maxX) &&
+            Number.isFinite(bounds.minY) &&
+            Number.isFinite(bounds.maxY)
+          ) {
+            (
+              viewer as unknown as {
+                FitView: (
+                  minX: number,
+                  maxX: number,
+                  minY: number,
+                  maxY: number,
+                  padding?: number,
+                ) => void;
+              }
+            ).FitView(
+              bounds.minX,
+              bounds.maxX,
+              bounds.minY,
+              bounds.maxY,
+              0.1,
+            );
+          }
         } catch {
-          /* older versions / no bbox — keep default camera */
+          /* no bounds — keep default camera */
         }
         setStatus('ready');
       })
