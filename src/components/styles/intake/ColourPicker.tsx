@@ -1,6 +1,10 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
+import { Button } from '@/components/ui/button';
 import { Combobox, type ComboboxOption } from '@/components/ui/combobox';
+import { Dialog } from '@/components/ui/dialog';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
 import { listDistinctColours } from '@/api/styles';
 
 interface Props {
@@ -14,13 +18,13 @@ interface Props {
 /**
  * Searchable Colour picker. Suggestions come from `GET /api/styles/colours`
  * (distinct `primaryColour` values across existing styles). There is no
- * master table — `primaryColour` is free text on Style — so the "+ Add"
- * row just commits the typed value verbatim.
+ * master table — `primaryColour` is free text on Style.
  *
- * Same UX contract as Category/Fabric pickers:
- *   - type-ahead filters the list
- *   - typing a value not in the list flips the first row to `+ Add "X"`
- *   - Enter on an unmatched query commits via that path
+ * UX matches CategoryPicker / FabricPicker:
+ *   - Type-ahead filters the suggestions list
+ *   - `+ Add` always opens a popup with a Name input prefilled from
+ *     whatever was typed (or empty when none). Submit commits the value.
+ *     Empty-typed click also opens the popup (used to be a no-op).
  */
 export default function ColourPicker({
   value,
@@ -30,6 +34,9 @@ export default function ColourPicker({
 }: Props) {
   const { t } = useTranslation();
   const [colours, setColours] = useState<string[]>([]);
+  const [modalOpen, setModalOpen] = useState(false);
+  const [formColour, setFormColour] = useState('');
+  const inputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     let mounted = true;
@@ -56,27 +63,95 @@ export default function ColourPicker({
       .map((c) => ({ value: c, label: c, searchText: c }));
   }, [colours, value]);
 
+  const commit = (raw: string) => {
+    const v = raw.trim();
+    if (!v) return;
+    // Keep the local suggestions in sync so the new value sticks
+    // around for this session even before the server-side list
+    // refreshes on the next mount.
+    setColours((cs) => (cs.includes(v) ? cs : [...cs, v]));
+    onChange(v);
+    setModalOpen(false);
+    setFormColour('');
+  };
+
   return (
-    <Combobox<string>
-      value={value || null}
-      options={options}
-      onChange={(next) => onChange(next ?? '')}
-      onAddNew={(typed) => {
-        // No master table for colours — the typed value is the colour.
-        const v = typed.trim();
-        if (!v) return;
-        // Keep the local suggestions in sync so the new value sticks
-        // around for this session even before the server-side list
-        // refreshes on next mount.
-        setColours((cs) => (cs.includes(v) ? cs : [...cs, v]));
-        onChange(v);
-      }}
-      addNewLabel={t('admin.styles.intake.addColour', 'Add colour')}
-      placeholder={
-        placeholder ?? t('admin.styles.intake.colourPh', 'Type or pick a colour')
-      }
-      disabled={disabled}
-      ariaLabel={t('admin.styles.intake.primaryColour', 'Primary colour')}
-    />
+    <>
+      <Combobox<string>
+        value={value || null}
+        options={options}
+        onChange={(next) => onChange(next ?? '')}
+        onAddNew={(typed) => {
+          // Open a popup whether or not the user has typed anything.
+          // Previously empty-typed was a no-op which felt broken —
+          // matches CategoryPicker / FabricPicker behaviour now.
+          setFormColour(typed.trim());
+          setModalOpen(true);
+        }}
+        addNewLabel={t('admin.styles.intake.addColour', 'Add colour')}
+        placeholder={
+          placeholder ?? t('admin.styles.intake.colourPh', 'Type or pick a colour')
+        }
+        disabled={disabled}
+        ariaLabel={t('admin.styles.intake.primaryColour', 'Primary colour')}
+      />
+
+      <Dialog
+        open={modalOpen}
+        onClose={() => {
+          setModalOpen(false);
+          setFormColour('');
+        }}
+        title={t('admin.styles.intake.newColourTitle', 'New colour')}
+        initialFocusRef={inputRef}
+        footer={
+          <>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => {
+                setModalOpen(false);
+                setFormColour('');
+              }}
+            >
+              {t('common.cancel', { defaultValue: 'Cancel' })}
+            </Button>
+            <Button
+              size="sm"
+              disabled={!formColour.trim()}
+              onClick={() => commit(formColour)}
+            >
+              {t('common.add', { defaultValue: 'Add' })}
+            </Button>
+          </>
+        }
+      >
+        <div className="space-y-3">
+          <p className="text-[12px] text-[var(--color-muted-foreground)]">
+            {t(
+              'admin.styles.intake.newColourHelp',
+              "Free text — colour names aren't standardised. Earlier picks autocomplete.",
+            )}
+          </p>
+          <div>
+            <Label>
+              {t('admin.styles.intake.colourLabel', 'Colour name *')}
+            </Label>
+            <Input
+              ref={inputRef}
+              value={formColour}
+              onChange={(e) => setFormColour(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' && formColour.trim()) {
+                  e.preventDefault();
+                  commit(formColour);
+                }
+              }}
+              placeholder="e.g. Sage Green"
+            />
+          </div>
+        </div>
+      </Dialog>
+    </>
   );
 }
