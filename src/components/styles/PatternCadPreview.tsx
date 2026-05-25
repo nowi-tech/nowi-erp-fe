@@ -276,50 +276,6 @@ function DxfRender({
       .Load({ url })
       .then(() => {
         if (cancelled) return;
-        // Same `fit on every resize` pattern as CadPreviewPage —
-        // the inline tile has a fixed h-[320px] container so it's
-        // less prone to the 0×0 trap, but we wire the resize sub
-        // anyway for consistency.
-        const fit = () => {
-          try {
-            const bounds = viewer.GetBounds() as
-              | { minX: number; maxX: number; minY: number; maxY: number }
-              | null;
-            if (
-              bounds &&
-              Number.isFinite(bounds.minX) &&
-              Number.isFinite(bounds.maxX) &&
-              Number.isFinite(bounds.minY) &&
-              Number.isFinite(bounds.maxY)
-            ) {
-              (
-                viewer as unknown as {
-                  FitView: (
-                    minX: number,
-                    maxX: number,
-                    minY: number,
-                    maxY: number,
-                    padding?: number,
-                  ) => void;
-                }
-              ).FitView(
-                bounds.minX,
-                bounds.maxX,
-                bounds.minY,
-                bounds.maxY,
-                0.1,
-              );
-            }
-          } catch {
-            /* no bounds — keep default camera */
-          }
-        };
-        (
-          viewer as unknown as {
-            Subscribe: (event: string, handler: () => void) => void;
-          }
-        ).Subscribe('resized', fit);
-        fit();
         setStatus('ready');
       })
       .catch(() => {
