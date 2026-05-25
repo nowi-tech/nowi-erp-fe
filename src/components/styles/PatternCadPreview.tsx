@@ -1,6 +1,12 @@
 import { useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Download, FileText, Loader2, Printer } from 'lucide-react';
+import {
+  Download,
+  ExternalLink,
+  FileText,
+  Loader2,
+  Printer,
+} from 'lucide-react';
 import { DxfViewer } from 'dxf-viewer';
 import { Color } from 'three';
 import { getReadUrls } from '@/api/storage';
@@ -113,14 +119,34 @@ function PatternCadFileTile({
   const isImage = IMAGE_EXT.includes(ext);
   const isPdf = ext === 'pdf';
   const isDxf = ext === 'dxf';
-  // Single "Open in new window" link replaces the previous trio of
-  // inline Print + Open + Download buttons. The dedicated preview page
-  // at /cad/preview hosts all three actions (Download, Print, full
-  // DXF interaction) so they live in one place instead of being
-  // half-implemented on the row and half on the page.
+  // "Open" goes to the dedicated full-window preview page.
+  // "Download" + "Print" run inline so the user doesn't bounce to a
+  // new tab just to grab a file or hit print.
   const previewHref = `/cad/preview?path=${encodeURIComponent(path)}`;
 
-  const fileRow = (_printable: boolean, _onPrint?: () => void) => (
+  // Inline download — fetch as blob and trigger <a download> so the
+  // file actually saves instead of opening inline (which most browsers
+  // do for image / PDF when you just `href` the URL).
+  const doDownload = async () => {
+    if (!url) return;
+    try {
+      const res = await fetch(url);
+      const blob = await res.blob();
+      const objUrl = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = objUrl;
+      a.download = fileName;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      setTimeout(() => URL.revokeObjectURL(objUrl), 0);
+    } catch {
+      // Cross-origin or storage hiccup — open the raw URL as a fallback.
+      window.open(url, '_blank', 'noopener');
+    }
+  };
+
+  const fileRow = (printable: boolean, onPrint?: () => void) => (
     <div className="flex items-center justify-between gap-3 rounded-[var(--radius-sm)] border border-[var(--color-border)] px-3 py-2">
       <span className="flex min-w-0 items-center gap-2 text-sm">
         <FileText
@@ -132,15 +158,39 @@ function PatternCadFileTile({
         </span>
       </span>
       <span className="flex shrink-0 items-center gap-3">
+        {url && (
+          <button
+            type="button"
+            onClick={() => void doDownload()}
+            className="inline-flex items-center gap-1 text-xs text-[var(--color-primary)] hover:underline"
+          >
+            <Download size={13} />{' '}
+            {t('admin.styles.drawer.patternCad.download', {
+              defaultValue: 'Download',
+            })}
+          </button>
+        )}
+        {printable && onPrint && (
+          <button
+            type="button"
+            onClick={onPrint}
+            className="inline-flex items-center gap-1 text-xs text-[var(--color-primary)] hover:underline"
+          >
+            <Printer size={13} />{' '}
+            {t('admin.styles.drawer.patternCad.print', {
+              defaultValue: 'Print',
+            })}
+          </button>
+        )}
         <a
           href={previewHref}
           target="_blank"
           rel="noreferrer"
           className="inline-flex items-center gap-1 text-xs text-[var(--color-primary)] hover:underline"
         >
-          <Download size={13} />{' '}
+          <ExternalLink size={13} />{' '}
           {t('admin.styles.drawer.patternCad.openPreview', {
-            defaultValue: 'Open in new window',
+            defaultValue: 'Open',
           })}
         </a>
       </span>
