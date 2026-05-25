@@ -1,6 +1,7 @@
-import { useEffect, type ReactNode } from 'react';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { X } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { ConfirmDialog } from './confirm-dialog';
 
 interface DrawerProps {
   open: boolean;
@@ -29,6 +30,15 @@ interface DrawerProps {
   footer?: ReactNode;
   /** Max-width override (default `420px`). */
   width?: string;
+  /**
+   * When true (default), backdrop click + Escape ask `window.confirm()`
+   * before dismissing so accidental clicks outside an edit form can't
+   * silently drop the user's work. Explicit X / Cancel buttons inside
+   * the drawer call `onClose` directly and bypass the confirm.
+   */
+  confirmOnClose?: boolean;
+  /** Override the confirm prompt (defaults to "Discard changes?"). */
+  confirmMessage?: string;
 }
 
 const ACCENTS: Record<NonNullable<DrawerProps['accent']>, string> = {
@@ -61,27 +71,47 @@ export function Drawer({
   children,
   footer,
   width = '420px',
+  confirmOnClose = true,
+  confirmMessage,
 }: DrawerProps) {
+  // Refs so the keydown listener (registered once per open) and the
+  // backdrop handler always see the latest prop values.
+  const onCloseRef = useRef(onClose);
+  onCloseRef.current = onClose;
+  const confirmOnCloseRef = useRef(confirmOnClose);
+  confirmOnCloseRef.current = confirmOnClose;
+  const [confirmOpen, setConfirmOpen] = useState(false);
+
+  const requestClose = () => {
+    if (confirmOnCloseRef.current) {
+      setConfirmOpen(true);
+      return;
+    }
+    onCloseRef.current();
+  };
+
   // Esc to close + body scroll lock
   useEffect(() => {
     if (!open) return;
     const prev = document.body.style.overflow;
     document.body.style.overflow = 'hidden';
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') onClose();
+      if (e.key === 'Escape') requestClose();
     };
     window.addEventListener('keydown', onKey);
     return () => {
       document.body.style.overflow = prev;
       window.removeEventListener('keydown', onKey);
     };
-  }, [open, onClose]);
+    // requestClose reads everything via refs; stable to omit.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open]);
 
   return (
     <>
       <div
         aria-hidden
-        onClick={onClose}
+        onClick={requestClose}
         className={cn(
           'fixed inset-0 z-40 bg-[var(--color-foreground)]/30 backdrop-blur-[2px] transition-opacity',
           open ? 'opacity-100 pointer-events-auto' : 'opacity-0 pointer-events-none',
@@ -150,6 +180,26 @@ export function Drawer({
           </footer>
         )}
       </aside>
+
+      {/* In-app discard-confirm. Replaces window.confirm so the
+          experience is styleable, doesn't freeze the JS thread, and
+          behaves consistently inside the Capacitor Android WebView. */}
+      <ConfirmDialog
+        open={confirmOpen}
+        title="Discard changes?"
+        message={
+          confirmMessage ??
+          'Any unsaved edits will be lost. Are you sure?'
+        }
+        confirmLabel="Discard"
+        cancelLabel="Keep editing"
+        destructive
+        onCancel={() => setConfirmOpen(false)}
+        onConfirm={() => {
+          setConfirmOpen(false);
+          onCloseRef.current();
+        }}
+      />
     </>
   );
 }
