@@ -38,4 +38,25 @@
     <!-- Permissions -->
 
     <uses-permission android:name="android.permission.INTERNET" />
+
+    <!--
+        Camera + media access for the finishing rework defect-photo flow
+        (and any other <input type="file" capture="environment"> in the FE).
+        On Android < 13 the WebView's file chooser needs CAMERA at install
+        time to launch the camera intent reliably. On Android 13+ the
+        photo-picker handles read access automatically, but declaring
+        READ_MEDIA_IMAGES keeps gallery-picker fallback working.
+        `android:maxSdkVersion="32"` scopes READ_EXTERNAL_STORAGE to
+        legacy Android only — required by some OEM camera intents that
+        save the capture to shared storage before returning the URI.
+    -->
+    <uses-permission android:name="android.permission.CAMERA" />
+    <uses-permission android:name="android.permission.READ_MEDIA_IMAGES" />
+    <uses-permission
+        android:name="android.permission.READ_EXTERNAL_STORAGE"
+        android:maxSdkVersion="32" />
+
+    <!-- Camera is optional: keep the app installable on devices without one. -->
+    <uses-feature android:name="android.hardware.camera" android:required="false" />
+    <uses-feature android:name="android.hardware.camera.autofocus" android:required="false" />
 </manifest>

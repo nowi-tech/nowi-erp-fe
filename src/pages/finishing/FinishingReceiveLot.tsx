@@ -287,14 +287,17 @@ export default function FinishingReceiveLot() {
     if (!size || !lot) return;
     const r = rows[size];
     if (!r || r.reworkQty <= 0) return;
-    // A defect photo is mandatory — the BE rejects a photo-less rework too.
+    // Defect photo is RECOMMENDED but optional. A blocked camera /
+    // failed GCS upload shouldn't stop a finisher from sending units
+    // back — the reason text carries enough context. We just nudge
+    // them once with a warning toast and proceed.
     if (!r.photoPath) {
-      sonnerToast.error(
-        t('finishing.photoRequired', {
-          defaultValue: 'A defect photo is required to send a rework.',
+      sonnerToast.warning(
+        t('finishing.photoMissingHint', {
+          defaultValue:
+            'No defect photo — proceeding anyway. Add one later if possible.',
         }),
       );
-      return;
     }
     const reworkStyleId = lot.style?.styleId ?? lot.sku;
     if (!reworkStyleId) {
@@ -309,7 +312,7 @@ export default function FinishingReceiveLot() {
         sizeLabel: size,
         qty: r.reworkQty,
         reason: reasonText(r),
-        photoPaths: [r.photoPath],
+        photoPaths: r.photoPath ? [r.photoPath] : [],
       });
       sonnerToast.warning(
         t('finishing.lot.reworkToast', {
@@ -361,8 +364,28 @@ export default function FinishingReceiveLot() {
   // accept="image/*" capture="environment"> and forwards the picked
   // file here. In noop dev mode the BE returns noop=true and uploadPhoto
   // skips the PUT, so the dev flow stays identical.
+  //
+  // Android-WebView gotcha: camera captures sometimes arrive with an
+  // empty `file.type`, or with a non-allowlisted MIME like `image/jpg`.
+  // Normalization lives in `uploadPhoto` / `resolvePhotoContentType` so
+  // this caller stays simple.
   async function attachPhoto(size: string, file: File) {
     if (!lot) return;
+    // Defensive: bail early if the picker handed us something that isn't
+    // an image at all (e.g. a doc on a desktop file picker). The BE
+    // would reject this with a confusing 400; better to fail with a
+    // clear local message.
+    const looksLikeImage =
+      file.type.startsWith('image/') ||
+      /\.(jpe?g|png|webp|heic|heif)$/i.test(file.name);
+    if (!looksLikeImage) {
+      sonnerToast.error(
+        t('finishing.photoMustBeImage', {
+          defaultValue: 'Please pick an image (JPG/PNG/WebP).',
+        }),
+      );
+      return;
+    }
     try {
       const res = await uploadPhoto('rework', lot.id, file);
       updateRow(size, {
@@ -374,8 +397,16 @@ export default function FinishingReceiveLot() {
           ? `${t('finishing.photoAdded')} ${t('common.noopDevHint')}`
           : t('finishing.photoAdded'),
       );
-    } catch {
-      sonnerToast.error(t('common.error'));
+    } catch (err) {
+      // Surface the real reason — the previous generic "common.error"
+      // toast hid network / permission failures and made the user think
+      // the whole flow was broken. The thrown error from uploadPhoto
+      // includes the HTTP status when the GCS PUT fails.
+      const msg =
+        err instanceof Error && err.message
+          ? err.message
+          : t('common.error');
+      sonnerToast.error(msg);
     }
   }
 
@@ -703,8 +734,7 @@ export default function FinishingReceiveLot() {
                   disabled={
                     reworkSubmitting ||
                     !rs ||
-                    rs.reworkQty <= 0 ||
-                    !rs.photoPath
+                    rs.reworkQty <= 0
                   }
                 >
                   {reworkSubmitting
@@ -768,11 +798,33 @@ export default function FinishingReceiveLot() {
                   {/* Native file input — capture="environment" opens the
                       rear camera directly on mobile so floor staff don't
                       have to tap through the gallery. The visible button
-                      is just a styled label proxy. */}
+                      is just a styled label proxy.
+
+                      `accept="image/*"` is intentional even though the BE
+                      only allows JPEG/PNG/WebP: some Android WebView
+                      builds silently ignore `capture` when `accept` is a
+                      narrow MIME list (e.g. "image/jpeg,image/png"),
+                      falling back to the gallery picker instead of the
+                      camera. The MIME is normalised + validated in
+                      uploadPhoto / attachPhoto. */}
+                  {/* A <button> inside a <label> does NOT receive label
+                      activation (HTML spec — labels skip nested form
+                      controls), so the camera/file picker wouldn't open.
+                      Use a styled <span role="button"> as the visible
+                      trigger instead; the surrounding label forwards
+                      taps to the hidden file input as expected.
+
+                      `accept="image/*"` is intentional even though the BE
+                      only allows JPEG/PNG/WebP: some Android WebView
+                      builds silently ignore `capture` when `accept` is a
+                      narrow MIME list (e.g. "image/jpeg,image/png"),
+                      falling back to the gallery picker instead of the
+                      camera. The MIME is normalised + validated in
+                      uploadPhoto / attachPhoto. */}
                   <label className="inline-flex">
                     <input
                       type="file"
-                      accept="image/jpeg,image/png,image/webp"
+                      accept="image/*"
                       capture="environment"
                       className="sr-only"
                       onChange={(e) => {
@@ -783,12 +835,14 @@ export default function FinishingReceiveLot() {
                         e.target.value = '';
                       }}
                     />
-                    <Button type="button" variant="outline" size="sm" asChild>
-                      <span className="cursor-pointer">
-                        <Camera size={14} />
-                        {t('finishing.addPhoto')}
-                      </span>
-                    </Button>
+                    <span
+                      role="button"
+                      tabIndex={0}
+                      className="inline-flex h-9 cursor-pointer items-center gap-1.5 rounded-[var(--radius-sm)] border border-[var(--color-input)] bg-transparent px-3 text-sm font-medium hover:bg-[var(--color-muted)]"
+                    >
+                      <Camera size={14} />
+                      {t('finishing.addPhoto')}
+                    </span>
                   </label>
                   {rs.photoPath && (
                     <span className="text-xs text-[var(--color-muted-foreground)] truncate">
@@ -798,10 +852,10 @@ export default function FinishingReceiveLot() {
                   )}
                 </div>
                 {!rs.photoPath && (
-                  <p className="text-xs text-[var(--color-destructive)]">
-                    {t('finishing.photoRequired', {
+                  <p className="text-xs text-[var(--color-muted-foreground)]">
+                    {t('finishing.photoOptionalHint', {
                       defaultValue:
-                        'A defect photo is required to send a rework.',
+                        'A defect photo is recommended but optional.',
                     })}
                   </p>
                 )}

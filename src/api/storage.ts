@@ -8,9 +8,10 @@ export interface UploadUrlPayload {
 }
 
 /**
- * Resolve GCS object paths to short-lived signed read URLs. In noop
- * dev mode the BE returns `noop://…` strings — callers should treat
- * any non-http(s) value as "no displayable image".
+ * Resolve GCS object paths to short-lived signed read URLs. In local-FS
+ * dev mode (no GCS creds) the BE returns http URLs pointing at its own
+ * /api/storage/dev-files/ endpoint instead, so preview/print still
+ * work. Either way callers get real http(s) URLs.
  */
 export async function getReadUrls(
   objectPaths: string[],
@@ -44,6 +45,36 @@ export async function issueReadUrls(
 }
 
 /**
+ * Resolve an upload-friendly content-type for a photo file.
+ *
+ * Android camera captures coming back through `<input type="file"
+ * capture="environment">` can have `file.type` empty or set to a value
+ * the BE's allow-list regex rejects (e.g. `image/jpg`). The BE only
+ * accepts `image/(jpeg|png|webp)` for photos — anything else 400s on
+ * /api/storage/upload-url and the user sees a generic error.
+ *
+ * Strategy:
+ *  1. If `file.type` is already an allowed image MIME, use it.
+ *  2. Otherwise fall back to the file extension.
+ *  3. Final fallback is `image/jpeg` — the safest assumption for an
+ *     Android camera output that didn't self-identify.
+ */
+function resolvePhotoContentType(file: File): string {
+  const t = (file.type || '').toLowerCase();
+  if (t === 'image/jpeg' || t === 'image/png' || t === 'image/webp') {
+    return t;
+  }
+  const ext = file.name.toLowerCase().split('.').pop() ?? '';
+  if (ext === 'png') return 'image/png';
+  if (ext === 'webp') return 'image/webp';
+  if (ext === 'jpg' || ext === 'jpeg' || t === 'image/jpg') return 'image/jpeg';
+  // Camera intents on some Android OEMs return a File with no name + no
+  // type at all. Defaulting to JPEG matches the actual encoding the
+  // hardware uses in practice and unblocks the upload.
+  return 'image/jpeg';
+}
+
+/**
  * Two-step photo upload:
  *   1. POST /api/storage/upload-url → get signed PUT URL + objectPath
  *   2. PUT the file bytes directly to GCS at that URL
@@ -61,20 +92,23 @@ export async function uploadPhoto(
   entityId: string | number,
   file: File,
 ): Promise<{ objectPath: string; noop: boolean }> {
+  const contentType = resolvePhotoContentType(file);
   const res = await requestUploadUrl({
     entityType,
     entityId: String(entityId),
-    contentType: file.type,
+    contentType,
   });
   if (!res.noop) {
     // Direct PUT to the GCS signed URL. Content-Type MUST match what
     // we asked the BE to sign for, otherwise GCS returns 403.
     const put = await fetch(res.uploadUrl, {
       method: 'PUT',
-      headers: { 'Content-Type': file.type },
+      headers: { 'Content-Type': contentType },
       body: file,
     });
     if (!put.ok) {
+      // Include status in the thrown error so callers can surface a
+      // more specific toast (e.g. "permission denied" vs "network").
       throw new Error(`Photo upload failed (${put.status})`);
     }
   }
