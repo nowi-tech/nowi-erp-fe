@@ -1,7 +1,15 @@
 import { Fragment, useEffect, useMemo, useState } from 'react';
-import { ChevronDown, ChevronRight, ExternalLink } from 'lucide-react';
+import {
+  CheckCircle2,
+  ChevronDown,
+  ChevronRight,
+  ExternalLink,
+  Pause,
+  Play,
+} from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
 import { ColumnFilter, type ColumnFilterOption } from '@/components/ui/column-filter';
 import InlineStatusCell from '@/components/styles/InlineStatusCell';
 import { useToast } from '@/components/ui/toast';
@@ -80,6 +88,12 @@ interface Props {
   loading: boolean;
   onRowClick?: (style: Style) => void;
   onStyleNoClick?: (style: Style) => void;
+  /** Row-level Approve action — null hides the button. */
+  onApprove?: (style: Style) => void;
+  /** Row-level Park action — null hides the button. */
+  onPark?: (style: Style) => void;
+  /** Row-level Revive action — null hides the button. */
+  onRevive?: (style: Style) => void;
   /**
    * `"full"` (default) — all sampling-workflow columns (Pattern Master, Stage,
    *   Approval, Web, Updated).
@@ -108,6 +122,9 @@ export default function StylesTable({
   loading,
   onRowClick,
   onStyleNoClick,
+  onApprove,
+  onPark,
+  onRevive,
   variant = 'full',
 }: Props) {
   const { t } = useTranslation();
@@ -194,12 +211,22 @@ export default function StylesTable({
     [rows, t],
   );
   const samplingStatusOptions = useMemo(
-    () => distinct(rows, (s) => s.samplingStatus, (v) => v),
-    [rows],
+    () =>
+      distinct(rows, (s) => s.samplingStatus, (v) =>
+        t(`admin.styles.samplingSteps.${v}` as const, {
+          defaultValue: v.replace(/_/g, ' '),
+        }),
+      ),
+    [rows, t],
   );
   const sampleApprovalOptions = useMemo(
-    () => distinct(rows, (s) => s.sampleApproval, (v) => v),
-    [rows],
+    () =>
+      distinct(rows, (s) => s.sampleApproval, (v) =>
+        t(`admin.styles.sampleApproval.${v}` as const, {
+          defaultValue: v.replace(/_/g, ' '),
+        }),
+      ),
+    [rows, t],
   );
   const colourOptions = useMemo(
     () => distinct(rows, (s) => s.primaryColour, (v) => v),
@@ -275,7 +302,17 @@ export default function StylesTable({
             <tr>
               <th className="w-8" />
               <th className="text-left font-medium px-3 py-2">
-                {t('admin.styles.table.styleNo')}
+                <span className="inline-flex items-center gap-1">
+                  {t('admin.styles.table.styleNo')}
+                  <ColumnFilter
+                    title={t('admin.styles.lifecycle.label', {
+                      defaultValue: 'Lifecycle',
+                    })}
+                    options={lifecycleOptions}
+                    excluded={excLifecycle}
+                    onChange={setExcLifecycle}
+                  />
+                </span>
               </th>
               <th className="text-left font-medium px-3 py-2">
                 {t('admin.styles.table.workingName')}
@@ -308,11 +345,15 @@ export default function StylesTable({
                   <th className="text-left font-medium px-3 py-2 hidden lg:table-cell">
                     <span className="inline-flex items-center gap-1">
                       {t('admin.styles.table.stage')}
+                      {/* Stage cell renders samplingStatus — filter
+                          matches what's displayed in the column. */}
                       <ColumnFilter
-                        title={t('admin.styles.table.stage')}
-                        options={lifecycleOptions}
-                        excluded={excLifecycle}
-                        onChange={setExcLifecycle}
+                        title={t('admin.styles.table.samplingStatus', {
+                          defaultValue: 'Sampling status',
+                        })}
+                        options={samplingStatusOptions}
+                        excluded={excSamplingStatus}
+                        onChange={setExcSamplingStatus}
                       />
                     </span>
                   </th>
@@ -328,18 +369,9 @@ export default function StylesTable({
                     </span>
                   </th>
                   <th className="text-left font-medium px-3 py-2 hidden sm:table-cell">
-                    <span className="inline-flex items-center gap-1">
-                      {t('admin.styles.table.web')}
-                      {/* Samplingstatus filter wired here rather than a
-                          separate column — it's the closest column to
-                          "web/sampling stage" in the Gurukul flow. */}
-                      <ColumnFilter
-                        title={t('admin.styles.table.samplingStatus', { defaultValue: 'Sampling status' })}
-                        options={samplingStatusOptions}
-                        excluded={excSamplingStatus}
-                        onChange={setExcSamplingStatus}
-                      />
-                    </span>
+                    {/* Web cell is just an external-link icon — no
+                        filtering needed. */}
+                    {t('admin.styles.table.web')}
                   </th>
                 </>
               )}
@@ -555,10 +587,15 @@ export default function StylesTable({
                       <td className="px-3 py-2 hidden md:table-cell text-xs text-[var(--color-muted-foreground)] tabular-nums">
                         {new Date(s.updatedAt).toLocaleDateString()}
                       </td>
-                      <td className="px-3 py-2 text-right">
-                        <ChevronRight
-                          size={16}
-                          className="text-[var(--color-muted-foreground)]"
+                      <td
+                        className="px-3 py-2 text-right whitespace-nowrap"
+                        onClick={(e) => e.stopPropagation()}
+                      >
+                        <RowActions
+                          style={s}
+                          onApprove={onApprove}
+                          onPark={onPark}
+                          onRevive={onRevive}
                         />
                       </td>
                     </tr>
@@ -622,6 +659,84 @@ export default function StylesTable({
           </tbody>
         </table>
       </div>
+    </div>
+  );
+}
+
+/**
+ * Inline action cell at the end of each row. Shows Approve / Park /
+ * Revive contextually based on the style's lifecycle. Falls back to a
+ * chevron when no action applies so the row still reads as a link.
+ *
+ * onApprove/onPark/onRevive are wired by the parent page so callbacks
+ * can navigate into the right dialog (sampling needs a checklist) or
+ * fire a direct API call (china_import + park + revive are one-click).
+ */
+function RowActions({
+  style,
+  onApprove,
+  onPark,
+  onRevive,
+}: {
+  style: Style;
+  onApprove?: (s: Style) => void;
+  onPark?: (s: Style) => void;
+  onRevive?: (s: Style) => void;
+}) {
+  const canApprove = style.lifecycle === 'draft';
+  const canPark =
+    style.lifecycle !== 'parked' &&
+    style.lifecycle !== 'archived' &&
+    style.lifecycle !== 'dispatched';
+  const canRevive = style.lifecycle === 'parked';
+  const hasAny =
+    (canApprove && onApprove) ||
+    (canPark && onPark) ||
+    (canRevive && onRevive);
+
+  if (!hasAny) {
+    return (
+      <ChevronRight
+        size={16}
+        className="text-[var(--color-muted-foreground)] inline-block"
+      />
+    );
+  }
+
+  return (
+    <div className="inline-flex items-center gap-1.5">
+      {canApprove && onApprove && (
+        <Button
+          size="sm"
+          onClick={() => onApprove(style)}
+          className="h-7 px-2.5 text-xs"
+        >
+          <CheckCircle2 size={13} />
+          <span className="ml-1">Approve</span>
+        </Button>
+      )}
+      {canRevive && onRevive && (
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={() => onRevive(style)}
+          className="h-7 px-2.5 text-xs"
+        >
+          <Play size={13} />
+          <span className="ml-1">Revive</span>
+        </Button>
+      )}
+      {canPark && onPark && (
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={() => onPark(style)}
+          className="h-7 px-2.5 text-xs"
+        >
+          <Pause size={13} />
+          <span className="ml-1">Park</span>
+        </Button>
+      )}
     </div>
   );
 }

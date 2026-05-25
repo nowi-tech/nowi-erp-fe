@@ -1,14 +1,24 @@
 import { useCallback, useEffect, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
-import { ArrowLeft, Palette, Pause, Play, CheckCircle2, ExternalLink } from 'lucide-react';
+import {
+  ArrowLeft,
+  Palette,
+  Pause,
+  Pencil,
+  Play,
+  CheckCircle2,
+  ExternalLink,
+} from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Dialog } from '@/components/ui/dialog';
 import { Textarea } from '@/components/ui/textarea';
 import { useToast } from '@/components/ui/toast';
 import SamplingPipelineStepper from '@/components/styles/SamplingPipelineStepper';
+import PatternCadPreview from '@/components/styles/PatternCadPreview';
 import AddColourModal from '@/components/styles/AddColourModal';
+import StyleQuickEditDrawer from '@/components/styles/StyleQuickEditDrawer';
 import {
   getStyle,
   parkStyle,
@@ -16,13 +26,20 @@ import {
   approveStyle,
   sampleApproveStyle,
   patchStyle,
+  listCollections,
+  listFabrics,
   type SamplingStatus,
   type SampleApprovalStatus,
   type ApproveStyleBody,
   type SampleApproveStyleBody,
 } from '@/api/styles';
 import { listUsers } from '@/api/users';
-import type { Style, User as ApiUser } from '@/api/types';
+import type {
+  Collection,
+  Fabric,
+  Style,
+  User as ApiUser,
+} from '@/api/types';
 import { cn } from '@/lib/utils';
 
 /**
@@ -51,6 +68,32 @@ export default function StyleWorkspace() {
   const [approveOpen, setApproveOpen] = useState(false);
   const [sampleApproveOpen, setSampleApproveOpen] = useState(false);
   const [colourModalOpen, setColourModalOpen] = useState(false);
+  const [editOpen, setEditOpen] = useState(false);
+  // Drawer needs the collection + fabric master to render its pickers;
+  // fetched lazily the first time the user opens it (most users on the
+  // page never click Edit, no need to load this on every detail-page
+  // mount).
+  const [collections, setCollections] = useState<Collection[]>([]);
+  const [fabrics, setFabrics] = useState<Fabric[]>([]);
+  const ensureMasterData = useCallback(async () => {
+    if (collections.length === 0) {
+      try {
+        const c = await listCollections();
+        setCollections(c);
+      } catch {
+        /* empty list is fine — drawer just shows no options */
+      }
+    }
+    if (fabrics.length === 0) {
+      try {
+        const f = await listFabrics();
+        setFabrics(f);
+      } catch {
+        /* same — soft-fail */
+      }
+    }
+  }, [collections.length, fabrics.length]);
+
 
   const load = useCallback(async () => {
     if (!idParam) return;
@@ -134,14 +177,21 @@ export default function StyleWorkspace() {
             <span>/</span>
             <span>{style.workingName ?? '—'}</span>
           </div>
-          <h1 className="font-serif text-2xl text-[var(--color-primary)] mt-1">
+          <h1 className="font-mono text-2xl font-semibold text-[var(--color-primary)] mt-1 tracking-wide">
             {style.styleId ?? `(${t('admin.styles.draft')})`}
           </h1>
           <div className="flex items-center gap-2 mt-2 flex-wrap">
             {style.collection && (
               <Badge variant="outline">{style.collection.name}</Badge>
             )}
-            <Badge variant="stitch">{sourceLabel}</Badge>
+            {/* For China Import styles the source IS the story — surface
+                it. For sampling styles the NOWI prefix already implies
+                source, and the lifecycle chip below carries the same
+                "in sampling" signal, so the source chip is redundant
+                and we omit it. */}
+            {isChinaImport && (
+              <Badge variant="stitch">{sourceLabel}</Badge>
+            )}
             <Badge variant="secondary">
               {t(`admin.styles.lifecycle.${style.lifecycle}`)}
             </Badge>
@@ -153,6 +203,19 @@ export default function StyleWorkspace() {
           </div>
         </div>
         <div className="flex flex-wrap items-center gap-2">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => {
+              void ensureMasterData();
+              setEditOpen(true);
+            }}
+          >
+            <Pencil size={14} />
+            <span className="ml-1">
+              {t('admin.styles.workspace.edit', { defaultValue: 'Edit' })}
+            </span>
+          </Button>
           {canPark && (
             <Button
               variant="outline"
@@ -196,18 +259,12 @@ export default function StyleWorkspace() {
               <span className="ml-1">{t('admin.styles.workspace.approve')}</span>
             </Button>
           )}
-          {canSampleApprove && (
-            <Button
-              size="sm"
-              disabled={busy !== null}
-              onClick={() => setSampleApproveOpen(true)}
-            >
-              <CheckCircle2 size={14} />
-              <span className="ml-1">
-                {t('admin.styles.workspace.sampleApprove')}
-              </span>
-            </Button>
-          )}
+          {/* Sample sign-off ("Approve sample") used to live as a header
+              button here. It now lives inside the pipeline stepper —
+              clicking the locked "Approved" pill opens the same dialog.
+              Keeping it in one place avoids the orphaned-floating-button
+              feel and reinforces that approval is the terminal step of
+              the pipeline, not a separate action. */}
           {/* + Add colour — spawns a sibling Style inheriting fabric/CAD
               from this one. Only meaningful once the parent style number
               is minted (i.e. past draft). */}
@@ -235,6 +292,34 @@ export default function StyleWorkspace() {
           // sample flow from there. Use numeric id when no styleId is
           // minted yet (it's a draft).
           navigate(`/styles/${created.styleId ?? created.id}`);
+        }}
+      />
+
+      {/* Full editor — drawer reuses the same component the intake form
+          uses. Opens in view mode (the user clicked "Edit" to get here,
+          so the drawer's own Edit button immediately flips it into edit
+          mode — small UX nit worth fixing later). */}
+      <StyleQuickEditDrawer
+        open={editOpen}
+        style={style}
+        defaults={{
+          source: style.source,
+          category: (style.categoryCode ?? 'DRESS') as Parameters<
+            typeof StyleQuickEditDrawer
+          >[0]['defaults']['category'],
+        }}
+        collections={collections}
+        fabrics={fabrics}
+        onClose={() => setEditOpen(false)}
+        onSaved={(saved) => {
+          setEditOpen(false);
+          // If the styleId changed (e.g. after first approval mints it)
+          // route to the new canonical URL; otherwise just refresh.
+          if (saved.styleId && saved.styleId !== style.styleId) {
+            navigate(`/styles/${saved.styleId}`);
+          } else {
+            void load();
+          }
         }}
       />
 
@@ -279,7 +364,11 @@ export default function StyleWorkspace() {
         </section>
       )}
 
-      {/* Sampling pipeline — not applicable to China Import styles */}
+      {/* Sampling pipeline — not applicable to China Import styles.
+          Approved pill in the stepper opens the sample sign-off dialog
+          (same one the explicit "Approve sample" button would have
+          opened); "Send back" sets samplingStatus = corrections_needed
+          via patchStyle so the audit log + side-effects stay clean. */}
       {!isChinaImport && (
         <section className={cardClasses}>
           <h2 className="font-serif text-lg mb-3">
@@ -290,6 +379,16 @@ export default function StyleWorkspace() {
             onStepClick={(next) =>
               void doAction('step', () =>
                 patchStyle(style.id, { samplingStatus: next }),
+              )
+            }
+            onApproveClick={
+              canSampleApprove ? () => setSampleApproveOpen(true) : undefined
+            }
+            onSendBack={() =>
+              void doAction('send-back', () =>
+                patchStyle(style.id, {
+                  samplingStatus: 'corrections_needed',
+                }),
               )
             }
           />
@@ -311,13 +410,16 @@ export default function StyleWorkspace() {
         </section>
       )}
 
-      {/* Specs + colour family — a slim two-up below the workflow state. */}
+      {/* Specs (left) + Pattern/CAD preview (right). Two-up on lg.
+          The CAD card always renders so the designer can see at a
+          glance whether files have been uploaded — empty state nudges
+          them to the edit drawer. */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-4">
-        <section className={cn(cardClasses, 'lg:col-span-7')}>
+        <section className={cn(cardClasses, 'lg:col-span-6')}>
           <h2 className="font-serif text-lg mb-3">
             {t('admin.styles.workspace.coreSpecs')}
           </h2>
-          <dl className="grid grid-cols-2 sm:grid-cols-3 gap-x-4 gap-y-2 text-sm">
+          <dl className="grid grid-cols-2 sm:grid-cols-3 gap-x-4 gap-y-3 text-sm">
             <Spec label="Gender" value={style.gender ?? '—'} />
             <Spec label="Category" value={style.categoryCode ?? '—'} />
             <Spec label="Fabric" value={style.fabric?.name ?? '—'} />
@@ -328,11 +430,7 @@ export default function StyleWorkspace() {
             {!isChinaImport && (
               <Spec
                 label="Sampling timeline"
-                value={
-                  style.samplingTimeline
-                    ? new Date(style.samplingTimeline).toLocaleDateString()
-                    : '—'
-                }
+                value={renderSamplingTimeline(style.samplingTimeline)}
               />
             )}
             {!isChinaImport &&
@@ -340,17 +438,41 @@ export default function StyleWorkspace() {
                 <Spec
                   label="Sample fabric required"
                   value={`${style.sampleFabricRequired} ${
-                    style.fabric?.unitOfMeasure ?? ''
+                    // Default to "m" when the fabric record has no
+                    // unit-of-measure set, so the spec never reads as a
+                    // bare number.
+                    style.fabric?.unitOfMeasure === 'meter'
+                      ? 'm'
+                      : (style.fabric?.unitOfMeasure ?? 'm')
                   }`}
                 />
               )}
           </dl>
         </section>
 
-        {/* Colour family chips — siblings + parent linked via
-            parentStyleId. The "+ Add colour" chip inside is the primary
-            entry point; mirrors the header button. China Import has
-            no colour-family flow, so the card hides itself there. */}
+        <section className={cn(cardClasses, 'lg:col-span-6')}>
+          <h2 className="font-serif text-lg mb-3">
+            {t('admin.styles.drawer.patternCad.label', {
+              defaultValue: 'Pattern / CAD',
+            })}
+          </h2>
+          {style.patternCadPaths && style.patternCadPaths.length > 0 ? (
+            <PatternCadPreview patternCadPaths={style.patternCadPaths} />
+          ) : (
+            <p className="text-sm text-[var(--color-muted-foreground)]">
+              {t('admin.styles.drawer.patternCad.none', {
+                defaultValue:
+                  'No pattern or CAD files uploaded yet. Use Edit to upload .dxf / .pdf / .png / .jpg.',
+              })}
+            </p>
+          )}
+        </section>
+      </div>
+
+      {/* Colour family chips — siblings + parent linked via
+          parentStyleId. Now on its own row so the CAD preview gets
+          the full right column above. */}
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-4">
         <ColourFamilyCard
           style={style}
           canAddColour={!!style.styleId && !isChinaImport}
@@ -887,8 +1009,8 @@ function SampleStateCard({
     <div>
       <div className="flex items-center justify-between mb-3">
         <h2 className="font-serif text-lg">
-          {t('admin.styles.workspace.sampleWorkflow', {
-            defaultValue: 'Sample workflow',
+          {t('admin.styles.workspace.sampleDetails', {
+            defaultValue: 'Sample details',
           })}
         </h2>
         <span className="text-[11px] text-[var(--color-muted-foreground)]">
@@ -898,26 +1020,11 @@ function SampleStateCard({
         </span>
       </div>
 
+      {/* Sampling status is owned by the pipeline stepper above —
+          dropping the dropdown here removes the redundant control
+          and leaves only the independent fields (DXF / fit session /
+          pattern master) in this card. */}
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-sm">
-        <FieldDropdown
-          label={t('admin.styles.workspace.samplingStatus', {
-            defaultValue: 'Sampling status',
-          })}
-          value={(style.samplingStatus as SamplingStatus | null) ?? ''}
-          options={SAMPLING_STATUS_OPTIONS.map((s) => ({
-            value: s,
-            label: t(`admin.styles.samplingStatus.${s}` as const, {
-              defaultValue: s,
-            }),
-          }))}
-          flashing={!!savedFlash.samplingStatus}
-          onChange={(v) => {
-            onSave({
-              samplingStatus: (v as SamplingStatus) || null,
-            });
-            flash('samplingStatus');
-          }}
-        />
         <FieldDropdown
           label="DXF approved"
           value={style.dxfApproved ?? ''}
@@ -1026,14 +1133,42 @@ function FieldDropdown({
   );
 }
 
+/**
+ * Sampling timeline is stored as a free-form string at the moment
+ * (legacy column shape). The intake form writes a plain integer count
+ * of days now ("5"); some older rows still hold ISO dates from the
+ * pre-revamp UI. Render both cases sanely:
+ *   - integer → "5 days" / "1 day"
+ *   - ISO     → localized date
+ *   - other   → as-is
+ */
+function renderSamplingTimeline(value: string | null | undefined): string {
+  if (!value) return '—';
+  const trimmed = value.trim();
+  if (!trimmed) return '—';
+  if (/^\d+$/.test(trimmed)) {
+    const n = Number(trimmed);
+    return `${n} ${n === 1 ? 'day' : 'days'}`;
+  }
+  const d = new Date(trimmed);
+  if (!Number.isNaN(d.getTime())) return d.toLocaleDateString();
+  return trimmed;
+}
+
 function Spec({ label, value }: { label: string; value: React.ReactNode }) {
+  // Wrap each label/value pair in a single grid cell so the parent
+  // `grid-cols-N` lays out pairs side-by-side instead of splitting
+  // dt/dd into separate cells (which made values drift one column to
+  // the right of their label).
   return (
-    <>
-      <dt className="text-xs text-[var(--color-muted-foreground)] mt-1">
+    <div className="min-w-0">
+      <dt className="text-xs text-[var(--color-muted-foreground)] mb-0.5">
         {label}
       </dt>
-      <dd className="text-sm">{value}</dd>
-    </>
+      <dd className="text-sm text-[var(--color-foreground)] break-words">
+        {value}
+      </dd>
+    </div>
   );
 }
 

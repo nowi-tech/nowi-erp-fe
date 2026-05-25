@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Pencil } from 'lucide-react';
-import { Drawer } from '@/components/ui/drawer';
+import { Dialog } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Select } from '@/components/ui/select';
@@ -9,9 +8,9 @@ import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
 import { useToast } from '@/components/ui/toast';
 import ReferenceImageInput from '@/components/shared/ReferenceImageInput';
+import FabricPicker from '@/components/styles/intake/FabricPicker';
+import ColourPicker from '@/components/styles/intake/ColourPicker';
 import PatternCadInput from '@/components/shared/PatternCadInput';
-import PatternCadPreview from '@/components/styles/PatternCadPreview';
-import StyleHistoryTimeline from '@/components/styles/StyleHistoryTimeline';
 import { createStyle, patchStyle, getStyle } from '@/api/styles';
 import type {
   Style,
@@ -69,7 +68,9 @@ export default function StyleQuickEditDrawer({
   open,
   style,
   defaults,
-  collections,
+  // `collections` prop kept for API compat with callers but unused —
+  // the collection picker was removed from the edit form.
+  collections: _collections,
   fabrics,
   onClose,
   onSaved,
@@ -79,17 +80,17 @@ export default function StyleQuickEditDrawer({
   const [form, setForm] = useState<FormState>({});
   const [saving, setSaving] = useState(false);
   const [err, setErr] = useState<string | null>(null);
-  // Create always starts in edit mode; an existing style opens read-only.
-  const [mode, setMode] = useState<'view' | 'edit'>('view');
   /** Full style (with auditLogs) fetched for the history timeline. */
-  const [detail, setDetail] = useState<Style | null>(null);
+  const [, setDetail] = useState<Style | null>(null);
 
   useEffect(() => {
     if (!open) return;
     setErr(null);
     if (style) {
       setForm({ ...style });
-      setMode('view');
+      // Always open straight in edit mode — the view-then-edit two-step
+      // was a UX wart. The detail page already shows the full read-only
+      // summary; this modal is exclusively for editing.
       setDetail(style.auditLogs ? style : null);
     } else {
       setForm({
@@ -97,7 +98,6 @@ export default function StyleQuickEditDrawer({
         lifecycle: 'draft',
         gender: 'women',
       });
-      setMode('edit');
       setDetail(null);
     }
   }, [open, style, defaults]);
@@ -122,15 +122,6 @@ export default function StyleQuickEditDrawer({
   const title = style?.styleId ?? style?.workingName ?? t('admin.styles.drawer.newStyle');
   const entityId = style?.id ?? 'new';
 
-  /** "Cotton Twill — 240 meter available" / "Cotton Twill — no stock". */
-  const fabricOptionLabel = (f: Fabric) => {
-    const qty = f.availableQuantity;
-    if (qty === undefined || qty === null || qty <= 0) {
-      return `${f.name} — ${t('admin.fabricLibrary.noStock')}`;
-    }
-    const unit = f.unitOfMeasure ?? '';
-    return `${f.name} — ${qty} ${unit} ${t('admin.fabricLibrary.available')}`.trim();
-  };
 
   const submit = async () => {
     setSaving(true);
@@ -139,21 +130,74 @@ export default function StyleQuickEditDrawer({
       // Empty strings → null so the BE clears the column cleanly.
       const clean = <T,>(v: T): T | null =>
         v === '' || v === undefined ? null : v;
+
+      // BE's ValidationPipe runs in `whitelist: true` strict mode and
+      // rejects any property the DTO doesn't declare. Build the payload
+      // from a tight allowlist of editable fields — `{...form}` would
+      // leak id, lifecycle, auditLogs, etc. and 400 the request.
+      //
+      // Gender mapping: Style.gender stores W/M/U (StyleGender), but
+      // the DTO accepts women/men/unisex (Gender). Translate before
+      // sending. New-mode (`!style`) already initialises with the long
+      // form so the conversion is only needed in edit mode.
+      // Runtime is actually `W | M | U | women | men | unisex` because
+      // Prisma's StyleGender (W/M/U) leaks through the include relations
+      // while the FE Style.gender type pretends it's only the long form.
+      // Compare as `unknown` then narrow.
+      const genderToWire = (
+        g: typeof form.gender,
+      ): 'women' | 'men' | 'unisex' | undefined => {
+        const v = g as unknown as string | null | undefined;
+        if (v === 'W') return 'women';
+        if (v === 'M') return 'men';
+        if (v === 'U') return 'unisex';
+        if (v === 'women' || v === 'men' || v === 'unisex') return v;
+        return undefined;
+      };
+
       const payload: Record<string, unknown> = {
-        ...form,
         workingName: clean(form.workingName),
         developmentReason: clean(form.developmentReason),
         primaryColour: clean(form.primaryColour),
         referenceLink: clean(form.referenceLink),
+        referenceImage: clean(form.referenceImage),
+        referenceImageUrl: clean(form.referenceImageUrl),
+        referenceImages: form.referenceImages ?? [],
         remark: clean(form.remark),
         patternCadPaths: form.patternCadPaths ?? [],
+        fabricId: form.fabricId ?? null,
+        collectionId: form.collectionId ?? null,
+        // `categoryId` and `articleCategory` aren't on the FE Style type
+        // but exist at runtime (Prisma serialises them via the include).
+        // Cast to any/unknown to read them without polluting FormState.
+        categoryId:
+          (form as unknown as { categoryId?: number }).categoryId ??
+          undefined,
+        articleCategory:
+          (form as unknown as { articleCategory?: string }).articleCategory ??
+          undefined,
+        samplingStatus: form.samplingStatus ?? null,
+        samplingTimeline: clean(form.samplingTimeline),
+        modelFitSession: form.modelFitSession ?? null,
+        dxfApproved: form.dxfApproved ?? null,
+        sampleApproval: form.sampleApproval ?? null,
+        patternMasterId: form.patternMasterId ?? null,
+        // `factoryId` and `pdNote` belong to the deferred PD-tracker
+        // phase and aren't on the current UpdateStyleDto. Leave them
+        // out so the BE doesn't 400 on whitelist mode.
         sampleFabricRequired:
           form.sampleFabricRequired === '' ||
           form.sampleFabricRequired === undefined ||
           form.sampleFabricRequired === null
             ? null
             : Number(form.sampleFabricRequired),
+        gender: genderToWire(form.gender),
       };
+      // Strip undefined so we don't send "key: undefined" → JSON drops
+      // it anyway, but it keeps the wire payload clean for debugging.
+      for (const k of Object.keys(payload)) {
+        if (payload[k] === undefined) delete payload[k];
+      }
       let saved: Style;
       if (style) {
         saved = await patchStyle(style.id, payload);
@@ -177,14 +221,9 @@ export default function StyleQuickEditDrawer({
         'success',
       );
       onSaved(saved);
-      if (style) {
-        // Stay in the drawer, drop back to the refreshed view.
-        setForm({ ...saved });
-        setDetail(saved);
-        setMode('view');
-      } else {
-        onClose();
-      }
+      // Modal — close on save. Read-only display lives on the detail
+      // page, which the host re-fetches via onSaved → load().
+      onClose();
     } catch (e: unknown) {
       const m =
         (e as { response?: { data?: { message?: string | string[] } } })
@@ -196,15 +235,11 @@ export default function StyleQuickEditDrawer({
   };
 
   const cancelEdit = useCallback(() => {
-    if (style) {
-      // Revert any in-progress edits and return to view mode.
-      setForm({ ...(detail ?? style) });
-      setErr(null);
-      setMode('view');
-    } else {
-      onClose();
-    }
-  }, [style, detail, onClose]);
+    // Modal — Cancel just closes the editor. Pre-existing edit state is
+    // discarded on next open via the open-time effect.
+    setErr(null);
+    onClose();
+  }, [onClose]);
 
   const tf = (k: string) => t(`admin.styles.drawer.fields.${k}`);
 
@@ -214,28 +249,11 @@ export default function StyleQuickEditDrawer({
     (style?.source ?? form.source ?? defaults.source) === 'china_import';
 
   return (
-    <Drawer
+    <Dialog
       open={open}
       onClose={onClose}
       title={title}
-      subtitle={style?.collection?.name ?? defaults.source}
-      accent="stitch"
-      headerAction={
-        style && mode === 'view' ? (
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => {
-              setForm({ ...(detail ?? style) });
-              setMode('edit');
-            }}
-          >
-            <Pencil size={14} />
-            <span className="ml-1.5">{t('admin.styles.drawer.edit')}</span>
-          </Button>
-        ) : undefined
-      }
-      width="560px"
+      maxWidthClassName="max-w-3xl"
       footer={
         <div className="flex items-center justify-between gap-3">
           {err && (
@@ -244,45 +262,27 @@ export default function StyleQuickEditDrawer({
             </span>
           )}
           <div className="ml-auto flex gap-2">
-            {mode === 'edit' ? (
-              <>
-                <Button variant="outline" size="sm" onClick={cancelEdit}>
-                  {t('admin.styles.drawer.cancel')}
-                </Button>
-                <Button
-                  size="sm"
-                  disabled={saving}
-                  onClick={() => void submit()}
-                >
-                  {saving
-                    ? t('admin.styles.drawer.saving')
-                    : style
-                      ? t('admin.styles.drawer.save')
-                      : t('admin.styles.drawer.create')}
-                </Button>
-              </>
-            ) : (
-              <Button variant="outline" size="sm" onClick={onClose}>
-                {t('admin.styles.drawer.cancel')}
-              </Button>
-            )}
+            <Button variant="outline" size="sm" onClick={cancelEdit}>
+              {t('admin.styles.drawer.cancel')}
+            </Button>
+            <Button
+              size="sm"
+              disabled={saving}
+              onClick={() => void submit()}
+            >
+              {saving
+                ? t('admin.styles.drawer.saving')
+                : style
+                  ? t('admin.styles.drawer.save')
+                  : t('admin.styles.drawer.create')}
+            </Button>
           </div>
         </div>
       }
     >
-      {mode === 'view' ? (
-        // `detail ?? style` can briefly be null — the Drawer renders its
-        // children even while closed (open=false, no style selected yet).
-        detail ?? style ? (
-          <ViewBody
-            style={(detail ?? style)!}
-            tf={tf}
-            t={t}
-            isChinaImport={isChinaImport}
-          />
-        ) : null
-      ) : (
-        <div className="space-y-4">
+      {/* Read-only "view" body removed — modal is always an edit form
+          now. The detail page handles the read-only display. */}
+      <div className="space-y-4">
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div>
               <Label>{tf('workingName')}</Label>
@@ -308,40 +308,18 @@ export default function StyleQuickEditDrawer({
                 ))}
               </Select>
             </div>
-            <div>
-              <Label>{tf('collection')}</Label>
-              <Select
-                value={form.collectionId ? String(form.collectionId) : ''}
-                onChange={(e) =>
-                  set(
-                    'collectionId',
-                    e.target.value ? Number(e.target.value) : null,
-                  )
-                }
-              >
-                <option value="">—</option>
-                {collections.map((c) => (
-                  <option key={c.id} value={c.id}>
-                    {c.name}
-                  </option>
-                ))}
-              </Select>
-            </div>
             <div className="sm:col-span-2">
               <Label>{tf('fabric')}</Label>
-              <Select
-                value={form.fabricId ? String(form.fabricId) : ''}
-                onChange={(e) =>
-                  set('fabricId', e.target.value ? Number(e.target.value) : null)
+              {/* Same searchable + "+ Add new" combobox the intake form
+                  uses, so the edit experience matches submission. */}
+              <FabricPicker
+                fabrics={fabrics}
+                value={form.fabricId ?? null}
+                onChange={(next) => set('fabricId', next)}
+                onFabricCreated={(f) =>
+                  setForm((cur) => ({ ...cur, fabricId: f.id }))
                 }
-              >
-                <option value="">—</option>
-                {fabrics.map((f) => (
-                  <option key={f.id} value={f.id}>
-                    {fabricOptionLabel(f)}
-                  </option>
-                ))}
-              </Select>
+              />
             </div>
             <div className="sm:col-span-2">
               <Label>{tf('sampleFabricRequired')}</Label>
@@ -361,9 +339,13 @@ export default function StyleQuickEditDrawer({
             </div>
             <div className="sm:col-span-2">
               <Label>{tf('primaryColour')}</Label>
-              <Input
+              {/* `inlineAdd` because this picker is itself nested in
+                  a Dialog; the colour picker's own confirmation Dialog
+                  would share window-level Esc handlers and double-close. */}
+              <ColourPicker
                 value={form.primaryColour ?? ''}
-                onChange={(e) => set('primaryColour', e.target.value)}
+                onChange={(next) => set('primaryColour', next)}
+                inlineAdd
               />
             </div>
           </div>
@@ -448,142 +430,7 @@ export default function StyleQuickEditDrawer({
             />
           </div>
         </div>
-      )}
-    </Drawer>
+    </Dialog>
   );
 }
 
-// ─── View mode ────────────────────────────────────────────────────────
-
-interface ViewBodyProps {
-  style: Style;
-  tf: (k: string) => string;
-  t: (k: string, opts?: Record<string, unknown>) => string;
-  isChinaImport: boolean;
-}
-
-/** A single read-only field row. */
-function ViewField({
-  label,
-  value,
-}: {
-  label: string;
-  value: React.ReactNode;
-}) {
-  return (
-    <div>
-      <div className="text-xs font-medium text-[var(--color-muted-foreground)]">
-        {label}
-      </div>
-      <div className="mt-0.5 text-sm text-[var(--color-foreground)] break-words">
-        {value}
-      </div>
-    </div>
-  );
-}
-
-function ViewBody({ style, tf, t, isChinaImport }: ViewBodyProps) {
-  const dash = t('admin.styles.drawer.empty');
-  const v = (s: string | null | undefined) => (s ? cap(String(s).replace(/_/g, ' ')) : dash);
-
-  return (
-    <div className="space-y-6">
-      {/* Reference image */}
-      {(style.referenceImageUrl || style.referenceImage) && (
-        <div>
-          <div className="text-xs font-medium text-[var(--color-muted-foreground)] mb-1.5">
-            {tf('referenceImage')}
-          </div>
-          <ReferenceImageInput
-            entityId={style.id}
-            referenceImage={style.referenceImage ?? null}
-            referenceImageUrl={style.referenceImageUrl ?? null}
-            referenceLink={style.referenceLink ?? null}
-            onChange={() => {
-              /* read-only in view mode */
-            }}
-          />
-        </div>
-      )}
-
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-3">
-        <ViewField
-          label={tf('styleNo')}
-          value={style.styleId ?? style.workingName ?? dash}
-        />
-        <ViewField label={tf('workingName')} value={style.workingName ?? dash} />
-        <ViewField label={tf('gender')} value={v(style.gender)} />
-        <ViewField
-          label={tf('collection')}
-          value={style.collection?.name ?? dash}
-        />
-        <ViewField label={tf('fabric')} value={style.fabric?.name ?? dash} />
-        <ViewField
-          label={tf('primaryColour')}
-          value={style.primaryColour ?? dash}
-        />
-        {!isChinaImport && (
-          <>
-            <ViewField
-              label={tf('samplingStatus')}
-              value={v(style.samplingStatus)}
-            />
-            <ViewField
-              label={tf('samplingTimeline')}
-              value={
-                style.samplingTimeline
-                  ? new Date(style.samplingTimeline).toLocaleDateString()
-                  : dash
-              }
-            />
-            <ViewField
-              label={tf('patternMaster')}
-              value={style.patternMaster?.name ?? dash}
-            />
-            <ViewField label={tf('dxfApproved')} value={v(style.dxfApproved)} />
-            <ViewField
-              label={tf('sampleApproval')}
-              value={v(style.sampleApproval)}
-            />
-          </>
-        )}
-        <ViewField
-          label={tf('productionStatus')}
-          value={v(style.productionStatus)}
-        />
-      </div>
-
-      {style.developmentReason && (
-        <ViewField label={tf('developmentReason')} value={style.developmentReason} />
-      )}
-
-      {style.remark && (
-        <ViewField label={tf('remark')} value={style.remark} />
-      )}
-
-      {/* Pattern / CAD file — sampling-only */}
-      {!isChinaImport && (
-        <div>
-          <div className="text-xs font-medium text-[var(--color-muted-foreground)] mb-1.5">
-            {tf('patternCad')}
-          </div>
-          {style.patternCadPaths && style.patternCadPaths.length > 0 ? (
-            <PatternCadPreview patternCadPaths={style.patternCadPaths} />
-          ) : (
-            <p className="text-sm text-[var(--color-muted-foreground)]">
-              {t('admin.styles.drawer.patternCad.none')}
-            </p>
-          )}
-        </div>
-      )}
-
-      {/* History timeline */}
-      <div>
-        <div className="text-xs font-medium text-[var(--color-muted-foreground)] mb-2">
-          {t('admin.styles.drawer.sections.history')}
-        </div>
-        <StyleHistoryTimeline auditLogs={style.auditLogs ?? []} />
-      </div>
-    </div>
-  );
-}

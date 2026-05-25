@@ -306,7 +306,11 @@ export default function NewIntake() {
     if (u === 'meter') return 'm';
     if (u === 'kg') return 'kg';
     if (u === 'oz') return 'oz';
-    return '';
+    // Default — fabric records without an explicit UoM (older imports
+    // or factory-side data) fall through to meters since that's the
+    // textile standard. Keeps the input visually labelled even before
+    // the fabric library is fully normalised.
+    return 'm';
   };
 
   return (
@@ -498,23 +502,42 @@ export default function NewIntake() {
                     )}
                     disabled={!selectedFabric}
                   />
-                  {selectedFabric?.unitOfMeasure && (
-                    <span
-                      className="pointer-events-none absolute inset-y-0 right-3 flex items-center text-[12px] text-[var(--color-muted-foreground)]"
-                      aria-hidden
-                    >
-                      {uomLabel(selectedFabric.unitOfMeasure)}
-                    </span>
-                  )}
+                  {/* Always show the unit — defaults to "m" when the
+                      fabric has no UoM set, so the input is never just
+                      a bare number. */}
+                  <span
+                    className="pointer-events-none absolute inset-y-0 right-3 flex items-center text-[12px] font-medium text-[var(--color-muted-foreground)]"
+                    aria-hidden
+                  >
+                    {uomLabel(selectedFabric?.unitOfMeasure ?? null)}
+                  </span>
                 </div>
               </div>
               <div>
                 <Label>{t('admin.styles.intake.samplingTimeline')}</Label>
-                <Input
-                  value={form.samplingTimeline}
-                  onChange={(e) => set('samplingTimeline', e.target.value)}
-                  placeholder={t('admin.styles.intake.samplingTimelinePh')}
-                />
+                <div className="relative">
+                  {/* Days-only — the workbook reality is whole-day
+                      estimates. We capture a number and render the
+                      unit as a faint suffix so the field reads
+                      "5 days" without the user typing the word. */}
+                  <Input
+                    type="number"
+                    min="0"
+                    step="1"
+                    inputMode="numeric"
+                    value={form.samplingTimeline}
+                    onChange={(e) =>
+                      set('samplingTimeline', e.target.value)
+                    }
+                    placeholder="0"
+                  />
+                  <span
+                    className="pointer-events-none absolute inset-y-0 right-3 flex items-center text-[12px] font-medium text-[var(--color-muted-foreground)]"
+                    aria-hidden
+                  >
+                    {Number(form.samplingTimeline) === 1 ? 'day' : 'days'}
+                  </span>
+                </div>
               </div>
               <div>
                 <Label>{t('admin.styles.intake.patternMaster')}</Label>

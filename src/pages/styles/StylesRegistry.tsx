@@ -5,13 +5,17 @@ import { useTranslation } from 'react-i18next';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Select } from '@/components/ui/select';
+import { useToast } from '@/components/ui/toast';
 import AttentionChips from '@/components/styles/AttentionChips';
 import StyleKpiStrip from '@/components/styles/StyleKpiStrip';
 import StylesTable from '@/components/styles/StylesTable';
 import {
+  approveStyle,
   listStyles,
   getStylesSummary,
   listCollections,
+  parkStyle,
+  reviveStyle,
   type ListStylesParams,
   type StyleTab,
   type StylesSummary,
@@ -32,6 +36,7 @@ const TABS: StyleTab[] = ['inbox', 'in_sampling', 'parked', 'in_pd', 'all'];
 export default function StylesRegistry() {
   const { t } = useTranslation();
   const navigate = useNavigate();
+  const toast = useToast();
 
   const [tab, setTab] = useState<StyleTab>('inbox');
   const [summary, setSummary] = useState<StylesSummary | null>(null);
@@ -42,19 +47,23 @@ export default function StylesRegistry() {
   const [collectionId, setCollectionId] = useState<string>('');
   const [samplingStatus, setSamplingStatus] = useState<string>('');
   const [collections, setCollections] = useState<Collection[]>([]);
-  const [showWidgets, setShowWidgets] = useState(true);
 
-  // Load master data once. The previous drawer flow also fetched the
-  // fabric master here; not needed anymore since the drawer is gone
-  // and the detail page fetches its own.
+  // Collections master loaded once — they barely change. Summary is
+  // refreshed alongside every list load so KPI counts stay in sync
+  // after approve/park/revive/edit from anywhere in the app.
   useEffect(() => {
-    void Promise.all([
-      listCollections().catch(() => [] as Collection[]),
-      getStylesSummary().catch(() => null),
-    ]).then(([c, s]) => {
-      setCollections(c);
+    void listCollections()
+      .then(setCollections)
+      .catch(() => setCollections([]));
+  }, []);
+
+  const reloadSummary = useCallback(async () => {
+    try {
+      const s = await getStylesSummary();
       setSummary(s);
-    });
+    } catch {
+      /* leave the previous summary in place on transient failures */
+    }
   }, []);
 
   const load = useCallback(async () => {
@@ -75,14 +84,65 @@ export default function StylesRegistry() {
     } finally {
       setLoading(false);
     }
-  }, [tab, searchText, collectionId, samplingStatus]);
+    // Fire-and-forget — KPI strip refresh in the background while the
+    // table renders. Doesn't block the visible list.
+    void reloadSummary();
+  }, [tab, searchText, collectionId, samplingStatus, reloadSummary]);
 
   useEffect(() => {
     const t = setTimeout(() => void load(), 200);
     return () => clearTimeout(t);
   }, [load]);
 
+  // Refresh summary when the tab regains focus — covers the case
+  // where the user approves a style on the detail page and uses the
+  // browser back button or a quick swipe back to the registry.
+  useEffect(() => {
+    const onFocus = () => void reloadSummary();
+    window.addEventListener('focus', onFocus);
+    document.addEventListener('visibilitychange', onFocus);
+    return () => {
+      window.removeEventListener('focus', onFocus);
+      document.removeEventListener('visibilitychange', onFocus);
+    };
+  }, [reloadSummary]);
+
   const openCreateDesign = () => navigate('/styles/new');
+
+  // Inline row actions — all three are one-click against the API and
+  // refresh the list. Approve sends an empty body (BE accepts it; the
+  // checklist fields are all optional and live on the detail page for
+  // designers who want to record them). Park / Revive are unchanged.
+  const onRowApprove = async (s: Style) => {
+    try {
+      await approveStyle(s.id);
+      toast.show('Approved.', 'success');
+      void load();
+    } catch (e: unknown) {
+      const m =
+        (e as { response?: { data?: { message?: string | string[] } } })
+          ?.response?.data?.message ?? 'Could not approve.';
+      toast.show(Array.isArray(m) ? m.join(', ') : String(m), 'error');
+    }
+  };
+  const onRowPark = async (s: Style) => {
+    try {
+      await parkStyle(s.id, { reason: 'Paused from inbox' });
+      toast.show('Parked.', 'success');
+      void load();
+    } catch {
+      toast.show('Could not park.', 'error');
+    }
+  };
+  const onRowRevive = async (s: Style) => {
+    try {
+      await reviveStyle(s.id);
+      toast.show('Revived.', 'success');
+      void load();
+    } catch {
+      toast.show('Could not revive.', 'error');
+    }
+  };
 
   const TAB_COUNTS = useMemo(() => {
     // Best-effort client-side counts pending a BE summary endpoint.
@@ -126,30 +186,6 @@ export default function StylesRegistry() {
           virtualLive={summary.kpi.virtualLive}
         />
       )}
-
-      {/* Collapsible widgets row */}
-      <div className="flex items-center justify-between border-b border-[var(--color-border)] pb-2">
-        <div className="flex gap-4 text-xs font-medium">
-          <button
-            type="button"
-            onClick={() => setShowWidgets((v) => !v)}
-            className="text-[var(--color-primary)] hover:underline"
-          >
-            {showWidgets
-              ? t('admin.styles.widgets.samplingFunnel')
-              : '▸ ' + t('admin.styles.widgets.samplingFunnel').replace('▸ ', '')}
-          </button>
-          <a href="#" className="text-[var(--color-primary)] hover:underline">
-            {t('admin.styles.widgets.byCollection')}
-          </a>
-          <a href="#" className="text-[var(--color-primary)] hover:underline">
-            {t('admin.styles.widgets.recentRemarks')}
-          </a>
-        </div>
-        <span className="text-[10px] text-[var(--color-muted-foreground)] italic">
-          {t('admin.styles.widgets.note')}
-        </span>
-      </div>
 
       {/* Tab + filter + table card */}
       <div className="bg-[var(--color-surface)] rounded-[var(--radius-md)] border border-[var(--color-border)] shadow-sm">
@@ -231,6 +267,9 @@ export default function StylesRegistry() {
             // always-editable SampleStateCard + full audit log.
             onRowClick={(s) => navigate(`/styles/${s.styleId ?? s.id}`)}
             onStyleNoClick={(s) => navigate(`/styles/${s.styleId ?? s.id}`)}
+            onApprove={onRowApprove}
+            onPark={onRowPark}
+            onRevive={onRowRevive}
           />
         </div>
       </div>

@@ -303,7 +303,7 @@ export default function CategoryPicker({
             <p className="mt-1 text-[11px] text-[var(--color-muted-foreground)]">
               {t(
                 'admin.styles.intake.categoryStyleCodeHint',
-                '2-4 letter prefix used in style numbers (e.g. NOWI-W-SK-1001). 2 letters is the convention; 3-4 allowed for niche codes (e.g. COD).',
+                '2-4 letter prefix used in style numbers (e.g. NOWIWSK1001). 2 letters is the convention; 3-4 allowed for niche codes (e.g. COD).',
               )}
             </p>
           </div>

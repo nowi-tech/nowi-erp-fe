@@ -205,7 +205,7 @@
       "genderM": "Men",
       "genderU": "Unisex",
       "category": "Category",
-      "styleIdHint": "New combos generate a fresh NOWI Style ID (e.g. NOWI-W-DR-1001) on save.",
+      "styleIdHint": "New combos generate a fresh NOWI Style ID (e.g. NOWIWDR1001) on save.",
       "sizeMatrix": "Size matrix",
       "notes": "Notes (optional)",
       "remark": "Remark (optional)",
@@ -542,6 +542,11 @@
         "handed_over_for_inspection": "Handed over",
         "corrections_needed": "Corrections",
         "approved_for_production": "Approved"
+      },
+      "sampleApproval": {
+        "approved_for_production": "Approved",
+        "under_review_corrections": "Under review",
+        "pattern_correction_approved": "Pattern correction OK"
       },
       "channel": {
         "myntra": "Myntra",
