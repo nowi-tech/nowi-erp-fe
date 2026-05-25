@@ -88,7 +88,11 @@ export default function CadPreviewPage() {
   };
 
   return (
-    <div className="min-h-screen flex flex-col bg-[var(--color-background)] text-[var(--color-foreground)]">
+    /* h-screen (definite height), not min-h-screen — `flex-1` on the
+       <main> below needs a hard parent height, otherwise the inner
+       canvas/iframe collapses to 0px and the DXF / PDF / image
+       renders into nothing. */
+    <div className="h-screen min-h-screen flex flex-col bg-[var(--color-background)] text-[var(--color-foreground)]">
       <header className="flex items-center justify-between gap-3 border-b border-[var(--color-border)] bg-[var(--color-surface)] px-4 py-3">
         <div className="flex items-center gap-3 min-w-0">
           <button
