@@ -31,13 +31,13 @@ function titleCase(s: string): string {
 }
 
 interface Props {
-  /** When set with a real `id`, the form is in edit mode (PATCHes on
-   *  save). Pass null / undefined / an object without an id for create
-   *  mode — use `initialName` to prefill in that case. */
+  /** Existing fabric to edit. When set, the form PATCHes on save.
+   *  Pass `null` / omit for create mode and use `initialName` /
+   *  `initialUnitOfMeasure` to prefill. */
   editing?: Fabric | null;
   /** Optional name prefill for create mode (e.g. the typed search term
    *  in the intake's "+ Add fabric" picker). Ignored when `editing`
-   *  is set with a real id. */
+   *  is set. */
   initialName?: string;
   /** Optional UoM prefill for create mode. Intake quick-add defaults
    *  to 'meter' so the most common path is one fewer click; Library
@@ -146,6 +146,23 @@ export default function FabricEditorForm({
     if (comp.length > 0) {
       if (comp.some((r) => !r.fibre.trim())) {
         setCompError(t('admin.fabricLibrary.comp.errEmptyFibre'));
+        return;
+      }
+      // Validate each percent is a finite number in [0, 100] before
+      // the sum check. Number('e') or Number('') yields NaN; some
+      // browsers also let <input type="number"> hold a stale "e" /
+      // "1e" mid-typing. Catch it here instead of shipping NaN to the
+      // BE (which 400s with a confusing message).
+      const invalid = comp.find((r) => {
+        const n = Number(r.percent);
+        return !Number.isFinite(n) || n < 0 || n > 100;
+      });
+      if (invalid) {
+        setCompError(
+          t('admin.fabricLibrary.comp.errInvalidPercent', {
+            defaultValue: 'Each percent must be a number between 0 and 100.',
+          }),
+        );
         return;
       }
       const norm = comp.map((r) => titleCase(r.fibre));
