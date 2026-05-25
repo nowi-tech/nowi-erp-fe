@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { useSearchParams } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { ArrowLeft, Download, Loader2, Printer } from 'lucide-react';
 import { DxfViewer } from 'dxf-viewer';
 import { Color } from 'three';
@@ -21,6 +21,7 @@ import { getReadUrls } from '@/api/storage';
  */
 export default function CadPreviewPage() {
   const [params] = useSearchParams();
+  const navigate = useNavigate();
   const objectPath = params.get('path') ?? '';
   const fileName = objectPath.split('/').pop() ?? objectPath;
   const ext = (fileName.split('.').pop() ?? '').toLowerCase();
@@ -97,7 +98,16 @@ export default function CadPreviewPage() {
         <div className="flex items-center gap-3 min-w-0">
           <button
             type="button"
-            onClick={() => window.close()}
+            onClick={() => {
+              // `window.close()` is blocked for non-script-opened
+              // tabs (most browsers). Fall back to history nav when
+              // there's somewhere to go, otherwise route to /styles.
+              if (window.history.length > 1) {
+                navigate(-1);
+              } else {
+                navigate('/styles');
+              }
+            }}
             aria-label="Close preview"
             className="rounded-[var(--radius-sm)] p-1.5 text-[var(--color-muted-foreground)] hover:bg-[var(--color-muted)]"
           >

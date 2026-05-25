@@ -69,6 +69,13 @@ export function Dialog({
   const confirmOnCloseRef = useRef(confirmOnClose);
   confirmOnCloseRef.current = confirmOnClose;
   const [confirmOpen, setConfirmOpen] = useState(false);
+
+  // Clear any pending discard-confirm when the dialog itself closes;
+  // otherwise reopening shows a stale prompt for changes that no
+  // longer apply.
+  useEffect(() => {
+    if (!open) setConfirmOpen(false);
+  }, [open]);
   const requestClose = () => {
     if (confirmOnCloseRef.current) {
       setConfirmOpen(true);

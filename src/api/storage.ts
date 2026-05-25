@@ -50,14 +50,19 @@ export async function issueReadUrls(
  * Android camera captures coming back through `<input type="file"
  * capture="environment">` can have `file.type` empty or set to a value
  * the BE's allow-list regex rejects (e.g. `image/jpg`). The BE only
- * accepts `image/(jpeg|png|webp)` for photos — anything else 400s on
- * /api/storage/upload-url and the user sees a generic error.
+ * accepts `image/(jpeg|png|webp)` for photos.
  *
- * Strategy:
- *  1. If `file.type` is already an allowed image MIME, use it.
- *  2. Otherwise fall back to the file extension.
- *  3. Final fallback is `image/jpeg` — the safest assumption for an
- *     Android camera output that didn't self-identify.
+ * Strategy is conservative — only normalise known Android quirks so we
+ * never coerce a random file type (e.g. `image/gif`, `image/heic`)
+ * into JPEG and bypass the BE allow-list. Unknown types pass through
+ * unchanged so the BE returns a clear 400.
+ *
+ *  1. Allowed MIME → use as-is.
+ *  2. `image/jpg` (Android typo) OR empty type with .jpg/.jpeg ext →
+ *     `image/jpeg`.
+ *  3. Empty type with .png / .webp ext → matching MIME.
+ *  4. Anything else → pass `file.type` through (or empty string),
+ *     letting the BE allow-list reject it with a real error.
  */
 function resolvePhotoContentType(file: File): string {
   const t = (file.type || '').toLowerCase();
@@ -65,13 +70,16 @@ function resolvePhotoContentType(file: File): string {
     return t;
   }
   const ext = file.name.toLowerCase().split('.').pop() ?? '';
-  if (ext === 'png') return 'image/png';
-  if (ext === 'webp') return 'image/webp';
-  if (ext === 'jpg' || ext === 'jpeg' || t === 'image/jpg') return 'image/jpeg';
-  // Camera intents on some Android OEMs return a File with no name + no
-  // type at all. Defaulting to JPEG matches the actual encoding the
-  // hardware uses in practice and unblocks the upload.
-  return 'image/jpeg';
+  if (t === 'image/jpg') return 'image/jpeg';
+  if (t === '') {
+    if (ext === 'png') return 'image/png';
+    if (ext === 'webp') return 'image/webp';
+    if (ext === 'jpg' || ext === 'jpeg') return 'image/jpeg';
+  }
+  // Don't guess — return whatever the browser gave us so the BE
+  // allow-list rejects unsupported types instead of us laundering
+  // them through as JPEG.
+  return t;
 }
 
 /**

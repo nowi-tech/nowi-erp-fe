@@ -375,9 +375,18 @@ export default function FinishingReceiveLot() {
     // an image at all (e.g. a doc on a desktop file picker). The BE
     // would reject this with a confusing 400; better to fail with a
     // clear local message.
-    const looksLikeImage =
-      file.type.startsWith('image/') ||
-      /\.(jpe?g|png|webp|heic|heif)$/i.test(file.name);
+    // Only accept what the BE allow-list actually accepts: JPEG / PNG
+    // / WebP. heic/heif from iPhones aren't supported by the BE, so
+    // we reject locally with a clear toast instead of letting the
+    // upload 400 later.
+    const supportedType =
+      file.type === 'image/jpeg' ||
+      file.type === 'image/png' ||
+      file.type === 'image/webp' ||
+      file.type === 'image/jpg' ||
+      file.type === '';
+    const supportedExt = /\.(jpe?g|png|webp)$/i.test(file.name);
+    const looksLikeImage = supportedType && (file.type !== '' || supportedExt);
     if (!looksLikeImage) {
       sonnerToast.error(
         t('finishing.photoMustBeImage', {
@@ -838,6 +847,20 @@ export default function FinishingReceiveLot() {
                     <span
                       role="button"
                       tabIndex={0}
+                      onKeyDown={(e) => {
+                        // Span needs an explicit keyboard handler —
+                        // unlike a real <button>, Enter/Space don't
+                        // activate the parent <label> automatically.
+                        // Forward to the previous sibling (the
+                        // hidden file input) so keyboard users get
+                        // the same picker as click users.
+                        if (e.key === 'Enter' || e.key === ' ') {
+                          e.preventDefault();
+                          const input = e.currentTarget
+                            .previousElementSibling as HTMLInputElement | null;
+                          input?.click();
+                        }
+                      }}
                       className="inline-flex h-9 cursor-pointer items-center gap-1.5 rounded-[var(--radius-sm)] border border-[var(--color-input)] bg-transparent px-3 text-sm font-medium hover:bg-[var(--color-muted)]"
                     >
                       <Camera size={14} />

@@ -73,7 +73,14 @@ export default function SamplingPipelineStepper({
   // When the style has no sampling status yet (fresh out of intake),
   // we fall back to making the FIRST step the writable chip so the
   // user always has somewhere to click.
-  const writableIdx = idx === -1 ? 0 : idx;
+  // When the style has no sampling status yet (fresh out of intake),
+  // fall back to step 0 so the user has somewhere to click. When the
+  // style is in `corrections_needed`, idx is also -1 — but in that
+  // case the active state is "off the linear path"; pretending step 1
+  // is writable would misrepresent the progress, so we suppress the
+  // fallback and leave NO chip writable until the user picks via the
+  // popover that opens from any pill click.
+  const writableIdx = inCorrections ? -1 : idx === -1 ? 0 : idx;
   const clickable = !!onStepClick;
 
   // Popover open state for the writable chip. Click-outside dismiss
@@ -107,6 +114,20 @@ export default function SamplingPipelineStepper({
           {t('admin.styles.workspace.inCorrections', {
             defaultValue: 'Sent back for corrections',
           })}
+          {clickable && (
+            <button
+              type="button"
+              onClick={() => setOpen((v) => !v)}
+              aria-haspopup="listbox"
+              aria-expanded={open}
+              className="ml-2 inline-flex items-center gap-1 text-[var(--color-primary)] hover:underline"
+            >
+              {t('admin.styles.workspace.resumeSampling', {
+                defaultValue: 'Resume…',
+              })}
+              <ChevronDown size={11} aria-hidden />
+            </button>
+          )}
         </div>
       )}
 

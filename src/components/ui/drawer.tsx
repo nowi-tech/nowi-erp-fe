@@ -82,6 +82,13 @@ export function Drawer({
   confirmOnCloseRef.current = confirmOnClose;
   const [confirmOpen, setConfirmOpen] = useState(false);
 
+  // Clear any pending discard-confirm when the drawer itself closes;
+  // otherwise the ConfirmDialog overlay lingers after the drawer
+  // unmounts and reopening shows a stale prompt.
+  useEffect(() => {
+    if (!open) setConfirmOpen(false);
+  }, [open]);
+
   const requestClose = () => {
     if (confirmOnCloseRef.current) {
       setConfirmOpen(true);
