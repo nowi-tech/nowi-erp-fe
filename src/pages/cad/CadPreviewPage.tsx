@@ -195,79 +195,105 @@ function DxfFull({ url }: { url: string }) {
 
   useEffect(() => {
     if (!containerRef.current) return;
+    const container = containerRef.current;
     let cancelled = false;
     setStatus('loading');
-    const viewer = new DxfViewer(containerRef.current, {
-      clearColor: new Color(0xffffff),
-      autoResize: true,
-      colorCorrection: true,
-      preserveDrawingBuffer: true,
-    });
-    viewerRef.current = viewer;
-    /**
-     * Frame the camera on the loaded geometry's bounding box.
-     * Re-runs on every `resized` event so the camera stays centred
-     * even when the canvas was 0×0 at initial mount (flex layout
-     * settling) and only got its real size after Load() resolved.
-     */
-    const fit = () => {
-      try {
-        const bounds = viewer.GetBounds() as
-          | { minX: number; maxX: number; minY: number; maxY: number }
-          | null;
-        if (
-          bounds &&
-          Number.isFinite(bounds.minX) &&
-          Number.isFinite(bounds.maxX) &&
-          Number.isFinite(bounds.minY) &&
-          Number.isFinite(bounds.maxY)
-        ) {
-          (
-            viewer as unknown as {
-              FitView: (
-                minX: number,
-                maxX: number,
-                minY: number,
-                maxY: number,
-                padding?: number,
-              ) => void;
-            }
-          ).FitView(
-            bounds.minX,
-            bounds.maxX,
-            bounds.minY,
-            bounds.maxY,
-            0.1,
-          );
+
+    // DxfViewer's constructor reads `clientWidth/clientHeight` from
+    // the container synchronously. If the flex layout hasn't settled
+    // yet (very common in this page — the canvas is `flex-1` inside
+    // `h-screen` and the toolbar takes a render pass to size), the
+    // viewer initializes at 0×0. The subsequent ResizeObserver-driven
+    // SetSize divides by the old canvasWidth (=0), the camera frustum
+    // becomes NaN/Infinity, and the geometry ends up framed against
+    // garbage — visually it lands in a tiny strip at the bottom of
+    // the canvas. Wait for a real size before constructing.
+    let viewer: DxfViewer | null = null;
+    let observer: ResizeObserver | null = null;
+
+    const runLoad = (v: DxfViewer) => {
+      const fit = () => {
+        try {
+          const bounds = v.GetBounds() as
+            | { minX: number; maxX: number; minY: number; maxY: number }
+            | null;
+          if (
+            bounds &&
+            Number.isFinite(bounds.minX) &&
+            Number.isFinite(bounds.maxX) &&
+            Number.isFinite(bounds.minY) &&
+            Number.isFinite(bounds.maxY)
+          ) {
+            (
+              v as unknown as {
+                FitView: (
+                  minX: number,
+                  maxX: number,
+                  minY: number,
+                  maxY: number,
+                  padding?: number,
+                ) => void;
+              }
+            ).FitView(
+              bounds.minX,
+              bounds.maxX,
+              bounds.minY,
+              bounds.maxY,
+              0.1,
+            );
+          }
+        } catch {
+          /* no bounds yet — keep default camera */
         }
-      } catch {
-        /* no bounds yet — keep default camera */
-      }
+      };
+      // Re-fit on every canvas resize so the camera tracks the
+      // current viewport, not the size at the moment Load resolved.
+      (
+        v as unknown as {
+          Subscribe: (event: string, handler: () => void) => void;
+        }
+      ).Subscribe('resized', fit);
+      v.Load({ url })
+        .then(() => {
+          if (cancelled) return;
+          fit();
+          setStatus('ready');
+        })
+        .catch(() => {
+          if (!cancelled) setStatus('error');
+        });
     };
 
-    // The viewer emits 'resized' from its ResizeObserver. Re-fit on
-    // every fire so the camera frames the geometry against the latest
-    // canvas dimensions (not the 0×0 size at initial mount).
-    (
-      viewer as unknown as {
-        Subscribe: (event: string, handler: () => void) => void;
-      }
-    ).Subscribe('resized', fit);
-
-    viewer
-      .Load({ url })
-      .then(() => {
-        if (cancelled) return;
-        fit();
-        setStatus('ready');
-      })
-      .catch(() => {
-        if (!cancelled) setStatus('error');
+    const construct = () => {
+      if (cancelled) return;
+      viewer = new DxfViewer(container, {
+        clearColor: new Color(0xffffff),
+        autoResize: true,
+        colorCorrection: true,
+        preserveDrawingBuffer: true,
       });
+      viewerRef.current = viewer;
+      runLoad(viewer);
+    };
+
+    if (container.clientWidth > 0 && container.clientHeight > 0) {
+      construct();
+    } else {
+      observer = new ResizeObserver(() => {
+        if (cancelled || viewer) return;
+        if (container.clientWidth > 0 && container.clientHeight > 0) {
+          observer?.disconnect();
+          construct();
+        }
+      });
+      observer.observe(container);
+    }
+
     return () => {
       cancelled = true;
+      observer?.disconnect();
       try {
-        viewer.Destroy();
+        viewer?.Destroy();
       } catch {
         /* viewer may already be torn down */
       }
