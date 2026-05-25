@@ -526,11 +526,18 @@ export default function StylesTable({
                           >
                             <InlineStatusCell
                               value={s.samplingStatus ?? ''}
-                              displayLabel={s.samplingStatus ?? '—'}
+                              displayLabel={
+                                s.samplingStatus
+                                  ? t(
+                                      `admin.styles.samplingSteps.${s.samplingStatus}` as const,
+                                      { defaultValue: s.samplingStatus },
+                                    )
+                                  : '—'
+                              }
                               options={SAMPLING_STATUS_OPTIONS.map((v) => ({
                                 value: v,
                                 label: t(
-                                  `admin.styles.samplingStatus.${v}` as const,
+                                  `admin.styles.samplingSteps.${v}` as const,
                                   { defaultValue: v },
                                 ),
                               }))}
@@ -549,7 +556,14 @@ export default function StylesTable({
                           >
                             <InlineStatusCell
                               value={s.sampleApproval ?? ''}
-                              displayLabel={s.sampleApproval ?? '—'}
+                              displayLabel={
+                                s.sampleApproval
+                                  ? t(
+                                      `admin.styles.sampleApproval.${s.sampleApproval}` as const,
+                                      { defaultValue: s.sampleApproval },
+                                    )
+                                  : '—'
+                              }
                               options={SAMPLE_APPROVAL_OPTIONS.map((v) => ({
                                 value: v,
                                 label: t(

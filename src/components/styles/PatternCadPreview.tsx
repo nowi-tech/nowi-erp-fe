@@ -113,8 +113,14 @@ function PatternCadFileTile({
   const isImage = IMAGE_EXT.includes(ext);
   const isPdf = ext === 'pdf';
   const isDxf = ext === 'dxf';
+  // Single "Open in new window" link replaces the previous trio of
+  // inline Print + Open + Download buttons. The dedicated preview page
+  // at /cad/preview hosts all three actions (Download, Print, full
+  // DXF interaction) so they live in one place instead of being
+  // half-implemented on the row and half on the page.
+  const previewHref = `/cad/preview?path=${encodeURIComponent(path)}`;
 
-  const fileRow = (printable: boolean, onPrint?: () => void) => (
+  const fileRow = (_printable: boolean, _onPrint?: () => void) => (
     <div className="flex items-center justify-between gap-3 rounded-[var(--radius-sm)] border border-[var(--color-border)] px-3 py-2">
       <span className="flex min-w-0 items-center gap-2 text-sm">
         <FileText
@@ -126,25 +132,17 @@ function PatternCadFileTile({
         </span>
       </span>
       <span className="flex shrink-0 items-center gap-3">
-        {printable && onPrint && (
-          <button
-            type="button"
-            onClick={onPrint}
-            className="inline-flex items-center gap-1 text-xs text-[var(--color-primary)] hover:underline"
-          >
-            <Printer size={13} /> {t('admin.styles.drawer.patternCad.print')}
-          </button>
-        )}
-        {url && (
-          <a
-            href={url}
-            target="_blank"
-            rel="noreferrer"
-            className="inline-flex items-center gap-1 text-xs text-[var(--color-primary)] hover:underline"
-          >
-            <Download size={13} /> {t('admin.styles.drawer.patternCad.open')}
-          </a>
-        )}
+        <a
+          href={previewHref}
+          target="_blank"
+          rel="noreferrer"
+          className="inline-flex items-center gap-1 text-xs text-[var(--color-primary)] hover:underline"
+        >
+          <Download size={13} />{' '}
+          {t('admin.styles.drawer.patternCad.openPreview', {
+            defaultValue: 'Open in new window',
+          })}
+        </a>
       </span>
     </div>
   );
