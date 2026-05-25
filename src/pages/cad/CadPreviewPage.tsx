@@ -203,7 +203,23 @@ function DxfFull({ url }: { url: string }) {
     viewer
       .Load({ url })
       .then(() => {
-        if (!cancelled) setStatus('ready');
+        if (cancelled) return;
+        // dxf-viewer doesn't auto-fit the camera to the loaded
+        // geometry; without this call the patterns render at their
+        // native CAD coordinates, which is almost always off-screen
+        // for the default camera. FitView() (and the lower-case alias
+        // some versions ship with) re-frames the view to the bounding
+        // box of all loaded entities.
+        const v = viewer as unknown as {
+          FitView?: () => void;
+          fitView?: () => void;
+        };
+        try {
+          (v.FitView ?? v.fitView)?.call(viewer);
+        } catch {
+          /* older versions or scene with no bbox — fall through */
+        }
+        setStatus('ready');
       })
       .catch(() => {
         if (!cancelled) setStatus('error');

@@ -276,6 +276,19 @@ function DxfRender({
       .Load({ url })
       .then(() => {
         if (cancelled) return;
+        // Frame the camera on the loaded geometry; without this the
+        // pattern renders at its native CAD coordinates and is
+        // typically far off-screen. See the same note in
+        // pages/cad/CadPreviewPage.tsx.
+        const v = viewer as unknown as {
+          FitView?: () => void;
+          fitView?: () => void;
+        };
+        try {
+          (v.FitView ?? v.fitView)?.call(viewer);
+        } catch {
+          /* older versions / no bbox — keep default camera */
+        }
         setStatus('ready');
       })
       .catch(() => {
