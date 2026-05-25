@@ -39,6 +39,14 @@ interface Props {
    *  in the intake's "+ Add fabric" picker). Ignored when `editing`
    *  is set with a real id. */
   initialName?: string;
+  /** Optional UoM prefill for create mode. Intake quick-add defaults
+   *  to 'meter' so the most common path is one fewer click; Library
+   *  leaves it blank to force an explicit choice. */
+  initialUnitOfMeasure?: FabricUnitOfMeasure;
+  /** Trim trailing whitespace from `notes` on submit. Intake quick-add
+   *  needs this so paste-and-go doesn't store whitespace; Library
+   *  preserves user input verbatim. */
+  trimNotes?: boolean;
   /** Called after a successful create or patch. */
   onSaved: (fabric: Fabric) => void;
   /** Called when the user hits Cancel. */
@@ -61,6 +69,8 @@ interface Props {
 export default function FabricEditorForm({
   editing,
   initialName,
+  initialUnitOfMeasure,
+  trimNotes,
   onSaved,
   onCancel,
   successMessage,
@@ -83,7 +93,9 @@ export default function FabricEditorForm({
     gsm: editing?.gsm != null ? String(editing.gsm) : '',
     cuttableWidth:
       editing?.cuttableWidth != null ? String(editing.cuttableWidth) : '',
-    unitOfMeasure: (editing?.unitOfMeasure ?? '') as '' | FabricUnitOfMeasure,
+    unitOfMeasure: (editing?.unitOfMeasure ?? initialUnitOfMeasure ?? '') as
+      | ''
+      | FabricUnitOfMeasure,
   }));
 
   const [comp, setComp] = useState<CompRow[]>(
@@ -157,7 +169,7 @@ export default function FabricEditorForm({
       const payload = {
         name: form.name.trim(),
         pricePerUnit: form.pricePerUnit || null,
-        notes: form.notes || null,
+        notes: (trimNotes ? form.notes.trim() : form.notes) || null,
         count: form.count.trim() || null,
         construction: form.construction.trim() || null,
         gsm: form.gsm ? Number(form.gsm) : null,
@@ -383,8 +395,8 @@ export default function FabricEditorForm({
           {saving
             ? t('common.saving', { defaultValue: 'Saving…' })
             : isEditing
-              ? t('admin.fabricLibrary.save', { defaultValue: 'Save' })
-              : t('admin.fabricLibrary.add', { defaultValue: 'Add fabric' })}
+              ? t('common.save')
+              : t('common.create')}
         </Button>
       </div>
     </div>

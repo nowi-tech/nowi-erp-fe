@@ -294,7 +294,7 @@ export default function ReferenceImageGrid({
               'group relative col-span-2 row-span-2 aspect-square overflow-hidden rounded-[var(--radius-md)] border-2 border-[var(--color-primary)] bg-[var(--color-muted)] transition-all',
               dragOverIdx === 0 && 'ring-2 ring-[var(--color-primary)]',
             )}
-            title="Primary image — drag another tile here to swap."
+            title="Primary image — drop another tile here to make it primary."
           >
             {primary.preview ? (
               <img
@@ -406,11 +406,12 @@ export default function ReferenceImageGrid({
                 : 'border-[var(--color-input)]',
             )}
             // aria-label mirrors the visible instructional copy so
-            // assistive tech announces the full set of input methods
-            // in the empty state (Copilot review on PR #8).
+            // assistive tech announces the full set of input methods.
+            // Layout-neutral phrasing — the link field may sit above
+            // or below the grid depending on the container.
             aria-label={
               addIsLarge
-                ? 'Add reference image — click to upload, drop a file, paste an image, or paste a product link below'
+                ? 'Add reference image — click to upload, drop a file, paste an image, or paste a product link'
                 : 'Add reference image'
             }
           >
@@ -426,7 +427,7 @@ export default function ReferenceImageGrid({
                 </span>
                 {addIsLarge && (
                   <span className="text-[11px] text-[var(--color-muted-foreground)]/80">
-                    or paste a product link below
+                    or paste a product link
                   </span>
                 )}
               </>

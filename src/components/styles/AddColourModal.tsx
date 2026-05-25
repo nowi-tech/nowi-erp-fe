@@ -260,6 +260,7 @@ export default function AddColourModal({
               value={colour}
               onChange={setColour}
               placeholder={t('admin.styles.addColour.colourPh')}
+              inlineAdd
             />
           </div>
 

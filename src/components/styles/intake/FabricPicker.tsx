@@ -103,6 +103,8 @@ export default function FabricPicker({
           key={`new-${seedName}`}
           editing={null}
           initialName={seedName}
+          initialUnitOfMeasure="meter"
+          trimNotes
           successMessage={t('admin.styles.intake.fabricAddedToast', {
             defaultValue: 'Fabric added.',
           })}

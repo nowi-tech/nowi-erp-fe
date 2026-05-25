@@ -142,6 +142,13 @@ export default function CategoryPicker({
       toast.show('Code is required.', 'error');
       return;
     }
+    // BE regex is /^[A-Z]{2,4}$/ — block the round-trip when the user
+    // submits a 1-letter code so they get an inline message instead
+    // of a 400 from the API.
+    if (styleCodeTrim.length < 2 || styleCodeTrim.length > 4) {
+      toast.show('Code must be 2-4 letters.', 'error');
+      return;
+    }
     // Legacy `code` is just an uppercase slug derived from the name; the
     // user-visible "Code" field maps to `styleCode` (the 2-letter prefix
     // used in NOWI style numbers — DR/PA/BL/…). `styleCounter` is
@@ -218,7 +225,16 @@ export default function CategoryPicker({
             >
               {t('common.cancel')}
             </Button>
-            <Button size="sm" disabled={saving} onClick={() => void submit()}>
+            <Button
+              size="sm"
+              disabled={
+                saving ||
+                !form.name.trim() ||
+                form.styleCode.trim().length < 2 ||
+                form.styleCode.trim().length > 4
+              }
+              onClick={() => void submit()}
+            >
               {saving ? t('common.saving') : t('common.create', 'Create')}
             </Button>
           </>
@@ -287,7 +303,7 @@ export default function CategoryPicker({
             <p className="mt-1 text-[11px] text-[var(--color-muted-foreground)]">
               {t(
                 'admin.styles.intake.categoryStyleCodeHint',
-                '2-letter prefix used in style numbers (e.g. NOWI-W-SK-1001).',
+                '2-4 letter prefix used in style numbers (e.g. NOWI-W-SK-1001). 2 letters is the convention; 3-4 allowed for niche codes (e.g. COD).',
               )}
             </p>
           </div>

@@ -13,6 +13,12 @@ interface Props {
   disabled?: boolean;
   /** Optional placeholder for the closed-state trigger. */
   placeholder?: string;
+  /** When true, the "+ Add" path commits the typed value directly
+   *  instead of opening a confirmation Dialog. Used when this picker
+   *  is already embedded inside another Dialog (e.g. AddColourModal),
+   *  where nested Dialogs would share the window-level Escape handler
+   *  and close both on a single Esc. */
+  inlineAdd?: boolean;
 }
 
 /**
@@ -31,6 +37,7 @@ export default function ColourPicker({
   onChange,
   disabled,
   placeholder,
+  inlineAdd,
 }: Props) {
   const { t } = useTranslation();
   const [colours, setColours] = useState<string[]>([]);
@@ -82,6 +89,15 @@ export default function ColourPicker({
         options={options}
         onChange={(next) => onChange(next ?? '')}
         onAddNew={(typed) => {
+          // When embedded in another Dialog (inlineAdd=true), commit
+          // the typed value directly — nested Dialogs share the
+          // window-level Escape handler and would close the host
+          // modal on a single Esc.
+          if (inlineAdd) {
+            const v = typed.trim();
+            if (v) commit(v);
+            return;
+          }
           // Open a popup whether or not the user has typed anything.
           // Previously empty-typed was a no-op which felt broken —
           // matches CategoryPicker / FabricPicker behaviour now.
@@ -114,14 +130,14 @@ export default function ColourPicker({
                 setFormColour('');
               }}
             >
-              {t('common.cancel', { defaultValue: 'Cancel' })}
+              {t('common.cancel')}
             </Button>
             <Button
               size="sm"
               disabled={!formColour.trim()}
               onClick={() => commit(formColour)}
             >
-              {t('common.add', { defaultValue: 'Add' })}
+              {t('common.create', 'Create')}
             </Button>
           </>
         }
