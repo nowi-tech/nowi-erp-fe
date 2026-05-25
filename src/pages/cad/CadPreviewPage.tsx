@@ -204,47 +204,61 @@ function DxfFull({ url }: { url: string }) {
       preserveDrawingBuffer: true,
     });
     viewerRef.current = viewer;
+    /**
+     * Frame the camera on the loaded geometry's bounding box.
+     * Re-runs on every `resized` event so the camera stays centred
+     * even when the canvas was 0×0 at initial mount (flex layout
+     * settling) and only got its real size after Load() resolved.
+     */
+    const fit = () => {
+      try {
+        const bounds = viewer.GetBounds() as
+          | { minX: number; maxX: number; minY: number; maxY: number }
+          | null;
+        if (
+          bounds &&
+          Number.isFinite(bounds.minX) &&
+          Number.isFinite(bounds.maxX) &&
+          Number.isFinite(bounds.minY) &&
+          Number.isFinite(bounds.maxY)
+        ) {
+          (
+            viewer as unknown as {
+              FitView: (
+                minX: number,
+                maxX: number,
+                minY: number,
+                maxY: number,
+                padding?: number,
+              ) => void;
+            }
+          ).FitView(
+            bounds.minX,
+            bounds.maxX,
+            bounds.minY,
+            bounds.maxY,
+            0.1,
+          );
+        }
+      } catch {
+        /* no bounds yet — keep default camera */
+      }
+    };
+
+    // The viewer emits 'resized' from its ResizeObserver. Re-fit on
+    // every fire so the camera frames the geometry against the latest
+    // canvas dimensions (not the 0×0 size at initial mount).
+    (
+      viewer as unknown as {
+        Subscribe: (event: string, handler: () => void) => void;
+      }
+    ).Subscribe('resized', fit);
+
     viewer
       .Load({ url })
       .then(() => {
         if (cancelled) return;
-        // dxf-viewer doesn't auto-fit the camera to the loaded
-        // geometry; the default camera sits at the origin while CAD
-        // coordinates can be anywhere in space, so the canvas reads
-        // as empty even though geometry was parsed. Pull the scene
-        // bounds and call FitView(minX, maxX, minY, maxY).
-        try {
-          const bounds = viewer.GetBounds() as
-            | { minX: number; maxX: number; minY: number; maxY: number }
-            | null;
-          if (
-            bounds &&
-            Number.isFinite(bounds.minX) &&
-            Number.isFinite(bounds.maxX) &&
-            Number.isFinite(bounds.minY) &&
-            Number.isFinite(bounds.maxY)
-          ) {
-            (
-              viewer as unknown as {
-                FitView: (
-                  minX: number,
-                  maxX: number,
-                  minY: number,
-                  maxY: number,
-                  padding?: number,
-                ) => void;
-              }
-            ).FitView(
-              bounds.minX,
-              bounds.maxX,
-              bounds.minY,
-              bounds.maxY,
-              0.1,
-            );
-          }
-        } catch {
-          /* no bounds yet — keep default camera */
-        }
+        fit();
         setStatus('ready');
       })
       .catch(() => {
