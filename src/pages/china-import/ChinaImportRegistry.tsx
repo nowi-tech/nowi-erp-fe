@@ -5,9 +5,9 @@ import { useTranslation } from 'react-i18next';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import StylesTable from '@/components/styles/StylesTable';
-import StyleQuickEditDrawer from '@/components/styles/StyleQuickEditDrawer';
-import { listStyles, listCollections, listFabrics } from '@/api/styles';
-import type { Style, Collection, Fabric } from '@/api/types';
+import StyleEditModal from '@/components/styles/StyleEditModal';
+import { listStyles } from '@/api/styles';
+import type { Style } from '@/api/types';
 
 /**
  * China Import registry — a simple, flat list of `china_import` styles.
@@ -24,22 +24,12 @@ export default function ChinaImportRegistry() {
   const [loading, setLoading] = useState(true);
   const [searchText, setSearchText] = useState('');
 
-  const [collections, setCollections] = useState<Collection[]>([]);
-  const [fabrics, setFabrics] = useState<Fabric[]>([]);
-
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [editing, setEditing] = useState<Style | null>(null);
 
-  // Master data — needed by the quick-edit drawer.
-  useEffect(() => {
-    void Promise.all([
-      listCollections().catch(() => [] as Collection[]),
-      listFabrics().catch(() => [] as Fabric[]),
-    ]).then(([c, fb]) => {
-      setCollections(c);
-      setFabrics(fb);
-    });
-  }, []);
+  // Collections + fabrics master used to be loaded here for the old
+  // QuickEditDrawer. The new StyleEditModal fetches them itself on
+  // first open, so this page no longer needs them.
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -115,12 +105,9 @@ export default function ChinaImportRegistry() {
         </div>
       </div>
 
-      <StyleQuickEditDrawer
+      <StyleEditModal
         open={drawerOpen}
         style={editing}
-        defaults={{ source: 'china_import', category: 'china_import' }}
-        collections={collections}
-        fabrics={fabrics}
         onClose={() => setDrawerOpen(false)}
         onSaved={() => void load()}
       />

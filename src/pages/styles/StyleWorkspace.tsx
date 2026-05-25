@@ -18,7 +18,7 @@ import { useToast } from '@/components/ui/toast';
 import SamplingPipelineStepper from '@/components/styles/SamplingPipelineStepper';
 import PatternCadPreview from '@/components/styles/PatternCadPreview';
 import AddColourModal from '@/components/styles/AddColourModal';
-import StyleQuickEditDrawer from '@/components/styles/StyleQuickEditDrawer';
+import StyleEditModal from '@/components/styles/StyleEditModal';
 import {
   getStyle,
   parkStyle,
@@ -295,26 +295,18 @@ export default function StyleWorkspace() {
         }}
       />
 
-      {/* Full editor — drawer reuses the same component the intake form
-          uses. Opens in view mode (the user clicked "Edit" to get here,
-          so the drawer's own Edit button immediately flips it into edit
-          mode — small UX nit worth fixing later). */}
-      <StyleQuickEditDrawer
+      {/* Full editor — renders the SAME shared form the /styles/new
+          page uses, wrapped in a centered modal. One UX surface for
+          create + edit; the page chrome (breadcrumb / source toggle /
+          reviewer card) just gets swapped for a Dialog + Save button. */}
+      <StyleEditModal
         open={editOpen}
         style={style}
-        defaults={{
-          source: style.source,
-          category: (style.categoryCode ?? 'DRESS') as Parameters<
-            typeof StyleQuickEditDrawer
-          >[0]['defaults']['category'],
-        }}
-        collections={collections}
-        fabrics={fabrics}
         onClose={() => setEditOpen(false)}
         onSaved={(saved) => {
-          setEditOpen(false);
-          // If the styleId changed (e.g. after first approval mints it)
-          // route to the new canonical URL; otherwise just refresh.
+          // If the styleId changed (e.g. after first approval mints
+          // it) route to the new canonical URL; otherwise just
+          // refresh the current page.
           if (saved.styleId && saved.styleId !== style.styleId) {
             navigate(`/styles/${saved.styleId}`);
           } else {
