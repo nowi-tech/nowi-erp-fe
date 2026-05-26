@@ -22,6 +22,7 @@ import { cn } from '@/lib/utils';
 import { listVendors } from '@/api/vendors';
 import { listCategories } from '@/api/categories';
 import { createInbound } from '@/api/inbound';
+import CategoryPicker from '@/components/styles/intake/CategoryPicker';
 import type {
   CategoryWithStyleCode,
   Vendor,
@@ -512,23 +513,30 @@ export default function ReceiveFromKottyPage() {
                         defaultValue: 'Category',
                       })}
                     </Label>
-                    <Select
-                      id={`cat-${row.key}`}
-                      value={row.categoryId === 0 ? '' : String(row.categoryId)}
-                      onChange={(e) =>
-                        updateCategoryId(row.key, Number(e.target.value))
+                    {/* Same searchable CategoryPicker the PD intake
+                        uses — gives the floor manager search + the
+                        "+ Add new" affordance when a Kotty challan
+                        carries an unfamiliar category, instead of
+                        scrolling a 20-item dropdown. */}
+                    <CategoryPicker
+                      categories={categories}
+                      value={row.categoryId === 0 ? null : row.categoryId}
+                      fallbackCode={null}
+                      gender={
+                        row.gender === 'M'
+                          ? 'men'
+                          : row.gender === 'U'
+                            ? 'unisex'
+                            : 'women'
                       }
-                      required
-                    >
-                      <option value="" disabled>
-                        —
-                      </option>
-                      {categories.map((c) => (
-                        <option key={c.id} value={c.id}>
-                          {c.name} ({c.styleCode})
-                        </option>
-                      ))}
-                    </Select>
+                      onChange={({ categoryId }) =>
+                        updateCategoryId(row.key, categoryId ?? 0)
+                      }
+                      onCategoryCreated={(c) => {
+                        setCategories((all) => [...all, c]);
+                        updateCategoryId(row.key, c.id);
+                      }}
+                    />
                   </div>
                 </div>
 
