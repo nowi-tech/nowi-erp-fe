@@ -52,18 +52,16 @@ BT="$(/bin/ls "$ANDROID_HOME/build-tools/" | sort -V | tail -1)"
   && echo "[release] APK signature OK"
 
 echo "[release] upload APK + latest.json"
-# Stable filename for the in-app auto-update flow — never changes. The
-# manifest at latest.json always points here.
-gcloud storage cp "$APK_OUT" "$BUCKET/nowi-erp.apk" \
-  --project "$PROJECT" --cache-control="no-cache, max-age=0" >/dev/null
-
-# Versioned filename for manual sideload sharing. Chrome refuses to
-# re-save a file with the same name as one already in Downloads, so a
-# unique name per release makes "tap the link, install" actually work
-# without users having to delete the old APK first.
+# Single stable URL — `nowi-erp.apk` — for both the in-app auto-update
+# flow AND manual sideloads. Content-Disposition sets a versioned
+# download filename so Chrome / Android Downloads write a fresh file
+# per release ("nowi-erp-v1.8.apk") instead of clashing with the user's
+# previous download of the same URL.
 VERSIONED_NAME="nowi-erp-v$VERSION_NAME.apk"
-gcloud storage cp "$APK_OUT" "$BUCKET/$VERSIONED_NAME" \
-  --project "$PROJECT" --cache-control="no-cache, max-age=0" >/dev/null
+gcloud storage cp "$APK_OUT" "$BUCKET/nowi-erp.apk" \
+  --project "$PROJECT" \
+  --cache-control="no-cache, max-age=0" \
+  --content-disposition="attachment; filename=\"$VERSIONED_NAME\"" >/dev/null
 
 TMP_MANIFEST="$(mktemp)"
 trap 'rm -f "$TMP_MANIFEST"' EXIT
@@ -80,8 +78,8 @@ gcloud storage cp "$TMP_MANIFEST" "$BUCKET/latest.json" \
 
 echo
 echo "[release] DONE — v$VERSION_NAME (versionCode $NEW_CODE) live."
-echo "  Stable   : https://storage.googleapis.com/nowi-erp-apk/nowi-erp.apk"
-echo "  Versioned: https://storage.googleapis.com/nowi-erp-apk/$VERSIONED_NAME"
+echo "  Link  : https://storage.googleapis.com/nowi-erp-apk/nowi-erp.apk"
+echo "  (Chrome saves it as $VERSIONED_NAME via Content-Disposition.)"
 echo "  Note  : commit the build.gradle version bump, and DEPLOY THE FE to"
 echo "          Vercel — the in-app update prompt only fires from the"
 echo "          deployed bundle, not from the freshly built APK."
