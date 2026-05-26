@@ -40,6 +40,7 @@ import type {
   User as ApiUser,
 } from '@/api/types';
 import { cn } from '@/lib/utils';
+import { formatStyleRef } from '@/lib/styleRef';
 
 /**
  * Per-style deep page (canonical_style_workspace.html).
@@ -168,7 +169,7 @@ export default function StyleWorkspace() {
             <span>{style.workingName ?? '—'}</span>
           </div>
           <h1 className="font-mono text-2xl font-semibold text-[var(--color-primary)] mt-1 tracking-wide">
-            {style.styleId ?? `(${t('admin.styles.draft')})`}
+            {formatStyleRef(style, `(${t('admin.styles.draft')})`)}
           </h1>
           <div className="flex items-center gap-2 mt-2 flex-wrap">
             {/* For China Import styles the source IS the story — surface
@@ -437,7 +438,7 @@ export default function StyleWorkspace() {
       <ParkDialog
         open={parkOpen}
         busy={busy !== null}
-        styleLabel={style.styleId ?? style.workingName ?? null}
+        styleLabel={style.styleId ?? (style.draftNo != null ? `D-${style.draftNo}` : style.workingName) ?? null}
         onClose={() => setParkOpen(false)}
         onConfirm={(reason) => {
           setParkOpen(false);

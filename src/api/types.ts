@@ -311,6 +311,10 @@ export interface Style {
   id: number;
   /** Style # — null while in `draft`. Assigned at first approval. */
   styleId: string | null;
+  /** Draft-only integer minted at intake so the design can be referred
+   *  to as `D-1042` in chat before Approval #1 mints the real `styleId`.
+   *  Stays on the row after approval so stale references still resolve. */
+  draftNo: number | null;
   /** Letter form used by the floor system: W / M / U. */
   legacyGender?: StyleGender | null;
   categoryCode: string;

@@ -19,6 +19,7 @@ import { patchStyle } from '@/api/styles';
 import { listUsers } from '@/api/users';
 import type { Style, User as ApiUser, UserRole } from '@/api/types';
 import { cn } from '@/lib/utils';
+import { formatStyleRef } from '@/lib/styleRef';
 
 // Enum option labels — mirror the BE Prisma enums and the same set the
 // approval dialogs + SampleStateCard already use. Kept here so the
@@ -502,7 +503,7 @@ export default function StylesTable({
                               onStyleNoClick && 'hover:underline',
                             )}
                           >
-                            {s.styleId ?? `(${t('admin.styles.draft')})`}
+                            {formatStyleRef(s, `(${t('admin.styles.draft')})`)}
                           </button>
                           <div className="flex gap-1 flex-wrap">
                             <Badge
@@ -969,7 +970,7 @@ function ColourFamilySubTable({
                   }}
                   className="text-left font-mono text-[var(--color-primary)] hover:underline"
                 >
-                  {v.styleId ?? `(${t('admin.styles.draft')})`}
+                  {formatStyleRef(v, `(${t('admin.styles.draft')})`)}
                 </button>
               </td>
               <td className="px-3 py-2">

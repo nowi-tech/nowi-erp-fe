@@ -248,7 +248,13 @@ export default function StylesRegistry() {
       <ParkDialog
         open={parkTarget !== null}
         busy={parkBusy}
-        styleLabel={parkTarget?.styleId ?? parkTarget?.workingName ?? null}
+        styleLabel={
+          parkTarget?.styleId ??
+          (parkTarget?.draftNo != null
+            ? `D-${parkTarget.draftNo}`
+            : parkTarget?.workingName) ??
+          null
+        }
         onClose={() => setParkTarget(null)}
         onConfirm={async (reason) => {
           if (!parkTarget) return;
