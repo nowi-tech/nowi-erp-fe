@@ -5,7 +5,6 @@ import { AuthProvider } from './context/auth';
 import { AppToaster, ToastProvider } from './components/ui/toast';
 import ProtectedRoute from './components/ProtectedRouteV2';
 // import PlaceholderSection from './components/PlaceholderSection'; // TODO: re-enable when commented stub routes return
-import PwaInstallPrompt from './components/PwaInstallPrompt';
 import Onboarding from './components/Onboarding';
 import { ErrorBoundary } from './components/ErrorBoundary';
 import { hideSplash } from './native/capacitor-init';
@@ -90,7 +89,6 @@ function App() {
     <AuthProvider>
       <ToastProvider>
         <AppToaster />
-        <PwaInstallPrompt />
         <Onboarding />
         <BrowserRouter>
           <ErrorBoundary>

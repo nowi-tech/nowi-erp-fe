@@ -9,6 +9,8 @@ import { useToast } from '@/components/ui/toast';
 import AttentionChips from '@/components/styles/AttentionChips';
 import StyleKpiStrip from '@/components/styles/StyleKpiStrip';
 import StylesTable from '@/components/styles/StylesTable';
+import Approval1Dialog from '@/components/styles/Approval1Dialog';
+import ParkDialog from '@/components/styles/ParkDialog';
 import {
   approveStyle,
   listStyles,
@@ -44,6 +46,12 @@ export default function StylesRegistry() {
 
   const [searchText, setSearchText] = useState('');
   const [samplingStatus, setSamplingStatus] = useState<string>('');
+  // Selected row for the Approval #1 modal — clicking the inline ✓
+  // opens the dialog with the row's gender + suggested pattern master.
+  const [approvalTarget, setApprovalTarget] = useState<Style | null>(null);
+  const [approvalBusy, setApprovalBusy] = useState(false);
+  const [parkTarget, setParkTarget] = useState<Style | null>(null);
+  const [parkBusy, setParkBusy] = useState(false);
 
   const reloadSummary = useCallback(async () => {
     try {
@@ -96,30 +104,14 @@ export default function StylesRegistry() {
 
   const openCreateDesign = () => navigate('/styles/new');
 
-  // Inline row actions — all three are one-click against the API and
-  // refresh the list. Approve sends an empty body (BE accepts it; the
-  // checklist fields are all optional and live on the detail page for
-  // designers who want to record them). Park / Revive are unchanged.
-  const onRowApprove = async (s: Style) => {
-    try {
-      await approveStyle(s.id);
-      toast.show('Approved.', 'success');
-      void load();
-    } catch (e: unknown) {
-      const m =
-        (e as { response?: { data?: { message?: string | string[] } } })
-          ?.response?.data?.message ?? 'Could not approve.';
-      toast.show(Array.isArray(m) ? m.join(', ') : String(m), 'error');
-    }
+  // Inline row actions — Approve now opens the Approval #1 dialog so
+  // the approver explicitly ticks fabric / price / collection checks
+  // before the Style # is minted. Park / Revive remain one-click.
+  const onRowApprove = (s: Style) => {
+    setApprovalTarget(s);
   };
-  const onRowPark = async (s: Style) => {
-    try {
-      await parkStyle(s.id, { reason: 'Paused from inbox' });
-      toast.show('Parked.', 'success');
-      void load();
-    } catch {
-      toast.show('Could not park.', 'error');
-    }
+  const onRowPark = (s: Style) => {
+    setParkTarget(s);
   };
   const onRowRevive = async (s: Style) => {
     try {
@@ -250,6 +242,56 @@ export default function StylesRegistry() {
       <Link to="/styles/new" className="sr-only">
         New design submission
       </Link>
+
+      {/* Park confirmation — captures the reason for the audit log
+          instead of the old hardcoded "Paused from inbox" string. */}
+      <ParkDialog
+        open={parkTarget !== null}
+        busy={parkBusy}
+        styleLabel={parkTarget?.styleId ?? parkTarget?.workingName ?? null}
+        onClose={() => setParkTarget(null)}
+        onConfirm={async (reason) => {
+          if (!parkTarget) return;
+          setParkBusy(true);
+          try {
+            await parkStyle(parkTarget.id, { reason });
+            toast.show('Parked.', 'success');
+            setParkTarget(null);
+            void load();
+          } catch {
+            toast.show('Could not park.', 'error');
+          } finally {
+            setParkBusy(false);
+          }
+        }}
+      />
+
+      {/* Approval #1 confirmation — same dialog the detail page uses.
+          All three intake checks must be ticked before Confirm enables. */}
+      <Approval1Dialog
+        open={approvalTarget !== null}
+        busy={approvalBusy}
+        gender={approvalTarget?.gender ?? null}
+        defaultPatternMasterId={approvalTarget?.patternMasterId ?? null}
+        onClose={() => setApprovalTarget(null)}
+        onConfirm={async (body) => {
+          if (!approvalTarget) return;
+          setApprovalBusy(true);
+          try {
+            await approveStyle(approvalTarget.id, body);
+            toast.show('Approved.', 'success');
+            setApprovalTarget(null);
+            void load();
+          } catch (e: unknown) {
+            const m =
+              (e as { response?: { data?: { message?: string | string[] } } })
+                ?.response?.data?.message ?? 'Could not approve.';
+            toast.show(Array.isArray(m) ? m.join(', ') : String(m), 'error');
+          } finally {
+            setApprovalBusy(false);
+          }
+        }}
+      />
     </div>
   );
 }

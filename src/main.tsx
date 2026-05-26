@@ -18,8 +18,27 @@ void initNativeShell();
 void initNativeFeatures();
 // Catch chunk-load failures that escape React's Suspense / error
 // boundary (e.g. unhandled promise rejections from lazy() imports) and
-// reload once so the SW-precached chunks take over.
+// reload once.
 installChunkErrorHandlers();
+
+// One-time cleanup: prior versions shipped a Vite-PWA service worker
+// that precached the bundle. We removed PWA — but existing users still
+// have the SW + its precache controlling their tab, which would keep
+// serving the old code. Unregister any leftover SWs + nuke their caches
+// so the next reload fetches fresh from the network. Cheap, idempotent,
+// and noop in the Capacitor APK (the WebView has no SW).
+if ('serviceWorker' in navigator) {
+  void navigator.serviceWorker
+    .getRegistrations()
+    .then((regs) => Promise.all(regs.map((r) => r.unregister())))
+    .catch(() => undefined);
+}
+if ('caches' in window) {
+  void caches
+    .keys()
+    .then((keys) => Promise.all(keys.map((k) => caches.delete(k))))
+    .catch(() => undefined);
+}
 // Update check: defer past the splash so the Capacitor bridge is fully
 // injected on the remote-loaded page before the first plugin call.
 setTimeout(() => {

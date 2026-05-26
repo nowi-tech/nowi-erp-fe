@@ -19,6 +19,8 @@ import SamplingPipelineStepper from '@/components/styles/SamplingPipelineStepper
 import PatternCadPreview from '@/components/styles/PatternCadPreview';
 import AddColourModal from '@/components/styles/AddColourModal';
 import StyleEditModal from '@/components/styles/StyleEditModal';
+import Approval1Dialog from '@/components/styles/Approval1Dialog';
+import ParkDialog from '@/components/styles/ParkDialog';
 import {
   getStyle,
   parkStyle,
@@ -29,7 +31,6 @@ import {
   listFabrics,
   type SamplingStatus,
   type SampleApprovalStatus,
-  type ApproveStyleBody,
   type SampleApproveStyleBody,
 } from '@/api/styles';
 import { listUsers } from '@/api/users';
@@ -67,6 +68,7 @@ export default function StyleWorkspace() {
   const [sampleApproveOpen, setSampleApproveOpen] = useState(false);
   const [colourModalOpen, setColourModalOpen] = useState(false);
   const [editOpen, setEditOpen] = useState(false);
+  const [parkOpen, setParkOpen] = useState(false);
   // StyleEditModal lazy-loads its own fabric master on first open;
   // we still pre-warm it here so the user doesn't see the modal
   // flicker into pickers. Collection was dropped from the schema.
@@ -206,11 +208,7 @@ export default function StyleWorkspace() {
               variant="outline"
               size="sm"
               disabled={busy !== null}
-              onClick={() =>
-                void doAction('park', () =>
-                  parkStyle(style.id, { reason: 'Paused from Workspace' }),
-                )
-              }
+              onClick={() => setParkOpen(true)}
             >
               <Pause size={14} />
               <span className="ml-1">{t('admin.styles.workspace.park')}</span>
@@ -313,33 +311,6 @@ export default function StyleWorkspace() {
         <ChinaImportApprovalCard style={style} cardClasses={cardClasses} />
       )}
 
-      {/* Recorded intake approval checks — sampling flow, already approved */}
-      {!isChinaImport && style.approvedAt && (
-        <section className={cardClasses}>
-          <h2 className="font-serif text-lg mb-3">
-            {t('admin.styles.approval1.recordedTitle')}
-          </h2>
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
-            <ApprovalCheckRow
-              label={t('admin.styles.approval1.fabricFeasible')}
-              value={style.approval1FabricFeasible}
-            />
-            <ApprovalCheckRow
-              label={t('admin.styles.approval1.priceOk')}
-              value={style.approval1PriceOk}
-            />
-            <ApprovalCheckRow
-              label={t('admin.styles.approval1.collectionFit')}
-              value={style.approval1CollectionFit}
-            />
-          </div>
-          {style.approval1Note && (
-            <p className="mt-3 text-sm whitespace-pre-wrap text-[var(--color-foreground-2)]">
-              {style.approval1Note}
-            </p>
-          )}
-        </section>
-      )}
 
       {/* Sampling pipeline — not applicable to China Import styles.
           Approved pill in the stepper opens the sample sign-off dialog
@@ -462,8 +433,20 @@ export default function StyleWorkspace() {
           detail include). Replaces the old InspectionTimeline. */}
       <ActivityTimelineCard style={style} cardClasses={cardClasses} />
 
+      {/* Park confirmation — captures the reason for the audit log. */}
+      <ParkDialog
+        open={parkOpen}
+        busy={busy !== null}
+        styleLabel={style.styleId ?? style.workingName ?? null}
+        onClose={() => setParkOpen(false)}
+        onConfirm={(reason) => {
+          setParkOpen(false);
+          void doAction('park', () => parkStyle(style.id, { reason }));
+        }}
+      />
+
       {/* Approval #1 checklist dialog — sampling flow only */}
-      <ApproveIntakeDialog
+      <Approval1Dialog
         open={approveOpen}
         busy={busy !== null}
         defaultPatternMasterId={style.patternMasterId}
@@ -495,225 +478,12 @@ export default function StyleWorkspace() {
   );
 }
 
-// Enum dropdown options — match the Gurukul workbook + BE Prisma enums.
-const SAMPLING_STATUS_OPTIONS: SamplingStatus[] = [
-  'in_progress_pattern_dev',
-  'in_progress_fabric_sourcing',
-  'in_progress_cutting',
-  'in_progress_stitching',
-  'ready_for_inspection',
-  'handed_over_for_inspection',
-  'corrections_needed',
-  'approved_for_production',
-];
-
 const SAMPLE_APPROVAL_OPTIONS: SampleApprovalStatus[] = [
   'approved_for_production',
   'under_review_corrections',
   'pattern_correction_approved',
 ];
 
-function ApproveIntakeDialog({
-  open,
-  busy,
-  gender,
-  defaultPatternMasterId,
-  onClose,
-  onConfirm,
-}: {
-  open: boolean;
-  busy: boolean;
-  gender: Style['gender'];
-  defaultPatternMasterId: number | null;
-  onClose: () => void;
-  onConfirm: (body: ApproveStyleBody) => void;
-}) {
-  const { t } = useTranslation();
-  const [fabricFeasible, setFabricFeasible] = useState(false);
-  const [priceOk, setPriceOk] = useState(false);
-  const [collectionFit, setCollectionFit] = useState(false);
-  const [note, setNote] = useState('');
-  const [samplingStatus, setSamplingStatus] = useState<SamplingStatus | ''>('');
-  const [patternMasterId, setPatternMasterId] = useState<number | null>(
-    defaultPatternMasterId,
-  );
-  // Pattern Master picker fetched lazily on open — narrow to the two
-  // PM roles + admin so override choices are sensible.
-  const [pmCandidates, setPmCandidates] = useState<ApiUser[]>([]);
-
-  // Reset the checklist each time the dialog opens, and seed the
-  // Pattern Master dropdown with the auto-routed user.
-  useEffect(() => {
-    if (open) {
-      setFabricFeasible(false);
-      setPriceOk(false);
-      setCollectionFit(false);
-      setNote('');
-      setSamplingStatus('');
-      setPatternMasterId(defaultPatternMasterId);
-    }
-  }, [open, defaultPatternMasterId]);
-
-  useEffect(() => {
-    if (!open) return;
-    let cancelled = false;
-    void listUsers({ take: 200 })
-      .then((rows) => {
-        if (cancelled) return;
-        // Filter to Pattern Masters; show w/m matching the style's
-        // gender first, then everyone else as fallback.
-        const isPm = (u: ApiUser) =>
-          u.role === 'pattern_master_w' ||
-          u.role === 'pattern_master_m' ||
-          u.role === 'admin';
-        const matchesGender = (u: ApiUser) =>
-          (gender === 'women' && u.role === 'pattern_master_w') ||
-          (gender === 'men' && u.role === 'pattern_master_m') ||
-          gender === 'unisex';
-        const ordered = rows
-          .filter(isPm)
-          .sort((a, b) =>
-            matchesGender(a) === matchesGender(b)
-              ? a.name.localeCompare(b.name)
-              : matchesGender(a)
-                ? -1
-                : 1,
-          );
-        setPmCandidates(ordered);
-      })
-      .catch(() => {
-        if (!cancelled) setPmCandidates([]);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [open, gender]);
-
-  return (
-    <Dialog
-      open={open}
-      onClose={onClose}
-      title={t('admin.styles.approval1.dialogTitle')}
-      footer={
-        <>
-          <Button variant="outline" size="sm" disabled={busy} onClick={onClose}>
-            {t('admin.styles.approval1.cancel')}
-          </Button>
-          <Button
-            size="sm"
-            disabled={busy}
-            onClick={() =>
-              onConfirm({
-                approval1FabricFeasible: fabricFeasible,
-                approval1PriceOk: priceOk,
-                approval1CollectionFit: collectionFit,
-                approval1Note: note.trim() || undefined,
-                samplingStatus: samplingStatus || undefined,
-                patternMasterId,
-              })
-            }
-          >
-            <CheckCircle2 size={14} />
-            <span className="ml-1">{t('admin.styles.approval1.confirm')}</span>
-          </Button>
-        </>
-      }
-    >
-      <p className="text-sm text-[var(--color-muted-foreground)] mb-4">
-        {t('admin.styles.approval1.dialogIntro')}
-      </p>
-
-      <div className="space-y-2">
-        <CheckboxRow
-          label={t('admin.styles.approval1.fabricFeasible')}
-          checked={fabricFeasible}
-          onChange={setFabricFeasible}
-        />
-        <CheckboxRow
-          label={t('admin.styles.approval1.priceOk')}
-          checked={priceOk}
-          onChange={setPriceOk}
-        />
-        <CheckboxRow
-          label={t('admin.styles.approval1.collectionFit')}
-          checked={collectionFit}
-          onChange={setCollectionFit}
-        />
-      </div>
-
-      {/* Workflow state set at Approval #1 — both optional. */}
-      <div className="mt-4 grid grid-cols-1 sm:grid-cols-2 gap-3">
-        <div>
-          <label className="block text-xs text-[var(--color-muted-foreground)] mb-1">
-            {t('admin.styles.approval1.samplingStatus', {
-              defaultValue: 'Initial sampling status',
-            })}
-          </label>
-          <select
-            value={samplingStatus}
-            onChange={(e) =>
-              setSamplingStatus(e.target.value as SamplingStatus | '')
-            }
-            className="flex h-10 w-full rounded-[var(--radius-sm)] border border-[var(--color-border)] bg-white px-2.5 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-ring)]"
-          >
-            <option value="">
-              {t('admin.styles.approval1.samplingStatusUnset', {
-                defaultValue: '—',
-              })}
-            </option>
-            {SAMPLING_STATUS_OPTIONS.map((s) => (
-              <option key={s} value={s}>
-                {t(`admin.styles.samplingStatus.${s}` as const, {
-                  defaultValue: s,
-                })}
-              </option>
-            ))}
-          </select>
-        </div>
-        <div>
-          <label className="block text-xs text-[var(--color-muted-foreground)] mb-1">
-            {t('admin.styles.approval1.patternMaster', {
-              defaultValue: 'Pattern Master',
-            })}
-          </label>
-          <select
-            value={patternMasterId ?? ''}
-            onChange={(e) =>
-              setPatternMasterId(
-                e.target.value ? Number(e.target.value) : null,
-              )
-            }
-            className="flex h-10 w-full rounded-[var(--radius-sm)] border border-[var(--color-border)] bg-white px-2.5 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-ring)]"
-          >
-            <option value="">
-              {t('admin.styles.approval1.patternMasterUnset', {
-                defaultValue: '— Unassigned',
-              })}
-            </option>
-            {pmCandidates.map((u) => (
-              <option key={u.id} value={u.id}>
-                {u.name}
-                {u.role === 'pattern_master_w' ? " (Women's)" : ''}
-                {u.role === 'pattern_master_m' ? " (Men's)" : ''}
-              </option>
-            ))}
-          </select>
-        </div>
-      </div>
-
-      <div className="mt-4">
-        <label className="block text-xs text-[var(--color-muted-foreground)] mb-1">
-          {t('admin.styles.approval1.note')}
-        </label>
-        <Textarea
-          value={note}
-          onChange={(e) => setNote(e.target.value)}
-          placeholder={t('admin.styles.approval1.notePlaceholder')}
-        />
-      </div>
-    </Dialog>
-  );
-}
 
 function SampleApproveDialog({
   open,
@@ -867,54 +637,6 @@ function SampleApproveDialog({
         </div>
       </div>
     </Dialog>
-  );
-}
-
-function CheckboxRow({
-  label,
-  checked,
-  onChange,
-}: {
-  label: string;
-  checked: boolean;
-  onChange: (v: boolean) => void;
-}) {
-  return (
-    <label className="flex items-center gap-2.5 rounded-[var(--radius-sm)] border border-[var(--color-border)] px-3 py-2 cursor-pointer hover:bg-[var(--color-surface-2)]/40">
-      <input
-        type="checkbox"
-        checked={checked}
-        onChange={(e) => onChange(e.target.checked)}
-        className="h-4 w-4 accent-[var(--color-primary)]"
-      />
-      <span className="text-sm">{label}</span>
-    </label>
-  );
-}
-
-function ApprovalCheckRow({
-  label,
-  value,
-}: {
-  label: string;
-  value: boolean | null;
-}) {
-  const { t } = useTranslation();
-  return (
-    <div className="flex items-center justify-between rounded-[var(--radius-sm)] border border-[var(--color-border)] px-3 py-2 bg-[var(--color-surface-2)]/40">
-      <span className="text-sm">{label}</span>
-      <Badge
-        variant={
-          value === true ? 'success' : value === false ? 'outline' : 'outline'
-        }
-      >
-        {value === true
-          ? t('admin.styles.approval1.checkYes')
-          : value === false
-            ? t('admin.styles.approval1.checkNo')
-            : t('admin.styles.approval1.checkUnset')}
-      </Badge>
-    </div>
   );
 }
 
