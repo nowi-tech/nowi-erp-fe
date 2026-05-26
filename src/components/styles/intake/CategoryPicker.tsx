@@ -87,11 +87,14 @@ export default function CategoryPicker({
       });
     }
     for (const c of categories) {
-      // Skip categories not valid for this gender — but if the user is
-      // already on one, we keep it visible so they can switch off.
+      // Show ALL server-side categories regardless of gender. The seed
+      // list still anchors the default options for the picked gender,
+      // but if SKIRT (or any other vetted category) exists on the
+      // server it should be selectable — otherwise the user types
+      // "Skirt", finds nothing, hits "+ Add new", and the BE 409s on
+      // duplicate styleCode. The previous gender-filter caused exactly
+      // that bug.
       const code = (c.code ?? '').toUpperCase();
-      const isSeed = (allowedCodes as readonly string[]).includes(code);
-      if (!isSeed && value !== c.id) continue;
       byCode.set(code || `id_${c.id}`, {
         value: c.id,
         label: c.name || fineCategoryLabel(code),
