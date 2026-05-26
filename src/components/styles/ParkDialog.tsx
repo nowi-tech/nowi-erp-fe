@@ -6,17 +6,24 @@ import { Dialog } from '@/components/ui/dialog';
 import { Textarea } from '@/components/ui/textarea';
 
 /**
- * Park confirmation dialog. The approver picks one of three preset
+ * Park confirmation dialog. The approver ticks one or more preset
  * reasons (same dimensions as the Approval #1 checks — fabric / price
  * / collection fit) or "Other" with free text. An optional context
- * note is appended to whichever reason is sent.
+ * note is appended to the joined reasons.
  *
- * Required: a reason category. Without it the activity log is
+ * Required: at least one reason. Without it the activity log is
  * unparseable ("Paused" doesn't say why). The default behaviour was
  * a hardcoded "Paused from inbox / Workspace" — that's gone.
  */
 
 type ReasonKey = 'fabric' | 'price' | 'collectionFit' | 'other';
+
+const REASON_KEYS: readonly ReasonKey[] = [
+  'fabric',
+  'price',
+  'collectionFit',
+  'other',
+] as const;
 
 interface Props {
   open: boolean;
@@ -35,17 +42,28 @@ export default function ParkDialog({
   onConfirm,
 }: Props) {
   const { t } = useTranslation();
-  const [reasonKey, setReasonKey] = useState<ReasonKey | null>(null);
+  // Multi-select: a design may be parked for more than one reason
+  // (e.g. fabric + price). Tracked as a Set so toggle is O(1).
+  const [picked, setPicked] = useState<Set<ReasonKey>>(() => new Set());
   const [otherText, setOtherText] = useState('');
   const [note, setNote] = useState('');
 
   useEffect(() => {
     if (open) {
-      setReasonKey(null);
+      setPicked(new Set());
       setOtherText('');
       setNote('');
     }
   }, [open]);
+
+  const toggle = (k: ReasonKey) => {
+    setPicked((prev) => {
+      const next = new Set(prev);
+      if (next.has(k)) next.delete(k);
+      else next.add(k);
+      return next;
+    });
+  };
 
   const reasonLabel = (k: ReasonKey): string => {
     switch (k) {
@@ -70,13 +88,17 @@ export default function ParkDialog({
 
   const canConfirm =
     !busy &&
-    reasonKey !== null &&
-    (reasonKey !== 'other' || otherText.trim().length > 0);
+    picked.size > 0 &&
+    (!picked.has('other') || otherText.trim().length > 0);
 
   const buildReason = (): string => {
-    if (reasonKey === null) return '';
-    const head =
-      reasonKey === 'other' ? otherText.trim() : reasonLabel(reasonKey);
+    if (picked.size === 0) return '';
+    // Preserve the canonical order rather than insertion order so the
+    // recorded string is stable regardless of click sequence.
+    const parts = REASON_KEYS.filter((k) => picked.has(k)).map((k) =>
+      k === 'other' ? otherText.trim() : reasonLabel(k),
+    );
+    const head = parts.join(' · ');
     const tail = note.trim();
     return tail ? `${head} — ${tail}` : head;
   };
@@ -120,22 +142,21 @@ export default function ParkDialog({
       </p>
 
       <div
-        role="radiogroup"
+        role="group"
         aria-label={t('admin.styles.park.reasonLabel', {
-          defaultValue: 'Reason',
+          defaultValue: 'Reasons (pick one or more)',
         })}
         className="space-y-2"
       >
-        {(['fabric', 'price', 'collectionFit', 'other'] as const).map((k) => (
+        {REASON_KEYS.map((k) => (
           <label
             key={k}
             className="flex items-center gap-2.5 rounded-[var(--radius-sm)] border border-[var(--color-border)] px-3 py-2 cursor-pointer hover:bg-[var(--color-surface-2)]/40"
           >
             <input
-              type="radio"
-              name="park-reason"
-              checked={reasonKey === k}
-              onChange={() => setReasonKey(k)}
+              type="checkbox"
+              checked={picked.has(k)}
+              onChange={() => toggle(k)}
               className="h-4 w-4 accent-[var(--color-primary)]"
             />
             <span className="text-sm">{reasonLabel(k)}</span>
@@ -143,7 +164,7 @@ export default function ParkDialog({
         ))}
       </div>
 
-      {reasonKey === 'other' && (
+      {picked.has('other') && (
         <div className="mt-3">
           <label className="block text-xs text-[var(--color-muted-foreground)] mb-1">
             {t('admin.styles.park.otherLabel', {
