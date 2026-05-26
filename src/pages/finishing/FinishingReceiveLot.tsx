@@ -5,6 +5,7 @@ import {
   Camera,
   CheckCircle2,
   ChevronLeft,
+  Loader2,
   Minus,
   Plus,
 } from 'lucide-react';
@@ -52,6 +53,7 @@ interface RowState {
   otherReason: string;
   photoPath: string | null;
   photoNoop: boolean;
+  photoUploading: boolean;
 }
 
 function defaultRow(): RowState {
@@ -63,6 +65,7 @@ function defaultRow(): RowState {
     otherReason: '',
     photoPath: null,
     photoNoop: false,
+    photoUploading: false,
   };
 }
 
@@ -395,11 +398,13 @@ export default function FinishingReceiveLot() {
       );
       return;
     }
+    updateRow(size, { photoUploading: true });
     try {
       const res = await uploadPhoto('rework', lot.id, file);
       updateRow(size, {
         photoPath: res.objectPath,
         photoNoop: res.noop,
+        photoUploading: false,
       });
       sonnerToast.success(
         res.noop
@@ -407,6 +412,7 @@ export default function FinishingReceiveLot() {
           : t('finishing.photoAdded'),
       );
     } catch (err) {
+      updateRow(size, { photoUploading: false });
       // Surface the real reason — the previous generic "common.error"
       // toast hid network / permission failures and made the user think
       // the whole flow was broken. The thrown error from uploadPhoto
@@ -830,12 +836,18 @@ export default function FinishingReceiveLot() {
                       falling back to the gallery picker instead of the
                       camera. The MIME is normalised + validated in
                       uploadPhoto / attachPhoto. */}
-                  <label className="inline-flex">
+                  <label
+                    className={cn(
+                      'inline-flex',
+                      rs.photoUploading && 'pointer-events-none opacity-60',
+                    )}
+                  >
                     <input
                       type="file"
                       accept="image/*"
                       capture="environment"
                       className="sr-only"
+                      disabled={rs.photoUploading}
                       onChange={(e) => {
                         const file = e.target.files?.[0];
                         if (file) void attachPhoto(reworkSize, file);
@@ -847,7 +859,9 @@ export default function FinishingReceiveLot() {
                     <span
                       role="button"
                       tabIndex={0}
+                      aria-busy={rs.photoUploading}
                       onKeyDown={(e) => {
+                        if (rs.photoUploading) return;
                         // Span needs an explicit keyboard handler —
                         // unlike a real <button>, Enter/Space don't
                         // activate the parent <label> automatically.
@@ -863,11 +877,19 @@ export default function FinishingReceiveLot() {
                       }}
                       className="inline-flex h-9 cursor-pointer items-center gap-1.5 rounded-[var(--radius-sm)] border border-[var(--color-input)] bg-transparent px-3 text-sm font-medium hover:bg-[var(--color-muted)]"
                     >
-                      <Camera size={14} />
-                      {t('finishing.addPhoto')}
+                      {rs.photoUploading ? (
+                        <Loader2 size={14} className="animate-spin" />
+                      ) : (
+                        <Camera size={14} />
+                      )}
+                      {rs.photoUploading
+                        ? t('finishing.uploadingPhoto', {
+                            defaultValue: 'Uploading…',
+                          })
+                        : t('finishing.addPhoto')}
                     </span>
                   </label>
-                  {rs.photoPath && (
+                  {!rs.photoUploading && rs.photoPath && (
                     <span className="text-xs text-[var(--color-muted-foreground)] truncate">
                       {t('finishing.photoAdded')}
                       {rs.photoNoop ? ` ${t('common.noopDevHint')}` : ''}

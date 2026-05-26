@@ -326,7 +326,7 @@
       "stitching": "Stitching",
       "finishing": "Finishing",
       "productDev": "Product development",
-      "styles": "Styles",
+      "styles": "Sampling",
       "chinaImport": "China Import",
       "fabricLibrary": "Fabric library",
       "sections": {
@@ -345,7 +345,7 @@
       }
     },
     "styles": {
-      "title": "Styles",
+      "title": "Sampling",
       "subtitle": "Every design in flight — submitted, in sampling, parked, or sent to production.",
       "newDesign": "New design submission",
       "newChinaImport": "New China Import intake",
