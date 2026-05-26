@@ -1,5 +1,6 @@
 import { Component, type ErrorInfo, type ReactNode } from 'react';
 import * as Sentry from '@sentry/react';
+import { tryRecoverFromChunkError } from '@/lib/chunk-reload';
 
 interface Props {
   children: ReactNode;
@@ -28,6 +29,11 @@ export class ErrorBoundary extends Component<Props, State> {
   }
 
   componentDidCatch(error: Error, info: ErrorInfo): void {
+    // A blank screen on first launch is usually a lazy()-chunk load
+    // failure — the WebView / browser cache hadn't fetched the chunk
+    // yet. Reload once before showing the error UI; the SW will have
+    // precached on the prior load attempt, so the reload succeeds.
+    if (tryRecoverFromChunkError(error)) return;
     Sentry.captureException(error, {
       extra: { componentStack: info.componentStack },
     });

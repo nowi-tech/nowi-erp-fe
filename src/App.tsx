@@ -1,4 +1,4 @@
-import { lazy, Suspense, type ReactNode } from 'react';
+import { lazy, Suspense, useEffect, type ReactNode } from 'react';
 import { Skeleton } from '@/components/ui/skeleton';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider } from './context/auth';
@@ -8,6 +8,8 @@ import ProtectedRoute from './components/ProtectedRouteV2';
 import PwaInstallPrompt from './components/PwaInstallPrompt';
 import Onboarding from './components/Onboarding';
 import { ErrorBoundary } from './components/ErrorBoundary';
+import { hideSplash } from './native/capacitor-init';
+import { markChunkLoadSucceeded } from './lib/chunk-reload';
 
 import Login from './pages/Login';
 import Dashboard from './pages/Dashboard';
@@ -75,6 +77,15 @@ function S({ children }: { children: ReactNode }) {
 // }
 
 function App() {
+  // App mounted = React committed + the initial route's chunks resolved
+  // far enough to render *something* (even just the Suspense fallback).
+  // Hiding the splash here — instead of an arbitrary rAF×2 from main.tsx
+  // — guarantees the user sees the app, not a blank frame.
+  useEffect(() => {
+    markChunkLoadSucceeded();
+    void hideSplash();
+  }, []);
+
   return (
     <AuthProvider>
       <ToastProvider>
