@@ -6,15 +6,17 @@ import { Dialog } from '@/components/ui/dialog';
 import { Textarea } from '@/components/ui/textarea';
 
 /**
- * Park confirmation dialog. Used from the Sampling registry's inline
- * Park action and from the Style detail page. Same shape as the
- * Approval #1 dialog — explicit confirmation, free-text reason field.
+ * Park confirmation dialog. The approver picks one of three preset
+ * reasons (same dimensions as the Approval #1 checks — fabric / price
+ * / collection fit) or "Other" with free text. An optional context
+ * note is appended to whichever reason is sent.
  *
- * Reason is required: parking a Style without a why-line leaves an
- * unreadable audit log. The default behaviour was to send a hardcoded
- * "Paused from inbox" / "Paused from Workspace" string; this dialog
- * makes the human decide what to record.
+ * Required: a reason category. Without it the activity log is
+ * unparseable ("Paused" doesn't say why). The default behaviour was
+ * a hardcoded "Paused from inbox / Workspace" — that's gone.
  */
+
+type ReasonKey = 'fabric' | 'price' | 'collectionFit' | 'other';
 
 interface Props {
   open: boolean;
@@ -33,13 +35,51 @@ export default function ParkDialog({
   onConfirm,
 }: Props) {
   const { t } = useTranslation();
-  const [reason, setReason] = useState('');
+  const [reasonKey, setReasonKey] = useState<ReasonKey | null>(null);
+  const [otherText, setOtherText] = useState('');
+  const [note, setNote] = useState('');
 
   useEffect(() => {
-    if (open) setReason('');
+    if (open) {
+      setReasonKey(null);
+      setOtherText('');
+      setNote('');
+    }
   }, [open]);
 
-  const canConfirm = reason.trim().length > 0 && !busy;
+  const reasonLabel = (k: ReasonKey): string => {
+    switch (k) {
+      case 'fabric':
+        return t('admin.styles.park.reasons.fabric', {
+          defaultValue: 'Fabric feasibility',
+        });
+      case 'price':
+        return t('admin.styles.park.reasons.price', {
+          defaultValue: 'Price',
+        });
+      case 'collectionFit':
+        return t('admin.styles.park.reasons.collectionFit', {
+          defaultValue: 'Compatibility with collection (design fit)',
+        });
+      case 'other':
+        return t('admin.styles.park.reasons.other', {
+          defaultValue: 'Other',
+        });
+    }
+  };
+
+  const canConfirm =
+    !busy &&
+    reasonKey !== null &&
+    (reasonKey !== 'other' || otherText.trim().length > 0);
+
+  const buildReason = (): string => {
+    if (reasonKey === null) return '';
+    const head =
+      reasonKey === 'other' ? otherText.trim() : reasonLabel(reasonKey);
+    const tail = note.trim();
+    return tail ? `${head} — ${tail}` : head;
+  };
 
   return (
     <Dialog
@@ -56,7 +96,7 @@ export default function ParkDialog({
           <Button
             size="sm"
             disabled={!canConfirm}
-            onClick={() => onConfirm(reason.trim())}
+            onClick={() => onConfirm(buildReason())}
           >
             <Pause size={14} />
             <span className="ml-1">
@@ -79,18 +119,63 @@ export default function ParkDialog({
             })}
       </p>
 
-      <label className="block text-xs text-[var(--color-muted-foreground)] mb-1">
-        {t('admin.styles.park.reason', { defaultValue: 'Reason' })}
-      </label>
-      <Textarea
-        value={reason}
-        onChange={(e) => setReason(e.target.value)}
-        placeholder={t('admin.styles.park.reasonPlaceholder', {
-          defaultValue:
-            'e.g. Fabric supplier out of stock, awaiting alternative…',
+      <div
+        role="radiogroup"
+        aria-label={t('admin.styles.park.reasonLabel', {
+          defaultValue: 'Reason',
         })}
-        autoFocus
-      />
+        className="space-y-2"
+      >
+        {(['fabric', 'price', 'collectionFit', 'other'] as const).map((k) => (
+          <label
+            key={k}
+            className="flex items-center gap-2.5 rounded-[var(--radius-sm)] border border-[var(--color-border)] px-3 py-2 cursor-pointer hover:bg-[var(--color-surface-2)]/40"
+          >
+            <input
+              type="radio"
+              name="park-reason"
+              checked={reasonKey === k}
+              onChange={() => setReasonKey(k)}
+              className="h-4 w-4 accent-[var(--color-primary)]"
+            />
+            <span className="text-sm">{reasonLabel(k)}</span>
+          </label>
+        ))}
+      </div>
+
+      {reasonKey === 'other' && (
+        <div className="mt-3">
+          <label className="block text-xs text-[var(--color-muted-foreground)] mb-1">
+            {t('admin.styles.park.otherLabel', {
+              defaultValue: 'Describe the reason',
+            })}
+          </label>
+          <Textarea
+            value={otherText}
+            onChange={(e) => setOtherText(e.target.value)}
+            placeholder={t('admin.styles.park.otherPlaceholder', {
+              defaultValue: 'Briefly describe why this is being parked…',
+            })}
+            autoFocus
+          />
+        </div>
+      )}
+
+      <div className="mt-3">
+        <label className="block text-xs text-[var(--color-muted-foreground)] mb-1">
+          {t('admin.styles.park.note', {
+            defaultValue: 'Optional context',
+          })}
+        </label>
+        <Textarea
+          value={note}
+          onChange={(e) => setNote(e.target.value)}
+          placeholder={t('admin.styles.park.notePlaceholder', {
+            defaultValue:
+              'Anything else worth noting? (e.g. supplier name, target retry date)',
+          })}
+        />
+      </div>
     </Dialog>
   );
 }
