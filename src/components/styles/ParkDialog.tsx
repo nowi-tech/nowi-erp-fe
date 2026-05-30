@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Pause } from 'lucide-react';
+import { AlertTriangle, Pause } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Dialog } from '@/components/ui/dialog';
 import { Textarea } from '@/components/ui/textarea';
@@ -30,6 +30,13 @@ interface Props {
   busy: boolean;
   /** Optional — shown in the dialog title. */
   styleLabel?: string | null;
+  /**
+   * True when the style has already passed Approval #1 (lifecycle past
+   * `draft`). Re-parking a committed design is restricted to admins +
+   * sampling leads (enforced on the BE); we surface a warning so the
+   * lead knows this pulls the style out of the pipeline.
+   */
+  approved?: boolean;
   onClose: () => void;
   onConfirm: (reason: string) => void;
 }
@@ -38,6 +45,7 @@ export default function ParkDialog({
   open,
   busy,
   styleLabel,
+  approved,
   onClose,
   onConfirm,
 }: Props) {
@@ -128,6 +136,21 @@ export default function ParkDialog({
         </>
       }
     >
+      {approved && (
+        <div className="mb-3 flex items-start gap-2 rounded-[var(--radius-sm)] border border-[var(--color-warning)] bg-[var(--color-warning-bg)] px-3 py-2 text-sm text-[var(--color-foreground)]">
+          <AlertTriangle
+            size={15}
+            className="mt-0.5 shrink-0 text-[var(--color-warning)]"
+          />
+          <span>
+            {t('admin.styles.park.approvedWarning', {
+              defaultValue:
+                'This style has already passed Approval #1 — re-parking pulls a committed design out of the pipeline. Only admins and sampling leads can do this.',
+            })}
+          </span>
+        </div>
+      )}
+
       <p className="text-sm text-[var(--color-muted-foreground)] mb-3">
         {styleLabel
           ? t('admin.styles.park.dialogIntroWithStyle', {
