@@ -607,6 +607,7 @@ export interface LocatorCounts {
   stitching: number;
   finishing: number;
   dispatched: number;
+  available: number;
 }
 
 export interface LocatorRow {
@@ -643,7 +644,11 @@ export interface LocatorParams {
   take?: number;
 }
 
-export interface SkuDetailTotals extends LocatorCounts {
+export interface SkuDetailTotals {
+  inbound: number;
+  stitching: number;
+  finishing: number;
+  dispatched: number;
   scrapped: number;
   reworking: number;
 }

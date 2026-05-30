@@ -304,8 +304,6 @@
     "totalOrders": "Total Orders",
     "nav": {
       "dashboard": "Dashboard",
-      "locator": "Locator",
-      "dispatches": "Dispatches",
       "vendors": "Vendors",
       "skus": "SKUs",
       "users": "Users",
@@ -322,7 +320,10 @@
         "production": "उत्पादन",
         "productDevelopment": "उत्पाद विकास",
         "administration": "प्रशासन"
-      }
+      },
+      "production": "उत्पादन",
+      "styles": "सैंपलिंग",
+      "fabricLibrary": "फ़ैब्रिक लाइब्रेरी"
     },
     "chinaImport": {
       "title": "China Import",
@@ -346,7 +347,9 @@
         "price": "मूल्य",
         "updated": "अंतिम अपडेट",
         "actions": "क्रियाएँ",
-        "available": "उपलब्ध"
+        "available": "उपलब्ध",
+        "type": "प्रकार",
+        "unit": "इकाई"
       },
       "empty": "इन फ़िल्टर से कोई फैब्रिक मेल नहीं खाता।",
       "addedToast": "फैब्रिक जोड़ा गया।",
@@ -501,7 +504,7 @@
       }
     },
     "locator": {
-      "title": "Product Locator",
+      "title": "उत्पादन",
       "exportXlsx": "Excel export",
       "loading": "Load हो रहा है…",
       "emptyResults": "कुछ नहीं मिला",
@@ -530,7 +533,19 @@
         "finishing": "Finishing",
         "dispatched": "Dispatched",
         "lots": "Lots",
-        "open": "Open"
+        "open": "Open",
+        "available": "उपलब्ध"
+      },
+      "tabs": {
+        "wip": "WIP",
+        "dispatch": "डिस्पैच"
+      },
+      "kpi": {
+        "throughput": "थ्रूपुट",
+        "rework": "रीवर्क दर",
+        "reworkUnits": "{{n}} यूनिट",
+        "cycle": "औसत साइकल",
+        "finished": "तैयार"
       }
     },
     "skuDetail": {
@@ -650,6 +665,9 @@
         "approved_for_production": "अनुमोदित",
         "under_review_corrections": "समीक्षा में",
         "pattern_correction_approved": "पैटर्न सुधार OK"
+      },
+      "park": {
+        "approvedWarning": "यह स्टाइल पहले ही Approval #1 पास कर चुकी है — दोबारा पार्क करने से एक तय डिज़ाइन पाइपलाइन से बाहर हो जाती है। केवल एडमिन और सैंपलिंग लीड ही ऐसा कर सकते हैं।"
       }
     }
   },
@@ -767,5 +785,66 @@
     "installBody": "App को home screen पर add करें — जल्दी खुलेगा।",
     "installButton": "Install करें",
     "dismissButton": "अभी नहीं"
+  },
+  "dashboard": {
+    "title": "डैशबोर्ड",
+    "submitDesign": "डिज़ाइन सबमिट करें",
+    "narrative": {
+      "pendingApprovals": "लंबित स्वीकृतियाँ",
+      "inYourQueue": "आपकी कतार में",
+      "inSampling": "सैंपलिंग में",
+      "inProduction": "उत्पादन में",
+      "live": "लाइव",
+      "error": "सारांश लोड नहीं हो सका।"
+    },
+    "cards": {
+      "pendingApprovals": "लंबित स्वीकृतियाँ",
+      "mySamplingWork": "मेरा सैंपलिंग कार्य",
+      "inSampling": "सैंपलिंग में",
+      "inProduction": "उत्पादन में",
+      "live": "लाइव",
+      "view": "देखें"
+    },
+    "table": {
+      "searchPlaceholder": "स्टाइल खोजें…",
+      "loading": "लोड हो रहा है…",
+      "error": "स्टाइल लोड नहीं हो सके। पुनः प्रयास करें।",
+      "empty": "कोई स्टाइल प्रगति में नहीं",
+      "colourCount_one": "{{count}} रंग",
+      "colourCount_other": "{{count}} रंग",
+      "tabs": {
+        "all": "सभी",
+        "sampling": "सैंपलिंग",
+        "in_production": "उत्पादन में",
+        "live": "लाइव",
+        "needs_attention": "ध्यान चाहिए"
+      },
+      "columns": {
+        "style": "स्टाइल",
+        "factory": "फ़ैक्टरी",
+        "lifecycle": "लाइफसाइकल",
+        "stage": "चरण",
+        "updated": "अपडेट",
+        "actions": "क्रियाएँ"
+      },
+      "actions": {
+        "approve": "स्वीकृत करें",
+        "park": "पार्क करें"
+      },
+      "toast": {
+        "approved": "स्वीकृत।",
+        "approveError": "स्वीकृत नहीं कर सके।",
+        "parked": "पार्क किया गया।",
+        "parkError": "पार्क नहीं कर सके।"
+      },
+      "productionStatus": {
+        "sample_handover": "सैंपल हैंडओवर",
+        "in_progress_cutting": "कटिंग",
+        "in_progress_stitching": "सिलाई",
+        "in_progress_finishing": "फिनिशिंग",
+        "packing_dispatch": "पैकिंग और डिस्पैच",
+        "warehouse_dispatch": "वेयरहाउस डिस्पैच"
+      }
+    }
   }
 }

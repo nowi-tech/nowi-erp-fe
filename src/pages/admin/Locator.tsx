@@ -5,6 +5,7 @@ import { Card, CardContent } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
 import CollapsibleFilters from '@/components/CollapsibleFilters';
 import StageChips, { type StageChipKey } from '@/components/StageChips';
+import KpiTile from '@/components/KpiTile';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -13,6 +14,7 @@ import { Badge } from '@/components/ui/badge';
 import { Drawer } from '@/components/ui/drawer';
 import { useToast } from '@/components/ui/toast';
 import { useDebounced } from '@/lib/useDebounced';
+import { cn } from '@/lib/utils';
 import {
   listVendors,
   listStages,
@@ -20,21 +22,33 @@ import {
   listStatuses,
 } from '@/api/filters';
 import { getLocator } from '@/api/locator';
+import { getThroughput, getReworkRate, getCycleTime } from '@/api/dashboard';
 import { downloadLocatorXlsx } from '@/api/exports';
 import { FeatureUnavailableError } from '@/api/_errors';
+import Dispatches from './Dispatches';
 import type {
+  CycleTimeResponse,
   FilterOption,
   FilterStage,
   FilterStatus,
   LocatorParams,
   LocatorResponse,
   LocatorRow,
+  ReworkRateResponse,
+  ThroughputResponse,
 } from '@/api/types';
 
 const PAGE_SIZE = 25;
 const ORIGIN_CODES = ['NOWI', 'KOTTY'] as const;
 
 type OriginFilter = 'ALL' | (typeof ORIGIN_CODES)[number];
+
+type ProductionTab = 'wip' | 'dispatch';
+const TABS: ProductionTab[] = ['wip', 'dispatch'];
+
+function tabFromParam(v: string | null): ProductionTab {
+  return v === 'dispatch' ? 'dispatch' : 'wip';
+}
 
 function paramsFromUrl(sp: URLSearchParams): LocatorParams & { origin: OriginFilter } {
   const get = (k: string) => sp.get(k) ?? undefined;
@@ -59,7 +73,59 @@ function originBadgeVariant(code: string): 'default' | 'secondary' | 'outline' {
   return 'outline';
 }
 
-export default function Locator() {
+/**
+ * Production — umbrella for everything post-sampling, two tabs:
+ *  - WIP (default): per-SKU locator (legacy floor lots) + production KPI strip.
+ *  - Dispatch: the existing Dispatches list, folded in (dispatch = tail of
+ *    finishing). Each tab owns its own URL filters; only the active tab
+ *    renders so the two don't fight over `searchParams`.
+ */
+export default function Production() {
+  const { t } = useTranslation();
+  const [searchParams, setSearchParams] = useSearchParams();
+  const tab = tabFromParam(searchParams.get('tab'));
+
+  const setTab = useCallback(
+    (next: ProductionTab) => {
+      // Switching tabs clears the previous tab's filters but keeps `tab`.
+      const sp = new URLSearchParams();
+      if (next !== 'wip') sp.set('tab', next);
+      setSearchParams(sp, { replace: false });
+    },
+    [setSearchParams],
+  );
+
+  return (
+    <div className="space-y-4">
+      <div className="flex items-center justify-between gap-2">
+        <h1 className="text-lg font-semibold">{t('admin.locator.title')}</h1>
+      </div>
+
+      <div className="flex border-b border-[var(--color-border)] overflow-x-auto">
+        {TABS.map((tk) => (
+          <button
+            key={tk}
+            type="button"
+            onClick={() => setTab(tk)}
+            className={cn(
+              'px-5 py-3 text-sm whitespace-nowrap transition-colors',
+              tab === tk
+                ? 'text-[var(--color-primary)] border-b-2 border-[var(--color-primary)] font-semibold'
+                : 'text-[var(--color-muted-foreground)] hover:text-[var(--color-foreground)]',
+            )}
+          >
+            {t(`admin.locator.tabs.${tk}`)}
+          </button>
+        ))}
+      </div>
+
+      {tab === 'wip' ? <ProductionWip /> : <Dispatches />}
+    </div>
+  );
+}
+
+/** WIP tab — production KPI strip + per-SKU locator table. */
+function ProductionWip() {
   const { t } = useTranslation();
   const navigate = useNavigate();
   const toast = useToast();
@@ -79,12 +145,46 @@ export default function Locator() {
   const [exporting, setExporting] = useState(false);
   const [previewRow, setPreviewRow] = useState<LocatorRow | null>(null);
 
+  // Production KPIs (moved here from AdminHome). Read-only; reuse the
+  // existing dashboard endpoints.
+  const [throughput, setThroughput] = useState<ThroughputResponse | null>(null);
+  const [rework, setRework] = useState<ReworkRateResponse | null>(null);
+  const [cycle, setCycle] = useState<CycleTimeResponse | null>(null);
+
   // Load filter lists once.
   useEffect(() => {
     listVendors().then(setVendors).catch(() => undefined);
     listStages().then(setStages).catch(() => undefined);
     listWarehouses().then(setWarehouses).catch(() => undefined);
     listStatuses().then(setStatuses).catch(() => undefined);
+  }, []);
+
+  // Load production KPIs once.
+  useEffect(() => {
+    let cancelled = false;
+    getThroughput(7)
+      .then((d) => !cancelled && setThroughput(d))
+      .catch(() => {
+        if (!cancelled) setThroughput({ finishedUnits: 0, dispatchedUnits: 0, trend: [] });
+      });
+    getReworkRate(30)
+      .then((d) => !cancelled && setRework(d))
+      .catch(() => {
+        if (!cancelled)
+          setRework({
+            overall: { reworkUnits: 0, finishingForwardUnits: 0, ratePct: 0 },
+            bySku: [],
+            byStage: [],
+          });
+      });
+    getCycleTime(30)
+      .then((d) => !cancelled && setCycle(d))
+      .catch(() => {
+        if (!cancelled) setCycle({ avgDays: 0, bySku: [], distribution: [] });
+      });
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   // Sync debounced SKU input back to URL.
@@ -179,10 +279,55 @@ export default function Locator() {
   const start = total === 0 ? 0 : skip + 1;
   const end = Math.min(skip + take, total);
 
+  const sparkData = throughput?.trend.map((p) => p.finished) ?? [];
+  // Rework is statistically meaningless below 10 finishing-forward units —
+  // show `—` rather than dropping the card (keeps the 4-up grid intact).
+  const reworkReady = !!rework && rework.overall.finishingForwardUnits >= 10;
+
   return (
     <div className="space-y-4">
-      <div className="flex items-center justify-between gap-2">
-        <h1 className="text-lg font-semibold">{t('admin.locator.title')}</h1>
+      {/* Production KPI strip — throughput / rework / cycle / finished */}
+      <div className="grid gap-3 grid-cols-2 lg:grid-cols-4">
+        <KpiTile
+          stage="disp"
+          label={t('admin.locator.kpi.throughput', { defaultValue: 'Throughput' })}
+          value={throughput ? throughput.dispatchedUnits : 0}
+          unit="u"
+          period="7D"
+          sparkPoints={sparkData}
+        />
+        <KpiTile
+          stage="accent"
+          label={t('admin.locator.kpi.rework', { defaultValue: 'Rework rate' })}
+          value={reworkReady && rework ? rework.overall.ratePct.toFixed(1) : '—'}
+          unit={reworkReady ? '%' : undefined}
+          period="30D"
+          context={
+            reworkReady && rework && rework.overall.reworkUnits > 0
+              ? t('admin.locator.kpi.reworkUnits', {
+                  defaultValue: '{{n}} units',
+                  n: rework.overall.reworkUnits,
+                })
+              : undefined
+          }
+        />
+        <KpiTile
+          stage="finish"
+          label={t('admin.locator.kpi.cycle', { defaultValue: 'Avg cycle' })}
+          value={cycle ? cycle.avgDays.toFixed(1) : '—'}
+          unit="d"
+          period="30D"
+        />
+        <KpiTile
+          stage="stitch"
+          label={t('admin.locator.kpi.finished', { defaultValue: 'Finished' })}
+          value={throughput ? throughput.finishedUnits : 0}
+          unit="u"
+          period="7D"
+        />
+      </div>
+
+      <div className="flex items-center justify-end gap-2">
         <Button
           variant="outline"
           onClick={() => void handleExport()}
@@ -350,21 +495,20 @@ export default function Locator() {
             <table className="w-full text-sm border-collapse">
               <thead className="sticky top-0 bg-[var(--color-muted)] text-[var(--color-muted-foreground)]">
                 <tr>
-                  <th className="text-left px-3 py-2">{t('admin.locator.columns.sku')}</th>
-                  <th className="text-left px-3 py-2">{t('admin.locator.columns.base')}</th>
-                  <th className="text-left px-3 py-2">{t('admin.locator.columns.size')}</th>
-                  <th className="text-left px-3 py-2">{t('admin.locator.columns.origin')}</th>
-                  <th className="text-right px-3 py-2">{t('admin.locator.columns.inbound')}</th>
-                  <th className="text-right px-3 py-2">
+                  <th className="text-left px-3 py-2 whitespace-nowrap">{t('admin.locator.columns.sku')}</th>
+                  <th className="text-left px-3 py-2 whitespace-nowrap">{t('admin.locator.columns.base')}</th>
+                  <th className="text-left px-3 py-2 whitespace-nowrap">{t('admin.locator.columns.size')}</th>
+                  <th className="text-left px-3 py-2 whitespace-nowrap">{t('admin.locator.columns.origin')}</th>
+                  <th className="text-right px-3 py-2 whitespace-nowrap">
                     {t('admin.locator.columns.stitching')}
                   </th>
-                  <th className="text-right px-3 py-2">
+                  <th className="text-right px-3 py-2 whitespace-nowrap">
                     {t('admin.locator.columns.finishing')}
                   </th>
-                  <th className="text-right px-3 py-2">
-                    {t('admin.locator.columns.dispatched')}
+                  <th className="text-right px-3 py-2 whitespace-nowrap">
+                    {t('admin.locator.columns.available')}
                   </th>
-                  <th className="text-right px-3 py-2">{t('admin.locator.columns.lots')}</th>
+                  <th className="text-right px-3 py-2 whitespace-nowrap">{t('admin.locator.columns.lots')}</th>
                   <th className="px-3 py-2" />
                 </tr>
               </thead>
@@ -372,7 +516,7 @@ export default function Locator() {
                 {loading &&
                   Array.from({ length: 6 }).map((_, i) => (
                     <tr key={`s${i}`} className="border-t border-[var(--color-border)]">
-                      <td colSpan={10} className="px-3 py-2">
+                      <td colSpan={9} className="px-3 py-2">
                         <Skeleton className="h-4 w-full" />
                       </td>
                     </tr>
@@ -380,7 +524,7 @@ export default function Locator() {
                 {!loading && data && data.rows.length === 0 && (
                   <tr>
                     <td
-                      colSpan={10}
+                      colSpan={9}
                       className="px-3 py-6 text-center text-[var(--color-muted-foreground)]"
                     >
                       {t('admin.locator.emptyResults')}
@@ -394,18 +538,17 @@ export default function Locator() {
                       className="border-t border-[var(--color-border)] hover:bg-[var(--color-muted)] cursor-pointer"
                       onClick={() => setPreviewRow(r)}
                     >
-                      <td className="px-3 py-2 font-mono text-xs">{r.sku}</td>
-                      <td className="px-3 py-2">{r.baseCode}</td>
-                      <td className="px-3 py-2">{r.sizeLabel}</td>
-                      <td className="px-3 py-2">
+                      <td className="px-3 py-2 font-mono text-xs whitespace-nowrap">{r.sku}</td>
+                      <td className="px-3 py-2 whitespace-nowrap">{r.baseCode}</td>
+                      <td className="px-3 py-2 whitespace-nowrap">{r.sizeLabel}</td>
+                      <td className="px-3 py-2 whitespace-nowrap">
                         <Badge variant={originBadgeVariant(r.originVendor.code)}>
                           {r.originVendor.code}
                         </Badge>
                       </td>
-                      <td className="px-3 py-2 text-right tabular-nums">{r.counts.inbound}</td>
                       <td className="px-3 py-2 text-right tabular-nums">{r.counts.stitching}</td>
                       <td className="px-3 py-2 text-right tabular-nums">{r.counts.finishing}</td>
-                      <td className="px-3 py-2 text-right tabular-nums">{r.counts.dispatched}</td>
+                      <td className="px-3 py-2 text-right tabular-nums">{r.counts.available}</td>
                       <td className="px-3 py-2 text-right tabular-nums">{r.lotsCount}</td>
                       <td className="px-3 py-2 text-right">
                         <span className="text-[var(--color-primary)] text-xs">
@@ -512,8 +655,8 @@ export default function Locator() {
                 ink="var(--stage-finish-ink)"
               />
               <CountTile
-                label={t('admin.locator.columns.dispatched')}
-                value={previewRow.counts.dispatched}
+                label={t('admin.locator.columns.available')}
+                value={previewRow.counts.available}
                 tint="var(--stage-disp-bg)"
                 ink="var(--stage-disp-ink)"
               />

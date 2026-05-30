@@ -51,6 +51,23 @@ const WRITE_ROLES: readonly UserRole[] = [
   'pattern_master_m',
 ] as const;
 
+// Row-action role gates — mirror the BE guards (and the dashboard
+// StylesInFlightTable) so /styles never shows a button that 403s:
+//  • Approve (Approval #1) → APPROVE set (Option A drops sampling_editor).
+//  • Park of a post-Approval-#1 style → admins + sampling leads only.
+// (Draft park + revive reuse WRITE_ROLES.) BE still enforces; this is UX.
+const APPROVER_ROLES: readonly UserRole[] = [
+  'admin',
+  'sampling_lead',
+  'pattern_master_w',
+  'pattern_master_m',
+  'china_import_approver',
+] as const;
+const POST_APPROVAL_PARK_ROLES: readonly UserRole[] = [
+  'admin',
+  'sampling_lead',
+] as const;
+
 /**
  * Distinct values + per-value row counts for a column. Used to populate
  * the column-filter popover. `getKey` is what we filter on (string, or
@@ -785,12 +802,20 @@ function RowActions({
   onPark?: (s: Style) => void;
   onRevive?: (s: Style) => void;
 }) {
-  const canApprove = style.lifecycle === 'draft';
+  const { user } = useAuth();
+  const canApprove =
+    style.lifecycle === 'draft' && hasAnyRole(user, APPROVER_ROLES);
   const canPark =
     style.lifecycle !== 'parked' &&
     style.lifecycle !== 'archived' &&
-    style.lifecycle !== 'dispatched';
-  const canRevive = style.lifecycle === 'parked';
+    style.lifecycle !== 'dispatched' &&
+    // Post-Approval-#1 styles: only admins + sampling leads may park.
+    hasAnyRole(
+      user,
+      style.lifecycle === 'draft' ? WRITE_ROLES : POST_APPROVAL_PARK_ROLES,
+    );
+  const canRevive =
+    style.lifecycle === 'parked' && hasAnyRole(user, WRITE_ROLES);
   const hasAny =
     (canApprove && onApprove) ||
     (canPark && onPark) ||

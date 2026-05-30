@@ -12,9 +12,12 @@ import { markChunkLoadSucceeded } from './lib/chunk-reload';
 
 import Login from './pages/Login';
 import Dashboard from './pages/Dashboard';
+import { useAuth } from './context/auth';
+import { hasAnyRole } from './lib/userRoles';
+import type { UserRole } from './api/types';
 
 const AdminShell = lazy(() => import('./components/layout/AdminShell'));
-const AdminHome = lazy(() => import('./pages/admin/AdminHome'));
+const Home = lazy(() => import('./pages/Home'));
 const Locator = lazy(() => import('./pages/admin/Locator'));
 const SkuDetail = lazy(() => import('./pages/admin/SkuDetail'));
 const Dispatches = lazy(() => import('./pages/admin/Dispatches'));
@@ -70,6 +73,37 @@ function S({ children }: { children: ReactNode }) {
   return <Suspense fallback={<PageSkeleton />}>{children}</Suspense>;
 }
 
+// Office roles that land on the unified Home (`/`). Floor roles
+// (floor_manager / stitching_master / finishing_master) are excluded —
+// they're bounced to their own data-entry homes. Mirrors the Home
+// allow-list in docs/DASHBOARD_REDESIGN.md and ROLE_HOMES in Dashboard.tsx.
+const OFFICE_HOME_ROLES: UserRole[] = [
+  'admin',
+  'viewer',
+  'data_manager',
+  'data_admin',
+  'sampling_editor',
+  'sampling_lead',
+  'pattern_master_w',
+  'pattern_master_m',
+  'china_import_approver',
+  'pd_lead',
+];
+
+/**
+ * Index of the `/` AdminShell route. Office roles see the unified Home;
+ * floor/stage roles fall through to <Dashboard/>, the role router that
+ * redirects them to /floor, /stitching or /finishing. Keeps `/` a single
+ * canonical entry point without a redirect loop.
+ */
+function HomeRoute() {
+  const { user } = useAuth();
+  if (hasAnyRole(user, OFFICE_HOME_ROLES)) {
+    return <Home />;
+  }
+  return <Dashboard />;
+}
+
 // function AdminPlaceholder({ titleKey }: { titleKey: string }) {
 //   const { t } = useTranslation();
 //   return <PlaceholderSection title={t(titleKey)} />;
@@ -95,14 +129,30 @@ function App() {
           <Routes>
             <Route path="/login" element={<Login />} />
 
+            {/* Unified office Home — the single role-aware landing surface.
+                Rendered inside the AdminShell chrome (sidebar + header).
+                The index decides: office roles see <Home/>; floor roles are
+                bounced to their own floor/stage homes by <Dashboard/> (the
+                role router), so they never loop on `/`. */}
             <Route
               path="/"
               element={
                 <ProtectedRoute>
-                  <Dashboard />
+                  <S>
+                    <AdminShell />
+                  </S>
                 </ProtectedRoute>
               }
-            />
+            >
+              <Route
+                index
+                element={
+                  <S>
+                    <HomeRoute />
+                  </S>
+                }
+              />
+            </Route>
 
             <Route
               path="/dispatches/:id/print"
@@ -139,14 +189,10 @@ function App() {
                 </ProtectedRoute>
               }
             >
-              <Route
-                index
-                element={
-                  <S>
-                    <AdminHome />
-                  </S>
-                }
-              />
+              {/* AdminHome is retired — `/admin` now redirects to the
+                  unified Home at `/`. The Production page (locator),
+                  Dispatches, Users, etc. remain reachable as child routes. */}
+              <Route index element={<Navigate to="/" replace />} />
               <Route
                 path="locator"
                 element={
@@ -369,6 +415,13 @@ function App() {
                     'pattern_master_w',
                     'pattern_master_m',
                     'viewer',
+                    // Office roles that reach the Sampling registry via the
+                    // Home cards (read-only; BE gates writes). Keeps the
+                    // card deep-links from bouncing back to '/'.
+                    'china_import_approver',
+                    'data_manager',
+                    'data_admin',
+                    'pd_lead',
                   ]}
                 >
                   <S>
@@ -388,9 +441,24 @@ function App() {
               <Route
                 path="new"
                 element={
-                  <S>
-                    <NewIntake />
-                  </S>
+                  // Intake creates a Style (write). The /styles parent now
+                  // admits read-only office roles for the registry
+                  // drill-down, so re-gate the create form to the PD write
+                  // set — otherwise a read-only role could open the form by
+                  // URL and only hit the 403 on submit.
+                  <ProtectedRoute
+                    allowedRoles={[
+                      'admin',
+                      'sampling_editor',
+                      'sampling_lead',
+                      'pattern_master_w',
+                      'pattern_master_m',
+                    ]}
+                  >
+                    <S>
+                      <NewIntake />
+                    </S>
+                  </ProtectedRoute>
                 }
               />
               <Route

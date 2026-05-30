@@ -2,25 +2,25 @@ import { Navigate } from 'react-router-dom';
 import { useAuth } from '@/context/auth';
 import type { UserRole } from '@/api/types';
 
+// Office roles now land on the unified Home at `/` (the dashboard redesign
+// killed the old /admin AdminHome + /styles sampling-home split). Only the
+// floor/stage roles keep their dedicated data-entry homes — they're bounced
+// off `/` by HomeRoute in App.tsx. See docs/DASHBOARD_REDESIGN.md.
 const ROLE_HOMES: Record<UserRole, string> = {
-  admin: '/admin',
+  admin: '/',
   floor_manager: '/floor',
   stitching_master: '/stitching',
   finishing_master: '/finishing',
-  data_manager: '/data',
-  viewer: '/admin',
-  sampling_editor: '/styles',
-  // ── Product Development (Phase 4-8) roles all land on /styles ──────
-  sampling_lead: '/styles',
-  pattern_master_w: '/styles',
-  pattern_master_m: '/styles',
-  china_import_approver: '/styles',
-  data_admin: '/admin',
-  pd_lead: '/styles',
+  data_manager: '/',
+  viewer: '/',
+  sampling_editor: '/',
+  sampling_lead: '/',
+  pattern_master_w: '/',
+  pattern_master_m: '/',
+  china_import_approver: '/',
+  data_admin: '/',
+  pd_lead: '/',
 };
-
-// Legacy roles still present in dev DB → fall through to admin so the user lands somewhere usable.
-const LEGACY_ROLES = new Set(['operator', 'cutting_master', 'finishing', 'warehouse']);
 
 export default function Dashboard() {
   const { user } = useAuth();
@@ -30,8 +30,7 @@ export default function Dashboard() {
   if (role in ROLE_HOMES) {
     return <Navigate to={ROLE_HOMES[role as UserRole]} replace />;
   }
-  if (LEGACY_ROLES.has(role)) {
-    return <Navigate to="/admin" replace />;
-  }
+  // Unknown / legacy dev-DB roles have no home in the redesigned IA —
+  // send them back to login rather than looping through `/admin` → `/`.
   return <Navigate to="/login" replace />;
 }

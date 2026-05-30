@@ -1,36 +1,38 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { Plus, Search } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Select } from '@/components/ui/select';
 import { useToast } from '@/components/ui/toast';
-import AttentionChips from '@/components/styles/AttentionChips';
-import StyleKpiStrip from '@/components/styles/StyleKpiStrip';
 import StylesTable from '@/components/styles/StylesTable';
 import Approval1Dialog from '@/components/styles/Approval1Dialog';
 import ParkDialog from '@/components/styles/ParkDialog';
 import {
   approveStyle,
   listStyles,
-  getStylesSummary,
   parkStyle,
   reviveStyle,
   type ListStylesParams,
   type StyleTab,
-  type StylesSummary,
 } from '@/api/styles';
 import type { Style } from '@/api/types';
 import { cn } from '@/lib/utils';
 
 const TABS: StyleTab[] = ['inbox', 'in_sampling', 'parked', 'in_pd', 'all'];
 
+// Read the initial tab from the `?tab=` deep-link param (the Home summary
+// cards land here with a filter pre-applied). Falls back to the inbox.
+function tabFromParam(value: string | null): StyleTab {
+  return TABS.includes(value as StyleTab) ? (value as StyleTab) : 'inbox';
+}
+
 /**
- * Merged Dashboard + Registry page (canonical_styles_registry.html).
+ * Sampling registry — the "View more" drill-down target from the unified Home.
  *
- * Header block: attention chips · KPI strip · collapsible widgets row.
- * Body: tabs + filter bar + parent/variant grouped table.
+ * The header summary (attention chips + KPI strip) moved to the Home page.
+ * Body: tabs + filter bar + parent/variant grouped table + Submit design.
  *
  * Sampling-only — China Import has its own dedicated page (`/china-import`).
  */
@@ -38,9 +40,11 @@ export default function StylesRegistry() {
   const { t } = useTranslation();
   const navigate = useNavigate();
   const toast = useToast();
+  const [searchParams, setSearchParams] = useSearchParams();
 
-  const [tab, setTab] = useState<StyleTab>('inbox');
-  const [summary, setSummary] = useState<StylesSummary | null>(null);
+  const [tab, setTab] = useState<StyleTab>(() =>
+    tabFromParam(searchParams.get('tab')),
+  );
   const [rows, setRows] = useState<Style[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -52,15 +56,6 @@ export default function StylesRegistry() {
   const [approvalBusy, setApprovalBusy] = useState(false);
   const [parkTarget, setParkTarget] = useState<Style | null>(null);
   const [parkBusy, setParkBusy] = useState(false);
-
-  const reloadSummary = useCallback(async () => {
-    try {
-      const s = await getStylesSummary();
-      setSummary(s);
-    } catch {
-      /* leave the previous summary in place on transient failures */
-    }
-  }, []);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -79,28 +74,27 @@ export default function StylesRegistry() {
     } finally {
       setLoading(false);
     }
-    // Fire-and-forget — KPI strip refresh in the background while the
-    // table renders. Doesn't block the visible list.
-    void reloadSummary();
-  }, [tab, searchText, samplingStatus, reloadSummary]);
+  }, [tab, searchText, samplingStatus]);
 
   useEffect(() => {
     const t = setTimeout(() => void load(), 200);
     return () => clearTimeout(t);
   }, [load]);
 
-  // Refresh summary when the tab regains focus — covers the case
-  // where the user approves a style on the detail page and uses the
-  // browser back button or a quick swipe back to the registry.
+  // Honor a deep-link `?tab=` change (e.g. back/forward navigation or a
+  // fresh card click while already on the page) by re-syncing the tab.
   useEffect(() => {
-    const onFocus = () => void reloadSummary();
-    window.addEventListener('focus', onFocus);
-    document.addEventListener('visibilitychange', onFocus);
-    return () => {
-      window.removeEventListener('focus', onFocus);
-      document.removeEventListener('visibilitychange', onFocus);
-    };
-  }, [reloadSummary]);
+    setTab(tabFromParam(searchParams.get('tab')));
+  }, [searchParams]);
+
+  // Tab selection mirrors the active tab into the URL so the page is
+  // shareable/back-button friendly and stays consistent with deep links.
+  const selectTab = (next: StyleTab) => {
+    setTab(next);
+    const params = new URLSearchParams(searchParams);
+    params.set('tab', next);
+    setSearchParams(params, { replace: true });
+  };
 
   const openCreateDesign = () => navigate('/styles/new');
 
@@ -146,26 +140,6 @@ export default function StylesRegistry() {
         </Button>
       </div>
 
-      {/* Attention chips */}
-      {summary && (
-        <AttentionChips
-          awaitingApproval1={summary.attention.awaitingApproval1}
-          awaitingApproval2={summary.attention.awaitingApproval2}
-          readyForQc={summary.attention.readyForQc}
-        />
-      )}
-
-      {/* KPI strip */}
-      {summary && (
-        <StyleKpiStrip
-          stylesDeveloped={summary.kpi.stylesDeveloped}
-          approved={summary.kpi.approved}
-          inProduction={summary.kpi.inProduction}
-          live={summary.kpi.live}
-          virtualLive={summary.kpi.virtualLive}
-        />
-      )}
-
       {/* Tab + filter + table card */}
       <div className="bg-[var(--color-surface)] rounded-[var(--radius-md)] border border-[var(--color-border)] shadow-sm">
         <div className="flex border-b border-[var(--color-border)] overflow-x-auto">
@@ -173,7 +147,7 @@ export default function StylesRegistry() {
             <button
               key={tk}
               type="button"
-              onClick={() => setTab(tk)}
+              onClick={() => selectTab(tk)}
               className={cn(
                 'px-5 py-3 text-sm whitespace-nowrap transition-colors',
                 tab === tk
@@ -255,6 +229,7 @@ export default function StylesRegistry() {
             : parkTarget?.workingName) ??
           null
         }
+        approved={parkTarget ? parkTarget.lifecycle !== 'draft' : false}
         onClose={() => setParkTarget(null)}
         onConfirm={async (reason) => {
           if (!parkTarget) return;
