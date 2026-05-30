@@ -441,9 +441,24 @@ function App() {
               <Route
                 path="new"
                 element={
-                  <S>
-                    <NewIntake />
-                  </S>
+                  // Intake creates a Style (write). The /styles parent now
+                  // admits read-only office roles for the registry
+                  // drill-down, so re-gate the create form to the PD write
+                  // set — otherwise a read-only role could open the form by
+                  // URL and only hit the 403 on submit.
+                  <ProtectedRoute
+                    allowedRoles={[
+                      'admin',
+                      'sampling_editor',
+                      'sampling_lead',
+                      'pattern_master_w',
+                      'pattern_master_m',
+                    ]}
+                  >
+                    <S>
+                      <NewIntake />
+                    </S>
+                  </ProtectedRoute>
                 }
               />
               <Route

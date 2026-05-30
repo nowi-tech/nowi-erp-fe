@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { CheckCircle2, ImageOff, Pause, Search } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
@@ -82,32 +82,35 @@ function lifecycleVariant(l: StyleLifecycle) {
   return 'secondary';
 }
 
-/** Compact relative-time formatter (no extra dep — codebase has none). */
-function relativeTime(iso: string): string {
+/** Locale-aware relative time via Intl.RelativeTimeFormat (no extra dep) —
+ *  honours the active i18n language (e.g. Hindi) instead of hardcoded
+ *  English. `numeric: 'auto'` yields "now"/"yesterday" niceties. */
+function relativeTime(iso: string, locale: string): string {
   const then = new Date(iso).getTime();
   if (Number.isNaN(then)) return '—';
-  const diffMs = Date.now() - then;
-  const sec = Math.round(diffMs / 1000);
-  if (sec < 45) return 'just now';
+  const sec = Math.round((Date.now() - then) / 1000); // +ve = in the past
+  const rtf = new Intl.RelativeTimeFormat(locale, { numeric: 'auto' });
+  if (Math.abs(sec) < 45) return rtf.format(-sec, 'second');
   const min = Math.round(sec / 60);
-  if (min < 60) return `${min}m ago`;
+  if (Math.abs(min) < 60) return rtf.format(-min, 'minute');
   const hr = Math.round(min / 60);
-  if (hr < 24) return `${hr}h ago`;
+  if (Math.abs(hr) < 24) return rtf.format(-hr, 'hour');
   const day = Math.round(hr / 24);
-  if (day < 30) return `${day}d ago`;
+  if (Math.abs(day) < 30) return rtf.format(-day, 'day');
   const mo = Math.round(day / 30);
-  if (mo < 12) return `${mo}mo ago`;
-  return `${Math.round(mo / 12)}y ago`;
+  if (Math.abs(mo) < 12) return rtf.format(-mo, 'month');
+  return rtf.format(-Math.round(mo / 12), 'year');
 }
 
 export default function StylesInFlightTable({
   initialTab = 'all',
   onActionDone,
 }: Props) {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const { user } = useAuth();
   const navigate = useNavigate();
   const toast = useToast();
+  const [searchParams, setSearchParams] = useSearchParams();
 
   const [tab, setTab] = useState<DashboardStyleTab>(initialTab);
   const [searchText, setSearchText] = useState('');
@@ -162,6 +165,16 @@ export default function StylesInFlightTable({
   const openStyle = (row: DashboardStyleRow) =>
     navigate(`/styles/${row.styleId ?? row.id}`);
 
+  // Mirror the active tab into ?tab= so a refresh or shared link reopens
+  // the selected bucket (not the stale deep-linked one) — matches the
+  // Sampling registry's behaviour.
+  const selectTab = (next: DashboardStyleTab) => {
+    setTab(next);
+    const params = new URLSearchParams(searchParams);
+    params.set('tab', next);
+    setSearchParams(params, { replace: true });
+  };
+
   const canApprove = (row: DashboardStyleRow) =>
     row.lifecycle === 'draft' && hasAnyRole(user, APPROVER_ROLES);
 
@@ -203,7 +216,7 @@ export default function StylesInFlightTable({
           <button
             key={tk}
             type="button"
-            onClick={() => setTab(tk)}
+            onClick={() => selectTab(tk)}
             className={cn(
               'px-4 py-2.5 text-sm whitespace-nowrap transition-colors',
               tab === tk
@@ -373,7 +386,7 @@ export default function StylesInFlightTable({
 
                     {/* UPDATED */}
                     <td className="px-3 py-2 text-xs text-[var(--color-muted-foreground)] tabular-nums">
-                      {relativeTime(row.updatedAt)}
+                      {relativeTime(row.updatedAt, i18n.language)}
                     </td>
 
                     {/* ACTIONS — role-gated, no "View" */}

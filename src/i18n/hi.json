@@ -539,6 +539,13 @@
       "tabs": {
         "wip": "WIP",
         "dispatch": "डिस्पैच"
+      },
+      "kpi": {
+        "throughput": "थ्रूपुट",
+        "rework": "रीवर्क दर",
+        "reworkUnits": "{{n}} यूनिट",
+        "cycle": "औसत साइकल",
+        "finished": "तैयार"
       }
     },
     "skuDetail": {
@@ -658,6 +665,9 @@
         "approved_for_production": "अनुमोदित",
         "under_review_corrections": "समीक्षा में",
         "pattern_correction_approved": "पैटर्न सुधार OK"
+      },
+      "park": {
+        "approvedWarning": "यह स्टाइल पहले ही Approval #1 पास कर चुकी है — दोबारा पार्क करने से एक तय डिज़ाइन पाइपलाइन से बाहर हो जाती है। केवल एडमिन और सैंपलिंग लीड ही ऐसा कर सकते हैं।"
       }
     }
   },

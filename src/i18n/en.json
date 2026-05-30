@@ -657,6 +657,9 @@
           "from": "from",
           "to": "to"
         }
+      },
+      "park": {
+        "approvedWarning": "This style has already passed Approval #1 — re-parking pulls a committed design out of the pipeline. Only admins and sampling leads can do this."
       }
     },
     "chinaImport": {
@@ -873,6 +876,13 @@
       "tabs": {
         "wip": "WIP",
         "dispatch": "Dispatch"
+      },
+      "kpi": {
+        "throughput": "Throughput",
+        "rework": "Rework rate",
+        "reworkUnits": "{{n}} units",
+        "cycle": "Avg cycle",
+        "finished": "Finished"
       }
     },
     "skuDetail": {
