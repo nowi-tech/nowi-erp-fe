@@ -313,8 +313,6 @@
     "totalOrders": "Total orders",
     "nav": {
       "dashboard": "Dashboard",
-      "locator": "Locator",
-      "dispatches": "Dispatches",
       "vendors": "Vendors",
       "skus": "SKUs",
       "users": "Users",
@@ -334,7 +332,8 @@
         "production": "Production",
         "productDevelopment": "Product Development",
         "administration": "Administration"
-      }
+      },
+      "production": "Production"
     },
     "home": {
       "approvalCta": {
@@ -682,7 +681,9 @@
         "price": "Price",
         "updated": "Last updated",
         "actions": "Actions",
-        "available": "Available"
+        "available": "Available",
+        "type": "Type",
+        "unit": "Unit"
       },
       "empty": "No fabrics match these filters.",
       "addedToast": "Fabric added.",
@@ -837,7 +838,7 @@
       }
     },
     "locator": {
-      "title": "Product Locator",
+      "title": "Production",
       "exportXlsx": "Export to Excel",
       "loading": "Loading…",
       "emptyResults": "No matching results.",
@@ -866,7 +867,12 @@
         "finishing": "Finishing",
         "dispatched": "Dispatched",
         "lots": "Lots",
-        "open": "Open"
+        "open": "Open",
+        "available": "Available"
+      },
+      "tabs": {
+        "wip": "WIP",
+        "dispatch": "Dispatch"
       }
     },
     "skuDetail": {
@@ -1065,5 +1071,66 @@
     "installBody": "Add the app to your home screen for faster access on the floor.",
     "installButton": "Install app",
     "dismissButton": "Not now"
+  },
+  "dashboard": {
+    "title": "Dashboard",
+    "submitDesign": "Submit design",
+    "narrative": {
+      "pendingApprovals": "pending approvals",
+      "inYourQueue": "in your queue",
+      "inSampling": "in sampling",
+      "inProduction": "in production",
+      "live": "live",
+      "error": "Couldn't load the summary."
+    },
+    "cards": {
+      "pendingApprovals": "Pending approvals",
+      "mySamplingWork": "My sampling work",
+      "inSampling": "In sampling",
+      "inProduction": "In production",
+      "live": "Live",
+      "view": "View"
+    },
+    "table": {
+      "searchPlaceholder": "Search styles…",
+      "loading": "Loading…",
+      "error": "Couldn't load styles. Try again.",
+      "empty": "No styles in flight",
+      "colourCount_one": "{{count}} colour",
+      "colourCount_other": "{{count}} colours",
+      "tabs": {
+        "all": "All",
+        "sampling": "Sampling",
+        "in_production": "In production",
+        "live": "Live",
+        "needs_attention": "Needs attention"
+      },
+      "columns": {
+        "style": "Style",
+        "factory": "Factory",
+        "lifecycle": "Lifecycle",
+        "stage": "Stage",
+        "updated": "Updated",
+        "actions": "Actions"
+      },
+      "actions": {
+        "approve": "Approve",
+        "park": "Park"
+      },
+      "toast": {
+        "approved": "Approved.",
+        "approveError": "Could not approve.",
+        "parked": "Parked.",
+        "parkError": "Could not park."
+      },
+      "productionStatus": {
+        "sample_handover": "Sample handover",
+        "in_progress_cutting": "Cutting",
+        "in_progress_stitching": "Stitching",
+        "in_progress_finishing": "Finishing",
+        "packing_dispatch": "Packing & dispatch",
+        "warehouse_dispatch": "Warehouse dispatch"
+      }
+    }
   }
 }
