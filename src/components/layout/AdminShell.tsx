@@ -4,7 +4,6 @@ import { Link, NavLink, Outlet, useLocation } from 'react-router-dom';
 import {
   LayoutDashboard,
   Users,
-  Truck,
   Search,
   LogOut,
   FlaskConical,
@@ -28,7 +27,7 @@ import { useToast } from '@/components/ui/toast';
 import LanguageToggle from '@/components/LanguageToggle';
 import Logo from '@/components/Logo';
 import { cn } from '@/lib/utils';
-import { hasAnyRole, userAllRoles } from '@/lib/userRoles';
+import { userAllRoles } from '@/lib/userRoles';
 import type { UserRole } from '@/api/types';
 import { RailTooltip, SectionFlyout } from '@/components/ui/sidebar-tooltip';
 
@@ -48,17 +47,59 @@ interface NavSection {
   items: NavItem[];
 }
 
-/* Nav is grouped into a handful of labelled, collapsible sections rather than
-   one long flat list. Every route that used to be a top-level link is still
-   here — nothing was removed, only re-grouped. Role-gating is unchanged: an
-   item only renders for the roles its route's ProtectedRoute permits. */
+/* Nav follows the simplified post-redesign IA (docs/DASHBOARD_REDESIGN.md):
+   Dashboard · Sampling · Production · Users · Master Data, plus China Import +
+   Fabric Library, plus the floor/stage drop-in surfaces for admins. Dispatch
+   is no longer a top-level item — it folds into the Production page as a tab
+   (the /admin/dispatches ROUTE stays, only the nav entry is gone). Role-gating
+   is unchanged: an item only renders for roles its route's ProtectedRoute
+   permits. */
+
+// Office roles that see the unified Home (`/`). Mirrors OFFICE_HOME_ROLES in
+// App.tsx and the Home allow-list in docs/DASHBOARD_REDESIGN.md.
+const OFFICE_ROLES: UserRole[] = [
+  'admin',
+  'viewer',
+  'data_manager',
+  'data_admin',
+  'sampling_editor',
+  'sampling_lead',
+  'pattern_master_w',
+  'pattern_master_m',
+  'china_import_approver',
+  'pd_lead',
+];
+
+const PD_ROLES: UserRole[] = [
+  'admin',
+  'sampling_editor',
+  'sampling_lead',
+  'pattern_master_w',
+  'pattern_master_m',
+];
+
 const NAV_SECTIONS: NavSection[] = [
   {
     id: 'overview',
     titleKey: 'admin.nav.sections.overview',
     items: [
-      { to: '/admin', end: true, icon: <LayoutDashboard size={18} />, labelKey: 'admin.nav.dashboard', roles: ['admin', 'viewer'] },
-      { to: '/admin/locator', icon: <Search size={18} />, labelKey: 'admin.nav.locator', roles: ['admin', 'viewer'] },
+      // Unified office Home — every office role lands here.
+      { to: '/', end: true, icon: <LayoutDashboard size={18} />, labelKey: 'admin.nav.dashboard', roles: OFFICE_ROLES },
+      // Sampling registry (the old Styles page) — the "View more" drill-down.
+      { to: '/styles', end: true, icon: <Shirt size={18} />, labelKey: 'admin.nav.styles', roles: PD_ROLES },
+      // Production = the renamed Locator. Dispatch lives inside it as a tab.
+      { to: '/admin/locator', icon: <Search size={18} />, labelKey: 'admin.nav.production', roles: ['admin', 'viewer', 'data_manager'] },
+    ],
+  },
+  {
+    id: 'productDevelopment',
+    titleKey: 'admin.nav.sections.productDevelopment',
+    items: [
+      // China Import is its own first-class destination (a simple, separate
+      // flow for NW- prefixed imported styles). Fabric Library = the master
+      // fabric catalogue used across styles.
+      { to: '/china-import', icon: <Container size={18} />, labelKey: 'admin.nav.chinaImport', roles: ['admin', 'sampling_editor', 'sampling_lead', 'pattern_master_w', 'pattern_master_m', 'china_import_approver'] },
+      { to: '/fabric-library', icon: <Layers size={18} />, labelKey: 'admin.nav.fabricLibrary', roles: PD_ROLES },
     ],
   },
   {
@@ -71,21 +112,6 @@ const NAV_SECTIONS: NavSection[] = [
       { to: '/floor', icon: <Boxes size={18} />, labelKey: 'admin.nav.floor', roles: ['admin'] },
       { to: '/stitching', icon: <Scissors size={18} />, labelKey: 'admin.nav.stitching', roles: ['admin'] },
       { to: '/finishing', icon: <Sparkles size={18} />, labelKey: 'admin.nav.finishing', roles: ['admin'] },
-      { to: '/admin/dispatches', icon: <Truck size={18} />, labelKey: 'admin.nav.dispatches', roles: ['admin', 'viewer'] },
-    ],
-  },
-  {
-    id: 'productDevelopment',
-    titleKey: 'admin.nav.sections.productDevelopment',
-    items: [
-      // Product Development module — Styles + China Import + Fabric Library.
-      // China Import is its own first-class destination (a simple, separate
-      // flow for NW- prefixed imported styles). Visibility matches the BE
-      // styles WRITE set so everyone who can submit an intake can see the
-      // entries — sampling_editor, sampling_lead, pattern_master_w/m, admin.
-      { to: '/styles', end: true, icon: <Shirt size={18} />, labelKey: 'admin.nav.styles', roles: ['admin', 'sampling_editor', 'sampling_lead', 'pattern_master_w', 'pattern_master_m'] },
-      { to: '/china-import', icon: <Container size={18} />, labelKey: 'admin.nav.chinaImport', roles: ['admin', 'sampling_editor', 'sampling_lead', 'pattern_master_w', 'pattern_master_m', 'china_import_approver'] },
-      { to: '/fabric-library', icon: <Layers size={18} />, labelKey: 'admin.nav.fabricLibrary', roles: ['admin', 'sampling_editor', 'sampling_lead', 'pattern_master_w', 'pattern_master_m'] },
     ],
   },
   {
@@ -94,13 +120,8 @@ const NAV_SECTIONS: NavSection[] = [
     items: [
       { to: '/admin/edit-requests', icon: <Inbox size={18} />, labelKey: 'admin.nav.editRequests', roles: ['admin'] },
       { to: '/admin/users', icon: <Users size={18} />, labelKey: 'admin.nav.users', roles: ['admin'] },
-      // data_manager hub. Lives under Administration so the role still
-      // has a way back to the master-data hub from anywhere in the app.
-      // We removed the generic "Master data" entry from the PD section
-      // earlier because the data_admin destination was just a link to
-      // /admin/users, which had its own entry. The /data hub now hosts
-      // future master-data tables (vendors / skus / settings) so it
-      // earns its own row, scoped to admins + data_manager.
+      // Master-data hub for data_manager (+ admin). Hosts future master-data
+      // tables (vendors / skus / settings).
       { to: '/data', icon: <Database size={18} />, labelKey: 'admin.nav.masterData', roles: ['admin', 'data_manager'] },
     ],
   },
@@ -550,19 +571,9 @@ export default function AdminShell() {
     })).filter((s) => s.items.length > 0);
   }, [allRoles]);
 
-  // Login landing: data_manager → /data; anyone with a PD role → /styles;
-  // otherwise /admin. Checked against allRoles so a secondary PD grant
-  // is honoured too.
-  const homePath = hasAnyRole(user, ['data_manager'])
-    ? '/data'
-    : hasAnyRole(user, [
-          'sampling_editor',
-          'sampling_lead',
-          'pattern_master_w',
-          'pattern_master_m',
-        ])
-      ? '/styles'
-      : '/admin';
+  // Logo target = the unified office Home for every office role; floor/stage
+  // roles never render AdminShell, so `/` (which HomeRoute bounces) is safe.
+  const homePath = '/';
 
   // Close the mobile drawer on any navigation.
   useEffect(() => {
