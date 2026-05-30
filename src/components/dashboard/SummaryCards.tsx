@@ -90,9 +90,11 @@ export default function SummaryCards({ cards }: Props) {
   return (
     <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
       {items.map((item) => (
-        <div
+        // Whole card is the click target (not just the "View →" cue).
+        <Link
           key={item.key}
-          className="flex flex-col rounded-[var(--radius-lg)] border border-[var(--color-border)] bg-[var(--color-surface)] px-4 pt-3.5 pb-3.5 transition-colors hover:border-[var(--color-border-strong)]"
+          to={item.to}
+          className="group flex flex-col rounded-[var(--radius-lg)] border border-[var(--color-border)] bg-[var(--color-surface)] px-4 pt-3.5 pb-3.5 transition-colors hover:border-[var(--color-border-strong)] hover:bg-[var(--color-surface-2)]/40 focus:outline-none focus-visible:border-[var(--color-primary)]"
         >
           {/* Label — plain charcoal/muted, never coloured. */}
           <span className="text-[11px] font-mono uppercase tracking-[0.11em] leading-tight text-[var(--color-foreground-3)]">
@@ -104,15 +106,13 @@ export default function SummaryCards({ cards }: Props) {
             {item.count}
           </span>
 
-          {/* The ONLY coloured element: the indigo "View →" link. */}
-          <Link
-            to={item.to}
-            className="mt-3 inline-flex items-center gap-1 text-[13px] font-medium text-[var(--color-primary)] hover:underline focus:outline-none focus-visible:underline"
-          >
+          {/* The ONLY coloured element: the indigo "View →" cue. The whole
+              card navigates; this stays as the visual affordance. */}
+          <span className="mt-3 inline-flex items-center gap-1 text-[13px] font-medium text-[var(--color-primary)] group-hover:underline">
             {t('dashboard.cards.view', { defaultValue: 'View' })}
             <ArrowRight size={13} strokeWidth={2.25} aria-hidden />
-          </Link>
-        </div>
+          </span>
+        </Link>
       ))}
     </div>
   );
