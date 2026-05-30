@@ -11,6 +11,10 @@ body {
 body.lang-hi,
 .lang-hi {
   font-family: var(--font-hi);
+  /* Keep the system single-font in Hindi too: point the sans token at the
+     Devanagari stack so every `font-sans`/`font-serif`/`font-mono` utility
+     (all aliased to --font-sans) renders in Noto Devanagari, not Latin. */
+  --font-sans: var(--font-hi);
 }
 
 /* Lighter placeholders globally — keep the muted color but knock the alpha down */

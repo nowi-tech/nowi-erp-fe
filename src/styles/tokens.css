@@ -115,7 +115,12 @@
   /* ── Typography ── */
   --font-sans:  'Plus Jakarta Sans', ui-sans-serif, system-ui, -apple-system, sans-serif;
   --font-hi:    'Noto Sans Devanagari', 'Plus Jakarta Sans', system-ui, sans-serif;
-  --font-mono:  'JetBrains Mono', ui-monospace, SFMono-Regular, monospace;
+  /* Single font across the system: serif headings + mono labels/codes all
+     resolve to the one sans family. `tabular-nums` still aligns numerics, so
+     code/number columns keep their alignment without a separate typeface.
+     (Override later by pointing these back at distinct stacks.) */
+  --font-serif: var(--font-sans);
+  --font-mono:  var(--font-sans);
 
   /* ── Elevation (rgba uses ink #0e1730 = 14,23,48) ── */
   --shadow-card: 0 1px 2px rgba(14, 23, 48, 0.04);
