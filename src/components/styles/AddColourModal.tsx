@@ -13,6 +13,17 @@ import { cn } from '@/lib/utils';
 interface Props {
   /** Parent style — the family the new colour belongs to. */
   parent: Style;
+  /**
+   * The whole colour family resolved off the BE — every sibling sharing
+   * the family's `familyCode`, including the parent itself. Drives the
+   * duplicate guard + "existing colours" strip so opening Add-Colour from
+   * a SIBLING (not the root) still sees the complete family. Falls back to
+   * `parent.colourVariants` when not supplied.
+   *
+   * parentStyleId drives inbox NESTING; familyCode drives the marketplace
+   * "other colours" GROUP — do NOT unify; based-on shares neither.
+   */
+  family?: Style[];
   open: boolean;
   onClose: () => void;
   /** Receives the newly-created child Style on success. */
@@ -20,9 +31,13 @@ interface Props {
 }
 
 /**
- * Spawn a colour-variant Style from an existing parent. Inherits
- * fabric / gender / category / CAD from the parent; the designer only
- * supplies the new colour + (optionally) fresh reference images / link.
+ * Spawn a colour-variant Style from an existing parent — a SUBMISSION, not
+ * an inline approval. `spawnColourVariant` creates a DRAFT that lands in
+ * the Inbox for Approval #1, the SAME flow as a brand-new design; there
+ * are deliberately NO inline approval checks in this modal (the spawned
+ * sibling skips re-sampling server-side, but a reviewer still approves it).
+ * It inherits fabric / gender / category / CAD from the parent; the
+ * designer only supplies the new colour + (optionally) fresh refs.
  *
  * Mirrors the Stitch design `79e6039778a14087b6f7a2bb1c31c6fc` — a rich
  * header card surfacing every inherited attribute (no hidden state),
@@ -30,6 +45,7 @@ interface Props {
  */
 export default function AddColourModal({
   parent,
+  family,
   open,
   onClose,
   onCreated,
@@ -42,9 +58,19 @@ export default function AddColourModal({
   const [saving, setSaving] = useState(false);
   const submitRef = useRef<HTMLButtonElement>(null);
 
-  // Existing sibling colours under the same parent — drives the "already
-  // done" chip strip in the header so designers don't duplicate.
+  // Existing colours in the whole family — drives the "already done" chip
+  // strip in the header AND the duplicate guard so designers don't double
+  // up. Prefer the BE-resolved `family` (correct even when opened from a
+  // sibling); fall back to parent.colourVariants + the parent's own colour
+  // when the group wasn't passed in.
   const siblings = useMemo(() => {
+    if (family && family.length > 0) {
+      return family.map((s) => ({
+        id: s.id,
+        styleId: s.styleId,
+        primaryColour: s.primaryColour,
+      }));
+    }
     const list = parent.colourVariants ?? [];
     // Include the parent's own colour as the first chip — it's also a
     // member of the family.
@@ -59,7 +85,7 @@ export default function AddColourModal({
       ];
     }
     return list;
-  }, [parent]);
+  }, [family, parent]);
 
   const reset = () => {
     setColour('');

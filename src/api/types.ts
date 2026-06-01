@@ -366,6 +366,18 @@ export interface Style {
     lifecycle?: StyleLifecycle;
   }>;
 
+  /** Colour-family group key = the family ROOT's minted stylecode. Flat,
+   *  denormalized (NOT an FK). Set on every colour sibling. XOR with
+   *  `basedOnStyleId` — a style carries one or neither, never both.
+   *  Drives the marketplace "other colours" grouping. */
+  familyCode?: string | null;
+  /** Sampling-bypass provenance self-FK ("this design reused that
+   *  approved sample to skip sampling"). Never co-exists with
+   *  `familyCode`. Set at submit. */
+  basedOnStyleId?: number | null;
+  /** Hydrated mirror of the based-on style when reads include it. */
+  basedOnStyle?: { id: number; styleId: string | null } | null;
+
   // Sampling state
   samplingStatus: string | null;
   samplingTimeline: string | null;

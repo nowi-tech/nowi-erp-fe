@@ -396,6 +396,12 @@
         "noStyleNo": "—",
         "variantsCount_one": "{{count}} variant",
         "variantsCount_other": "{{count}} variants",
+        "type": {
+          "label": "Type",
+          "new": "New design",
+          "colourOf": "Colour of {{code}}",
+          "basedOn": "Based on {{code}}"
+        },
         "empty": "No styles. Click \"New design submission\" to create one."
       },
       "draft": "Draft",
@@ -491,12 +497,36 @@
         "primaryColourPh": "e.g. Indigo / Black-pink Weaved",
         "patternMasterReadonly": "{{name}} ({{role}}) — auto-routed",
         "reviewerPradyuman": "Pradyuman",
-        "submitToPradyuman": "Submit to Pradyuman"
+        "submitToPradyuman": "Submit to Pradyuman",
+        "fork": {
+          "title": "What are you submitting?",
+          "subtitle": "Pick the path — it decides whether this design samples.",
+          "newTitle": "New design",
+          "newDesc": "A net-new design. Runs the full sampling workflow.",
+          "colourTitle": "Colour of an existing style",
+          "colourDesc": "Same design, a new colour. Skips sampling.",
+          "basedOnTitle": "Based on an existing sample",
+          "basedOnDesc": "A different design that reused an approved sample. Skips sampling.",
+          "colourPickLabel": "Parent style",
+          "basedOnPickLabel": "Source style",
+          "pickPlaceholder": "Search a style or type a code",
+          "pickEmpty": "No matching styles",
+          "addCode": "Use this style code",
+          "colourHelp": "Inherits the family — fabric, gender, category and CAD come from the parent.",
+          "basedOnHelp": "Records sampling provenance only. This stays its own independent style.",
+          "needsTarget": "Pick the style this is based on to submit",
+          "skipsSampling": "skips sampling",
+          "submitColour": "Submit colour",
+          "submitBasedOn": "Submit for approval"
+        }
       },
       "workspace": {
         "edit": "Edit",
         "printTechPack": "Print Tech Pack",
         "park": "Park style",
+        "withdraw": "Withdraw",
+        "withdrawConfirmTitle": "Withdraw this style?",
+        "withdrawConfirmBody": "This style has already passed Approval #1. Withdrawing pulls a committed design out of the pipeline and parks it. You can revive it later. Continue?",
         "sendToPd": "Send to PD",
         "revive": "Revive",
         "approve": "Approve intake",

@@ -3,6 +3,7 @@ import {
   useEffect,
   useImperativeHandle,
   useMemo,
+  useRef,
   useState,
 } from 'react';
 import { useTranslation } from 'react-i18next';
@@ -10,6 +11,7 @@ import { useTranslation } from 'react-i18next';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
+import { Combobox, type ComboboxOption } from '@/components/ui/combobox';
 
 import PatternCadInput from '@/components/shared/PatternCadInput';
 import IntakeCard from '@/components/styles/intake/IntakeCard';
@@ -24,6 +26,9 @@ import {
   type FineCategoryCode,
 } from '@/components/styles/intake/categoryOptions';
 
+import { listStyles, spawnColourVariant } from '@/api/styles';
+import { cn } from '@/lib/utils';
+
 import type {
   CategoryWithStyleCode,
   Fabric,
@@ -31,6 +36,19 @@ import type {
   Style,
   StyleSource,
 } from '@/api/types';
+
+/**
+ * The three submission paths offered at the top of a *new* sampling
+ * intake (the A/B/C fork from STYLE_SUBMISSION_FLOWS.md):
+ *   - `new`       — net-new design → full sampling.
+ *   - `colour`    — a colour of an existing style → spawned as a colour
+ *                   variant (skips sampling, inherits the family).
+ *   - `based_on`  — a *different* design that reused an existing approved
+ *                   sample to skip sampling → carries `basedOnStyleId`.
+ *
+ * The fork only exists in create mode; edit never re-forks a style.
+ */
+export type SubmissionForkMode = 'new' | 'colour' | 'based_on';
 
 /**
  * Shared intake / edit form for the Product Development module.
@@ -61,6 +79,14 @@ export interface StyleIntakeFormHandle {
   getCategoryCode: () => string | null;
 }
 
+/** Resolved fork target — either an existing Style row picked from the
+ *  list, or a free-typed style code the BE will resolve. Exactly one of
+ *  `style` / `code` is populated; null when nothing is picked yet. */
+type ForkTarget =
+  | { style: Style; code: null }
+  | { style: null; code: string }
+  | null;
+
 export interface StyleIntakeFormProps {
   /** `sampling` or `china_import`. The page toggles this; the modal
    *  pins it to the style's existing source. */
@@ -87,6 +113,9 @@ export interface StyleIntakeFormProps {
   /** Notified when the user changes gender — the page's ReviewerCard
    *  + sticky footer label depend on it. */
   onGenderChange?: (next: Gender) => void;
+  /** Notified when the user switches the submission fork (new / colour /
+   *  based-on) so the page can adapt its copy. Create mode only. */
+  onForkModeChange?: (next: SubmissionForkMode) => void;
   /** Callback the imperative `submit` calls on success. */
   onSaved: (style: Style) => Promise<void> | void;
   /**
@@ -198,6 +227,166 @@ function buildInitialForm(style: Style | null | undefined): FormState {
   };
 }
 
+/** One selectable radio-card in the submission fork (New / Colour / Based-on). */
+function ForkCard({
+  active,
+  title,
+  description,
+  onSelect,
+}: {
+  active: boolean;
+  title: string;
+  description: string;
+  onSelect: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      role="radio"
+      aria-checked={active}
+      onClick={onSelect}
+      className={cn(
+        'flex items-start gap-3 rounded-[var(--radius-md)] border p-3.5 text-left transition-colors',
+        active
+          ? 'border-[var(--color-primary)] bg-[var(--color-primary)]/5 shadow-sm'
+          : 'border-[var(--color-border)] bg-[var(--color-surface)] hover:border-[var(--color-primary)]/40',
+      )}
+    >
+      <span
+        aria-hidden
+        className={cn(
+          'mt-0.5 flex h-4 w-4 shrink-0 items-center justify-center rounded-full border',
+          active
+            ? 'border-[var(--color-primary)]'
+            : 'border-[var(--color-input)]',
+        )}
+      >
+        {active && (
+          <span className="h-2 w-2 rounded-full bg-[var(--color-primary)]" />
+        )}
+      </span>
+      <span className="min-w-0">
+        <span className="block text-[14px] font-medium text-[var(--color-foreground)]">
+          {title}
+        </span>
+        <span className="mt-0.5 block text-[12px] text-[var(--color-muted-foreground)]">
+          {description}
+        </span>
+      </span>
+    </button>
+  );
+}
+
+/** Sentinel id for the synthetic "typed style code" option — never
+ *  collides with a real (positive) Style.id. */
+const TYPED_CODE_ID = -1;
+
+/**
+ * Picker for the colour / based-on fork. Loads existing sampling
+ * products once via `listStyles({ search })` and filters them
+ * client-side through the Combobox, OR — when `allowCode` (the based-on
+ * branch) — lets the user type a free-text style code the BE will
+ * resolve. The colour branch needs a real row (the spawn endpoint
+ * addresses the parent by id), so it never enables the free-text path.
+ */
+function StyleRefPicker({
+  value,
+  onChange,
+  allowCode,
+  placeholder,
+  emptyLabel,
+  addCodeLabel,
+}: {
+  value: ForkTarget;
+  onChange: (next: ForkTarget) => void;
+  allowCode: boolean;
+  placeholder: string;
+  emptyLabel: string;
+  addCodeLabel: string;
+}) {
+  const [results, setResults] = useState<Style[]>([]);
+  // Keep the picked style around so its row keeps rendering even when it
+  // isn't in the loaded page.
+  const pickedRef = useRef<Style | null>(value?.style ?? null);
+  pickedRef.current = value?.style ?? pickedRef.current;
+
+  // Load a generous page of existing styles once; the Combobox filters
+  // them client-side as the user types. Soft-fails to an empty list so a
+  // flaky search never blocks the form (same pattern as ColourPicker).
+  useEffect(() => {
+    let mounted = true;
+    void listStyles({ source: 'sampling', take: 100 })
+      .then((res) => {
+        if (mounted) setResults(res.data);
+      })
+      .catch(() => {
+        if (mounted) setResults([]);
+      });
+    return () => {
+      mounted = false;
+    };
+  }, []);
+
+  const styleLabel = (s: Style) =>
+    s.styleId ?? s.workingName ?? `D-${s.draftNo ?? s.id}`;
+
+  const options = useMemo<ComboboxOption<number>[]>(() => {
+    const rows = [...results];
+    const picked = pickedRef.current;
+    if (picked && !rows.some((r) => r.id === picked.id)) rows.unshift(picked);
+    const mapped = rows.map<ComboboxOption<number>>((s) => ({
+      value: s.id,
+      label: styleLabel(s),
+      sublabel: [s.workingName, s.primaryColour].filter(Boolean).join(' · '),
+      searchText: [s.styleId, s.workingName, s.primaryColour]
+        .filter(Boolean)
+        .join(' '),
+    }));
+    // A typed-only code (based-on) shows as a synthetic selected option
+    // so the closed trigger reflects the choice.
+    if (value?.code != null && !value.style) {
+      mapped.unshift({ value: TYPED_CODE_ID, label: value.code });
+    }
+    return mapped;
+  }, [results, value]);
+
+  const comboValue: number | null = value?.style
+    ? value.style.id
+    : value?.code != null
+      ? TYPED_CODE_ID
+      : null;
+
+  return (
+    <Combobox<number>
+      value={comboValue}
+      options={options}
+      onChange={(next) => {
+        if (next == null || next === TYPED_CODE_ID) {
+          // Clearing, or re-selecting the synthetic code row, is a no-op
+          // beyond keeping the current value.
+          if (next == null) onChange(null);
+          return;
+        }
+        const hit =
+          results.find((r) => r.id === next) ??
+          (pickedRef.current?.id === next ? pickedRef.current : null);
+        if (hit) onChange({ style: hit, code: null });
+      }}
+      onAddNew={
+        allowCode
+          ? (typed) => {
+              const code = typed.trim();
+              if (code) onChange({ style: null, code });
+            }
+          : undefined
+      }
+      addNewLabel={addCodeLabel}
+      placeholder={placeholder}
+      emptyLabel={emptyLabel}
+    />
+  );
+}
+
 const StyleIntakeForm = forwardRef<StyleIntakeFormHandle, StyleIntakeFormProps>(
   function StyleIntakeForm(
     {
@@ -211,6 +400,7 @@ const StyleIntakeForm = forwardRef<StyleIntakeFormHandle, StyleIntakeFormProps>(
       onCategoriesChanged,
       onValidityChange,
       onGenderChange: notifyGenderChange,
+      onForkModeChange: notifyForkModeChange,
       onSaved,
       apiCall,
     },
@@ -219,8 +409,14 @@ const StyleIntakeForm = forwardRef<StyleIntakeFormHandle, StyleIntakeFormProps>(
     const { t } = useTranslation();
     const isChinaImport = source === 'china_import';
     const isEdit = !!style;
+    // The A/B/C submission fork only applies to a NEW sampling intake.
+    // China-import has its own simplified path; edit never re-forks.
+    const showFork = !isEdit && !isChinaImport;
 
     const [form, setForm] = useState<FormState>(() => buildInitialForm(style));
+    // Submission fork (create + sampling only). Defaults to the net-new path.
+    const [forkMode, setForkMode] = useState<SubmissionForkMode>('new');
+    const [forkTarget, setForkTarget] = useState<ForkTarget>(null);
 
     // Re-seed when the parent swaps the style under us (e.g. modal
     // reopened for a different row). We deliberately don't re-seed on
@@ -269,7 +465,34 @@ const StyleIntakeForm = forwardRef<StyleIntakeFormHandle, StyleIntakeFormProps>(
       [fabrics, form.fabricId],
     );
 
-    const isValid = form.workingName.trim().length > 0;
+    // Switching the fork is a hard reset of the link target so a stale
+    // pick from another branch can never travel on submit.
+    const onForkModeChange = (next: SubmissionForkMode) => {
+      setForkMode(next);
+      setForkTarget(null);
+      notifyForkModeChange?.(next);
+    };
+
+    // Notify on mount so the page's submit label matches the default.
+    useEffect(() => {
+      if (showFork) notifyForkModeChange?.(forkMode);
+      // Run once for the initial fork; subsequent changes flow through
+      // onForkModeChange above.
+      // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [showFork]);
+
+    // Linking branches (colour / based-on) need a resolved target before
+    // they can submit. The net-new branch only needs a working name.
+    // Colour MUST resolve to a real row (the spawn endpoint addresses the
+    // parent by id); based-on also accepts a typed code.
+    const forkTargetOk =
+      forkMode === 'colour'
+        ? forkTarget?.style != null
+        : forkTarget != null;
+    const needsForkTarget = showFork && forkMode !== 'new';
+    const isValid =
+      form.workingName.trim().length > 0 &&
+      (!needsForkTarget || forkTargetOk);
 
     // Notify the parent on every validity flip so it can enable / disable
     // its submit button without subscribing to form state changes.
@@ -312,7 +535,7 @@ const StyleIntakeForm = forwardRef<StyleIntakeFormHandle, StyleIntakeFormProps>(
         .filter(Boolean)
         .join('\n');
 
-      return {
+      const samplingBody: Record<string, unknown> = {
         ...base,
         developmentReason: reason || null,
         fabricId: form.fabricId,
@@ -321,6 +544,23 @@ const StyleIntakeForm = forwardRef<StyleIntakeFormHandle, StyleIntakeFormProps>(
           : null,
         patternCadPaths: form.patternCadPaths,
       };
+
+      // Fork hard-switch: emit EXACTLY ONE branch's link fields so a
+      // stale target from a different branch can never leak onto the
+      // payload. The `colour` branch never reaches createStyle() — it
+      // goes through spawnColourVariant() in submit() below — so only
+      // the `based_on` branch decorates the create payload, and it
+      // sends `basedOnStyleId` / `basedOnStyleCode` ONLY (never
+      // familyCode / parentStyleId; those belong to the colour path).
+      if (showFork && forkMode === 'based_on' && forkTarget) {
+        if (forkTarget.style) {
+          samplingBody.basedOnStyleId = forkTarget.style.id;
+        } else {
+          samplingBody.basedOnStyleCode = forkTarget.code;
+        }
+      }
+
+      return samplingBody;
     };
 
     useImperativeHandle(
@@ -328,6 +568,26 @@ const StyleIntakeForm = forwardRef<StyleIntakeFormHandle, StyleIntakeFormProps>(
       () => ({
         async submit() {
           if (!isValid) return null;
+          // Colour-of-X must NOT use the normal create() — create()
+          // ignores parentStyleId and would birth a standalone style.
+          // Route through the colour-variant spawn so the child links
+          // to its parent and inherits the family (skips sampling on
+          // Approval #1). Requires a resolved parent *id* (the spawn
+          // endpoint is /styles/:id/colour-variants); a typed-only
+          // code can't address it, so the picker disables submit until
+          // a row is resolved for this branch.
+          if (showFork && forkMode === 'colour' && forkTarget?.style) {
+            const saved = await spawnColourVariant(forkTarget.style.id, {
+              primaryColour: form.primaryColour.trim(),
+              referenceLink: form.referenceLink.trim() || null,
+              referenceImages: form.referenceImages,
+              referenceImageUrl: form.referenceImageUrl,
+            });
+            await onSaved(saved);
+            return saved;
+          }
+          // New design + Based-on both ride the normal create() path;
+          // buildPayload() decides whether basedOnStyleId/Code travels.
           const saved = await apiCall(buildPayload());
           await onSaved(saved);
           return saved;
@@ -339,7 +599,7 @@ const StyleIntakeForm = forwardRef<StyleIntakeFormHandle, StyleIntakeFormProps>(
       // intentional dep list: rebuild whenever the form or wiring
       // changes so submit() reads the latest values.
       // eslint-disable-next-line react-hooks/exhaustive-deps
-      [isValid, form, source, isEdit, apiCall, onSaved],
+      [isValid, form, source, isEdit, showFork, forkMode, forkTarget, apiCall, onSaved],
     );
 
     const uomLabel = (u: Fabric['unitOfMeasure']) => {
@@ -351,6 +611,64 @@ const StyleIntakeForm = forwardRef<StyleIntakeFormHandle, StyleIntakeFormProps>(
 
     return (
       <>
+        {/* Submission fork — create + sampling only (A/B/C). */}
+        {showFork && (
+          <div className="mb-4">
+            <IntakeCard
+              title={t('admin.styles.intake.fork.title')}
+              subtitle={t('admin.styles.intake.fork.subtitle')}
+            >
+              <div
+                role="radiogroup"
+                aria-label={t('admin.styles.intake.fork.title')}
+                className="grid grid-cols-1 gap-3 sm:grid-cols-3"
+              >
+                <ForkCard
+                  active={forkMode === 'new'}
+                  title={t('admin.styles.intake.fork.newTitle')}
+                  description={t('admin.styles.intake.fork.newDesc')}
+                  onSelect={() => onForkModeChange('new')}
+                />
+                <ForkCard
+                  active={forkMode === 'colour'}
+                  title={t('admin.styles.intake.fork.colourTitle')}
+                  description={t('admin.styles.intake.fork.colourDesc')}
+                  onSelect={() => onForkModeChange('colour')}
+                />
+                <ForkCard
+                  active={forkMode === 'based_on'}
+                  title={t('admin.styles.intake.fork.basedOnTitle')}
+                  description={t('admin.styles.intake.fork.basedOnDesc')}
+                  onSelect={() => onForkModeChange('based_on')}
+                />
+              </div>
+
+              {forkMode !== 'new' && (
+                <div className="mt-4">
+                  <Label>
+                    {forkMode === 'colour'
+                      ? t('admin.styles.intake.fork.colourPickLabel')
+                      : t('admin.styles.intake.fork.basedOnPickLabel')}
+                  </Label>
+                  <StyleRefPicker
+                    value={forkTarget}
+                    onChange={setForkTarget}
+                    allowCode={forkMode === 'based_on'}
+                    placeholder={t('admin.styles.intake.fork.pickPlaceholder')}
+                    emptyLabel={t('admin.styles.intake.fork.pickEmpty')}
+                    addCodeLabel={t('admin.styles.intake.fork.addCode')}
+                  />
+                  <p className="mt-1.5 text-[12px] text-[var(--color-muted-foreground)]">
+                    {forkMode === 'colour'
+                      ? t('admin.styles.intake.fork.colourHelp')
+                      : t('admin.styles.intake.fork.basedOnHelp')}
+                  </p>
+                </div>
+              )}
+            </IntakeCard>
+          </div>
+        )}
+
         {/* Two-up grid: Inspiration | Article */}
         <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
           <IntakeCard

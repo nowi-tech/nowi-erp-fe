@@ -10,6 +10,7 @@ import SourceToggle from '@/components/styles/SourceToggle';
 import ReviewerCard from '@/components/styles/intake/ReviewerCard';
 import StyleIntakeForm, {
   type StyleIntakeFormHandle,
+  type SubmissionForkMode,
 } from '@/components/styles/StyleIntakeForm';
 import { fineCategoryLabel } from '@/components/styles/intake/categoryOptions';
 
@@ -103,6 +104,11 @@ export default function NewIntake() {
   const [categoryCodeForChip, setCategoryCodeForChip] = useState<
     string | null
   >(null);
+  // Which submission path the form is on (new / colour / based-on). The
+  // reviewer is unchanged across forks — all three land at the same
+  // Approval #1 reviewer (no fork-based BE routing) — but the sticky
+  // footer's submit verb adapts so the action reads true to the choice.
+  const [forkMode, setForkMode] = useState<SubmissionForkMode>('new');
 
   const formRef = useRef<StyleIntakeFormHandle>(null);
   const reviewer = resolveReviewer(source, genderForReviewer, t);
@@ -150,8 +156,19 @@ export default function NewIntake() {
   };
 
   const submitDisabled = !valid;
+  // Submit verb reacts to the fork. The colour / based-on paths spell
+  // out what they do; the new-design path keeps the reviewer-routed
+  // "Submit to <reviewer>" copy. The reviewer itself never changes.
+  const submitLabel =
+    source === 'china_import' || forkMode === 'new'
+      ? reviewer.submitLabel
+      : forkMode === 'colour'
+        ? t('admin.styles.intake.fork.submitColour')
+        : t('admin.styles.intake.fork.submitBasedOn');
   const footerHint = submitDisabled
-    ? t('admin.styles.intake.needsName')
+    ? forkMode !== 'new' && source !== 'china_import'
+      ? t('admin.styles.intake.fork.needsTarget')
+      : t('admin.styles.intake.needsName')
     : t('admin.styles.intake.readyHint');
 
   return (
@@ -182,7 +199,11 @@ export default function NewIntake() {
       <div className="mt-4">
         <ReviewerCard
           name={reviewer.name}
-          role={reviewer.role}
+          role={
+            forkMode !== 'new' && source !== 'china_import'
+              ? `${reviewer.role} · ${t('admin.styles.intake.fork.skipsSampling')}`
+              : reviewer.role
+          }
           checks={reviewer.checks}
         />
       </div>
@@ -219,6 +240,7 @@ export default function NewIntake() {
             createStyle(payload as Parameters<typeof createStyle>[0])
           }
           onGenderChange={setGenderForReviewer}
+          onForkModeChange={setForkMode}
         />
       </div>
 
@@ -260,7 +282,7 @@ export default function NewIntake() {
               disabled={busy !== null || submitDisabled}
               onClick={() => void save('submit')}
             >
-              {busy === 'submit' ? t('common.saving') : reviewer.submitLabel}
+              {busy === 'submit' ? t('common.saving') : submitLabel}
             </Button>
           </div>
         </div>

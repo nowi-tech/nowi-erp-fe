@@ -100,6 +100,11 @@ export type CreateStyleRequest = Partial<
 > & {
   source: StyleSource;
   category: ArticleCategory;
+  /** Submit fork (case C): link this design to an existing approved
+   *  sample to skip sampling. Resolve by picking an existing style id… */
+  basedOnStyleId?: number;
+  /** …or by entering its minted style code (BE resolves to the id). */
+  basedOnStyleCode?: string;
 };
 
 export type UpdateStyleRequest = Partial<CreateStyleRequest>;
@@ -160,6 +165,24 @@ export async function getStyle(styleId: number | string): Promise<Style> {
 export async function getStyleOptions(): Promise<StyleOptions> {
   const res = await apiClient.get<StyleOptions>('/api/styles/options');
   return res.data;
+}
+
+/** Resolve the colour family for a style — every sibling sharing its
+ *  `familyCode` (the family root's stylecode). Drives the detail-page
+ *  "Colour family" strip and the marketplace "other colours" group.
+ *  Test-data-consistent (a family never straddles the test/prod line). */
+/** BE returns the group envelope `{ familyCode, groupId, members }` (the
+ *  groupId is the marketplace "other colours" group key). Consumers only need
+ *  the sibling list, so we unwrap `members`; `?? []` guards a standalone /
+ *  based-on style (familyCode null → empty members) and any shape surprise. */
+export interface ColourGroup {
+  familyCode: string | null;
+  groupId: string | null;
+  members: Style[];
+}
+export async function colourGroup(id: number): Promise<Style[]> {
+  const res = await apiClient.get<ColourGroup>(`/api/styles/${id}/colour-group`);
+  return res.data?.members ?? [];
 }
 
 export async function getStylesSummary(): Promise<StylesSummary> {

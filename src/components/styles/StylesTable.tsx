@@ -55,18 +55,15 @@ const WRITE_ROLES: readonly UserRole[] = [
 // Row-action role gates — mirror the BE guards (and the dashboard
 // StylesInFlightTable) so /styles never shows a button that 403s:
 //  • Approve (Approval #1) → APPROVE set (Option A drops sampling_editor).
-//  • Park of a post-Approval-#1 style → admins + sampling leads only.
-// (Draft park + revive reuse WRITE_ROLES.) BE still enforces; this is UX.
+//  • Inline Park → DRAFT rows only, reusing WRITE_ROLES (post-approval
+//    "Withdraw" is a detail-page action, not a queue button).
+// BE still enforces; this is UX.
 const APPROVER_ROLES: readonly UserRole[] = [
   'admin',
   'sampling_lead',
   'pattern_master_w',
   'pattern_master_m',
   'china_import_approver',
-] as const;
-const POST_APPROVAL_PARK_ROLES: readonly UserRole[] = [
-  'admin',
-  'sampling_lead',
 ] as const;
 
 /**
@@ -127,6 +124,58 @@ function lifecycleVariant(l: Style['lifecycle']) {
   if (l === 'parked' || l === 'archived') return 'outline';
   if (l === 'qc' || l === 'in_pd' || l === 'in_sampling') return 'stitch';
   return 'secondary';
+}
+
+/**
+ * The submit-fork type of a style, derived from the two link columns
+ * (mutually exclusive — XOR enforced on the BE):
+ *   • `familyCode` set      → "Colour of <root code>"
+ *   • `basedOnStyleId` set  → "Based on <code>"
+ *   • neither               → "New design"
+ */
+function styleType(s: Style): {
+  kind: 'new' | 'colour' | 'based_on';
+  ref: string | null;
+} {
+  if (s.familyCode) return { kind: 'colour', ref: s.familyCode };
+  if (s.basedOnStyleId != null)
+    return { kind: 'based_on', ref: s.basedOnStyle?.styleId ?? null };
+  return { kind: 'new', ref: null };
+}
+
+/**
+ * Small pill in the Type column showing the submit-fork the style came
+ * in through. Colour / based-on variants also carry the root code they
+ * link to so the family is legible at a glance.
+ */
+function StyleTypePill({ style }: { style: Style }) {
+  const { t } = useTranslation();
+  const { kind, ref } = styleType(style);
+  if (kind === 'colour') {
+    return (
+      <Badge variant="stitch" className="text-[10px]" title={ref ?? undefined}>
+        {t('admin.styles.table.type.colourOf', {
+          code: ref ?? '—',
+          defaultValue: `Colour of ${ref ?? '—'}`,
+        })}
+      </Badge>
+    );
+  }
+  if (kind === 'based_on') {
+    return (
+      <Badge variant="outline" className="text-[10px]" title={ref ?? undefined}>
+        {t('admin.styles.table.type.basedOn', {
+          code: ref ?? '—',
+          defaultValue: `Based on ${ref ?? '—'}`,
+        })}
+      </Badge>
+    );
+  }
+  return (
+    <Badge variant="secondary" className="text-[10px]">
+      {t('admin.styles.table.type.new', { defaultValue: 'New design' })}
+    </Badge>
+  );
 }
 
 /**
@@ -342,9 +391,9 @@ export default function StylesTable({
   const rowClasses =
     'border-t border-[var(--color-border)] cursor-pointer hover:bg-[var(--color-muted)] focus:outline-none focus-visible:bg-[var(--color-muted)]';
 
-  // compact = 5 cols (expand + style# + name + colour + updated + chevron)
-  // full    = 9 cols (expand + style# + name + patternMaster + stage + approval + web + updated + chevron)
-  const COL_COUNT = isCompact ? 6 : 9;
+  // compact = expand + style# + name + type + colour + updated + chevron
+  // full    = expand + style# + name + type + patternMaster + stage + approval + web + updated + chevron
+  const COL_COUNT = isCompact ? 7 : 10;
 
   return (
     <div className="space-y-2">
@@ -379,6 +428,9 @@ export default function StylesTable({
               </th>
               <th className="text-left font-medium px-3 py-2">
                 {t('admin.styles.table.workingName')}
+              </th>
+              <th className="text-left font-medium px-3 py-2 hidden sm:table-cell">
+                {t('admin.styles.table.type.label', { defaultValue: 'Type' })}
               </th>
               {isCompact ? (
                 <th className="text-left font-medium px-3 py-2 hidden sm:table-cell">
@@ -553,6 +605,9 @@ export default function StylesTable({
                             {`${1 + colourChildren.length} colours`}
                           </Badge>
                         )}
+                      </td>
+                      <td className="px-3 py-2 hidden sm:table-cell">
+                        <StyleTypePill style={s} />
                       </td>
                       {isCompact ? (
                         <td className="px-3 py-2 hidden sm:table-cell text-[var(--color-muted-foreground)]">
@@ -742,6 +797,7 @@ export default function StylesTable({
                               </span>
                             )}
                           </td>
+                          <td className="px-3 py-2 hidden sm:table-cell" />
                           <td className="px-3 py-2 text-[var(--color-muted-foreground)]">
                             {v.cuttingQty != null
                               ? `Cut ${v.cuttingQty}`
@@ -806,15 +862,12 @@ function RowActions({
   const { user } = useAuth();
   const canApprove =
     style.lifecycle === 'draft' && hasAnyRole(user, APPROVER_ROLES);
+  // Inline Park belongs only on DRAFT (inbox) rows — it means "decide not
+  // to develop." Once a style is approved (past draft) parking a committed
+  // design is a rare admin/lead "Withdraw" on the detail page, not a queue
+  // button (2026-06-01 refinement, STYLE_SUBMISSION_FLOWS.md).
   const canPark =
-    style.lifecycle !== 'parked' &&
-    style.lifecycle !== 'archived' &&
-    style.lifecycle !== 'dispatched' &&
-    // Post-Approval-#1 styles: only admins + sampling leads may park.
-    hasAnyRole(
-      user,
-      style.lifecycle === 'draft' ? WRITE_ROLES : POST_APPROVAL_PARK_ROLES,
-    );
+    style.lifecycle === 'draft' && hasAnyRole(user, WRITE_ROLES);
   const canRevive =
     style.lifecycle === 'parked' && hasAnyRole(user, WRITE_ROLES);
   const hasAny =

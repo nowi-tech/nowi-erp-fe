@@ -13,6 +13,7 @@ import {
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Dialog } from '@/components/ui/dialog';
+import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 import { Textarea } from '@/components/ui/textarea';
 import { useToast } from '@/components/ui/toast';
 import SamplingPipelineStepper from '@/components/styles/SamplingPipelineStepper';
@@ -29,6 +30,7 @@ import {
   sampleApproveStyle,
   patchStyle,
   listFabrics,
+  colourGroup,
   type SamplingStatus,
   type SampleApprovalStatus,
   type SampleApproveStyleBody,
@@ -37,10 +39,45 @@ import { listUsers } from '@/api/users';
 import type {
   Fabric,
   Style,
+  StyleLifecycle,
+  UserRole,
   User as ApiUser,
 } from '@/api/types';
+import { useAuth } from '@/context/auth';
+import { userAllRoles } from '@/lib/userRoles';
 import { cn } from '@/lib/utils';
 import { formatStyleRef } from '@/lib/styleRef';
+
+// Add-Colour is only meaningful once the family has an approved sample to
+// inherit (a colour sibling skips sampling). `StyleLifecycle` is
+// NON-ORDINAL — enumerate the post-sampling states explicitly, never `>=`.
+// ⚠️ DRIFT HAZARD: this set is duplicated server-side as the spawn gate in
+// `nowi-erp-api` (`spawnColourVariant`, styles-actions.service) and in the
+// LLD §Phase 3 `POST_SAMPLING` list — keep all three in sync.
+const POST_SAMPLING = new Set<StyleLifecycle>([
+  'sample_approved',
+  'in_pd',
+  'qc',
+  'dispatched',
+]);
+
+// Roles allowed to WRITE a new colour (spawn a sibling submission).
+const COLOUR_WRITE: readonly UserRole[] = [
+  'admin',
+  'sampling_editor',
+  'sampling_lead',
+  'pattern_master_w',
+  'pattern_master_m',
+  'china_import_approver',
+];
+
+// Roles allowed to "Withdraw" (re-park) a style that has already passed
+// Approval #1. Drafts can be parked by anyone; post-approval is gated.
+const POST_APPROVAL_PARK: readonly UserRole[] = [
+  'admin',
+  'sampling_lead',
+  'pd_lead',
+];
 
 /**
  * Per-style deep page (canonical_style_workspace.html).
@@ -60,6 +97,8 @@ export default function StyleWorkspace() {
   const { t } = useTranslation();
   const navigate = useNavigate();
   const toast = useToast();
+  const { user } = useAuth();
+  const roles = userAllRoles(user);
   const { styleId: idParam } = useParams<{ styleId: string }>();
 
   const [style, setStyle] = useState<Style | null>(null);
@@ -70,6 +109,16 @@ export default function StyleWorkspace() {
   const [colourModalOpen, setColourModalOpen] = useState(false);
   const [editOpen, setEditOpen] = useState(false);
   const [parkOpen, setParkOpen] = useState(false);
+  // Two-step Withdraw: confirm pulling a committed (post-Approval-#1)
+  // design out of the pipeline, then open ParkDialog to capture the
+  // reason. Drafts skip this and open ParkDialog directly.
+  const [withdrawConfirmOpen, setWithdrawConfirmOpen] = useState(false);
+  // Colour family (siblings sharing this style's familyCode). Sourced from
+  // the BE colour-group resolver, NOT parent.colourVariants — so opening
+  // Add-Colour from a SIBLING (not the root) still sees the whole family.
+  // parentStyleId drives inbox NESTING; familyCode drives the marketplace
+  // "other colours" GROUP — do NOT unify; based-on shares neither.
+  const [colourFamily, setColourFamily] = useState<Style[]>([]);
   // StyleEditModal lazy-loads its own fabric master on first open;
   // we still pre-warm it here so the user doesn't see the modal
   // flicker into pickers. Collection was dropped from the schema.
@@ -92,8 +141,18 @@ export default function StyleWorkspace() {
     try {
       const s = await getStyle(idParam);
       setStyle(s);
+      // Resolve the whole colour family (every sibling sharing familyCode)
+      // off the canonical numeric id. A based-on style has no familyCode →
+      // empty group → the ColourFamilyCard hides itself. Soft-fail: the
+      // card just shows no siblings if the resolver errors.
+      try {
+        setColourFamily(await colourGroup(s.id));
+      } catch {
+        setColourFamily([]);
+      }
     } catch {
       setStyle(null);
+      setColourFamily([]);
     } finally {
       setLoading(false);
     }
@@ -144,7 +203,25 @@ export default function StyleWorkspace() {
   const canApproveIntake = style.lifecycle === 'draft';
   const canSampleApprove =
     !isChinaImport && style.lifecycle === 'in_sampling';
-  const canPark = style.lifecycle !== 'parked' && style.lifecycle !== 'archived';
+
+  // Add-Colour: only once the family has an approved sample to inherit
+  // (POST_SAMPLING), never for china_import, and only for colour-WRITE
+  // roles. A colour add is a SUBMISSION — the spawned draft re-enters the
+  // Inbox for Approval #1 (NOT an inline approval here).
+  const canAddColour =
+    POST_SAMPLING.has(style.lifecycle) &&
+    !isChinaImport &&
+    roles.some((r) => COLOUR_WRITE.includes(r));
+
+  // Park: inline button on drafts (anyone). Post-approval it becomes a
+  // gated "Withdraw" — only admin / sampling_lead / pd_lead can pull a
+  // committed design back out of the pipeline.
+  const isDraft = style.lifecycle === 'draft';
+  const canPark =
+    style.lifecycle !== 'parked' &&
+    style.lifecycle !== 'archived' &&
+    (isDraft || roles.some((r) => POST_APPROVAL_PARK.includes(r)));
+  const isWithdraw = canPark && !isDraft;
   const canRevive = style.lifecycle === 'parked';
   const sourceLabel = t(`admin.styles.source.${style.source}`);
 
@@ -209,10 +286,18 @@ export default function StyleWorkspace() {
               variant="outline"
               size="sm"
               disabled={busy !== null}
-              onClick={() => setParkOpen(true)}
+              onClick={() =>
+                isWithdraw ? setWithdrawConfirmOpen(true) : setParkOpen(true)
+              }
             >
               <Pause size={14} />
-              <span className="ml-1">{t('admin.styles.workspace.park')}</span>
+              <span className="ml-1">
+                {isWithdraw
+                  ? t('admin.styles.workspace.withdraw', {
+                      defaultValue: 'Withdraw',
+                    })
+                  : t('admin.styles.workspace.park')}
+              </span>
             </Button>
           )}
           {canRevive && (
@@ -249,10 +334,12 @@ export default function StyleWorkspace() {
               Keeping it in one place avoids the orphaned-floating-button
               feel and reinforces that approval is the terminal step of
               the pipeline, not a separate action. */}
-          {/* + Add colour — spawns a sibling Style inheriting fabric/CAD
-              from this one. Only meaningful once the parent style number
-              is minted (i.e. past draft). */}
-          {style.styleId && !isChinaImport && (
+          {/* + Add colour — spawns a sibling Style (a SUBMISSION) that
+              inherits fabric/CAD from this family and re-enters the Inbox
+              for Approval #1. Gated to POST_SAMPLING lifecycles + colour-
+              WRITE roles (see canAddColour); hidden during sampling/draft
+              and for china_import. */}
+          {canAddColour && (
             <Button
               variant="outline"
               size="sm"
@@ -269,6 +356,11 @@ export default function StyleWorkspace() {
 
       <AddColourModal
         parent={style}
+        // Whole colour family (every sibling sharing familyCode), resolved
+        // off the BE — so the duplicate guard + "existing colours" strip
+        // are correct even when Add-Colour is opened from a SIBLING rather
+        // than the root. Not parent.colourVariants (root-only).
+        family={colourFamily}
         open={colourModalOpen}
         onClose={() => setColourModalOpen(false)}
         onCreated={(created) => {
@@ -418,26 +510,56 @@ export default function StyleWorkspace() {
         </section>
       </div>
 
-      {/* Colour family chips — siblings + parent linked via
-          parentStyleId. Now on its own row so the CAD preview gets
-          the full right column above. */}
+      {/* Colour family chips — siblings sharing this style's familyCode
+          (the marketplace "other colours" group), resolved off the BE.
+          Now on its own row so the CAD preview gets the full right
+          column above. */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-4">
         <ColourFamilyCard
           style={style}
-          canAddColour={!!style.styleId && !isChinaImport}
+          family={colourFamily}
+          canAddColour={canAddColour}
           onAddColour={() => setColourModalOpen(true)}
         />
       </div>
 
-      {/* Activity timeline — surfaces who did what when. Reads
-          straight from style.auditLogs (already hydrated by the
-          detail include). Replaces the old InspectionTimeline. */}
+      {/* Activity timeline — surfaces who did what when. Reads straight
+          from style.auditLogs (already hydrated by the detail include).
+          Full-width section at the BOTTOM of the workspace: the log can
+          grow long, so it spans the page rather than squeezing into the
+          right column. */}
       <ActivityTimelineCard style={style} cardClasses={cardClasses} />
+
+      {/* Withdraw confirmation — only for post-approval styles. Pulling a
+          committed design out of the pipeline is a heavier action than
+          parking a draft, so we warn first, then capture the reason in
+          ParkDialog. Drafts skip straight to ParkDialog. */}
+      <ConfirmDialog
+        open={withdrawConfirmOpen}
+        destructive
+        title={t('admin.styles.workspace.withdrawConfirmTitle', {
+          defaultValue: 'Withdraw this style?',
+        })}
+        message={t('admin.styles.workspace.withdrawConfirmBody', {
+          defaultValue:
+            'This style has already passed Approval #1. Withdrawing pulls a committed design out of the pipeline and parks it. You can revive it later. Continue?',
+        })}
+        confirmLabel={t('admin.styles.workspace.withdraw', {
+          defaultValue: 'Withdraw',
+        })}
+        cancelLabel={t('common.cancel', { defaultValue: 'Cancel' })}
+        onCancel={() => setWithdrawConfirmOpen(false)}
+        onConfirm={() => {
+          setWithdrawConfirmOpen(false);
+          setParkOpen(true);
+        }}
+      />
 
       {/* Park confirmation — captures the reason for the audit log. */}
       <ParkDialog
         open={parkOpen}
         busy={busy !== null}
+        approved={isWithdraw}
         styleLabel={style.styleId ?? (style.draftNo != null ? `D-${style.draftNo}` : style.workingName) ?? null}
         onClose={() => setParkOpen(false)}
         onConfirm={(reason) => {
@@ -958,40 +1080,44 @@ function InspirationCard({
 }
 
 /**
- * Compact "Colour family" card. Lists this style + its sibling colour
- * variants (linked via parentStyleId / colourVariants). Click a chip
- * to navigate to that variant's detail page. Replaces the old
- * fabric-×-colour Variants matrix which was the pre-Gurukul model.
+ * Compact "Colour family" card. Lists every sibling sharing this style's
+ * `familyCode` — the marketplace "other colours" group — resolved off the
+ * BE colour-group endpoint (see StyleWorkspace's `colourFamily` state) and
+ * passed in as `family`. The group is FLAT (familyCode is a denormalized
+ * root stylecode, not a tree), so there is no parent/child framing here:
+ * we mark the current style "This colour" and render the rest as chips.
  *
- * The "+ Add colour" chip at the end of the variant strip opens the
- * AddColourModal — the primary entry point for adding a new colour
- * to the family, more discoverable than the header action button.
- * Hidden for china_import (no colour-family flow there) and pre-mint
- * drafts (need a styleId on the parent to spawn).
+ * Why the BE group and NOT `parent.colourVariants`: parentStyleId drives
+ * inbox NESTING; familyCode drives this "other colours" GROUP — they are
+ * deliberately NOT unified. A based-on style shares neither, so its group
+ * is just itself → the card hides (no siblings, no add affordance).
+ *
+ * The "+ Add colour" chip at the end of the strip opens the AddColourModal
+ * — the primary entry point for adding a new colour to the family, more
+ * discoverable than the header action button. Hidden for china_import and
+ * during sampling/draft (canAddColour is gated upstream).
  */
 function ColourFamilyCard({
   style,
+  family,
   canAddColour,
   onAddColour,
 }: {
   style: Style;
-  /** True for sample-approved sampling styles with a minted styleId. */
+  /** Whole colour family from the BE — every sibling sharing familyCode,
+   *  including `style` itself. Empty for a style with no family. */
+  family: Style[];
+  /** Gated POST_SAMPLING + colour-WRITE — see canAddColour upstream. */
   canAddColour: boolean;
   onAddColour: () => void;
 }) {
   const { t } = useTranslation();
   const navigate = useNavigate();
-  // Family = the parent's family if I'm a variant, else my own.
-  const parent = style.parentStyle ?? {
-    id: style.id,
-    styleId: style.styleId,
-    workingName: style.workingName,
-    primaryColour: style.primaryColour,
-  };
-  const variants = style.colourVariants ?? [];
-  const hasFamily = variants.length > 0 || !!style.parentStyleId;
+  // Siblings = every family member that isn't the style we're viewing.
+  const siblings = family.filter((f) => f.id !== style.id);
+  const hasFamily = family.length > 1;
   // Hide entirely when there's no family AND no add affordance — keeps
-  // pre-approval drafts uncluttered.
+  // based-on styles and non-colour-WRITE views uncluttered.
   if (!hasFamily && !canAddColour) return null;
   return (
     <section className="lg:col-span-5 rounded-[var(--radius-md)] border border-[var(--color-border)] bg-[var(--color-surface)] p-4">
@@ -1003,42 +1129,39 @@ function ColourFamilyCard({
       {hasFamily && (
         <>
           <div className="text-[11px] uppercase tracking-[0.06em] text-[var(--color-muted-foreground)] mb-1.5">
-            {t('admin.styles.workspace.colourFamilyParent', {
-              defaultValue: 'Parent',
+            {t('admin.styles.workspace.colourFamilyThis', {
+              defaultValue: 'This colour',
             })}
           </div>
-          <button
-            type="button"
-            onClick={() => parent.styleId && navigate(`/styles/${parent.styleId}`)}
-            className="w-full text-left rounded-[var(--radius-sm)] border border-[var(--color-border)] bg-[var(--color-surface-2)]/40 px-3 py-2 hover:bg-[var(--color-muted)] mb-3"
-          >
+          <div className="w-full text-left rounded-[var(--radius-sm)] border border-[var(--color-primary)]/40 bg-[var(--color-primary)]/5 px-3 py-2 mb-3">
             <div className="font-mono text-sm text-[var(--color-primary)]">
-              {parent.styleId ?? `#${parent.id}`}
+              {style.styleId ?? `#${style.id}`}
             </div>
             <div className="text-xs text-[var(--color-muted-foreground)]">
-              {parent.workingName ?? '—'} · {parent.primaryColour ?? '—'}
+              {style.workingName ?? '—'} · {style.primaryColour ?? '—'}
             </div>
-          </button>
+          </div>
         </>
       )}
 
       <div className="text-[11px] uppercase tracking-[0.06em] text-[var(--color-muted-foreground)] mb-1.5">
-        {variants.length > 0
+        {siblings.length > 0
           ? t('admin.styles.workspace.colourFamilyVariants', {
-              defaultValue: 'Variants ({{count}})',
-              count: variants.length,
+              defaultValue: 'Other colours ({{count}})',
+              count: siblings.length,
             })
           : t('admin.styles.workspace.colourFamilyNoVariants', {
-              defaultValue: 'No variants yet',
+              defaultValue: 'No other colours yet',
             })}
       </div>
       <div className="flex flex-wrap gap-1.5">
-        {variants.map((v) => (
+        {siblings.map((v) => (
           <button
             key={v.id}
             type="button"
-            onClick={() => v.styleId && navigate(`/styles/${v.styleId}`)}
+            onClick={() => navigate(`/styles/${v.styleId ?? v.id}`)}
             className="inline-flex items-center gap-1.5 rounded-full bg-white border border-[var(--color-border)] px-2.5 py-1 text-xs hover:bg-[var(--color-muted)]"
+            title={v.styleId ?? undefined}
           >
             <span className="inline-block h-2 w-2 rounded-full bg-[var(--color-muted-foreground)]" />
             {v.primaryColour ?? '—'}
