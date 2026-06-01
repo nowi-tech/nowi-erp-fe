@@ -15,12 +15,27 @@ import {
   parkStyle,
   reviveStyle,
   type ListStylesParams,
+  type SamplingStatus,
   type StyleTab,
 } from '@/api/styles';
 import type { Style } from '@/api/types';
 import { cn } from '@/lib/utils';
 
 const TABS: StyleTab[] = ['inbox', 'in_sampling', 'parked', 'in_pd', 'all'];
+
+// Sampling-status filter — the 5 live stages plus the "Corrections"
+// off-ramp. Labels render via the `admin.styles.samplingSteps.*` i18n
+// keys (so `ready_for_inspection` shows "QC"). The removed
+// `in_progress_stitching` / `handed_over_for_inspection` statuses are
+// intentionally absent.
+const SAMPLING_STATUS_FILTER_OPTIONS: SamplingStatus[] = [
+  'in_progress_pattern_dev',
+  'in_progress_fabric_sourcing',
+  'in_progress_cutting',
+  'ready_for_inspection',
+  'approved_for_production',
+  'corrections_needed',
+];
 
 // Read the initial tab from the `?tab=` deep-link param (the Home summary
 // cards land here with a filter pre-applied). Falls back to the inbox.
@@ -184,13 +199,13 @@ export default function StylesRegistry() {
             onChange={(e) => setSamplingStatus(e.target.value)}
           >
             <option value="">{t('admin.styles.filters.samplingStatus')}</option>
-            <option value="in_progress_pattern_dev">Pattern dev</option>
-            <option value="in_progress_fabric_sourcing">Fabric sourcing</option>
-            <option value="in_progress_cutting">Cutting</option>
-            <option value="ready_for_inspection">Ready for inspection</option>
-            <option value="handed_over_for_inspection">Handed over</option>
-            <option value="corrections_needed">Corrections</option>
-            <option value="approved_for_production">Approved</option>
+            {SAMPLING_STATUS_FILTER_OPTIONS.map((s) => (
+              <option key={s} value={s}>
+                {t(`admin.styles.samplingSteps.${s}` as const, {
+                  defaultValue: s,
+                })}
+              </option>
+            ))}
           </Select>
         </div>
 
@@ -253,7 +268,6 @@ export default function StylesRegistry() {
         open={approvalTarget !== null}
         busy={approvalBusy}
         gender={approvalTarget?.gender ?? null}
-        defaultPatternMasterId={approvalTarget?.patternMasterId ?? null}
         onClose={() => setApprovalTarget(null)}
         onConfirm={async (body) => {
           if (!approvalTarget) return;

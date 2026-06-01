@@ -14,7 +14,6 @@ import { listCategories } from '@/api/categories';
 import type {
   CategoryWithStyleCode,
   Fabric,
-  Gender,
   Style,
 } from '@/api/types';
 
@@ -52,9 +51,6 @@ export default function StyleEditModal({
   const [err, setErr] = useState<string | null>(null);
   const [fabrics, setFabrics] = useState<Fabric[]>([]);
   const [categories, setCategories] = useState<CategoryWithStyleCode[]>([]);
-  // Mirror gender for the reviewer label only — the form is the
-  // authoritative source for the field itself.
-  const [genderForReviewer, setGenderForReviewer] = useState<Gender>('women');
 
   // Lazy-load master data the first time the modal opens.
   useEffect(() => {
@@ -82,18 +78,6 @@ export default function StyleEditModal({
   // Edit modal never toggles source — it's pinned to whatever the
   // style was created under.
   const source = style.source;
-  const patternMasterRoleLabel =
-    source === 'china_import'
-      ? t('admin.styles.intake.reviewerRoleChina')
-      : genderForReviewer === 'men'
-        ? t('admin.styles.intake.reviewerRoleM')
-        : t('admin.styles.intake.reviewerRoleW');
-  const patternMasterName =
-    source === 'china_import'
-      ? t('admin.styles.intake.reviewerDheeraj')
-      : genderForReviewer === 'men'
-        ? t('admin.styles.intake.reviewerPradyuman')
-        : t('admin.styles.intake.reviewerParul');
 
   const onSave = async () => {
     if (!valid) {
@@ -174,14 +158,11 @@ export default function StyleEditModal({
         ref={formRef}
         source={source}
         style={style}
-        patternMasterName={patternMasterName}
-        patternMasterRoleLabel={patternMasterRoleLabel}
         fabrics={fabrics}
         categories={categories}
         onFabricsChanged={setFabrics}
         onCategoriesChanged={setCategories}
         onValidityChange={setValid}
-        onGenderChange={setGenderForReviewer}
         onSaved={() => {
           /* navigate / refresh handled by `onSaved` prop on this modal */
         }}

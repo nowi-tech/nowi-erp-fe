@@ -112,10 +112,6 @@ export default function NewIntake() {
 
   const formRef = useRef<StyleIntakeFormHandle>(null);
   const reviewer = resolveReviewer(source, genderForReviewer, t);
-  const patternMasterRoleLabel =
-    genderForReviewer === 'men'
-      ? t('admin.styles.intake.reviewerRoleM')
-      : t('admin.styles.intake.reviewerRoleW');
 
   // Load master data once.
   useEffect(() => {
@@ -218,8 +214,6 @@ export default function NewIntake() {
         <StyleIntakeForm
           ref={formRef}
           source={source}
-          patternMasterName={reviewer.name}
-          patternMasterRoleLabel={patternMasterRoleLabel}
           fabrics={fabrics}
           categories={categories}
           onFabricsChanged={setFabrics}

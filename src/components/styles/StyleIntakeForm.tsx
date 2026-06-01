@@ -5,29 +5,29 @@ import {
   useMemo,
   useRef,
   useState,
-} from 'react';
-import { useTranslation } from 'react-i18next';
+} from "react";
+import { useTranslation } from "react-i18next";
 
-import { Input } from '@/components/ui/input';
-import { Textarea } from '@/components/ui/textarea';
-import { Label } from '@/components/ui/label';
-import { Combobox, type ComboboxOption } from '@/components/ui/combobox';
+import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
+import { Label } from "@/components/ui/label";
+import { Combobox, type ComboboxOption } from "@/components/ui/combobox";
 
-import PatternCadInput from '@/components/shared/PatternCadInput';
-import IntakeCard from '@/components/styles/intake/IntakeCard';
-import GenderSegment from '@/components/styles/intake/GenderSegment';
-import CategoryPicker from '@/components/styles/intake/CategoryPicker';
-import FabricPicker from '@/components/styles/intake/FabricPicker';
-import ColourPicker from '@/components/styles/intake/ColourPicker';
-import ReferenceImageGrid from '@/components/styles/intake/ReferenceImageGrid';
+import PatternCadInput from "@/components/shared/PatternCadInput";
+import IntakeCard from "@/components/styles/intake/IntakeCard";
+import GenderSegment from "@/components/styles/intake/GenderSegment";
+import CategoryPicker from "@/components/styles/intake/CategoryPicker";
+import FabricPicker from "@/components/styles/intake/FabricPicker";
+import ColourPicker from "@/components/styles/intake/ColourPicker";
+import ReferenceImageGrid from "@/components/styles/intake/ReferenceImageGrid";
 import {
   GENDER_CATEGORIES,
   deriveArticleCategory,
   type FineCategoryCode,
-} from '@/components/styles/intake/categoryOptions';
+} from "@/components/styles/intake/categoryOptions";
 
-import { listStyles, spawnColourVariant } from '@/api/styles';
-import { cn } from '@/lib/utils';
+import { listStyles, spawnColourVariant } from "@/api/styles";
+import { cn } from "@/lib/utils";
 
 import type {
   CategoryWithStyleCode,
@@ -35,7 +35,7 @@ import type {
   Gender,
   Style,
   StyleSource,
-} from '@/api/types';
+} from "@/api/types";
 
 /**
  * The three submission paths offered at the top of a *new* sampling
@@ -48,7 +48,7 @@ import type {
  *
  * The fork only exists in create mode; edit never re-forks a style.
  */
-export type SubmissionForkMode = 'new' | 'colour' | 'based_on';
+export type SubmissionForkMode = "new" | "colour" | "based_on";
 
 /**
  * Shared intake / edit form for the Product Development module.
@@ -94,13 +94,6 @@ export interface StyleIntakeFormProps {
   /** When provided, the form opens in EDIT mode (PATCH on submit,
    *  prefilled from the style). When null/undefined, CREATE mode. */
   style?: Style | null;
-  /** Display name shown in the read-only "Pattern Master" cell.
-   *  Resolved by the parent via the same routing rule used elsewhere
-   *  (women + unisex → Parul, men → Pradyuman, china_import →
-   *  Dheeraj). Keeping it as a prop avoids importing the user list
-   *  here just for the label. */
-  patternMasterName: string;
-  patternMasterRoleLabel: string;
   /** Master data — fetched by parent so the same lists power the
    *  page and the modal without double-loading. */
   fabrics: Fabric[];
@@ -155,10 +148,10 @@ function defaultCategoryCode(gender: Gender): FineCategoryCode {
  * a known state.
  */
 function toFormGender(g: unknown): Gender {
-  if (g === 'W' || g === 'women') return 'women';
-  if (g === 'M' || g === 'men') return 'men';
-  if (g === 'U' || g === 'unisex') return 'unisex';
-  return 'women';
+  if (g === "W" || g === "women") return "women";
+  if (g === "M" || g === "men") return "men";
+  if (g === "U" || g === "unisex") return "unisex";
+  return "women";
 }
 
 /**
@@ -171,9 +164,9 @@ function splitTimelineFromReason(reason: string | null | undefined): {
   reason: string;
   timeline: string;
 } {
-  if (!reason) return { reason: '', timeline: '' };
+  if (!reason) return { reason: "", timeline: "" };
   const match = /\n?\s*Sampling timeline:\s*([0-9]+)\s*$/.exec(reason);
-  if (!match) return { reason, timeline: '' };
+  if (!match) return { reason, timeline: "" };
   return {
     reason: reason.slice(0, match.index).trimEnd(),
     timeline: match[1],
@@ -183,20 +176,20 @@ function splitTimelineFromReason(reason: string | null | undefined): {
 function buildInitialForm(style: Style | null | undefined): FormState {
   if (!style) {
     return {
-      workingName: '',
-      developmentReason: '',
+      workingName: "",
+      developmentReason: "",
       fabricId: null,
-      sampleFabricRequired: '',
-      gender: 'women',
+      sampleFabricRequired: "",
+      gender: "women",
       categoryId: null,
-      categoryCode: defaultCategoryCode('women'),
-      primaryColour: '',
-      referenceLink: '',
+      categoryCode: defaultCategoryCode("women"),
+      primaryColour: "",
+      referenceLink: "",
       referenceImages: [],
       referenceImageUrl: null,
       patternCadPaths: [],
-      remark: '',
-      samplingTimeline: '',
+      remark: "",
+      samplingTimeline: "",
     };
   }
   const { reason, timeline } = splitTimelineFromReason(style.developmentReason);
@@ -205,24 +198,24 @@ function buildInitialForm(style: Style | null | undefined): FormState {
   const categoryId =
     (style as unknown as { categoryId?: number }).categoryId ?? null;
   return {
-    workingName: style.workingName ?? '',
+    workingName: style.workingName ?? "",
     developmentReason: reason,
     fabricId: style.fabricId ?? null,
     sampleFabricRequired:
       style.sampleFabricRequired == null
-        ? ''
+        ? ""
         : String(style.sampleFabricRequired),
     gender: toFormGender(style.gender),
     categoryId,
     categoryCode:
       (style.categoryCode as FineCategoryCode | null) ??
       defaultCategoryCode(toFormGender(style.gender)),
-    primaryColour: style.primaryColour ?? '',
-    referenceLink: style.referenceLink ?? '',
+    primaryColour: style.primaryColour ?? "",
+    referenceLink: style.referenceLink ?? "",
     referenceImages: style.referenceImages ?? [],
     referenceImageUrl: style.referenceImageUrl ?? null,
     patternCadPaths: style.patternCadPaths ?? [],
-    remark: style.remark ?? '',
+    remark: style.remark ?? "",
     samplingTimeline: timeline,
   };
 }
@@ -246,19 +239,19 @@ function ForkCard({
       aria-checked={active}
       onClick={onSelect}
       className={cn(
-        'flex items-start gap-3 rounded-[var(--radius-md)] border p-3.5 text-left transition-colors',
+        "flex items-start gap-3 rounded-[var(--radius-md)] border p-3.5 text-left transition-colors",
         active
-          ? 'border-[var(--color-primary)] bg-[var(--color-primary)]/5 shadow-sm'
-          : 'border-[var(--color-border)] bg-[var(--color-surface)] hover:border-[var(--color-primary)]/40',
+          ? "border-[var(--color-primary)] bg-[var(--color-primary)]/5 shadow-sm"
+          : "border-[var(--color-border)] bg-[var(--color-surface)] hover:border-[var(--color-primary)]/40",
       )}
     >
       <span
         aria-hidden
         className={cn(
-          'mt-0.5 flex h-4 w-4 shrink-0 items-center justify-center rounded-full border',
+          "mt-0.5 flex h-4 w-4 shrink-0 items-center justify-center rounded-full border",
           active
-            ? 'border-[var(--color-primary)]'
-            : 'border-[var(--color-input)]',
+            ? "border-[var(--color-primary)]"
+            : "border-[var(--color-input)]",
         )}
       >
         {active && (
@@ -315,7 +308,7 @@ function StyleRefPicker({
   // flaky search never blocks the form (same pattern as ColourPicker).
   useEffect(() => {
     let mounted = true;
-    void listStyles({ source: 'sampling', take: 100 })
+    void listStyles({ source: "sampling", take: 100 })
       .then((res) => {
         if (mounted) setResults(res.data);
       })
@@ -337,10 +330,10 @@ function StyleRefPicker({
     const mapped = rows.map<ComboboxOption<number>>((s) => ({
       value: s.id,
       label: styleLabel(s),
-      sublabel: [s.workingName, s.primaryColour].filter(Boolean).join(' · '),
+      sublabel: [s.workingName, s.primaryColour].filter(Boolean).join(" · "),
       searchText: [s.styleId, s.workingName, s.primaryColour]
         .filter(Boolean)
-        .join(' '),
+        .join(" "),
     }));
     // A typed-only code (based-on) shows as a synthetic selected option
     // so the closed trigger reflects the choice.
@@ -392,8 +385,6 @@ const StyleIntakeForm = forwardRef<StyleIntakeFormHandle, StyleIntakeFormProps>(
     {
       source,
       style,
-      patternMasterName,
-      patternMasterRoleLabel,
       fabrics,
       categories,
       onFabricsChanged,
@@ -407,7 +398,7 @@ const StyleIntakeForm = forwardRef<StyleIntakeFormHandle, StyleIntakeFormProps>(
     handleRef,
   ) {
     const { t } = useTranslation();
-    const isChinaImport = source === 'china_import';
+    const isChinaImport = source === "china_import";
     const isEdit = !!style;
     // The A/B/C submission fork only applies to a NEW sampling intake.
     // China-import has its own simplified path; edit never re-forks.
@@ -415,7 +406,7 @@ const StyleIntakeForm = forwardRef<StyleIntakeFormHandle, StyleIntakeFormProps>(
 
     const [form, setForm] = useState<FormState>(() => buildInitialForm(style));
     // Submission fork (create + sampling only). Defaults to the net-new path.
-    const [forkMode, setForkMode] = useState<SubmissionForkMode>('new');
+    const [forkMode, setForkMode] = useState<SubmissionForkMode>("new");
     const [forkTarget, setForkTarget] = useState<ForkTarget>(null);
 
     // Re-seed when the parent swaps the style under us (e.g. modal
@@ -434,12 +425,12 @@ const StyleIntakeForm = forwardRef<StyleIntakeFormHandle, StyleIntakeFormProps>(
     const onGenderChange = (next: Gender) => {
       setForm((f) => {
         const allowed = GENDER_CATEGORIES[next];
-        const currentCode = (f.categoryCode ?? '').toString().toUpperCase();
+        const currentCode = (f.categoryCode ?? "").toString().toUpperCase();
         const stillValid = (allowed as readonly string[]).includes(currentCode);
         if (stillValid) return { ...f, gender: next };
         const code = allowed[0];
         const hit = categories.find(
-          (c) => (c.code ?? '').toUpperCase() === code,
+          (c) => (c.code ?? "").toUpperCase() === code,
         );
         return {
           ...f,
@@ -485,14 +476,16 @@ const StyleIntakeForm = forwardRef<StyleIntakeFormHandle, StyleIntakeFormProps>(
     // they can submit. The net-new branch only needs a working name.
     // Colour MUST resolve to a real row (the spawn endpoint addresses the
     // parent by id); based-on also accepts a typed code.
+    // The colour branch ALSO needs a non-empty primary colour — a colour
+    // variant whose defining attribute is blank is meaningless, and the
+    // spawn endpoint would otherwise persist an empty string.
     const forkTargetOk =
-      forkMode === 'colour'
-        ? forkTarget?.style != null
+      forkMode === "colour"
+        ? forkTarget?.style != null && form.primaryColour.trim().length > 0
         : forkTarget != null;
-    const needsForkTarget = showFork && forkMode !== 'new';
+    const needsForkTarget = showFork && forkMode !== "new";
     const isValid =
-      form.workingName.trim().length > 0 &&
-      (!needsForkTarget || forkTargetOk);
+      form.workingName.trim().length > 0 && (!needsForkTarget || forkTargetOk);
 
     // Notify the parent on every validity flip so it can enable / disable
     // its submit button without subscribing to form state changes.
@@ -530,10 +523,10 @@ const StyleIntakeForm = forwardRef<StyleIntakeFormHandle, StyleIntakeFormProps>(
         form.developmentReason.trim(),
         form.samplingTimeline.trim()
           ? `Sampling timeline: ${form.samplingTimeline.trim()}`
-          : '',
+          : "",
       ]
         .filter(Boolean)
-        .join('\n');
+        .join("\n");
 
       const samplingBody: Record<string, unknown> = {
         ...base,
@@ -552,7 +545,7 @@ const StyleIntakeForm = forwardRef<StyleIntakeFormHandle, StyleIntakeFormProps>(
       // the `based_on` branch decorates the create payload, and it
       // sends `basedOnStyleId` / `basedOnStyleCode` ONLY (never
       // familyCode / parentStyleId; those belong to the colour path).
-      if (showFork && forkMode === 'based_on' && forkTarget) {
+      if (showFork && forkMode === "based_on" && forkTarget) {
         if (forkTarget.style) {
           samplingBody.basedOnStyleId = forkTarget.style.id;
         } else {
@@ -576,7 +569,7 @@ const StyleIntakeForm = forwardRef<StyleIntakeFormHandle, StyleIntakeFormProps>(
           // endpoint is /styles/:id/colour-variants); a typed-only
           // code can't address it, so the picker disables submit until
           // a row is resolved for this branch.
-          if (showFork && forkMode === 'colour' && forkTarget?.style) {
+          if (showFork && forkMode === "colour" && forkTarget?.style) {
             const saved = await spawnColourVariant(forkTarget.style.id, {
               primaryColour: form.primaryColour.trim(),
               referenceLink: form.referenceLink.trim() || null,
@@ -593,20 +586,29 @@ const StyleIntakeForm = forwardRef<StyleIntakeFormHandle, StyleIntakeFormProps>(
           return saved;
         },
         isValid: () => isValid,
-        getCategoryCode: () =>
-          (form.categoryCode as string | null) ?? null,
+        getCategoryCode: () => (form.categoryCode as string | null) ?? null,
       }),
       // intentional dep list: rebuild whenever the form or wiring
       // changes so submit() reads the latest values.
       // eslint-disable-next-line react-hooks/exhaustive-deps
-      [isValid, form, source, isEdit, showFork, forkMode, forkTarget, apiCall, onSaved],
+      [
+        isValid,
+        form,
+        source,
+        isEdit,
+        showFork,
+        forkMode,
+        forkTarget,
+        apiCall,
+        onSaved,
+      ],
     );
 
-    const uomLabel = (u: Fabric['unitOfMeasure']) => {
-      if (u === 'meter') return 'm';
-      if (u === 'kg') return 'kg';
-      if (u === 'oz') return 'oz';
-      return 'm';
+    const uomLabel = (u: Fabric["unitOfMeasure"]) => {
+      if (u === "meter") return "m";
+      if (u === "kg") return "kg";
+      if (u === "oz") return "oz";
+      return "m";
     };
 
     return (
@@ -615,53 +617,53 @@ const StyleIntakeForm = forwardRef<StyleIntakeFormHandle, StyleIntakeFormProps>(
         {showFork && (
           <div className="mb-4">
             <IntakeCard
-              title={t('admin.styles.intake.fork.title')}
-              subtitle={t('admin.styles.intake.fork.subtitle')}
+              title={t("admin.styles.intake.fork.title")}
+              subtitle={t("admin.styles.intake.fork.subtitle")}
             >
               <div
                 role="radiogroup"
-                aria-label={t('admin.styles.intake.fork.title')}
+                aria-label={t("admin.styles.intake.fork.title")}
                 className="grid grid-cols-1 gap-3 sm:grid-cols-3"
               >
                 <ForkCard
-                  active={forkMode === 'new'}
-                  title={t('admin.styles.intake.fork.newTitle')}
-                  description={t('admin.styles.intake.fork.newDesc')}
-                  onSelect={() => onForkModeChange('new')}
+                  active={forkMode === "new"}
+                  title={t("admin.styles.intake.fork.newTitle")}
+                  description={t("admin.styles.intake.fork.newDesc")}
+                  onSelect={() => onForkModeChange("new")}
                 />
                 <ForkCard
-                  active={forkMode === 'colour'}
-                  title={t('admin.styles.intake.fork.colourTitle')}
-                  description={t('admin.styles.intake.fork.colourDesc')}
-                  onSelect={() => onForkModeChange('colour')}
+                  active={forkMode === "colour"}
+                  title={t("admin.styles.intake.fork.colourTitle")}
+                  description={t("admin.styles.intake.fork.colourDesc")}
+                  onSelect={() => onForkModeChange("colour")}
                 />
                 <ForkCard
-                  active={forkMode === 'based_on'}
-                  title={t('admin.styles.intake.fork.basedOnTitle')}
-                  description={t('admin.styles.intake.fork.basedOnDesc')}
-                  onSelect={() => onForkModeChange('based_on')}
+                  active={forkMode === "based_on"}
+                  title={t("admin.styles.intake.fork.basedOnTitle")}
+                  description={t("admin.styles.intake.fork.basedOnDesc")}
+                  onSelect={() => onForkModeChange("based_on")}
                 />
               </div>
 
-              {forkMode !== 'new' && (
+              {forkMode !== "new" && (
                 <div className="mt-4">
                   <Label>
-                    {forkMode === 'colour'
-                      ? t('admin.styles.intake.fork.colourPickLabel')
-                      : t('admin.styles.intake.fork.basedOnPickLabel')}
+                    {forkMode === "colour"
+                      ? t("admin.styles.intake.fork.colourPickLabel")
+                      : t("admin.styles.intake.fork.basedOnPickLabel")}
                   </Label>
                   <StyleRefPicker
                     value={forkTarget}
                     onChange={setForkTarget}
-                    allowCode={forkMode === 'based_on'}
-                    placeholder={t('admin.styles.intake.fork.pickPlaceholder')}
-                    emptyLabel={t('admin.styles.intake.fork.pickEmpty')}
-                    addCodeLabel={t('admin.styles.intake.fork.addCode')}
+                    allowCode={forkMode === "based_on"}
+                    placeholder={t("admin.styles.intake.fork.pickPlaceholder")}
+                    emptyLabel={t("admin.styles.intake.fork.pickEmpty")}
+                    addCodeLabel={t("admin.styles.intake.fork.addCode")}
                   />
                   <p className="mt-1.5 text-[12px] text-[var(--color-muted-foreground)]">
-                    {forkMode === 'colour'
-                      ? t('admin.styles.intake.fork.colourHelp')
-                      : t('admin.styles.intake.fork.basedOnHelp')}
+                    {forkMode === "colour"
+                      ? t("admin.styles.intake.fork.colourHelp")
+                      : t("admin.styles.intake.fork.basedOnHelp")}
                   </p>
                 </div>
               )}
@@ -672,35 +674,35 @@ const StyleIntakeForm = forwardRef<StyleIntakeFormHandle, StyleIntakeFormProps>(
         {/* Two-up grid: Inspiration | Article */}
         <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
           <IntakeCard
-            title={t('admin.styles.intake.inspiration')}
-            subtitle={t('admin.styles.intake.inspirationSubtitle')}
+            title={t("admin.styles.intake.inspiration")}
+            subtitle={t("admin.styles.intake.inspirationSubtitle")}
           >
             <div className="space-y-4">
               <div>
-                <Label>{t('admin.styles.intake.referenceLink')}</Label>
+                <Label>{t("admin.styles.intake.referenceLink")}</Label>
                 <Input
                   value={form.referenceLink}
-                  onChange={(e) => set('referenceLink', e.target.value)}
+                  onChange={(e) => set("referenceLink", e.target.value)}
                   placeholder="https://…"
                 />
               </div>
               <div>
-                <Label>{t('admin.styles.intake.referenceImage')}</Label>
+                <Label>{t("admin.styles.intake.referenceImage")}</Label>
                 <ReferenceImageGrid
-                  entityId={style?.id ?? 'new'}
+                  entityId={style?.id ?? "new"}
                   value={form.referenceImages}
                   referenceLink={form.referenceLink || null}
-                  onChange={(next) => set('referenceImages', next)}
-                  onPrimaryUrlChange={(u) => set('referenceImageUrl', u)}
+                  onChange={(next) => set("referenceImages", next)}
+                  onPrimaryUrlChange={(u) => set("referenceImageUrl", u)}
                 />
               </div>
               {isChinaImport && (
                 <div>
-                  <Label>{t('admin.styles.intake.remark')}</Label>
+                  <Label>{t("admin.styles.intake.remark")}</Label>
                   <Textarea
                     value={form.remark}
-                    onChange={(e) => set('remark', e.target.value)}
-                    placeholder={t('admin.styles.intake.remarkPh')}
+                    onChange={(e) => set("remark", e.target.value)}
+                    placeholder={t("admin.styles.intake.remarkPh")}
                   />
                 </div>
               )}
@@ -708,33 +710,33 @@ const StyleIntakeForm = forwardRef<StyleIntakeFormHandle, StyleIntakeFormProps>(
           </IntakeCard>
 
           <IntakeCard
-            title={t('admin.styles.intake.article')}
-            subtitle={t('admin.styles.intake.articleSubtitle')}
+            title={t("admin.styles.intake.article")}
+            subtitle={t("admin.styles.intake.articleSubtitle")}
           >
             <div className="space-y-4">
               <div>
-                <Label>{t('admin.styles.intake.workingName')} *</Label>
+                <Label>{t("admin.styles.intake.workingName")} *</Label>
                 <Input
                   value={form.workingName}
-                  onChange={(e) => set('workingName', e.target.value)}
-                  placeholder={t('admin.styles.intake.workingNamePh')}
+                  onChange={(e) => set("workingName", e.target.value)}
+                  placeholder={t("admin.styles.intake.workingNamePh")}
                   autoFocus={!isEdit}
                 />
               </div>
               <div>
-                <Label>{t('admin.styles.intake.gender')}</Label>
+                <Label>{t("admin.styles.intake.gender")}</Label>
                 <GenderSegment
                   value={form.gender}
                   onChange={onGenderChange}
                   labels={{
-                    women: t('admin.styles.intake.genderWomen'),
-                    men: t('admin.styles.intake.genderMen'),
-                    unisex: t('admin.styles.intake.genderUnisex'),
+                    women: t("admin.styles.intake.genderWomen"),
+                    men: t("admin.styles.intake.genderMen"),
+                    unisex: t("admin.styles.intake.genderUnisex"),
                   }}
                 />
               </div>
               <div>
-                <Label>{t('admin.styles.intake.category')}</Label>
+                <Label>{t("admin.styles.intake.category")}</Label>
                 <CategoryPicker
                   categories={categories}
                   value={form.categoryId}
@@ -755,24 +757,20 @@ const StyleIntakeForm = forwardRef<StyleIntakeFormHandle, StyleIntakeFormProps>(
                 />
               </div>
               <div>
-                <Label>{t('admin.styles.intake.primaryColour')}</Label>
+                <Label>{t("admin.styles.intake.primaryColour")}</Label>
                 <ColourPicker
                   value={form.primaryColour}
-                  onChange={(next) => set('primaryColour', next)}
-                  placeholder={t('admin.styles.intake.primaryColourPh')}
+                  onChange={(next) => set("primaryColour", next)}
+                  placeholder={t("admin.styles.intake.primaryColourPh")}
                 />
               </div>
               {!isChinaImport && (
                 <div>
-                  <Label>
-                    {t('admin.styles.intake.developmentReason')}
-                  </Label>
+                  <Label>{t("admin.styles.intake.developmentReason")}</Label>
                   <Textarea
                     value={form.developmentReason}
-                    onChange={(e) =>
-                      set('developmentReason', e.target.value)
-                    }
-                    placeholder={t('admin.styles.intake.developmentReasonPh')}
+                    onChange={(e) => set("developmentReason", e.target.value)}
+                    placeholder={t("admin.styles.intake.developmentReasonPh")}
                   />
                 </div>
               )}
@@ -784,25 +782,21 @@ const StyleIntakeForm = forwardRef<StyleIntakeFormHandle, StyleIntakeFormProps>(
         {!isChinaImport && (
           <div className="mt-4">
             <IntakeCard
-              title={t('admin.styles.intake.samplingSpecifics')}
-              subtitle={t('admin.styles.intake.samplingSpecificsSubtitle')}
+              title={t("admin.styles.intake.samplingSpecifics")}
+              subtitle={t("admin.styles.intake.samplingSpecificsSubtitle")}
             >
               <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
                 <div>
-                  <Label>{t('admin.styles.intake.fabric')}</Label>
+                  <Label>{t("admin.styles.intake.fabric")}</Label>
                   <FabricPicker
                     fabrics={fabrics}
                     value={form.fabricId}
-                    onChange={(next) => set('fabricId', next)}
-                    onFabricCreated={(f) =>
-                      onFabricsChanged([...fabrics, f])
-                    }
+                    onChange={(next) => set("fabricId", next)}
+                    onFabricCreated={(f) => onFabricsChanged([...fabrics, f])}
                   />
                 </div>
                 <div>
-                  <Label>
-                    {t('admin.styles.intake.sampleFabricRequired')}
-                  </Label>
+                  <Label>{t("admin.styles.intake.sampleFabricRequired")}</Label>
                   <div className="relative">
                     <Input
                       type="number"
@@ -810,10 +804,10 @@ const StyleIntakeForm = forwardRef<StyleIntakeFormHandle, StyleIntakeFormProps>(
                       step="0.01"
                       value={form.sampleFabricRequired}
                       onChange={(e) =>
-                        set('sampleFabricRequired', e.target.value)
+                        set("sampleFabricRequired", e.target.value)
                       }
                       placeholder={t(
-                        'admin.styles.intake.sampleFabricRequiredHelp',
+                        "admin.styles.intake.sampleFabricRequiredHelp",
                       )}
                       disabled={!selectedFabric}
                     />
@@ -826,9 +820,7 @@ const StyleIntakeForm = forwardRef<StyleIntakeFormHandle, StyleIntakeFormProps>(
                   </div>
                 </div>
                 <div>
-                  <Label>
-                    {t('admin.styles.intake.samplingTimeline')}
-                  </Label>
+                  <Label>{t("admin.styles.intake.samplingTimeline")}</Label>
                   <div className="relative">
                     <Input
                       type="number"
@@ -836,39 +828,28 @@ const StyleIntakeForm = forwardRef<StyleIntakeFormHandle, StyleIntakeFormProps>(
                       step="1"
                       inputMode="numeric"
                       value={form.samplingTimeline}
-                      onChange={(e) =>
-                        set('samplingTimeline', e.target.value)
-                      }
+                      onChange={(e) => set("samplingTimeline", e.target.value)}
                       placeholder="0"
                     />
                     <span
                       className="pointer-events-none absolute inset-y-0 right-3 flex items-center text-[12px] font-medium text-[var(--color-muted-foreground)]"
                       aria-hidden
                     >
-                      {Number(form.samplingTimeline) === 1 ? 'day' : 'days'}
+                      {Number(form.samplingTimeline) === 1 ? "day" : "days"}
                     </span>
-                  </div>
-                </div>
-                <div>
-                  <Label>{t('admin.styles.intake.patternMaster')}</Label>
-                  <div className="flex h-12 items-center rounded-[10px] border border-[var(--color-input)] bg-[var(--color-muted)] px-3.5 text-[14px] text-[var(--color-foreground)]">
-                    {t('admin.styles.intake.patternMasterReadonly', {
-                      name: patternMasterName,
-                      role: patternMasterRoleLabel,
-                    })}
                   </div>
                 </div>
                 <div className="md:col-span-2">
                   <Label>
                     {t(
-                      'admin.styles.drawer.fields.patternCad',
-                      'Pattern / CAD',
+                      "admin.styles.drawer.fields.patternCad",
+                      "Pattern / CAD",
                     )}
                   </Label>
                   <PatternCadInput
-                    entityId={style?.id ?? 'new'}
+                    entityId={style?.id ?? "new"}
                     patternCadPaths={form.patternCadPaths}
-                    onChange={(p) => set('patternCadPaths', p)}
+                    onChange={(p) => set("patternCadPaths", p)}
                   />
                 </div>
               </div>

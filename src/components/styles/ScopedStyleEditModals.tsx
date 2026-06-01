@@ -1,0 +1,558 @@
+import { useEffect, useMemo, useState } from 'react';
+import { useTranslation } from 'react-i18next';
+
+import { Button } from '@/components/ui/button';
+import { Dialog } from '@/components/ui/dialog';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { useToast } from '@/components/ui/toast';
+
+import GenderSegment from '@/components/styles/intake/GenderSegment';
+import CategoryPicker from '@/components/styles/intake/CategoryPicker';
+import FabricPicker from '@/components/styles/intake/FabricPicker';
+import ColourPicker from '@/components/styles/intake/ColourPicker';
+import PatternCadInput from '@/components/shared/PatternCadInput';
+import {
+  GENDER_CATEGORIES,
+  deriveArticleCategory,
+  type FineCategoryCode,
+} from '@/components/styles/intake/categoryOptions';
+
+import { listFabrics, patchStyle } from '@/api/styles';
+import { listCategories } from '@/api/categories';
+import type {
+  CategoryWithStyleCode,
+  Fabric,
+  Gender,
+  Style,
+} from '@/api/types';
+
+/**
+ * Scoped edit dialogs for the Style workspace.
+ *
+ * The workspace's Core-specifications card and Bill-of-materials card
+ * each expose a pencil / edit affordance. Rather than re-open the full
+ * `<StyleEditModal>` (every intake field), these two small dialogs edit
+ * ONLY the fields that belong to their card, then persist through the
+ * same `patchStyle(id, …)` client. They reuse the shared intake field
+ * components (GenderSegment / CategoryPicker / FabricPicker /
+ * ColourPicker) so the controls stay identical to the full form.
+ */
+
+/** Map the BE's StyleGender (`W`/`M`/`U`) or long-form back to `Gender`. */
+function toFormGender(g: unknown): Gender {
+  if (g === 'W' || g === 'women') return 'women';
+  if (g === 'M' || g === 'men') return 'men';
+  if (g === 'U' || g === 'unisex') return 'unisex';
+  return 'women';
+}
+
+/** Pull the runtime-only `categoryId` off a Style (present via Prisma include). */
+function readCategoryId(style: Style): number | null {
+  return (style as unknown as { categoryId?: number }).categoryId ?? null;
+}
+
+/** Human suffix for the sample-fabric quantity input. */
+function uomLabel(u: Fabric['unitOfMeasure']): string {
+  if (u === 'kg') return 'kg';
+  if (u === 'oz') return 'oz';
+  return 'm';
+}
+
+/** Extract an API error message into a string. */
+function errMessage(e: unknown, fallback: string): string {
+  const m =
+    (e as { response?: { data?: { message?: string | string[] } } })?.response
+      ?.data?.message ?? fallback;
+  return Array.isArray(m) ? m.join(', ') : String(m);
+}
+
+// ─── Core specifications editor ───────────────────────────────────────
+// Fields: working name · gender · category · fabric · primary colour ·
+// sampling timeline.
+
+interface CoreSpecsState {
+  workingName: string;
+  gender: Gender;
+  categoryId: number | null;
+  categoryCode: FineCategoryCode | string | null;
+  fabricId: number | null;
+  primaryColour: string;
+  /** Days, kept as a string so an empty input distinguishes from `0`. */
+  samplingTimeline: string;
+}
+
+function buildCoreSpecsState(style: Style): CoreSpecsState {
+  const gender = toFormGender(style.gender);
+  return {
+    workingName: style.workingName ?? '',
+    gender,
+    categoryId: readCategoryId(style),
+    categoryCode:
+      (style.categoryCode as FineCategoryCode | null) ??
+      GENDER_CATEGORIES[gender][0],
+    fabricId: style.fabricId ?? null,
+    primaryColour: style.primaryColour ?? '',
+    samplingTimeline:
+      style.samplingTimeline && /^\d+$/.test(style.samplingTimeline.trim())
+        ? style.samplingTimeline.trim()
+        : '',
+  };
+}
+
+export function CoreSpecsEditModal({
+  open,
+  style,
+  fabrics: fabricsProp,
+  onClose,
+  onSaved,
+}: {
+  open: boolean;
+  style: Style;
+  /** Pre-warmed fabric master from the parent; the modal still
+   *  self-loads on first open if the parent passed an empty list. */
+  fabrics?: Fabric[];
+  onClose: () => void;
+  onSaved: (saved: Style) => void;
+}) {
+  const { t } = useTranslation();
+  const toast = useToast();
+
+  const [form, setForm] = useState<CoreSpecsState>(() =>
+    buildCoreSpecsState(style),
+  );
+  const [fabrics, setFabrics] = useState<Fabric[]>(fabricsProp ?? []);
+  const [categories, setCategories] = useState<CategoryWithStyleCode[]>([]);
+  const [saving, setSaving] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+
+  // Re-seed whenever the modal opens for a (possibly different) style.
+  useEffect(() => {
+    if (open) {
+      setForm(buildCoreSpecsState(style));
+      setErr(null);
+    }
+    // style.id is the stable identity for the row being edited.
+  }, [open, style.id]);
+
+  // Lazy-load master data the first time the modal opens.
+  useEffect(() => {
+    if (!open) return;
+    if (fabrics.length === 0) {
+      void listFabrics()
+        .then(setFabrics)
+        .catch(() => setFabrics([]));
+    }
+    if (categories.length === 0) {
+      void listCategories()
+        .then(setCategories)
+        .catch(() => setCategories([]));
+    }
+  }, [open, fabrics.length, categories.length]);
+
+  // Gender → category cascade: drop the category when it isn't valid for
+  // the new gender bucket (same rule the full intake form uses).
+  const onGenderChange = (next: Gender) => {
+    setForm((f) => {
+      const allowed = GENDER_CATEGORIES[next];
+      const currentCode = (f.categoryCode ?? '').toString().toUpperCase();
+      const stillValid = (allowed as readonly string[]).includes(currentCode);
+      if (stillValid) return { ...f, gender: next };
+      const code = allowed[0];
+      const hit = categories.find((c) => (c.code ?? '').toUpperCase() === code);
+      return { ...f, gender: next, categoryCode: code, categoryId: hit?.id ?? null };
+    });
+  };
+
+  const valid = form.workingName.trim().length > 0;
+
+  const onSave = async () => {
+    if (!valid) {
+      setErr(t('admin.styles.intake.needsName'));
+      return;
+    }
+    setSaving(true);
+    setErr(null);
+    try {
+      const code =
+        (form.categoryCode as string | null) ??
+        GENDER_CATEGORIES[form.gender][0];
+      const articleCategory = deriveArticleCategory(form.gender, code);
+      const saved = await patchStyle(style.id, {
+        workingName: form.workingName.trim() || null,
+        gender: form.gender,
+        category: articleCategory,
+        categoryId: form.categoryId ?? undefined,
+        fabricId: form.fabricId,
+        primaryColour: form.primaryColour.trim() || null,
+        samplingTimeline: form.samplingTimeline.trim() || null,
+      } as Parameters<typeof patchStyle>[1]);
+      toast.show(t('admin.styles.drawer.updatedToast', { defaultValue: 'Saved.' }), 'success');
+      onSaved(saved);
+      onClose();
+    } catch (e: unknown) {
+      setErr(errMessage(e, t('admin.styles.intake.saveError')));
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <Dialog
+      open={open}
+      onClose={onClose}
+      maxWidthClassName="max-w-lg"
+      title={
+        <span className="font-serif text-lg">
+          {t('admin.styles.workspace.editCoreSpecs', {
+            defaultValue: 'Edit core specifications',
+          })}
+        </span>
+      }
+      footer={
+        <>
+          {err && (
+            <span className="mr-auto truncate text-xs text-[var(--status-stuck-ink)]">
+              {err}
+            </span>
+          )}
+          <Button variant="outline" size="sm" disabled={saving} onClick={onClose}>
+            {t('common.cancel')}
+          </Button>
+          <Button size="sm" disabled={saving || !valid} onClick={() => void onSave()}>
+            {saving
+              ? t('common.saving')
+              : t('admin.styles.drawer.save', { defaultValue: 'Save' })}
+          </Button>
+        </>
+      }
+    >
+      <div className="space-y-4">
+        <div>
+          <Label>{t('admin.styles.intake.workingName')} *</Label>
+          <Input
+            value={form.workingName}
+            onChange={(e) =>
+              setForm((f) => ({ ...f, workingName: e.target.value }))
+            }
+            placeholder={t('admin.styles.intake.workingNamePh')}
+            autoFocus
+          />
+        </div>
+        <div>
+          <Label>{t('admin.styles.intake.gender')}</Label>
+          <GenderSegment
+            value={form.gender}
+            onChange={onGenderChange}
+            labels={{
+              women: t('admin.styles.intake.genderWomen'),
+              men: t('admin.styles.intake.genderMen'),
+              unisex: t('admin.styles.intake.genderUnisex'),
+            }}
+          />
+        </div>
+        <div>
+          <Label>{t('admin.styles.intake.category')}</Label>
+          <CategoryPicker
+            categories={categories}
+            value={form.categoryId}
+            fallbackCode={(form.categoryCode as FineCategoryCode | null) ?? null}
+            gender={form.gender}
+            onChange={({ categoryId, code }) =>
+              setForm((f) => ({ ...f, categoryId, categoryCode: code }))
+            }
+            onCategoryCreated={(c) => setCategories([...categories, c])}
+          />
+        </div>
+        <div>
+          <Label>{t('admin.styles.intake.fabric')}</Label>
+          <FabricPicker
+            fabrics={fabrics}
+            value={form.fabricId}
+            onChange={(next) => setForm((f) => ({ ...f, fabricId: next }))}
+            onFabricCreated={(f) => setFabrics([...fabrics, f])}
+          />
+        </div>
+        <div>
+          <Label>{t('admin.styles.intake.primaryColour')}</Label>
+          <ColourPicker
+            value={form.primaryColour}
+            onChange={(next) => setForm((f) => ({ ...f, primaryColour: next }))}
+            placeholder={t('admin.styles.intake.primaryColourPh')}
+            inlineAdd
+          />
+        </div>
+        <div>
+          <Label>{t('admin.styles.intake.samplingTimeline')}</Label>
+          <div className="relative">
+            <Input
+              type="number"
+              min="0"
+              step="1"
+              inputMode="numeric"
+              value={form.samplingTimeline}
+              onChange={(e) =>
+                setForm((f) => ({ ...f, samplingTimeline: e.target.value }))
+              }
+              placeholder="0"
+            />
+            <span
+              className="pointer-events-none absolute inset-y-0 right-3 flex items-center text-[12px] font-medium text-[var(--color-muted-foreground)]"
+              aria-hidden
+            >
+              {Number(form.samplingTimeline) === 1 ? 'day' : 'days'}
+            </span>
+          </div>
+        </div>
+      </div>
+    </Dialog>
+  );
+}
+
+// ─── Bill of materials editor ─────────────────────────────────────────
+// Fields: fabric · sample fabric required.
+
+interface BomState {
+  fabricId: number | null;
+  sampleFabricRequired: string;
+}
+
+function buildBomState(style: Style): BomState {
+  return {
+    fabricId: style.fabricId ?? null,
+    sampleFabricRequired:
+      style.sampleFabricRequired == null
+        ? ''
+        : String(style.sampleFabricRequired),
+  };
+}
+
+export function BomEditModal({
+  open,
+  style,
+  fabrics: fabricsProp,
+  onClose,
+  onSaved,
+}: {
+  open: boolean;
+  style: Style;
+  fabrics?: Fabric[];
+  onClose: () => void;
+  onSaved: (saved: Style) => void;
+}) {
+  const { t } = useTranslation();
+  const toast = useToast();
+
+  const [form, setForm] = useState<BomState>(() => buildBomState(style));
+  const [fabrics, setFabrics] = useState<Fabric[]>(fabricsProp ?? []);
+  const [saving, setSaving] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (open) {
+      setForm(buildBomState(style));
+      setErr(null);
+    }
+  }, [open, style.id]);
+
+  useEffect(() => {
+    if (!open) return;
+    if (fabrics.length === 0) {
+      void listFabrics()
+        .then(setFabrics)
+        .catch(() => setFabrics([]));
+    }
+  }, [open, fabrics.length]);
+
+  const selectedFabric = useMemo(
+    () => fabrics.find((f) => f.id === form.fabricId) ?? null,
+    [fabrics, form.fabricId],
+  );
+
+  const onSave = async () => {
+    setSaving(true);
+    setErr(null);
+    try {
+      const saved = await patchStyle(style.id, {
+        fabricId: form.fabricId,
+        sampleFabricRequired: form.sampleFabricRequired
+          ? Number(form.sampleFabricRequired)
+          : null,
+      } as Parameters<typeof patchStyle>[1]);
+      toast.show(t('admin.styles.drawer.updatedToast', { defaultValue: 'Saved.' }), 'success');
+      onSaved(saved);
+      onClose();
+    } catch (e: unknown) {
+      setErr(errMessage(e, t('admin.styles.intake.saveError')));
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <Dialog
+      open={open}
+      onClose={onClose}
+      maxWidthClassName="max-w-lg"
+      title={
+        <span className="font-serif text-lg">
+          {t('admin.styles.workspace.editBomTitle', {
+            defaultValue: 'Edit bill of materials',
+          })}
+        </span>
+      }
+      footer={
+        <>
+          {err && (
+            <span className="mr-auto truncate text-xs text-[var(--status-stuck-ink)]">
+              {err}
+            </span>
+          )}
+          <Button variant="outline" size="sm" disabled={saving} onClick={onClose}>
+            {t('common.cancel')}
+          </Button>
+          <Button size="sm" disabled={saving} onClick={() => void onSave()}>
+            {saving
+              ? t('common.saving')
+              : t('admin.styles.drawer.save', { defaultValue: 'Save' })}
+          </Button>
+        </>
+      }
+    >
+      <div className="space-y-4">
+        <div>
+          <Label>{t('admin.styles.intake.fabric')}</Label>
+          <FabricPicker
+            fabrics={fabrics}
+            value={form.fabricId}
+            onChange={(next) => setForm((f) => ({ ...f, fabricId: next }))}
+            onFabricCreated={(f) => setFabrics([...fabrics, f])}
+          />
+        </div>
+        <div>
+          <Label>{t('admin.styles.intake.sampleFabricRequired')}</Label>
+          <div className="relative">
+            <Input
+              type="number"
+              min="0"
+              step="0.01"
+              value={form.sampleFabricRequired}
+              onChange={(e) =>
+                setForm((f) => ({
+                  ...f,
+                  sampleFabricRequired: e.target.value,
+                }))
+              }
+              placeholder={t('admin.styles.intake.sampleFabricRequiredHelp')}
+              disabled={!selectedFabric}
+            />
+            <span
+              className="pointer-events-none absolute inset-y-0 right-3 flex items-center text-[12px] font-medium text-[var(--color-muted-foreground)]"
+              aria-hidden
+            >
+              {uomLabel(selectedFabric?.unitOfMeasure ?? null)}
+            </span>
+          </div>
+        </div>
+      </div>
+    </Dialog>
+  );
+}
+
+// ─── Pattern / CAD editor ─────────────────────────────────────────────
+// Scoped single-field editor: ONLY uploads CAD files and persists the
+// `patternCadPaths` list. Opened from the workspace's Pattern/CAD card
+// upload affordance instead of the full StyleEditModal. Reuses the
+// shared <PatternCadInput> (the same control the full intake form uses).
+
+export function PatternCadEditModal({
+  open,
+  style,
+  onClose,
+  onSaved,
+}: {
+  open: boolean;
+  style: Style;
+  onClose: () => void;
+  onSaved: (saved: Style) => void;
+}) {
+  const { t } = useTranslation();
+  const toast = useToast();
+
+  const [paths, setPaths] = useState<string[]>(style.patternCadPaths ?? []);
+  const [saving, setSaving] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+
+  // Re-seed whenever the modal opens for a (possibly different) style.
+  useEffect(() => {
+    if (open) {
+      setPaths(style.patternCadPaths ?? []);
+      setErr(null);
+    }
+  }, [open, style.id, style.patternCadPaths]);
+
+  const onSave = async () => {
+    setSaving(true);
+    setErr(null);
+    try {
+      const saved = await patchStyle(style.id, {
+        patternCadPaths: paths,
+      } as Parameters<typeof patchStyle>[1]);
+      toast.show(
+        t('admin.styles.drawer.updatedToast', { defaultValue: 'Saved.' }),
+        'success',
+      );
+      onSaved(saved);
+      onClose();
+    } catch (e: unknown) {
+      setErr(errMessage(e, t('admin.styles.intake.saveError')));
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <Dialog
+      open={open}
+      onClose={onClose}
+      maxWidthClassName="max-w-lg"
+      title={
+        <span className="font-serif text-lg">
+          {t('admin.styles.drawer.patternCad.label', {
+            defaultValue: 'Pattern / CAD',
+          })}
+        </span>
+      }
+      footer={
+        <>
+          {err && (
+            <span className="mr-auto truncate text-xs text-[var(--status-stuck-ink)]">
+              {err}
+            </span>
+          )}
+          <Button variant="outline" size="sm" disabled={saving} onClick={onClose}>
+            {t('common.cancel')}
+          </Button>
+          <Button size="sm" disabled={saving} onClick={() => void onSave()}>
+            {saving
+              ? t('common.saving')
+              : t('admin.styles.drawer.save', { defaultValue: 'Save' })}
+          </Button>
+        </>
+      }
+    >
+      <div className="space-y-2">
+        <Label>
+          {t('admin.styles.drawer.patternCad.label', {
+            defaultValue: 'Pattern / CAD',
+          })}
+        </Label>
+        <PatternCadInput
+          patternCadPaths={paths}
+          entityId={style.id}
+          onChange={setPaths}
+        />
+      </div>
+    </Dialog>
+  );
+}

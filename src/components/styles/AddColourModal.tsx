@@ -170,10 +170,6 @@ export default function AddColourModal({
           value={parent.fabric?.name ?? '—'}
         />
         <AttrPair
-          label={t('admin.styles.addColour.attrs.patternMaster')}
-          value={parent.patternMaster?.name ?? '—'}
-        />
-        <AttrPair
           label={t('admin.styles.addColour.attrs.cad')}
           value={
             parent.patternCadPaths && parent.patternCadPaths.length > 0

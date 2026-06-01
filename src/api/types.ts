@@ -381,10 +381,6 @@ export interface Style {
   // Sampling state
   samplingStatus: string | null;
   samplingTimeline: string | null;
-  patternMasterId: number | null;
-  patternMaster?: { id: number; name: string } | null;
-  modelFitSession: 'yes' | 'pending' | 'no' | null;
-  dxfApproved: 'yes' | 'no' | null;
   /** GCS object paths of uploaded pattern / CAD files (.dxf/.pdf/image). */
   patternCadPaths: string[];
 

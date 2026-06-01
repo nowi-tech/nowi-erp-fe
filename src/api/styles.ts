@@ -36,9 +36,7 @@ export type SamplingStatus =
   | 'in_progress_pattern_dev'
   | 'in_progress_fabric_sourcing'
   | 'in_progress_cutting'
-  | 'in_progress_stitching'
   | 'ready_for_inspection'
-  | 'handed_over_for_inspection'
   | 'corrections_needed'
   | 'approved_for_production';
 
@@ -55,7 +53,6 @@ export type ProductionStatus =
   | 'packing_dispatch'
   | 'warehouse_dispatch';
 
-export type FitSession = 'yes' | 'pending' | 'no';
 export type YesNo = 'yes' | 'no';
 export type LiveStatus = 'live' | 'not_live';
 
@@ -73,7 +70,6 @@ export interface ListStylesParams {
   tab?: StyleTab;
   collectionId?: number;
   samplingStatus?: SamplingStatus;
-  patternMasterId?: number;
   search?: string;
   skip?: number;
   take?: number;
@@ -118,8 +114,6 @@ export interface StyleOptions {
   samplingStatus: Option[];
   sampleApproval: Option[];
   productionStatus: Option[];
-  modelFitSession: Option[];
-  dxfApproved: Option[];
   websiteLive: Option[];
 }
 
@@ -246,29 +240,25 @@ export async function hardDeleteStyle(styleId: number): Promise<void> {
 
 // ─── Style actions ────────────────────────────────────────────────────
 /**
- * Optional body for Approval #1 — the merchandiser's intake checks plus
- * the initial sample-workflow state (Sampling Status, Pattern Master).
+ * Optional body for Approval #1 — the merchandiser's intake checks
+ * (fabric feasible / price OK / collection fit) plus an optional note.
+ * The BE auto-sets `samplingStatus = Pattern dev` on approval, so the
+ * dialog no longer asks for an initial status.
  */
 export interface ApproveStyleBody {
   approval1FabricFeasible?: boolean;
   approval1PriceOk?: boolean;
   approval1CollectionFit?: boolean;
   approval1Note?: string;
-  /** Initial Sampling Status set at intake approval. */
-  samplingStatus?: SamplingStatus;
-  /** Pattern Master override — defaults to gender-routed user when null. */
-  patternMasterId?: number | null;
 }
 
 /**
  * Optional body for Approval #2 — sample sign-off. Captures the
- * sample-verdict enum plus the Gurukul fit-session / DXF flags.
- * Defaults to `approved_for_production` server-side when omitted.
+ * sample-verdict enum. Defaults to `approved_for_production`
+ * server-side when omitted.
  */
 export interface SampleApproveStyleBody {
   sampleApproval?: SampleApprovalStatus;
-  dxfApproved?: 'yes' | 'no';
-  modelFitSession?: 'yes' | 'pending' | 'no';
   note?: string;
 }
 

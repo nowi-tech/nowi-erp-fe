@@ -38,7 +38,6 @@ export interface DashboardStyleRow {
   /** Raw enum value (coarse) — meaningful while in_pd. */
   productionStatus: string | null;
   factory: { id: number; name: string } | null;
-  patternMaster: { id: number; name: string } | null;
   colourVariantCount: number;
   updatedAt: string;
 }
