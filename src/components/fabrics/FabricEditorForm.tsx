@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Plus, Trash2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -6,8 +6,8 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select } from '@/components/ui/select';
 import { useToast } from '@/components/ui/toast';
-import { createFabric, patchFabric } from '@/api/styles';
-import type { Fabric, FabricUnitOfMeasure } from '@/api/types';
+import { createFabric, patchFabric, listColourMaster } from '@/api/styles';
+import type { Colour, Fabric, FabricUnitOfMeasure } from '@/api/types';
 import { cn } from '@/lib/utils';
 
 const UOM_SHORT: Record<FabricUnitOfMeasure, string> = {
@@ -15,6 +15,12 @@ const UOM_SHORT: Record<FabricUnitOfMeasure, string> = {
   kg: 'kg',
   oz: 'oz',
 };
+
+/** CSS colour for a swatch dot: explicit hex, else the lowercased name
+ *  (CSS resolves common names like "navy" / "teal"). */
+function swatchColor(hex: string | null, name: string): string {
+  return hex || name.toLowerCase();
+}
 
 /** A composition row in the editor — strings while editing. */
 export interface CompRow {
@@ -109,6 +115,43 @@ export default function FabricEditorForm({
   const [saving, setSaving] = useState(false);
   const [compError, setCompError] = useState<string | null>(null);
 
+  // ── Colours stocked (links to the Colour master) ──────────────
+  const [colourMaster, setColourMaster] = useState<Colour[]>([]);
+  const [colourQuery, setColourQuery] = useState('');
+  // Selected = Colour-master ids. Seeded from the fabric's existing colours.
+  const [selectedColourIds, setSelectedColourIds] = useState<Set<number>>(
+    () => new Set((editing?.colours ?? []).map((c) => c.colourId)),
+  );
+
+  useEffect(() => {
+    let mounted = true;
+    listColourMaster()
+      .then((rows) => {
+        if (mounted) setColourMaster(rows);
+      })
+      .catch(() => {
+        // Soft-fail: a missing master shouldn't block fabric editing.
+      });
+    return () => {
+      mounted = false;
+    };
+  }, []);
+
+  const toggleColour = (id: number) =>
+    setSelectedColourIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+
+  const filteredColours = useMemo(() => {
+    const q = colourQuery.trim().toLowerCase();
+    return q
+      ? colourMaster.filter((c) => c.name.toLowerCase().includes(q))
+      : colourMaster;
+  }, [colourMaster, colourQuery]);
+
   // ── Composition helpers (sum, valid, mutators) ─────────────────
   const compSum = useMemo(
     () =>
@@ -196,6 +239,8 @@ export default function FabricEditorForm({
           fibre: r.fibre.trim(),
           percent: Number(r.percent),
         })),
+        // Full desired set — the server diffs (keeps stock attribution).
+        colourIds: Array.from(selectedColourIds),
       };
       const saved = isEditing
         ? await patchFabric(editing!.id, payload)
@@ -390,6 +435,70 @@ export default function FabricEditorForm({
         {compError && (
           <p className="text-xs text-[var(--color-destructive)]">{compError}</p>
         )}
+      </div>
+
+      {/* Colours this fabric is stocked in — drives per-colour stock and
+          constrains the variant colour picker. */}
+      <div className="border border-[var(--color-border)] rounded-[var(--radius-sm)] p-2.5 space-y-2">
+        <div className="flex items-center justify-between">
+          <Label className="mb-0">
+            {t('admin.fabricLibrary.colours.title', {
+              defaultValue: 'Colours stocked',
+            })}
+          </Label>
+          <span className="text-xs tabular-nums text-[var(--color-muted-foreground)]">
+            {t('admin.fabricLibrary.colours.count', {
+              defaultValue: '{{n}} selected',
+              n: selectedColourIds.size,
+            })}
+          </span>
+        </div>
+        <Input
+          className="h-8 text-[13px]"
+          placeholder={t('admin.fabricLibrary.colours.search', {
+            defaultValue: 'Search colours…',
+          })}
+          value={colourQuery}
+          onChange={(e) => setColourQuery(e.target.value)}
+        />
+        <div className="flex flex-wrap gap-1.5 max-h-40 overflow-y-auto">
+          {filteredColours.map((c) => {
+            const on = selectedColourIds.has(c.id);
+            return (
+              <button
+                key={c.id}
+                type="button"
+                onClick={() => toggleColour(c.id)}
+                aria-pressed={on}
+                className={cn(
+                  'inline-flex items-center gap-1.5 rounded-full border px-2 py-1 text-[12px] transition-colors',
+                  on
+                    ? 'border-[var(--color-primary)] bg-[var(--color-primary)]/10 font-medium'
+                    : 'border-[var(--color-border)] hover:bg-[var(--color-muted)]',
+                )}
+              >
+                <span
+                  className="h-3 w-3 rounded-full border border-black/10"
+                  style={{ backgroundColor: swatchColor(c.hex, c.name) }}
+                />
+                {c.name}
+              </button>
+            );
+          })}
+          {filteredColours.length === 0 && (
+            <span className="text-[12px] text-[var(--color-muted-foreground)] py-1">
+              {t('admin.fabricLibrary.colours.empty', {
+                defaultValue: 'No matching colours.',
+              })}
+            </span>
+          )}
+        </div>
+        <p className="text-[11px] text-[var(--color-muted-foreground)]">
+          {t('admin.fabricLibrary.colours.help', {
+            defaultValue:
+              'Pick every colour this fabric is procured in. Stock is tracked per colour, and Style variants pick their colour from this list.',
+          })}
+        </p>
       </div>
 
       <div>

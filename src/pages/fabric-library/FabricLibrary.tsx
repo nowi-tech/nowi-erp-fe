@@ -73,31 +73,59 @@ export default function FabricLibrary() {
   const [stockForm, setStockForm] = useState<{
     quantity: string;
     entryType: FabricStockEntryType;
+    fabricColourId: number | '';
     note: string;
-  }>({ quantity: '', entryType: 'receipt', note: '' });
+  }>({ quantity: '', entryType: 'receipt', fabricColourId: '', note: '' });
   const [stockSaving, setStockSaving] = useState(false);
 
   const openStock = (f: Fabric) => {
     setStockFabric(f);
-    setStockForm({ quantity: '', entryType: 'receipt', note: '' });
+    setStockForm({
+      quantity: '',
+      entryType: 'receipt',
+      // Preselect when the fabric has exactly one colour — one fewer click.
+      fabricColourId: f.colours?.length === 1 ? f.colours[0].id : '',
+      note: '',
+    });
   };
 
   const submitStock = async () => {
     if (!stockFabric) return;
     const qty = Number(stockForm.quantity);
     if (!(qty > 0)) return;
+    // A fabric that stocks colours needs the entry attributed to one.
+    if ((stockFabric.colours?.length ?? 0) > 0 && stockForm.fabricColourId === '') {
+      toast.show(
+        t('admin.fabricLibrary.stock.colourRequired', {
+          defaultValue: 'Pick the colour this stock is for.',
+        }),
+        'error',
+      );
+      return;
+    }
     setStockSaving(true);
     try {
       await addFabricStock(stockFabric.id, {
         quantity: qty,
         entryType: stockForm.entryType,
+        fabricColourId:
+          stockForm.fabricColourId === '' ? null : stockForm.fabricColourId,
         note: stockForm.note.trim() || null,
       });
       toast.show(t('admin.fabricLibrary.stockSavedToast'));
       setStockFabric(null);
       await load();
-    } catch {
-      toast.show(t('admin.fabricLibrary.stockSaveError'));
+    } catch (e: unknown) {
+      const m = (e as { response?: { data?: { message?: string | string[] } } })
+        ?.response?.data?.message;
+      toast.show(
+        m
+          ? Array.isArray(m)
+            ? m.join(', ')
+            : String(m)
+          : t('admin.fabricLibrary.stockSaveError'),
+        'error',
+      );
     } finally {
       setStockSaving(false);
     }
@@ -561,6 +589,43 @@ export default function FabricLibrary() {
               />
             </div>
           </div>
+          {(stockFabric?.colours?.length ?? 0) > 0 && (
+            <div>
+              <Label>
+                {t('admin.fabricLibrary.stock.colour', {
+                  defaultValue: 'Colour',
+                })}{' '}
+                *
+              </Label>
+              <Select
+                value={stockForm.fabricColourId === '' ? '' : String(stockForm.fabricColourId)}
+                onChange={(e) =>
+                  setStockForm((s) => ({
+                    ...s,
+                    fabricColourId: e.target.value ? Number(e.target.value) : '',
+                  }))
+                }
+              >
+                <option value="">
+                  {t('admin.fabricLibrary.stock.colourPlaceholder', {
+                    defaultValue: 'Choose a colour…',
+                  })}
+                </option>
+                {stockFabric?.colours?.map((c) => (
+                  <option key={c.id} value={String(c.id)}>
+                    {c.name}
+                    {c.availableQuantity != null
+                      ? ` — ${c.availableQuantity}${
+                          stockFabric?.unitOfMeasure
+                            ? ` ${UOM_SHORT[stockFabric.unitOfMeasure]}`
+                            : ''
+                        }`
+                      : ''}
+                  </option>
+                ))}
+              </Select>
+            </div>
+          )}
           <div>
             <Label>{t('admin.fabricLibrary.stock.note')}</Label>
             <Input

@@ -269,6 +269,17 @@ const StyleIntakeForm = forwardRef<StyleIntakeFormHandle, StyleIntakeFormProps>(
       [fabrics, form.fabricId],
     );
 
+    // When the chosen fabric stocks exactly one colour, default the (empty)
+    // product colour to it — the common cut-and-sew case. Multiple-colour
+    // fabrics surface their colours as the picker's top suggestions instead,
+    // and an existing colour is never overwritten.
+    useEffect(() => {
+      if (selectedFabric?.colours?.length === 1 && !form.primaryColour.trim()) {
+        set('primaryColour', selectedFabric.colours[0].name);
+      }
+      // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [selectedFabric]);
+
     const isValid = form.workingName.trim().length > 0;
 
     // Notify the parent on every validity flip so it can enable / disable
@@ -442,6 +453,7 @@ const StyleIntakeForm = forwardRef<StyleIntakeFormHandle, StyleIntakeFormProps>(
                   value={form.primaryColour}
                   onChange={(next) => set('primaryColour', next)}
                   placeholder={t('admin.styles.intake.primaryColourPh')}
+                  fabricColours={selectedFabric?.colours ?? []}
                 />
               </div>
               {!isChinaImport && (

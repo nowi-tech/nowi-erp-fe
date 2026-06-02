@@ -20,6 +20,7 @@ import type {
   FabricStockEntry,
   FabricStockEntryType,
   CreateFabricStockEntryInput,
+  Colour,
 } from './types';
 
 // ── enum unions (mirror prisma/schema.prisma) ──────────────────────────
@@ -290,9 +291,14 @@ export async function sampleApproveStyle(
 }
 
 // ─── Variants ─────────────────────────────────────────────────────────
+/**
+ * Add a variant. Either `colour` (free text) or `fabricColourId` must be
+ * present — the server defaults `colour` from the fabric-colour when only
+ * the latter is given.
+ */
 export async function addVariant(
   styleId: number,
-  body: Partial<StyleVariant> & { colour: string },
+  body: Partial<StyleVariant> & ({ colour: string } | { fabricColourId: number }),
 ): Promise<StyleVariant> {
   const res = await apiClient.post<StyleVariant>(
     `/api/styles/${styleId}/variants`,
@@ -385,6 +391,14 @@ export interface FabricUpsertBody {
   cuttableWidth?: string | number | null;
   unitOfMeasure?: 'meter' | 'kg' | 'oz' | null;
   compositions?: { fibre: string; percent: number }[];
+  /** Colour-master ids this fabric is stocked in (full desired set). */
+  colourIds?: number[];
+}
+
+/** Curated colour master — feeds the fabric colours multi-select. */
+export async function listColourMaster(): Promise<Colour[]> {
+  const res = await apiClient.get<Colour[]>('/api/colours');
+  return res.data;
 }
 
 export async function createFabric(
