@@ -5,10 +5,10 @@ import {
   useRef,
   useState,
   type ReactNode,
-} from "react";
-import { createPortal } from "react-dom";
-import { Check, ChevronDown, Plus, Search } from "lucide-react";
-import { cn } from "@/lib/utils";
+} from 'react';
+import { createPortal } from 'react-dom';
+import { Check, ChevronDown, Plus, Search } from 'lucide-react';
+import { cn } from '@/lib/utils';
 
 export interface ComboboxOption<V extends string | number = string | number> {
   value: V;
@@ -76,14 +76,14 @@ export function Combobox<V extends string | number = string | number>({
   onChange,
   onAddNew,
   addNewLabel,
-  placeholder = "Select…",
-  emptyLabel = "No matches.",
+  placeholder = 'Select…',
+  emptyLabel = 'No matches.',
   disabled = false,
   className,
   ariaLabel,
 }: Props<V>) {
   const [open, setOpen] = useState(false);
-  const [query, setQuery] = useState("");
+  const [query, setQuery] = useState('');
   const [activeIdx, setActiveIdx] = useState(0);
   const rootRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -107,7 +107,7 @@ export function Combobox<V extends string | number = string | number>({
     if (!q) return options;
     return options.filter((o) => {
       const hay =
-        `${o.label} ${o.sublabel ?? ""} ${o.searchText ?? ""}`.toLowerCase();
+        `${o.label} ${o.sublabel ?? ''} ${o.searchText ?? ''}`.toLowerCase();
       return hay.includes(q);
     });
   }, [options, query]);
@@ -128,8 +128,8 @@ export function Combobox<V extends string | number = string | number>({
         setOpen(false);
       }
     };
-    document.addEventListener("mousedown", onDown);
-    return () => document.removeEventListener("mousedown", onDown);
+    document.addEventListener('mousedown', onDown);
+    return () => document.removeEventListener('mousedown', onDown);
   }, [open]);
 
   // Focus the search input on open.
@@ -149,17 +149,17 @@ export function Combobox<V extends string | number = string | number>({
       if (r) setMenuRect({ top: r.bottom + 4, left: r.left, width: r.width });
     };
     place();
-    window.addEventListener("scroll", place, true);
-    window.addEventListener("resize", place);
+    window.addEventListener('scroll', place, true);
+    window.addEventListener('resize', place);
     return () => {
-      window.removeEventListener("scroll", place, true);
-      window.removeEventListener("resize", place);
+      window.removeEventListener('scroll', place, true);
+      window.removeEventListener('resize', place);
     };
   }, [open]);
 
   const close = useCallback(() => {
     setOpen(false);
-    setQuery("");
+    setQuery('');
   }, []);
 
   // Escape while the menu is open closes ONLY the menu — it must not bubble
@@ -171,13 +171,13 @@ export function Combobox<V extends string | number = string | number>({
   useEffect(() => {
     if (!open) return;
     const onEsc = (e: KeyboardEvent) => {
-      if (e.key !== "Escape") return;
+      if (e.key !== 'Escape') return;
       e.preventDefault();
       e.stopPropagation();
       close();
     };
-    window.addEventListener("keydown", onEsc, true);
-    return () => window.removeEventListener("keydown", onEsc, true);
+    window.addEventListener('keydown', onEsc, true);
+    return () => window.removeEventListener('keydown', onEsc, true);
   }, [open, close]);
 
   const commit = useCallback(
@@ -190,7 +190,7 @@ export function Combobox<V extends string | number = string | number>({
 
   const onKeyDown = (e: React.KeyboardEvent) => {
     if (!open) {
-      if (e.key === "Enter" || e.key === " " || e.key === "ArrowDown") {
+      if (e.key === 'Enter' || e.key === ' ' || e.key === 'ArrowDown') {
         e.preventDefault();
         setOpen(true);
       }
@@ -198,17 +198,17 @@ export function Combobox<V extends string | number = string | number>({
     }
     // Escape is handled by the capture-phase window listener above so it
     // never bubbles to an ancestor Dialog — don't duplicate it here.
-    if (e.key === "ArrowDown") {
+    if (e.key === 'ArrowDown') {
       e.preventDefault();
       setActiveIdx((i) => Math.min(i + 1, Math.max(filtered.length - 1, 0)));
       return;
     }
-    if (e.key === "ArrowUp") {
+    if (e.key === 'ArrowUp') {
       e.preventDefault();
       setActiveIdx((i) => Math.max(i - 1, 0));
       return;
     }
-    if (e.key === "Enter") {
+    if (e.key === 'Enter') {
       e.preventDefault();
       // If the typed query has no exact match and "+ Add" is wired up,
       // commit the typed value directly. This makes the picker feel
@@ -243,10 +243,10 @@ export function Combobox<V extends string | number = string | number>({
     ? exactMatch
       ? null
       : `Add "${trimmedQuery}"`
-    : (addNewLabel ?? "Add new");
+    : (addNewLabel ?? 'Add new');
 
   return (
-    <div ref={rootRef} className={cn("relative", className)}>
+    <div ref={rootRef} className={cn('relative', className)}>
       <button
         type="button"
         disabled={disabled}
@@ -256,13 +256,13 @@ export function Combobox<V extends string | number = string | number>({
         onClick={() => !disabled && setOpen((o) => !o)}
         onKeyDown={onKeyDown}
         className={cn(
-          "flex w-full h-12 items-center justify-between gap-2 rounded-[10px] border border-[var(--color-input)] bg-white px-3.5 py-2 text-left text-[15px] text-[var(--color-foreground)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-ring)] disabled:cursor-not-allowed disabled:opacity-50",
+          'flex w-full h-12 items-center justify-between gap-2 rounded-[10px] border border-[var(--color-input)] bg-white px-3.5 py-2 text-left text-[15px] text-[var(--color-foreground)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-ring)] disabled:cursor-not-allowed disabled:opacity-50',
         )}
       >
         <span
           className={cn(
-            "truncate",
-            !selected && "text-[var(--color-muted-foreground)]",
+            'truncate',
+            !selected && 'text-[var(--color-muted-foreground)]',
           )}
         >
           {selected ? selected.label : placeholder}
@@ -279,7 +279,7 @@ export function Combobox<V extends string | number = string | number>({
           <div
             ref={dropdownRef}
             style={{
-              position: "fixed",
+              position: 'fixed',
               top: menuRect.top,
               left: menuRect.left,
               width: menuRect.width,
@@ -339,13 +339,13 @@ export function Combobox<V extends string | number = string | number>({
                       onMouseEnter={() => setActiveIdx(idx)}
                       onClick={() => commit(o)}
                       className={cn(
-                        "flex w-full items-center justify-between gap-2 px-3 py-2 text-left text-[14px]",
+                        'flex w-full items-center justify-between gap-2 px-3 py-2 text-left text-[14px]',
                         o.disabled
-                          ? "cursor-not-allowed opacity-50"
-                          : "cursor-pointer",
+                          ? 'cursor-not-allowed opacity-50'
+                          : 'cursor-pointer',
                         isActive
-                          ? "bg-[var(--color-muted)]"
-                          : "hover:bg-[var(--color-muted)]",
+                          ? 'bg-[var(--color-muted)]'
+                          : 'hover:bg-[var(--color-muted)]',
                       )}
                     >
                       <span className="min-w-0 flex-1">

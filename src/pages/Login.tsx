@@ -280,24 +280,24 @@ async function handleSendOtp(e: FormEvent) {
           </div>
           <div className="mb-8 hidden lg:block">
             <h1 className="font-serif text-3xl text-[var(--color-foreground)]">
-              {t("auth.title")}
+              {t('auth.title')}
             </h1>
             <p className="mt-1 text-sm text-[var(--color-muted-foreground)]">
-              {t("auth.subtitle")}
+              {t('auth.subtitle')}
             </p>
           </div>
 
           <Card>
             <CardHeader>
-              <CardTitle>{t("auth.title")}</CardTitle>
-              {step === "otp" && (
+              <CardTitle>{t('auth.title')}</CardTitle>
+              {step === 'otp' && (
                 <CardDescription>
-                  {t("auth.otpHelp", { mobile: toE164(mobile) })}
+                  {t('auth.otpHelp', { mobile: toE164(mobile) })}
                 </CardDescription>
               )}
             </CardHeader>
 
-            {step === "mobile" ? (
+            {step === 'mobile' ? (
               <form onSubmit={handleSendOtp}>
                 <CardContent className="space-y-4">
                   {error && (
@@ -309,7 +309,7 @@ async function handleSendOtp(e: FormEvent) {
                     </div>
                   )}
                   <div>
-                    <Label htmlFor="mobile">{t("auth.mobileLabel")}</Label>
+                    <Label htmlFor="mobile">{t('auth.mobileLabel')}</Label>
                     <div className="flex items-stretch gap-2">
                       <span className="inline-flex items-center rounded-[var(--radius-md)] border border-[var(--color-input)] bg-[var(--color-muted)] px-3 text-sm text-[var(--color-muted-foreground)]">
                         +91
@@ -322,11 +322,11 @@ async function handleSendOtp(e: FormEvent) {
                         inputMode="numeric"
                         pattern="[0-9]*"
                         maxLength={10}
-                        placeholder={t("auth.mobilePlaceholder")}
+                        placeholder={t('auth.mobilePlaceholder')}
                         value={mobile}
                         onChange={(e) =>
                           setMobile(
-                            e.target.value.replace(/\D/g, "").slice(0, 10),
+                            e.target.value.replace(/\D/g, '').slice(0, 10),
                           )
                         }
                         required
@@ -334,7 +334,7 @@ async function handleSendOtp(e: FormEvent) {
                       />
                     </div>
                     <p className="mt-1 text-xs text-[var(--color-muted-foreground)]">
-                      {t("auth.mobileHelp")}
+                      {t('auth.mobileHelp')}
                     </p>
                   </div>
                 </CardContent>
@@ -344,7 +344,7 @@ async function handleSendOtp(e: FormEvent) {
                     disabled={submitting}
                     className="w-full"
                   >
-                    {submitting ? t("auth.sendingOtp") : t("auth.sendOtp")}
+                    {submitting ? t('auth.sendingOtp') : t('auth.sendOtp')}
                   </Button>
                 </CardFooter>
               </form>
@@ -361,7 +361,7 @@ async function handleSendOtp(e: FormEvent) {
                   )}
                   <div>
                     <Label className="block mb-2 text-center">
-                      {t("auth.otpLabel")}
+                      {t('auth.otpLabel')}
                     </Label>
                     <OtpInput
                       value={otp}
@@ -375,13 +375,13 @@ async function handleSendOtp(e: FormEvent) {
                     <button
                       type="button"
                       onClick={() => {
-                        setStep("mobile");
-                        setOtp("");
+                        setStep('mobile');
+                        setOtp('');
                         setError(null);
                       }}
                       className="text-[var(--color-muted-foreground)] hover:text-[var(--color-foreground)] underline-offset-4 hover:underline"
                     >
-                      {t("auth.changeMobile")}
+                      {t('auth.changeMobile')}
                     </button>
                     <button
                       type="button"
@@ -390,8 +390,8 @@ async function handleSendOtp(e: FormEvent) {
                       className="text-[var(--color-primary)] disabled:text-[var(--color-muted-foreground)] disabled:cursor-not-allowed underline-offset-4 hover:underline"
                     >
                       {cooldown > 0
-                        ? t("auth.resendIn", { seconds: cooldown })
-                        : t("auth.resendOtp")}
+                        ? t('auth.resendIn', { seconds: cooldown })
+                        : t('auth.resendOtp')}
                     </button>
                   </div>
                 </CardContent>
@@ -401,7 +401,7 @@ async function handleSendOtp(e: FormEvent) {
                     disabled={submitting}
                     className="w-full"
                   >
-                    {submitting ? t("auth.loggingIn") : t("auth.verifyOtp")}
+                    {submitting ? t('auth.loggingIn') : t('auth.verifyOtp')}
                   </Button>
                 </CardFooter>
               </form>

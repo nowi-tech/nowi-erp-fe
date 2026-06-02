@@ -37,7 +37,7 @@ export class ErrorBoundary extends Component<Props, State> {
     Sentry.captureException(error, {
       extra: { componentStack: info.componentStack },
     });
-    // eslint-disable-next-line no-console
+     
     console.error('[ErrorBoundary]', error, info.componentStack);
   }
 

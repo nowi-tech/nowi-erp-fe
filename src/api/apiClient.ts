@@ -12,7 +12,7 @@ const API_URL = RAW
     ? 'http://localhost:3001'
     : (() => {
         // Generic message — don't leak deploy/config internals to users.
-        // eslint-disable-next-line no-console
+         
         console.error('API endpoint is not configured.');
         throw new Error('Application is not configured correctly.');
       })();

@@ -1,12 +1,12 @@
-import { useCallback, useEffect, useState } from "react";
-import { useNavigate, useSearchParams } from "react-router-dom";
-import { useTranslation } from "react-i18next";
-import { Search } from "lucide-react";
-import { Badge } from "@/components/ui/badge";
-import { Input } from "@/components/ui/input";
-import { useToast } from "@/components/ui/toast";
-import Approval1Dialog from "@/components/styles/Approval1Dialog";
-import ParkDialog from "@/components/styles/ParkDialog";
+import { useCallback, useEffect, useState } from 'react';
+import { useNavigate, useSearchParams } from 'react-router-dom';
+import { useTranslation } from 'react-i18next';
+import { Search } from 'lucide-react';
+import { Badge } from '@/components/ui/badge';
+import { Input } from '@/components/ui/input';
+import { useToast } from '@/components/ui/toast';
+import Approval1Dialog from '@/components/styles/Approval1Dialog';
+import ParkDialog from '@/components/styles/ParkDialog';
 import {
   StyleQueueTable,
   QueueTabs,
@@ -19,17 +19,17 @@ import {
   GhostActionButton,
   RowChevron,
   type QueueColumn,
-} from "@/components/styles/StyleQueueTable";
+} from '@/components/styles/StyleQueueTable';
 import {
   getDashboardStyles,
   type DashboardStyleRow,
   type DashboardStyleTab,
-} from "@/api/dashboard";
-import { approveStyle, parkStyle } from "@/api/styles";
-import { useAuth } from "@/context/auth";
-import { hasAnyRole } from "@/lib/userRoles";
-import { useDebounced } from "@/lib/useDebounced";
-import { formatStyleRef } from "@/lib/styleRef";
+} from '@/api/dashboard';
+import { approveStyle, parkStyle } from '@/api/styles';
+import { useAuth } from '@/context/auth';
+import { hasAnyRole } from '@/lib/userRoles';
+import { useDebounced } from '@/lib/useDebounced';
+import { formatStyleRef } from '@/lib/styleRef';
 
 /**
  * Self-contained Home content surface — the per-style "Styles in flight"
@@ -51,42 +51,42 @@ interface Props {
 }
 
 const TABS: DashboardStyleTab[] = [
-  "all",
-  "sampling",
-  "in_production",
-  "live",
-  "needs_attention",
+  'all',
+  'sampling',
+  'in_production',
+  'live',
+  'needs_attention',
 ];
 
 // Roles allowed to Park a style once it's past `draft` (Approval #1 has
 // minted the Style #). Mirrors the post-approval park guard in the spec.
-const POST_APPROVAL_PARK_ROLES = ["admin", "sampling_lead"] as const;
+const POST_APPROVAL_PARK_ROLES = ['admin', 'sampling_lead'] as const;
 
 // Roles allowed to Approve (Approval #1) — mirrors the BE APPROVER_ROLES
 // set in dashboard.service.ts. Home's allow-list is wide (viewers,
 // data managers, etc. all land here), so the inline Approve button must
 // be role-gated, not just lifecycle-gated, or non-approvers 403.
 const APPROVER_ROLES = [
-  "admin",
-  "sampling_lead",
-  "pattern_master_w",
-  "pattern_master_m",
-  "china_import_approver",
+  'admin',
+  'sampling_lead',
+  'pattern_master_w',
+  'pattern_master_m',
+  'china_import_approver',
 ] as const;
 
 // Roles allowed to Park a draft (pre-approval) — mirrors StylesTable.tsx
 // WRITE_ROLES (the styles write set on the BE).
 const PARK_WRITE_ROLES = [
-  "admin",
-  "sampling_editor",
-  "sampling_lead",
-  "pattern_master_w",
-  "pattern_master_m",
-  "operator",
+  'admin',
+  'sampling_editor',
+  'sampling_lead',
+  'pattern_master_w',
+  'pattern_master_m',
+  'operator',
 ] as const;
 
 export default function StylesInFlightTable({
-  initialTab = "all",
+  initialTab = 'all',
   onActionDone,
 }: Props) {
   const { t } = useTranslation();
@@ -96,7 +96,7 @@ export default function StylesInFlightTable({
   const [searchParams, setSearchParams] = useSearchParams();
 
   const [tab, setTab] = useState<DashboardStyleTab>(initialTab);
-  const [searchText, setSearchText] = useState("");
+  const [searchText, setSearchText] = useState('');
   const debouncedSearch = useDebounced(searchText, 300);
 
   const [rows, setRows] = useState<DashboardStyleRow[]>([]);
@@ -153,57 +153,57 @@ export default function StylesInFlightTable({
   const selectTab = (next: DashboardStyleTab) => {
     setTab(next);
     const params = new URLSearchParams(searchParams);
-    params.set("tab", next);
+    params.set('tab', next);
     setSearchParams(params, { replace: true });
   };
 
   const canApprove = (row: DashboardStyleRow) =>
-    row.lifecycle === "draft" && hasAnyRole(user, APPROVER_ROLES);
+    row.lifecycle === 'draft' && hasAnyRole(user, APPROVER_ROLES);
 
   // Park is open while in `draft` (write roles only); post-approval
   // (anything else) only admins + sampling leads may park inline.
   const canPark = (row: DashboardStyleRow) => {
     if (
-      row.lifecycle === "parked" ||
-      row.lifecycle === "archived" ||
-      row.lifecycle === "dispatched"
+      row.lifecycle === 'parked' ||
+      row.lifecycle === 'archived' ||
+      row.lifecycle === 'dispatched'
     ) {
       return false;
     }
-    if (row.lifecycle === "draft") return hasAnyRole(user, PARK_WRITE_ROLES);
+    if (row.lifecycle === 'draft') return hasAnyRole(user, PARK_WRITE_ROLES);
     return hasAnyRole(user, POST_APPROVAL_PARK_ROLES);
   };
 
   const stageLabel = (row: DashboardStyleRow): string => {
-    if (row.lifecycle === "in_sampling" && row.samplingStatus) {
+    if (row.lifecycle === 'in_sampling' && row.samplingStatus) {
       return t(`admin.styles.samplingSteps.${row.samplingStatus}` as const, {
-        defaultValue: row.samplingStatus.replace(/_/g, " "),
+        defaultValue: row.samplingStatus.replace(/_/g, ' '),
       });
     }
-    if (row.lifecycle === "in_pd" && row.productionStatus) {
+    if (row.lifecycle === 'in_pd' && row.productionStatus) {
       return t(
         `dashboard.table.productionStatus.${row.productionStatus}` as const,
         {
-          defaultValue: row.productionStatus.replace(/_/g, " "),
+          defaultValue: row.productionStatus.replace(/_/g, ' '),
         },
       );
     }
-    return "";
+    return '';
   };
 
   const columns: QueueColumn<DashboardStyleRow>[] = [
     {
-      key: "style",
-      header: t("dashboard.table.columns.style", { defaultValue: "Style" }),
+      key: 'style',
+      header: t('dashboard.table.columns.style', { defaultValue: 'Style' }),
       cell: (row) => {
         // Colour has its own column now; the subline only surfaces the
         // colour-family fan-out count when there are variants.
         const subLine =
           row.colourVariantCount > 0
-            ? t("dashboard.table.colourCount", {
+            ? t('dashboard.table.colourCount', {
                 count: row.colourVariantCount,
               })
-            : "";
+            : '';
         return (
           <div className="flex items-center gap-2.5">
             <Thumbnail
@@ -228,17 +228,17 @@ export default function StylesInFlightTable({
       },
     },
     {
-      key: "lifecycle",
-      header: t("dashboard.table.columns.lifecycle", {
-        defaultValue: "Lifecycle",
+      key: 'lifecycle',
+      header: t('dashboard.table.columns.lifecycle', {
+        defaultValue: 'Lifecycle',
       }),
       cell: (row) => <LifecycleBadge lifecycle={row.lifecycle} />,
     },
     {
-      key: "stage",
-      header: t("dashboard.table.columns.stage", { defaultValue: "Stage" }),
-      className: "hidden md:table-cell",
-      headerClassName: "hidden md:table-cell",
+      key: 'stage',
+      header: t('dashboard.table.columns.stage', { defaultValue: 'Stage' }),
+      className: 'hidden md:table-cell',
+      headerClassName: 'hidden md:table-cell',
       cell: (row) => {
         const stage = stageLabel(row);
         return stage ? (
@@ -251,16 +251,16 @@ export default function StylesInFlightTable({
       },
     },
     {
-      key: "colour",
-      header: t("dashboard.table.columns.colour", { defaultValue: "Colour" }),
-      className: "hidden sm:table-cell",
-      headerClassName: "hidden sm:table-cell",
+      key: 'colour',
+      header: t('dashboard.table.columns.colour', { defaultValue: 'Colour' }),
+      className: 'hidden sm:table-cell',
+      headerClassName: 'hidden sm:table-cell',
       cell: (row) => <ColourCell name={row.primaryColour} />,
     },
     {
-      key: "age",
-      header: t("dashboard.table.columns.updated", { defaultValue: "Updated" }),
-      align: "right",
+      key: 'age',
+      header: t('dashboard.table.columns.updated', { defaultValue: 'Updated' }),
+      align: 'right',
       cell: (row) => <AgeCell iso={row.updatedAt} />,
     },
   ];
@@ -285,7 +285,7 @@ export default function StylesInFlightTable({
         />
         <Input
           className="h-9 text-[13px] pl-9"
-          placeholder={t("dashboard.table.searchPlaceholder")}
+          placeholder={t('dashboard.table.searchPlaceholder')}
           value={searchText}
           onChange={(e) => setSearchText(e.target.value)}
         />
@@ -297,11 +297,11 @@ export default function StylesInFlightTable({
         getRowKey={(row) => row.id}
         loading={loading}
         error={error}
-        loadingLabel={t("dashboard.table.loading")}
-        emptyLabel={t("dashboard.table.empty")}
-        errorLabel={t("dashboard.table.error")}
+        loadingLabel={t('dashboard.table.loading')}
+        emptyLabel={t('dashboard.table.empty')}
+        errorLabel={t('dashboard.table.error')}
         onRowClick={openStyle}
-        rowAccent={(row) => row.lifecycle === "draft"}
+        rowAccent={(row) => row.lifecycle === 'draft'}
         renderActions={(row) => {
           const approve = canApprove(row);
           const park = canPark(row);
@@ -316,7 +316,7 @@ export default function StylesInFlightTable({
                   icon="park"
                   onClick={() => setParkTarget(row)}
                 >
-                  {t("dashboard.table.actions.park")}
+                  {t('dashboard.table.actions.park')}
                 </GhostActionButton>
               )}
               {approve && (
@@ -338,15 +338,15 @@ export default function StylesInFlightTable({
           setApprovalBusy(true);
           try {
             await approveStyle(approvalTarget.id, body);
-            toast.show(t("dashboard.table.toast.approved"), "success");
+            toast.show(t('dashboard.table.toast.approved'), 'success');
             setApprovalTarget(null);
             afterAction();
           } catch (e: unknown) {
             const m =
               (e as { response?: { data?: { message?: string | string[] } } })
                 ?.response?.data?.message ??
-              t("dashboard.table.toast.approveError");
-            toast.show(Array.isArray(m) ? m.join(", ") : String(m), "error");
+              t('dashboard.table.toast.approveError');
+            toast.show(Array.isArray(m) ? m.join(', ') : String(m), 'error');
           } finally {
             setApprovalBusy(false);
           }
@@ -358,22 +358,22 @@ export default function StylesInFlightTable({
         open={parkTarget !== null}
         busy={parkBusy}
         styleLabel={parkTarget ? formatStyleRef(parkTarget) : null}
-        approved={parkTarget ? parkTarget.lifecycle !== "draft" : false}
+        approved={parkTarget ? parkTarget.lifecycle !== 'draft' : false}
         onClose={() => setParkTarget(null)}
         onConfirm={async (reason) => {
           if (!parkTarget) return;
           setParkBusy(true);
           try {
             await parkStyle(parkTarget.id, { reason });
-            toast.show(t("dashboard.table.toast.parked"), "success");
+            toast.show(t('dashboard.table.toast.parked'), 'success');
             setParkTarget(null);
             afterAction();
           } catch (e: unknown) {
             const m =
               (e as { response?: { data?: { message?: string | string[] } } })
                 ?.response?.data?.message ??
-              t("dashboard.table.toast.parkError");
-            toast.show(Array.isArray(m) ? m.join(", ") : String(m), "error");
+              t('dashboard.table.toast.parkError');
+            toast.show(Array.isArray(m) ? m.join(', ') : String(m), 'error');
           } finally {
             setParkBusy(false);
           }

@@ -5,34 +5,34 @@ import {
   useMemo,
   useRef,
   useState,
-} from "react";
-import { useTranslation } from "react-i18next";
+} from 'react';
+import { useTranslation } from 'react-i18next';
 
-import { Input } from "@/components/ui/input";
-import { Textarea } from "@/components/ui/textarea";
-import { Label } from "@/components/ui/label";
-import { Skeleton } from "@/components/ui/skeleton";
-import { Combobox, type ComboboxOption } from "@/components/ui/combobox";
+import { Input } from '@/components/ui/input';
+import { Textarea } from '@/components/ui/textarea';
+import { Label } from '@/components/ui/label';
+import { Skeleton } from '@/components/ui/skeleton';
+import { Combobox, type ComboboxOption } from '@/components/ui/combobox';
 
-import PatternCadInput from "@/components/shared/PatternCadInput";
-import IntakeCard from "@/components/styles/intake/IntakeCard";
-import GenderSegment from "@/components/styles/intake/GenderSegment";
-import CategoryPicker from "@/components/styles/intake/CategoryPicker";
-import FabricPicker from "@/components/styles/intake/FabricPicker";
-import ColourPicker from "@/components/styles/intake/ColourPicker";
-import ReferenceImageGrid from "@/components/styles/intake/ReferenceImageGrid";
+import PatternCadInput from '@/components/shared/PatternCadInput';
+import IntakeCard from '@/components/styles/intake/IntakeCard';
+import GenderSegment from '@/components/styles/intake/GenderSegment';
+import CategoryPicker from '@/components/styles/intake/CategoryPicker';
+import FabricPicker from '@/components/styles/intake/FabricPicker';
+import ColourPicker from '@/components/styles/intake/ColourPicker';
+import ReferenceImageGrid from '@/components/styles/intake/ReferenceImageGrid';
 import {
   GENDER_CATEGORIES,
   deriveArticleCategory,
   type FineCategoryCode,
-} from "@/components/styles/intake/categoryOptions";
+} from '@/components/styles/intake/categoryOptions';
 
 import {
   listStyles,
   spawnColourVariant,
   type LinkExtractResult,
-} from "@/api/styles";
-import { cn } from "@/lib/utils";
+} from '@/api/styles';
+import { cn } from '@/lib/utils';
 
 import type {
   CategoryWithStyleCode,
@@ -40,7 +40,7 @@ import type {
   Gender,
   Style,
   StyleSource,
-} from "@/api/types";
+} from '@/api/types';
 
 /**
  * The three submission paths offered at the top of a *new* sampling
@@ -54,7 +54,7 @@ import type {
  *
  * The fork only exists in create mode; edit never re-forks a style.
  */
-export type SubmissionForkMode = "new" | "colour" | "based_on";
+export type SubmissionForkMode = 'new' | 'colour' | 'based_on';
 
 /**
  * Shared intake / edit form for the Product Development module.
@@ -109,8 +109,8 @@ export interface StyleIntakeFormProps {
   /** Notified when the form becomes valid / invalid, so the parent
    *  can enable/disable its submit button without polling. */
   onValidityChange?: (valid: boolean) => void;
-  /** Notified when the user changes gender — the page's ReviewerCard
-   *  + sticky footer label depend on it. */
+  /** Notified when the user changes gender — optional hook for parents
+   *  that surface a gender-dependent label. */
   onGenderChange?: (next: Gender) => void;
   /** Notified when the user switches the submission fork (new / colour /
    *  based-on) so the page can adapt its copy. Create mode only. */
@@ -154,10 +154,10 @@ function defaultCategoryCode(gender: Gender): FineCategoryCode {
  * a known state.
  */
 function toFormGender(g: unknown): Gender {
-  if (g === "W" || g === "women") return "women";
-  if (g === "M" || g === "men") return "men";
-  if (g === "U" || g === "unisex") return "unisex";
-  return "women";
+  if (g === 'W' || g === 'women') return 'women';
+  if (g === 'M' || g === 'men') return 'men';
+  if (g === 'U' || g === 'unisex') return 'unisex';
+  return 'women';
 }
 
 /**
@@ -166,16 +166,32 @@ function toFormGender(g: unknown): Gender {
  * when the model's confidence was weak. Suggestions are always editable —
  * this is just provenance, not a lock.
  */
-function AiFilledBadge({ low }: { low?: boolean }) {
+function AiFilledBadge({
+  low,
+  source = 'link',
+}: {
+  low?: boolean;
+  source?: 'link' | 'image';
+}) {
   return (
     <span
       className={cn(
-        "ml-2 inline-flex items-center gap-0.5 rounded-full px-1.5 py-0.5 align-middle text-[10px] font-medium",
-        low ? "bg-amber-100 text-amber-700" : "bg-violet-100 text-violet-700",
+        'ml-2 inline-flex items-center gap-0.5 rounded-full px-1.5 py-0.5 align-middle text-[10px] font-medium',
+        low ? 'bg-amber-100 text-amber-700' : 'bg-violet-100 text-violet-700',
       )}
     >
-      ✨ {low ? "check this" : "from link"}
+      ✨ {low ? 'check this' : `from ${source}`}
     </span>
+  );
+}
+
+/** Hint shown under a field an extraction ran for but couldn't auto-detect,
+ *  nudging the user to fill it manually. */
+function MissedHint() {
+  return (
+    <p className="mt-1 text-[11px] text-amber-600">
+      Couldn’t auto-detect — please fill this in.
+    </p>
   );
 }
 
@@ -189,9 +205,9 @@ function splitTimelineFromReason(reason: string | null | undefined): {
   reason: string;
   timeline: string;
 } {
-  if (!reason) return { reason: "", timeline: "" };
+  if (!reason) return { reason: '', timeline: '' };
   const match = /\n?\s*Sampling timeline:\s*([0-9]+)\s*$/.exec(reason);
-  if (!match) return { reason, timeline: "" };
+  if (!match) return { reason, timeline: '' };
   return {
     reason: reason.slice(0, match.index).trimEnd(),
     timeline: match[1],
@@ -201,20 +217,20 @@ function splitTimelineFromReason(reason: string | null | undefined): {
 function buildInitialForm(style: Style | null | undefined): FormState {
   if (!style) {
     return {
-      workingName: "",
-      developmentReason: "",
+      workingName: '',
+      developmentReason: '',
       fabricId: null,
-      sampleFabricRequired: "",
-      gender: "women",
+      sampleFabricRequired: '',
+      gender: 'women',
       categoryId: null,
-      categoryCode: defaultCategoryCode("women"),
-      primaryColour: "",
-      referenceLink: "",
+      categoryCode: defaultCategoryCode('women'),
+      primaryColour: '',
+      referenceLink: '',
       referenceImages: [],
       referenceImageUrl: null,
       patternCadPaths: [],
-      remark: "",
-      samplingTimeline: "",
+      remark: '',
+      samplingTimeline: '',
     };
   }
   const { reason, timeline } = splitTimelineFromReason(style.developmentReason);
@@ -223,24 +239,24 @@ function buildInitialForm(style: Style | null | undefined): FormState {
   const categoryId =
     (style as unknown as { categoryId?: number }).categoryId ?? null;
   return {
-    workingName: style.workingName ?? "",
+    workingName: style.workingName ?? '',
     developmentReason: reason,
     fabricId: style.fabricId ?? null,
     sampleFabricRequired:
       style.sampleFabricRequired == null
-        ? ""
+        ? ''
         : String(style.sampleFabricRequired),
     gender: toFormGender(style.gender),
     categoryId,
     categoryCode:
       (style.categoryCode as FineCategoryCode | null) ??
       defaultCategoryCode(toFormGender(style.gender)),
-    primaryColour: style.primaryColour ?? "",
-    referenceLink: style.referenceLink ?? "",
+    primaryColour: style.primaryColour ?? '',
+    referenceLink: style.referenceLink ?? '',
     referenceImages: style.referenceImages ?? [],
     referenceImageUrl: style.referenceImageUrl ?? null,
     patternCadPaths: style.patternCadPaths ?? [],
-    remark: style.remark ?? "",
+    remark: style.remark ?? '',
     samplingTimeline: timeline,
   };
 }
@@ -264,19 +280,19 @@ function ForkCard({
       aria-checked={active}
       onClick={onSelect}
       className={cn(
-        "flex items-start gap-3 rounded-[var(--radius-md)] border p-3.5 text-left transition-colors",
+        'flex items-start gap-3 rounded-[var(--radius-md)] border p-3.5 text-left transition-colors',
         active
-          ? "border-[var(--color-primary)] bg-[var(--color-primary)]/5 shadow-sm"
-          : "border-[var(--color-border)] bg-[var(--color-surface)] hover:border-[var(--color-primary)]/40",
+          ? 'border-[var(--color-primary)] bg-[var(--color-primary)]/5 shadow-sm'
+          : 'border-[var(--color-border)] bg-[var(--color-surface)] hover:border-[var(--color-primary)]/40',
       )}
     >
       <span
         aria-hidden
         className={cn(
-          "mt-0.5 flex h-4 w-4 shrink-0 items-center justify-center rounded-full border",
+          'mt-0.5 flex h-4 w-4 shrink-0 items-center justify-center rounded-full border',
           active
-            ? "border-[var(--color-primary)]"
-            : "border-[var(--color-input)]",
+            ? 'border-[var(--color-primary)]'
+            : 'border-[var(--color-input)]',
         )}
       >
         {active && (
@@ -333,7 +349,7 @@ function StyleRefPicker({
   // flaky search never blocks the form (same pattern as ColourPicker).
   useEffect(() => {
     let mounted = true;
-    void listStyles({ source: "sampling", take: 100 })
+    void listStyles({ source: 'sampling', take: 100 })
       .then((res) => {
         if (mounted) setResults(res.data);
       })
@@ -355,10 +371,10 @@ function StyleRefPicker({
     const mapped = rows.map<ComboboxOption<number>>((s) => ({
       value: s.id,
       label: styleLabel(s),
-      sublabel: [s.workingName, s.primaryColour].filter(Boolean).join(" · "),
+      sublabel: [s.workingName, s.primaryColour].filter(Boolean).join(' · '),
       searchText: [s.styleId, s.workingName, s.primaryColour]
         .filter(Boolean)
-        .join(" "),
+        .join(' '),
     }));
     // A typed-only code (based-on) shows as a synthetic selected option
     // so the closed trigger reflects the choice.
@@ -423,7 +439,7 @@ const StyleIntakeForm = forwardRef<StyleIntakeFormHandle, StyleIntakeFormProps>(
     handleRef,
   ) {
     const { t } = useTranslation();
-    const isChinaImport = source === "china_import";
+    const isChinaImport = source === 'china_import';
     const isEdit = !!style;
     // The A/B/C submission fork only applies to a NEW sampling intake.
     // China-import has its own simplified path; edit never re-forks.
@@ -431,7 +447,7 @@ const StyleIntakeForm = forwardRef<StyleIntakeFormHandle, StyleIntakeFormProps>(
 
     const [form, setForm] = useState<FormState>(() => buildInitialForm(style));
     // Submission fork (create + sampling only). Defaults to the net-new path.
-    const [forkMode, setForkMode] = useState<SubmissionForkMode>("new");
+    const [forkMode, setForkMode] = useState<SubmissionForkMode>('new');
     const [forkTarget, setForkTarget] = useState<ForkTarget>(null);
 
     // Re-seed when the parent swaps the style under us (e.g. modal
@@ -451,52 +467,76 @@ const StyleIntakeForm = forwardRef<StyleIntakeFormHandle, StyleIntakeFormProps>(
     // the per-field "from link" badge and is cleared when the user edits.
     const genderTouched = useRef(false);
     const [aiFilled, setAiFilled] = useState<Record<string, boolean>>({});
+    // Fields an extraction ran for but couldn't fill — drives a "couldn't
+    // auto-detect, please fill" hint under that field.
+    const [aiMissed, setAiMissed] = useState<Record<string, boolean>>({});
     const [aiLowConfidence, setAiLowConfidence] = useState(false);
+    // Where the last auto-fill came from — drives "from link" vs "from image"
+    // on the badges + the status copy.
+    const [aiOrigin, setAiOrigin] = useState<'link' | 'image'>('link');
     // Inline feedback shown under the reference-link input.
     const [linkStatus, setLinkStatus] = useState<{
       loading: boolean;
       result?: LinkExtractResult;
+      origin?: 'link' | 'image';
+      retry?: () => void;
     } | null>(null);
     // While a link is being read, shimmer the auto-fillable fields that are
     // still empty so the user sees they're about to populate.
     const extracting = !!linkStatus?.loading;
     const FIELD_SKELETON = <Skeleton className="h-10 w-full" />;
 
-    const clearAiBadge = (k: string) =>
+    // Clear both the "from link" badge and the "couldn't detect" hint once
+    // the user touches a field.
+    const clearAiBadge = (k: string) => {
       setAiFilled((prev) => (prev[k] ? { ...prev, [k]: false } : prev));
+      setAiMissed((prev) => (prev[k] ? { ...prev, [k]: false } : prev));
+    };
 
-    const handleExtracted = (r: LinkExtractResult) => {
+    const handleExtracted = (
+      r: LinkExtractResult,
+      origin: 'link' | 'image' = 'link',
+    ) => {
       if (!r.ok) return;
+      setAiOrigin(origin);
       setAiLowConfidence(
-        typeof r.confidence === "number" && r.confidence < 0.5,
+        typeof r.confidence === 'number' && r.confidence < 0.5,
       );
       const filled: string[] = [];
+      const missed: string[] = [];
       setForm((f) => {
         const patch: Partial<FormState> = {};
         // Working name — only when still blank. Prefer the AI-cleaned `name`
         // (no brand/SEO), never the raw marketplace title.
-        if (!f.workingName.trim() && r.name) {
-          patch.workingName = r.name;
-          filled.push("name");
+        if (!f.workingName.trim()) {
+          if (r.name) {
+            patch.workingName = r.name;
+            filled.push('name');
+          } else missed.push('name');
         }
         if (!genderTouched.current && r.gender) {
           patch.gender = toFormGender(r.gender);
-          filled.push("gender");
+          filled.push('gender');
         }
         // Drive category off the resolved categoryId (unambiguous), then
         // mirror its `code` into the form's categoryCode. Only when empty.
-        if (f.categoryId == null && r.categoryId != null) {
-          const cat = categories.find((c) => c.id === r.categoryId);
+        if (f.categoryId == null) {
+          const cat =
+            r.categoryId != null
+              ? categories.find((c) => c.id === r.categoryId)
+              : undefined;
           if (cat) {
             patch.categoryId = cat.id;
-            patch.categoryCode = (cat.code ?? "")
+            patch.categoryCode = (cat.code ?? '')
               .toUpperCase() as FineCategoryCode;
-            filled.push("category");
-          }
+            filled.push('category');
+          } else missed.push('category');
         }
-        if (!f.primaryColour.trim() && r.colour) {
-          patch.primaryColour = r.colour;
-          filled.push("colour");
+        if (!f.primaryColour.trim()) {
+          if (r.colour) {
+            patch.primaryColour = r.colour;
+            filled.push('colour');
+          } else missed.push('colour');
         }
         return Object.keys(patch).length ? { ...f, ...patch } : f;
       });
@@ -507,38 +547,49 @@ const StyleIntakeForm = forwardRef<StyleIntakeFormHandle, StyleIntakeFormProps>(
           return next;
         });
       }
+      if (missed.length) {
+        setAiMissed((prev) => {
+          const next = { ...prev };
+          for (const k of missed) next[k] = true;
+          return next;
+        });
+      }
     };
 
     // Gender → category cascade. Switching gender resets category if
     // the current one isn't valid for the new gender bucket.
     // Human summary of what a link read produced, for the inline hint.
-    const summarizeExtract = (r: LinkExtractResult): string => {
+    const summarizeExtract = (
+      r: LinkExtractResult,
+      origin: 'link' | 'image',
+    ): string => {
+      const src = origin === 'image' ? 'image' : 'link';
       const bits: string[] = [];
-      if (r.imageUrl) bits.push("image");
+      if (origin !== 'image' && r.imageUrl) bits.push('image');
       if (r.name) bits.push(`“${r.name}”`);
       if (r.gender)
-        bits.push({ W: "Women", M: "Men", U: "Unisex" }[r.gender]);
+        bits.push({ W: 'Women', M: 'Men', U: 'Unisex' }[r.gender]);
       if (r.categoryId != null) {
         const c = categories.find((x) => x.id === r.categoryId);
         if (c) bits.push(c.name);
       }
       if (r.colour) bits.push(r.colour);
       return bits.length
-        ? `From link: ${bits.join(" · ")}`
-        : "Read the link, but couldn’t detect details — fill them manually.";
+        ? `From ${src}: ${bits.join(' · ')}`
+        : `Read the ${src}, but couldn’t detect details — fill them manually.`;
     };
 
     const onGenderChange = (next: Gender) => {
       genderTouched.current = true;
-      clearAiBadge("gender");
+      clearAiBadge('gender');
       setForm((f) => {
         const allowed = GENDER_CATEGORIES[next];
-        const currentCode = (f.categoryCode ?? "").toString().toUpperCase();
+        const currentCode = (f.categoryCode ?? '').toString().toUpperCase();
         const stillValid = (allowed as readonly string[]).includes(currentCode);
         if (stillValid) return { ...f, gender: next };
         const code = allowed[0];
         const hit = categories.find(
-          (c) => (c.code ?? "").toUpperCase() === code,
+          (c) => (c.code ?? '').toUpperCase() === code,
         );
         return {
           ...f,
@@ -601,10 +652,10 @@ const StyleIntakeForm = forwardRef<StyleIntakeFormHandle, StyleIntakeFormProps>(
     // variant whose defining attribute is blank is meaningless, and the
     // spawn endpoint would otherwise persist an empty string.
     const forkTargetOk =
-      forkMode === "colour"
+      forkMode === 'colour'
         ? forkTarget?.style != null && form.primaryColour.trim().length > 0
         : forkTarget != null;
-    const needsForkTarget = showFork && forkMode !== "new";
+    const needsForkTarget = showFork && forkMode !== 'new';
     const isValid =
       form.workingName.trim().length > 0 && (!needsForkTarget || forkTargetOk);
 
@@ -644,10 +695,10 @@ const StyleIntakeForm = forwardRef<StyleIntakeFormHandle, StyleIntakeFormProps>(
         form.developmentReason.trim(),
         form.samplingTimeline.trim()
           ? `Sampling timeline: ${form.samplingTimeline.trim()}`
-          : "",
+          : '',
       ]
         .filter(Boolean)
-        .join("\n");
+        .join('\n');
 
       const samplingBody: Record<string, unknown> = {
         ...base,
@@ -666,7 +717,7 @@ const StyleIntakeForm = forwardRef<StyleIntakeFormHandle, StyleIntakeFormProps>(
       // the `based_on` branch decorates the create payload, and it
       // sends `basedOnStyleId` / `basedOnStyleCode` ONLY (never
       // familyCode / parentStyleId; those belong to the colour path).
-      if (showFork && forkMode === "based_on" && forkTarget) {
+      if (showFork && forkMode === 'based_on' && forkTarget) {
         if (forkTarget.style) {
           samplingBody.basedOnStyleId = forkTarget.style.id;
         } else {
@@ -690,7 +741,7 @@ const StyleIntakeForm = forwardRef<StyleIntakeFormHandle, StyleIntakeFormProps>(
           // endpoint is /styles/:id/colour-variants); a typed-only
           // code can't address it, so the picker disables submit until
           // a row is resolved for this branch.
-          if (showFork && forkMode === "colour" && forkTarget?.style) {
+          if (showFork && forkMode === 'colour' && forkTarget?.style) {
             const saved = await spawnColourVariant(forkTarget.style.id, {
               primaryColour: form.primaryColour.trim(),
               referenceLink: form.referenceLink.trim() || null,
@@ -725,11 +776,11 @@ const StyleIntakeForm = forwardRef<StyleIntakeFormHandle, StyleIntakeFormProps>(
       ],
     );
 
-    const uomLabel = (u: Fabric["unitOfMeasure"]) => {
-      if (u === "meter") return "m";
-      if (u === "kg") return "kg";
-      if (u === "oz") return "oz";
-      return "m";
+    const uomLabel = (u: Fabric['unitOfMeasure']) => {
+      if (u === 'meter') return 'm';
+      if (u === 'kg') return 'kg';
+      if (u === 'oz') return 'oz';
+      return 'm';
     };
 
     return (
@@ -738,53 +789,53 @@ const StyleIntakeForm = forwardRef<StyleIntakeFormHandle, StyleIntakeFormProps>(
         {showFork && (
           <div className="mb-4">
             <IntakeCard
-              title={t("admin.styles.intake.fork.title")}
-              subtitle={t("admin.styles.intake.fork.subtitle")}
+              title={t('admin.styles.intake.fork.title')}
+              subtitle={t('admin.styles.intake.fork.subtitle')}
             >
               <div
                 role="radiogroup"
-                aria-label={t("admin.styles.intake.fork.title")}
+                aria-label={t('admin.styles.intake.fork.title')}
                 className="grid grid-cols-1 gap-3 sm:grid-cols-3"
               >
                 <ForkCard
-                  active={forkMode === "new"}
-                  title={t("admin.styles.intake.fork.newTitle")}
-                  description={t("admin.styles.intake.fork.newDesc")}
-                  onSelect={() => onForkModeChange("new")}
+                  active={forkMode === 'new'}
+                  title={t('admin.styles.intake.fork.newTitle')}
+                  description={t('admin.styles.intake.fork.newDesc')}
+                  onSelect={() => onForkModeChange('new')}
                 />
                 <ForkCard
-                  active={forkMode === "colour"}
-                  title={t("admin.styles.intake.fork.colourTitle")}
-                  description={t("admin.styles.intake.fork.colourDesc")}
-                  onSelect={() => onForkModeChange("colour")}
+                  active={forkMode === 'colour'}
+                  title={t('admin.styles.intake.fork.colourTitle')}
+                  description={t('admin.styles.intake.fork.colourDesc')}
+                  onSelect={() => onForkModeChange('colour')}
                 />
                 <ForkCard
-                  active={forkMode === "based_on"}
-                  title={t("admin.styles.intake.fork.basedOnTitle")}
-                  description={t("admin.styles.intake.fork.basedOnDesc")}
-                  onSelect={() => onForkModeChange("based_on")}
+                  active={forkMode === 'based_on'}
+                  title={t('admin.styles.intake.fork.basedOnTitle')}
+                  description={t('admin.styles.intake.fork.basedOnDesc')}
+                  onSelect={() => onForkModeChange('based_on')}
                 />
               </div>
 
-              {forkMode !== "new" && (
+              {forkMode !== 'new' && (
                 <div className="mt-4">
                   <Label>
-                    {forkMode === "colour"
-                      ? t("admin.styles.intake.fork.colourPickLabel")
-                      : t("admin.styles.intake.fork.basedOnPickLabel")}
+                    {forkMode === 'colour'
+                      ? t('admin.styles.intake.fork.colourPickLabel')
+                      : t('admin.styles.intake.fork.basedOnPickLabel')}
                   </Label>
                   <StyleRefPicker
                     value={forkTarget}
                     onChange={setForkTarget}
-                    allowCode={forkMode === "based_on"}
-                    placeholder={t("admin.styles.intake.fork.pickPlaceholder")}
-                    emptyLabel={t("admin.styles.intake.fork.pickEmpty")}
-                    addCodeLabel={t("admin.styles.intake.fork.addCode")}
+                    allowCode={forkMode === 'based_on'}
+                    placeholder={t('admin.styles.intake.fork.pickPlaceholder')}
+                    emptyLabel={t('admin.styles.intake.fork.pickEmpty')}
+                    addCodeLabel={t('admin.styles.intake.fork.addCode')}
                   />
                   <p className="mt-1.5 text-[12px] text-[var(--color-muted-foreground)]">
-                    {forkMode === "colour"
-                      ? t("admin.styles.intake.fork.colourHelp")
-                      : t("admin.styles.intake.fork.basedOnHelp")}
+                    {forkMode === 'colour'
+                      ? t('admin.styles.intake.fork.colourHelp')
+                      : t('admin.styles.intake.fork.basedOnHelp')}
                   </p>
                 </div>
               )}
@@ -797,71 +848,73 @@ const StyleIntakeForm = forwardRef<StyleIntakeFormHandle, StyleIntakeFormProps>(
             (no fabric/CAD) and stacks to 1 on small screens. */}
         <div
           className={cn(
-            "grid grid-cols-1 gap-4",
-            isChinaImport ? "lg:grid-cols-2" : "lg:grid-cols-3",
+            'grid grid-cols-1 gap-4',
+            isChinaImport ? 'lg:grid-cols-2' : 'lg:grid-cols-3',
           )}
         >
           {/* Inspiration — the reference link drives the auto-fill */}
           <IntakeCard
-            title={t("admin.styles.intake.inspiration")}
-            subtitle={t("admin.styles.intake.inspirationSubtitle")}
+            title={t('admin.styles.intake.inspiration')}
+            subtitle={t('admin.styles.intake.inspirationSubtitle')}
           >
             <div className="space-y-4">
               <div>
-                <Label>{t("admin.styles.intake.referenceLink")}</Label>
+                <Label>{t('admin.styles.intake.referenceLink')}</Label>
                 <Input
                   value={form.referenceLink}
-                  onChange={(e) => set("referenceLink", e.target.value)}
+                  onChange={(e) => set('referenceLink', e.target.value)}
                   placeholder="https://…"
                 />
                 {linkStatus?.loading ? (
                   <p className="mt-1.5 text-[12px] text-[var(--color-muted-foreground)]">
-                    ✨ Reading link…
+                    {linkStatus.origin === 'image'
+                      ? '✨ Analysing image…'
+                      : '✨ Reading link…'}
                   </p>
                 ) : linkStatus?.result ? (
                   linkStatus.result.ok ? (
                     <p className="mt-1.5 text-[12px] text-violet-600">
-                      {summarizeExtract(linkStatus.result)}
+                      {summarizeExtract(
+                        linkStatus.result,
+                        linkStatus.origin ?? 'link',
+                      )}
                     </p>
                   ) : (
                     <p className="mt-1.5 text-[12px] text-amber-600">
                       {linkStatus.result.reason ??
-                        "Couldn’t read that link — paste or upload the image."}
+                        'Couldn’t read that link — paste or upload the image.'}
+                      {linkStatus.retry && (
+                        <button
+                          type="button"
+                          onClick={linkStatus.retry}
+                          className="ml-2 font-medium underline underline-offset-2 hover:text-amber-700"
+                        >
+                          Retry
+                        </button>
+                      )}
                     </p>
                   )
                 ) : null}
               </div>
               <div>
-                <Label>{t("admin.styles.intake.referenceImage")}</Label>
+                <Label>{t('admin.styles.intake.referenceImage')}</Label>
                 <ReferenceImageGrid
-                  entityId={style?.id ?? "new"}
+                  entityId={style?.id ?? 'new'}
                   value={form.referenceImages}
                   referenceLink={form.referenceLink || null}
-                  onChange={(next) => set("referenceImages", next)}
-                  onPrimaryUrlChange={(u) => set("referenceImageUrl", u)}
+                  onChange={(next) => set('referenceImages', next)}
+                  onPrimaryUrlChange={(u) => set('referenceImageUrl', u)}
                   onExtracted={handleExtracted}
                   onExtractStatus={setLinkStatus}
                 />
               </div>
-              {!isChinaImport && (
-                <div>
-                  <Label>
-                    {t("admin.styles.drawer.fields.patternCad", "Pattern / CAD")}
-                  </Label>
-                  <PatternCadInput
-                    entityId={style?.id ?? "new"}
-                    patternCadPaths={form.patternCadPaths}
-                    onChange={(p) => set("patternCadPaths", p)}
-                  />
-                </div>
-              )}
               {isChinaImport && (
                 <div>
-                  <Label>{t("admin.styles.intake.remark")}</Label>
+                  <Label>{t('admin.styles.intake.remark')}</Label>
                   <Textarea
                     value={form.remark}
-                    onChange={(e) => set("remark", e.target.value)}
-                    placeholder={t("admin.styles.intake.remarkPh")}
+                    onChange={(e) => set('remark', e.target.value)}
+                    placeholder={t('admin.styles.intake.remarkPh')}
                   />
                 </div>
               )}
@@ -870,14 +923,14 @@ const StyleIntakeForm = forwardRef<StyleIntakeFormHandle, StyleIntakeFormProps>(
 
           {/* Article — the auto-filled identity (editable, badged) */}
           <IntakeCard
-            title={t("admin.styles.intake.article")}
-            subtitle={t("admin.styles.intake.articleSubtitle")}
+            title={t('admin.styles.intake.article')}
+            subtitle={t('admin.styles.intake.articleSubtitle')}
           >
             <div className="space-y-4">
               <div>
                 <Label>
-                  {t("admin.styles.intake.workingName")} *
-                  {aiFilled.name && <AiFilledBadge />}
+                  {t('admin.styles.intake.workingName')} *
+                  {aiFilled.name && <AiFilledBadge source={aiOrigin} />}
                 </Label>
                 {extracting && !form.workingName.trim() ? (
                   FIELD_SKELETON
@@ -885,18 +938,19 @@ const StyleIntakeForm = forwardRef<StyleIntakeFormHandle, StyleIntakeFormProps>(
                   <Input
                     value={form.workingName}
                     onChange={(e) => {
-                      clearAiBadge("name");
-                      set("workingName", e.target.value);
+                      clearAiBadge('name');
+                      set('workingName', e.target.value);
                     }}
-                    placeholder={t("admin.styles.intake.workingNamePh")}
+                    placeholder={t('admin.styles.intake.workingNamePh')}
                     autoFocus={!isEdit}
                   />
                 )}
+                {aiMissed.name && <MissedHint />}
               </div>
               <div>
                 <Label>
-                  {t("admin.styles.intake.gender")}
-                  {aiFilled.gender && <AiFilledBadge />}
+                  {t('admin.styles.intake.gender')}
+                  {aiFilled.gender && <AiFilledBadge source={aiOrigin} />}
                 </Label>
                 {extracting && !genderTouched.current ? (
                   FIELD_SKELETON
@@ -905,18 +959,18 @@ const StyleIntakeForm = forwardRef<StyleIntakeFormHandle, StyleIntakeFormProps>(
                     value={form.gender}
                     onChange={onGenderChange}
                     labels={{
-                      women: t("admin.styles.intake.genderWomen"),
-                      men: t("admin.styles.intake.genderMen"),
-                      unisex: t("admin.styles.intake.genderUnisex"),
+                      women: t('admin.styles.intake.genderWomen'),
+                      men: t('admin.styles.intake.genderMen'),
+                      unisex: t('admin.styles.intake.genderUnisex'),
                     }}
                   />
                 )}
               </div>
               <div>
                 <Label>
-                  {t("admin.styles.intake.category")}
+                  {t('admin.styles.intake.category')}
                   {aiFilled.category && (
-                    <AiFilledBadge low={aiLowConfidence} />
+                    <AiFilledBadge low={aiLowConfidence} source={aiOrigin} />
                   )}
                 </Label>
                 {extracting && form.categoryId == null ? (
@@ -930,7 +984,7 @@ const StyleIntakeForm = forwardRef<StyleIntakeFormHandle, StyleIntakeFormProps>(
                     }
                     gender={form.gender}
                     onChange={({ categoryId, code }) => {
-                      clearAiBadge("category");
+                      clearAiBadge('category');
                       setForm((f) => ({
                         ...f,
                         categoryId,
@@ -942,11 +996,12 @@ const StyleIntakeForm = forwardRef<StyleIntakeFormHandle, StyleIntakeFormProps>(
                     }
                   />
                 )}
+                {aiMissed.category && <MissedHint />}
               </div>
               <div>
                 <Label>
-                  {t("admin.styles.intake.primaryColour")}
-                  {aiFilled.colour && <AiFilledBadge />}
+                  {t('admin.styles.intake.primaryColour')}
+                  {aiFilled.colour && <AiFilledBadge source={aiOrigin} />}
                 </Label>
                 {extracting && !form.primaryColour.trim() ? (
                   FIELD_SKELETON
@@ -954,21 +1009,22 @@ const StyleIntakeForm = forwardRef<StyleIntakeFormHandle, StyleIntakeFormProps>(
                   <ColourPicker
                     value={form.primaryColour}
                     onChange={(next) => {
-                      clearAiBadge("colour");
-                      set("primaryColour", next);
+                      clearAiBadge('colour');
+                      set('primaryColour', next);
                     }}
-                    placeholder={t("admin.styles.intake.primaryColourPh")}
+                    placeholder={t('admin.styles.intake.primaryColourPh')}
                     fabricColours={selectedFabric?.colours ?? []}
                   />
                 )}
+                {aiMissed.colour && <MissedHint />}
               </div>
               {!isChinaImport && (
                 <div>
-                  <Label>{t("admin.styles.intake.developmentReason")}</Label>
+                  <Label>{t('admin.styles.intake.developmentReason')}</Label>
                   <Textarea
                     value={form.developmentReason}
-                    onChange={(e) => set("developmentReason", e.target.value)}
-                    placeholder={t("admin.styles.intake.developmentReasonPh")}
+                    onChange={(e) => set('developmentReason', e.target.value)}
+                    placeholder={t('admin.styles.intake.developmentReasonPh')}
                   />
                 </div>
               )}
@@ -978,29 +1034,35 @@ const StyleIntakeForm = forwardRef<StyleIntakeFormHandle, StyleIntakeFormProps>(
           {/* Fabric & sampling — right rail (sampling source only) */}
           {!isChinaImport && (
             <IntakeCard
-              title={t("admin.styles.intake.samplingSpecifics")}
-              subtitle={t("admin.styles.intake.samplingSpecificsSubtitle")}
+              title={t(
+                'admin.styles.intake.samplingSpecifics',
+                'Fabric & sampling',
+              )}
+              subtitle={t(
+                'admin.styles.intake.samplingSpecificsSubtitle',
+                'Fabric, sample requirement, timeline & CAD.',
+              )}
             >
               <div className="space-y-4">
                 <div>
-                  <Label>{t("admin.styles.intake.fabric")}</Label>
+                  <Label>{t('admin.styles.intake.fabric')}</Label>
                   <FabricPicker
                     fabrics={fabrics}
                     fabricId={form.fabricId}
                     fabricColourId={selectedFabricColourId}
                     onChange={(choice) => {
-                      set("fabricId", choice?.fabricId ?? null);
+                      set('fabricId', choice?.fabricId ?? null);
                       // Auto-fill the product colour from the chosen
                       // fabric-colour (still overridable in the colour field).
                       if (choice?.colourName) {
-                        set("primaryColour", choice.colourName);
+                        set('primaryColour', choice.colourName);
                       }
                     }}
                     onFabricCreated={(f) => onFabricsChanged([...fabrics, f])}
                   />
                 </div>
                 <div>
-                  <Label>{t("admin.styles.intake.sampleFabricRequired")}</Label>
+                  <Label>{t('admin.styles.intake.sampleFabricRequired')}</Label>
                   <div className="relative">
                     <Input
                       type="number"
@@ -1008,10 +1070,10 @@ const StyleIntakeForm = forwardRef<StyleIntakeFormHandle, StyleIntakeFormProps>(
                       step="0.01"
                       value={form.sampleFabricRequired}
                       onChange={(e) =>
-                        set("sampleFabricRequired", e.target.value)
+                        set('sampleFabricRequired', e.target.value)
                       }
                       placeholder={t(
-                        "admin.styles.intake.sampleFabricRequiredHelp",
+                        'admin.styles.intake.sampleFabricRequiredHelp',
                       )}
                       disabled={!selectedFabric}
                     />
@@ -1024,7 +1086,7 @@ const StyleIntakeForm = forwardRef<StyleIntakeFormHandle, StyleIntakeFormProps>(
                   </div>
                 </div>
                 <div>
-                  <Label>{t("admin.styles.intake.samplingTimeline")}</Label>
+                  <Label>{t('admin.styles.intake.samplingTimeline')}</Label>
                   <div className="relative">
                     <Input
                       type="number"
@@ -1032,16 +1094,26 @@ const StyleIntakeForm = forwardRef<StyleIntakeFormHandle, StyleIntakeFormProps>(
                       step="1"
                       inputMode="numeric"
                       value={form.samplingTimeline}
-                      onChange={(e) => set("samplingTimeline", e.target.value)}
+                      onChange={(e) => set('samplingTimeline', e.target.value)}
                       placeholder="0"
                     />
                     <span
                       className="pointer-events-none absolute inset-y-0 right-3 flex items-center text-[12px] font-medium text-[var(--color-muted-foreground)]"
                       aria-hidden
                     >
-                      {Number(form.samplingTimeline) === 1 ? "day" : "days"}
+                      {Number(form.samplingTimeline) === 1 ? 'day' : 'days'}
                     </span>
                   </div>
+                </div>
+                <div>
+                  <Label>
+                    {t('admin.styles.drawer.fields.patternCad', 'Pattern / CAD')}
+                  </Label>
+                  <PatternCadInput
+                    entityId={style?.id ?? 'new'}
+                    patternCadPaths={form.patternCadPaths}
+                    onChange={(p) => set('patternCadPaths', p)}
+                  />
                 </div>
               </div>
             </IntakeCard>

@@ -1,4 +1,4 @@
-import { cn } from "@/lib/utils";
+import { cn } from '@/lib/utils';
 
 /**
  * Shimmer skeleton placeholder. A linear-gradient sweeps across a muted
@@ -23,10 +23,10 @@ export function Skeleton({
     <span
       aria-hidden
       className={cn(
-        "block relative isolate overflow-hidden rounded-[var(--radius-sm)] bg-[var(--color-muted)]",
-        "before:absolute before:inset-0 before:-translate-x-full",
-        "before:bg-gradient-to-r before:from-transparent before:via-[color-mix(in_oklab,var(--color-border)_60%,transparent)] before:to-transparent",
-        "before:animate-[shimmer_1.5s_infinite]",
+        'block relative isolate overflow-hidden rounded-[var(--radius-sm)] bg-[var(--color-muted)]',
+        'before:absolute before:inset-0 before:-translate-x-full',
+        'before:bg-gradient-to-r before:from-transparent before:via-[color-mix(in_oklab,var(--color-border)_60%,transparent)] before:to-transparent',
+        'before:animate-[shimmer_1.5s_infinite]',
         className,
       )}
       {...props}

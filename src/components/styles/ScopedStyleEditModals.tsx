@@ -197,6 +197,15 @@ export function CoreSpecsEditModal({
     }
   };
 
+  // Highlight the active fabric-colour row by matching the product colour
+  // text back to the chosen fabric's colours (Style stores colour as text).
+  const selectedFabricColourId = useMemo(() => {
+    const fabric = fabrics.find((f) => f.id === form.fabricId);
+    const name = form.primaryColour.trim().toLowerCase();
+    if (!name || !fabric?.colours?.length) return null;
+    return fabric.colours.find((c) => c.name.toLowerCase() === name)?.id ?? null;
+  }, [fabrics, form.fabricId, form.primaryColour]);
+
   return (
     <Dialog
       open={open}
@@ -268,8 +277,17 @@ export function CoreSpecsEditModal({
           <Label>{t('admin.styles.intake.fabric')}</Label>
           <FabricPicker
             fabrics={fabrics}
-            value={form.fabricId}
-            onChange={(next) => setForm((f) => ({ ...f, fabricId: next }))}
+            fabricId={form.fabricId}
+            fabricColourId={selectedFabricColourId}
+            onChange={(choice) =>
+              setForm((f) => ({
+                ...f,
+                fabricId: choice?.fabricId ?? null,
+                // Auto-fill the product colour from the chosen fabric-colour
+                // (still overridable in the colour field below).
+                primaryColour: choice?.colourName ?? f.primaryColour,
+              }))
+            }
             onFabricCreated={(f) => setFabrics([...fabrics, f])}
           />
         </div>
@@ -279,6 +297,9 @@ export function CoreSpecsEditModal({
             value={form.primaryColour}
             onChange={(next) => setForm((f) => ({ ...f, primaryColour: next }))}
             placeholder={t('admin.styles.intake.primaryColourPh')}
+            fabricColours={
+              fabrics.find((f) => f.id === form.fabricId)?.colours ?? []
+            }
             inlineAdd
           />
         </div>
@@ -424,8 +445,10 @@ export function BomEditModal({
           <Label>{t('admin.styles.intake.fabric')}</Label>
           <FabricPicker
             fabrics={fabrics}
-            value={form.fabricId}
-            onChange={(next) => setForm((f) => ({ ...f, fabricId: next }))}
+            fabricId={form.fabricId}
+            onChange={(choice) =>
+              setForm((f) => ({ ...f, fabricId: choice?.fabricId ?? null }))
+            }
             onFabricCreated={(f) => setFabrics([...fabrics, f])}
           />
         </div>

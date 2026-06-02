@@ -1,10 +1,10 @@
-import { useState, type ReactNode } from "react";
-import { useTranslation } from "react-i18next";
-import { Check, ChevronRight, ImageOff, Pause, Play } from "lucide-react";
-import { Badge } from "@/components/ui/badge";
-import type { Style, StyleLifecycle } from "@/api/types";
-import { formatStyleRef } from "@/lib/styleRef";
-import { cn } from "@/lib/utils";
+import { useState, type ReactNode } from 'react';
+import { useTranslation } from 'react-i18next';
+import { Check, ChevronRight, ImageOff, Pause, Play } from 'lucide-react';
+import { Badge } from '@/components/ui/badge';
+import type { Style, StyleLifecycle } from '@/api/types';
+import { formatStyleRef } from '@/lib/styleRef';
+import { cn } from '@/lib/utils';
 
 /**
  * Shared sampling/styles queue table — the single component behind BOTH
@@ -37,7 +37,7 @@ export interface QueueColumn<R> {
   /** Cell renderer for a row. */
   cell: (row: R) => ReactNode;
   /** Right-align (used for AGE / numeric columns). */
-  align?: "left" | "right";
+  align?: 'left' | 'right';
   /** Extra cell classes — e.g. responsive hiding `hidden lg:table-cell`. */
   className?: string;
   /** Extra header classes (mirrors `className` for responsive hiding). */
@@ -72,8 +72,8 @@ export function StyleQueueTable<R>({
   getRowKey,
   loading = false,
   error = false,
-  loadingLabel = "Loading…",
-  emptyLabel = "No rows.",
+  loadingLabel = 'Loading…',
+  emptyLabel = 'No rows.',
   errorLabel = "Couldn't load.",
   onRowClick,
   renderActions,
@@ -93,8 +93,8 @@ export function StyleQueueTable<R>({
                 <th
                   key={col.key}
                   className={cn(
-                    "px-4 py-2 text-[11px] font-bold uppercase tracking-[0.05em] text-[var(--color-muted-foreground)] whitespace-nowrap",
-                    col.align === "right" && "text-right",
+                    'px-4 py-2 text-[11px] font-bold uppercase tracking-[0.05em] text-[var(--color-muted-foreground)] whitespace-nowrap',
+                    col.align === 'right' && 'text-right',
                     col.headerClassName,
                   )}
                 >
@@ -123,18 +123,18 @@ export function StyleQueueTable<R>({
                     key={getRowKey(row)}
                     onClick={clickable ? () => onRowClick(row) : undefined}
                     className={cn(
-                      "group border-b border-[var(--color-border)] text-[var(--color-foreground)] transition-colors",
-                      clickable && "cursor-pointer",
-                      "hover:bg-[var(--color-muted)] focus-within:bg-[var(--color-muted)]",
-                      rowAccent?.(row) && "bg-[var(--color-primary)]/[0.04]",
+                      'group border-b border-[var(--color-border)] text-[var(--color-foreground)] transition-colors',
+                      clickable && 'cursor-pointer',
+                      'hover:bg-[var(--color-muted)] focus-within:bg-[var(--color-muted)]',
+                      rowAccent?.(row) && 'bg-[var(--color-primary)]/[0.04]',
                     )}
                   >
                     {columns.map((col) => (
                       <td
                         key={col.key}
                         className={cn(
-                          "px-4 py-2",
-                          col.align === "right" && "text-right",
+                          'px-4 py-2',
+                          col.align === 'right' && 'text-right',
                           col.className,
                         )}
                       >
@@ -216,10 +216,10 @@ export function QueueTabs<K extends string>({
             type="button"
             onClick={() => onSelect(tab.key)}
             className={cn(
-              "flex items-center gap-1.5 whitespace-nowrap border-b-2 pb-3 text-[14px] font-semibold transition-colors",
+              'flex items-center gap-1.5 whitespace-nowrap border-b-2 pb-3 text-[14px] font-semibold transition-colors',
               isActive
-                ? "border-[var(--color-primary)] text-[var(--color-primary)]"
-                : "border-transparent text-[var(--color-muted-foreground)] hover:text-[var(--color-foreground)]",
+                ? 'border-[var(--color-primary)] text-[var(--color-primary)]'
+                : 'border-transparent text-[var(--color-muted-foreground)] hover:text-[var(--color-foreground)]',
             )}
           >
             {tab.label}
@@ -295,18 +295,18 @@ export function Thumbnail({ src, alt }: { src: string | null; alt: string }) {
 export function TypePill({ style }: { style: Style }) {
   const { t } = useTranslation();
   const base =
-    "inline-flex items-center rounded px-2 py-0.5 text-[11px] font-medium";
+    'inline-flex items-center rounded px-2 py-0.5 text-[11px] font-medium';
 
   if (style.familyCode) {
     return (
       <span
         className={cn(
           base,
-          "border border-amber-200 bg-amber-100 text-amber-900",
+          'border border-amber-200 bg-amber-100 text-amber-900',
         )}
         title={style.familyCode}
       >
-        {t("admin.styles.table.type.colourOf", { code: style.familyCode })}
+        {t('admin.styles.table.type.colourOf', { code: style.familyCode })}
       </span>
     );
   }
@@ -314,10 +314,10 @@ export function TypePill({ style }: { style: Style }) {
     const ref = style.basedOnStyle?.styleId ?? undefined;
     return (
       <span
-        className={cn(base, "border border-blue-200 bg-blue-100 text-blue-900")}
+        className={cn(base, 'border border-blue-200 bg-blue-100 text-blue-900')}
         title={ref}
       >
-        {t("admin.styles.table.type.basedOn", { code: ref ?? "—" })}
+        {t('admin.styles.table.type.basedOn', { code: ref ?? '—' })}
       </span>
     );
   }
@@ -325,10 +325,10 @@ export function TypePill({ style }: { style: Style }) {
     <span
       className={cn(
         base,
-        "bg-[var(--color-primary)] text-[var(--color-primary-foreground)]",
+        'bg-[var(--color-primary)] text-[var(--color-primary-foreground)]',
       )}
     >
-      {t("admin.styles.table.type.new")}
+      {t('admin.styles.table.type.new')}
     </span>
   );
 }
@@ -394,7 +394,7 @@ export function ApproverOrPanelCell({
   return (
     <span
       className="flex items-center -space-x-1"
-      title={panel.map((p) => p.name).join(", ")}
+      title={panel.map((p) => p.name).join(', ')}
     >
       {shown.map((p) => (
         <span
@@ -450,7 +450,7 @@ export function ApproveButton({ onClick }: { onClick: () => void }) {
       className="inline-flex items-center gap-1 rounded bg-[var(--color-primary)] px-2 py-1 text-[12px] font-medium text-[var(--color-primary-foreground)] transition-colors hover:opacity-90"
     >
       <Check size={14} />
-      {t("dashboard.table.actions.approve", { defaultValue: "Approve" })}
+      {t('dashboard.table.actions.approve', { defaultValue: 'Approve' })}
     </button>
   );
 }
@@ -461,7 +461,7 @@ export function GhostActionButton({
   children,
 }: {
   onClick: () => void;
-  icon?: "park" | "revive";
+  icon?: 'park' | 'revive';
   children: ReactNode;
 }) {
   return (
@@ -473,8 +473,8 @@ export function GhostActionButton({
       }}
       className="inline-flex items-center gap-1 rounded border border-transparent px-2 py-1 text-[12px] text-[var(--color-muted-foreground)] transition-colors hover:bg-[var(--color-surface-2)] hover:text-[var(--color-foreground)]"
     >
-      {icon === "park" && <Pause size={13} />}
-      {icon === "revive" && <Play size={13} />}
+      {icon === 'park' && <Pause size={13} />}
+      {icon === 'revive' && <Play size={13} />}
       {children}
     </button>
   );
@@ -495,25 +495,25 @@ export function RowChevron() {
  * ────────────────────────────────────────────────────────────────── */
 
 export function lifecycleVariant(l: StyleLifecycle) {
-  if (l === "sample_approved" || l === "dispatched") return "success";
-  if (l === "parked" || l === "archived") return "outline";
-  if (l === "qc" || l === "in_pd" || l === "in_sampling") return "stitch";
-  return "secondary";
+  if (l === 'sample_approved' || l === 'dispatched') return 'success';
+  if (l === 'parked' || l === 'archived') return 'outline';
+  if (l === 'qc' || l === 'in_pd' || l === 'in_sampling') return 'stitch';
+  return 'secondary';
 }
 
 function initials(name: string): string {
   const parts = name.trim().split(/\s+/);
   if (parts.length === 1) return parts[0].slice(0, 2);
-  return (parts[0][0] ?? "") + (parts[parts.length - 1][0] ?? "");
+  return (parts[0][0] ?? '') + (parts[parts.length - 1][0] ?? '');
 }
 
 /** Short relative age — "now", "5m", "3h", "2d", "4w", "3mo", "2y". */
 export function compactAge(iso: string | null | undefined): string {
-  if (!iso) return "—";
+  if (!iso) return '—';
   const then = new Date(iso).getTime();
-  if (Number.isNaN(then)) return "—";
+  if (Number.isNaN(then)) return '—';
   const sec = Math.max(0, Math.round((Date.now() - then) / 1000));
-  if (sec < 45) return "now";
+  if (sec < 45) return 'now';
   const min = Math.round(sec / 60);
   if (min < 60) return `${min}m`;
   const hr = Math.round(min / 60);
@@ -534,23 +534,23 @@ export function compactAge(iso: string | null | undefined): string {
  * dot still renders. Mirrors the legacy StylesTable helper.
  */
 export function colourSwatch(name: string | null | undefined): string {
-  if (!name) return "var(--color-muted-foreground)";
+  if (!name) return 'var(--color-muted-foreground)';
   const n = name.trim().toLowerCase();
   const overrides: Record<string, string> = {
-    cream: "#f5e9c8",
-    "off white": "#f5f1e6",
-    offwhite: "#f5f1e6",
-    natural: "#ece1c8",
-    nude: "#e8c7a0",
-    blush: "#f4c2c2",
-    sage: "#a8b9a0",
-    olive: "#708238",
-    mustard: "#e1b800",
-    rust: "#b7410e",
-    burgundy: "#800020",
-    charcoal: "#36454f",
-    navy: "#0a1f44",
-    indigo: "#4b0082",
+    cream: '#f5e9c8',
+    'off white': '#f5f1e6',
+    offwhite: '#f5f1e6',
+    natural: '#ece1c8',
+    nude: '#e8c7a0',
+    blush: '#f4c2c2',
+    sage: '#a8b9a0',
+    olive: '#708238',
+    mustard: '#e1b800',
+    rust: '#b7410e',
+    burgundy: '#800020',
+    charcoal: '#36454f',
+    navy: '#0a1f44',
+    indigo: '#4b0082',
   };
   return overrides[n] ?? n;
 }
