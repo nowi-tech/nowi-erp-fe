@@ -71,6 +71,7 @@ const PARK_WRITE_ROLES = [
   'sampling_lead',
   'pattern_master_w',
   'pattern_master_m',
+  'operator',
 ] as const;
 
 // Mirror StylesTable.tsx's lifecycle → Badge-variant mapping so the

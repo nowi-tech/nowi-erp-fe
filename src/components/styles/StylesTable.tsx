@@ -49,6 +49,7 @@ const WRITE_ROLES: readonly UserRole[] = [
   'sampling_lead',
   'pattern_master_w',
   'pattern_master_m',
+  'operator',
 ] as const;
 
 // Row-action role gates — mirror the BE guards (and the dashboard

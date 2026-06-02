@@ -14,7 +14,9 @@ export type UserRole =
   | 'pattern_master_m'
   | 'china_import_approver'
   | 'data_admin'
-  | 'pd_lead';
+  | 'pd_lead'
+  // Cross-cutting data-entry role: creates/edits everywhere, approves nothing.
+  | 'operator';
 
 export interface User {
   id: string;

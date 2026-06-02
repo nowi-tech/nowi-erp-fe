@@ -68,6 +68,7 @@ const OFFICE_ROLES: UserRole[] = [
   'pattern_master_m',
   'china_import_approver',
   'pd_lead',
+  'operator',
 ];
 
 const PD_ROLES: UserRole[] = [
@@ -76,6 +77,7 @@ const PD_ROLES: UserRole[] = [
   'sampling_lead',
   'pattern_master_w',
   'pattern_master_m',
+  'operator',
 ];
 
 const NAV_SECTIONS: NavSection[] = [
@@ -88,7 +90,7 @@ const NAV_SECTIONS: NavSection[] = [
       // Sampling registry (the old Styles page) — the "View more" drill-down.
       { to: '/styles', end: true, icon: <Shirt size={18} />, labelKey: 'admin.nav.styles', roles: PD_ROLES },
       // Production = the renamed Locator. Dispatch lives inside it as a tab.
-      { to: '/admin/locator', icon: <Search size={18} />, labelKey: 'admin.nav.production', roles: ['admin', 'viewer', 'data_manager'] },
+      { to: '/admin/locator', icon: <Search size={18} />, labelKey: 'admin.nav.production', roles: ['admin', 'viewer', 'data_manager', 'operator'] },
     ],
   },
   {
@@ -98,7 +100,7 @@ const NAV_SECTIONS: NavSection[] = [
       // China Import is its own first-class destination (a simple, separate
       // flow for NW- prefixed imported styles). Fabric Library = the master
       // fabric catalogue used across styles.
-      { to: '/china-import', icon: <Container size={18} />, labelKey: 'admin.nav.chinaImport', roles: ['admin', 'sampling_editor', 'sampling_lead', 'pattern_master_w', 'pattern_master_m', 'china_import_approver'] },
+      { to: '/china-import', icon: <Container size={18} />, labelKey: 'admin.nav.chinaImport', roles: ['admin', 'sampling_editor', 'sampling_lead', 'pattern_master_w', 'pattern_master_m', 'china_import_approver', 'operator'] },
       { to: '/fabric-library', icon: <Layers size={18} />, labelKey: 'admin.nav.fabricLibrary', roles: PD_ROLES },
     ],
   },
@@ -109,9 +111,9 @@ const NAV_SECTIONS: NavSection[] = [
       // Floor surfaces — admins drop in to triage / receive / forward when
       // a floor user is unavailable. Each route already permits 'admin' in
       // ProtectedRoute.
-      { to: '/floor', icon: <Boxes size={18} />, labelKey: 'admin.nav.floor', roles: ['admin'] },
-      { to: '/stitching', icon: <Scissors size={18} />, labelKey: 'admin.nav.stitching', roles: ['admin'] },
-      { to: '/finishing', icon: <Sparkles size={18} />, labelKey: 'admin.nav.finishing', roles: ['admin'] },
+      { to: '/floor', icon: <Boxes size={18} />, labelKey: 'admin.nav.floor', roles: ['admin', 'operator'] },
+      { to: '/stitching', icon: <Scissors size={18} />, labelKey: 'admin.nav.stitching', roles: ['admin', 'operator'] },
+      { to: '/finishing', icon: <Sparkles size={18} />, labelKey: 'admin.nav.finishing', roles: ['admin', 'operator'] },
     ],
   },
   {
@@ -122,7 +124,7 @@ const NAV_SECTIONS: NavSection[] = [
       { to: '/admin/users', icon: <Users size={18} />, labelKey: 'admin.nav.users', roles: ['admin'] },
       // Master-data hub for data_manager (+ admin). Hosts future master-data
       // tables (vendors / skus / settings).
-      { to: '/data', icon: <Database size={18} />, labelKey: 'admin.nav.masterData', roles: ['admin', 'data_manager'] },
+      { to: '/data', icon: <Database size={18} />, labelKey: 'admin.nav.masterData', roles: ['admin', 'data_manager', 'operator'] },
     ],
   },
 ];
