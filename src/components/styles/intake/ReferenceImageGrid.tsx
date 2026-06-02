@@ -8,7 +8,7 @@ import {
 } from 'react';
 import { ImagePlus, Loader2, Sparkles, Star, Upload, X } from 'lucide-react';
 import { useToast } from '@/components/ui/toast';
-import { extractLink } from '@/api/styles';
+import { classifyImage, extractLink, type LinkExtractResult } from '@/api/styles';
 import { getReadUrls, uploadPhoto } from '@/api/storage';
 import { useDebounced } from '@/lib/useDebounced';
 import { cn } from '@/lib/utils';
@@ -42,6 +42,10 @@ interface Props {
    *  primary tile changes. Used to keep the legacy `referenceImageUrl`
    *  field roughly in sync for downstream displays. */
   onPrimaryUrlChange?: (url: string | null) => void;
+  /** Optional — receives the full extraction result (incl. AI-inferred
+   *  gender / categoryId / colour) whenever a link is read or an image is
+   *  classified. The parent form pre-fills empty fields from it. */
+  onExtracted?: (result: LinkExtractResult) => void;
 }
 
 function isAbsUrl(v: string): boolean {
@@ -68,6 +72,7 @@ export default function ReferenceImageGrid({
   entityId,
   onChange,
   onPrimaryUrlChange,
+  onExtracted,
 }: Props) {
   const toast = useToast();
   const fileRef = useRef<HTMLInputElement>(null);
@@ -87,10 +92,12 @@ export default function ReferenceImageGrid({
   const valueRef = useRef(value);
   const onChangeRef = useRef(onChange);
   const onPrimaryUrlChangeRef = useRef(onPrimaryUrlChange);
+  const onExtractedRef = useRef(onExtracted);
   useEffect(() => {
     valueRef.current = value;
     onChangeRef.current = onChange;
     onPrimaryUrlChangeRef.current = onPrimaryUrlChange;
+    onExtractedRef.current = onExtracted;
   });
   // True until the component unmounts — used to guard async callbacks
   // from updating state after unmount (replaces the per-effect-run
@@ -160,8 +167,12 @@ export default function ReferenceImageGrid({
     lastFetchedFor.current = url;
     extractLink(url)
       .then((r) => {
-        if (!mountedRef.current) return;
-        if (!r.ok || !r.imageUrl) return;
+        if (!mountedRef.current || !r.ok) return;
+        // Bubble AI attributes (gender / category / colour) to the form
+        // even when no image came back — url-context often reads the page
+        // attributes without yielding a usable image.
+        onExtractedRef.current?.(r);
+        if (!r.imageUrl) return;
         // Re-read current value from the ref (not the effect closure)
         // so a tile that landed via upload while extractLink was in
         // flight isn't clobbered.
@@ -188,14 +199,28 @@ export default function ReferenceImageGrid({
       setBusy(true);
       try {
         const next = [...value];
+        const uploaded: string[] = [];
         for (const file of imageFiles) {
           const { objectPath } = await uploadPhoto('style', entityId, file);
           next.push(objectPath);
+          uploaded.push(objectPath);
           // Optimistic local preview so the tile fills before the signed
           // URL round-trips.
           setPreviews((p) => ({ ...p, [objectPath]: URL.createObjectURL(file) }));
         }
         onChange(next);
+        // Classify the first uploaded image for attribute suggestions —
+        // the vision fallback that covers sites url-context can't read
+        // (e.g. Amazon). Non-blocking; the parent fills only empty fields.
+        if (uploaded[0] && onExtractedRef.current) {
+          classifyImage(uploaded[0])
+            .then((r) => {
+              if (mountedRef.current && r.ok) onExtractedRef.current?.(r);
+            })
+            .catch(() => {
+              /* silent — non-blocking */
+            });
+        }
       } catch {
         toast.show('Upload failed — try again.', 'error');
       } finally {

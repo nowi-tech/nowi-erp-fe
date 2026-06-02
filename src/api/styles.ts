@@ -139,7 +139,24 @@ export interface LinkExtractResult {
   title?: string;
   price?: number;
   currency?: string;
-  source?: 'jsonld' | 'opengraph' | 'flipkart' | 'myntra';
+  // AI-extracted, editable suggestions (best-effort):
+  /** NOWI StyleGender (W/M/U). */
+  gender?: 'W' | 'M' | 'U';
+  /** Category.styleCode the model picked. */
+  categoryCode?: string;
+  /** Resolved categoryId for the picked code (when known). */
+  categoryId?: number;
+  /** Free-text colour → primaryColour. */
+  colour?: string;
+  /** 0..1 — drives a "please confirm" hint when low. */
+  confidence?: number;
+  source?:
+    | 'jsonld'
+    | 'opengraph'
+    | 'flipkart'
+    | 'myntra'
+    | 'gemini_url_context'
+    | 'gemini_vision';
   reason?: string;
 }
 
@@ -377,6 +394,25 @@ export async function extractLink(url: string): Promise<LinkExtractResult> {
       ok: false,
       reason: 'Could not reach the extractor — paste or upload the image.',
     };
+  }
+}
+
+/**
+ * Classify an already-uploaded reference image (GCS objectPath) with Gemini
+ * vision — the fallback for sites url-context can't read (e.g. Amazon).
+ * Best-effort: resolves even when classification fails (ok:false).
+ */
+export async function classifyImage(
+  objectPath: string,
+): Promise<LinkExtractResult> {
+  try {
+    const res = await apiClient.post<LinkExtractResult>(
+      '/api/styles/classify-image',
+      { objectPath },
+    );
+    return res.data;
+  } catch {
+    return { ok: false, reason: 'Could not classify the image.' };
   }
 }
 

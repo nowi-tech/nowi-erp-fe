@@ -26,7 +26,11 @@ import {
   type FineCategoryCode,
 } from "@/components/styles/intake/categoryOptions";
 
-import { listStyles, spawnColourVariant } from "@/api/styles";
+import {
+  listStyles,
+  spawnColourVariant,
+  type LinkExtractResult,
+} from "@/api/styles";
 import { cn } from "@/lib/utils";
 
 import type {
@@ -153,6 +157,25 @@ function toFormGender(g: unknown): Gender {
   if (g === "M" || g === "men") return "men";
   if (g === "U" || g === "unisex") return "unisex";
   return "women";
+}
+
+/**
+ * Tiny inline pill shown next to a field the AI pre-filled from the pasted
+ * link / uploaded image. `low` flips it to an amber "please confirm" state
+ * when the model's confidence was weak. Suggestions are always editable —
+ * this is just provenance, not a lock.
+ */
+function AiFilledBadge({ low }: { low?: boolean }) {
+  return (
+    <span
+      className={cn(
+        "ml-2 inline-flex items-center gap-0.5 rounded-full px-1.5 py-0.5 align-middle text-[10px] font-medium",
+        low ? "bg-amber-100 text-amber-700" : "bg-violet-100 text-violet-700",
+      )}
+    >
+      ✨ {low ? "check this" : "from link"}
+    </span>
+  );
 }
 
 /**
@@ -421,9 +444,60 @@ const StyleIntakeForm = forwardRef<StyleIntakeFormHandle, StyleIntakeFormProps>(
     const set = <K extends keyof FormState>(k: K, v: FormState[K]) =>
       setForm((f) => ({ ...f, [k]: v }));
 
+    // ── Link / image auto-fill (Gemini) ─────────────────────────────
+    // `genderTouched` guards against clobbering a deliberate gender choice;
+    // category/colour are only filled when still empty. `aiFilled` drives
+    // the per-field "from link" badge and is cleared when the user edits.
+    const genderTouched = useRef(false);
+    const [aiFilled, setAiFilled] = useState<Record<string, boolean>>({});
+    const [aiLowConfidence, setAiLowConfidence] = useState(false);
+
+    const clearAiBadge = (k: string) =>
+      setAiFilled((prev) => (prev[k] ? { ...prev, [k]: false } : prev));
+
+    const handleExtracted = (r: LinkExtractResult) => {
+      if (!r.ok) return;
+      setAiLowConfidence(
+        typeof r.confidence === "number" && r.confidence < 0.5,
+      );
+      const filled: string[] = [];
+      setForm((f) => {
+        const patch: Partial<FormState> = {};
+        if (!genderTouched.current && r.gender) {
+          patch.gender = toFormGender(r.gender);
+          filled.push("gender");
+        }
+        // Drive category off the resolved categoryId (unambiguous), then
+        // mirror its `code` into the form's categoryCode. Only when empty.
+        if (f.categoryId == null && r.categoryId != null) {
+          const cat = categories.find((c) => c.id === r.categoryId);
+          if (cat) {
+            patch.categoryId = cat.id;
+            patch.categoryCode = (cat.code ?? "")
+              .toUpperCase() as FineCategoryCode;
+            filled.push("category");
+          }
+        }
+        if (!f.primaryColour.trim() && r.colour) {
+          patch.primaryColour = r.colour;
+          filled.push("colour");
+        }
+        return Object.keys(patch).length ? { ...f, ...patch } : f;
+      });
+      if (filled.length) {
+        setAiFilled((prev) => {
+          const next = { ...prev };
+          for (const k of filled) next[k] = true;
+          return next;
+        });
+      }
+    };
+
     // Gender → category cascade. Switching gender resets category if
     // the current one isn't valid for the new gender bucket.
     const onGenderChange = (next: Gender) => {
+      genderTouched.current = true;
+      clearAiBadge("gender");
       setForm((f) => {
         const allowed = GENDER_CATEGORIES[next];
         const currentCode = (f.categoryCode ?? "").toString().toUpperCase();
@@ -695,6 +769,7 @@ const StyleIntakeForm = forwardRef<StyleIntakeFormHandle, StyleIntakeFormProps>(
                   referenceLink={form.referenceLink || null}
                   onChange={(next) => set("referenceImages", next)}
                   onPrimaryUrlChange={(u) => set("referenceImageUrl", u)}
+                  onExtracted={handleExtracted}
                 />
               </div>
               {isChinaImport && (
@@ -725,7 +800,10 @@ const StyleIntakeForm = forwardRef<StyleIntakeFormHandle, StyleIntakeFormProps>(
                 />
               </div>
               <div>
-                <Label>{t("admin.styles.intake.gender")}</Label>
+                <Label>
+                  {t("admin.styles.intake.gender")}
+                  {aiFilled.gender && <AiFilledBadge />}
+                </Label>
                 <GenderSegment
                   value={form.gender}
                   onChange={onGenderChange}
@@ -737,7 +815,12 @@ const StyleIntakeForm = forwardRef<StyleIntakeFormHandle, StyleIntakeFormProps>(
                 />
               </div>
               <div>
-                <Label>{t("admin.styles.intake.category")}</Label>
+                <Label>
+                  {t("admin.styles.intake.category")}
+                  {aiFilled.category && (
+                    <AiFilledBadge low={aiLowConfidence} />
+                  )}
+                </Label>
                 <CategoryPicker
                   categories={categories}
                   value={form.categoryId}
@@ -746,6 +829,7 @@ const StyleIntakeForm = forwardRef<StyleIntakeFormHandle, StyleIntakeFormProps>(
                   }
                   gender={form.gender}
                   onChange={({ categoryId, code }) => {
+                    clearAiBadge("category");
                     setForm((f) => ({
                       ...f,
                       categoryId,
@@ -758,10 +842,16 @@ const StyleIntakeForm = forwardRef<StyleIntakeFormHandle, StyleIntakeFormProps>(
                 />
               </div>
               <div>
-                <Label>{t("admin.styles.intake.primaryColour")}</Label>
+                <Label>
+                  {t("admin.styles.intake.primaryColour")}
+                  {aiFilled.colour && <AiFilledBadge />}
+                </Label>
                 <ColourPicker
                   value={form.primaryColour}
-                  onChange={(next) => set("primaryColour", next)}
+                  onChange={(next) => {
+                    clearAiBadge("colour");
+                    set("primaryColour", next);
+                  }}
                   placeholder={t("admin.styles.intake.primaryColourPh")}
                 />
               </div>
