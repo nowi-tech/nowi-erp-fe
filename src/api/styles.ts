@@ -401,6 +401,17 @@ export async function listColourMaster(): Promise<Colour[]> {
   return res.data;
 }
 
+/** Create a colour-master row (admin / data_manager). Used by the fabric
+ *  editor's "+ Add colour" popup. */
+export async function createColourMaster(body: {
+  name: string;
+  hex?: string | null;
+  family?: string | null;
+}): Promise<Colour> {
+  const res = await apiClient.post<Colour>('/api/colours', body);
+  return res.data;
+}
+
 export async function createFabric(
   body: FabricUpsertBody & { name: string },
 ): Promise<Fabric> {

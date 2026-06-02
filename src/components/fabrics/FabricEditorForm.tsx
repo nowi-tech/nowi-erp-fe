@@ -1,12 +1,18 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Plus, Trash2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { Dialog } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select } from '@/components/ui/select';
 import { useToast } from '@/components/ui/toast';
-import { createFabric, patchFabric, listColourMaster } from '@/api/styles';
+import {
+  createFabric,
+  patchFabric,
+  listColourMaster,
+  createColourMaster,
+} from '@/api/styles';
 import type { Colour, Fabric, FabricUnitOfMeasure } from '@/api/types';
 import { cn } from '@/lib/utils';
 
@@ -152,6 +158,45 @@ export default function FabricEditorForm({
       : colourMaster;
   }, [colourMaster, colourQuery]);
 
+  // ── "+ Add colour" popup → creates a Colour-master row, then selects it.
+  // Nested Dialog is safe: the Dialog stack lets only the top handle Escape.
+  const [addColourOpen, setAddColourOpen] = useState(false);
+  const [newColourName, setNewColourName] = useState('');
+  const [addingColour, setAddingColour] = useState(false);
+  const newColourRef = useRef<HTMLInputElement>(null);
+
+  const submitNewColour = async () => {
+    const name = newColourName.trim();
+    if (!name) return;
+    setAddingColour(true);
+    try {
+      const created = await createColourMaster({ name });
+      setColourMaster((cs) =>
+        cs.some((c) => c.id === created.id)
+          ? cs
+          : [...cs, created].sort((a, b) => a.name.localeCompare(b.name)),
+      );
+      setSelectedColourIds((prev) => new Set(prev).add(created.id));
+      setAddColourOpen(false);
+      setNewColourName('');
+    } catch (e: unknown) {
+      const m = (e as { response?: { data?: { message?: string | string[] } } })
+        ?.response?.data?.message;
+      toast.show(
+        m
+          ? Array.isArray(m)
+            ? m.join(', ')
+            : String(m)
+          : t('admin.fabricLibrary.colours.addError', {
+              defaultValue: 'Could not add colour.',
+            }),
+        'error',
+      );
+    } finally {
+      setAddingColour(false);
+    }
+  };
+
   // ── Composition helpers (sum, valid, mutators) ─────────────────
   const compSum = useMemo(
     () =>
@@ -267,7 +312,8 @@ export default function FabricEditorForm({
   };
 
   return (
-    <div className="space-y-3 max-h-[70vh] overflow-y-auto pr-1">
+    <div className="flex flex-col max-h-[75vh]">
+      <div className="space-y-3 overflow-y-auto pr-1 flex-1 min-h-0">
       <div>
         <Label>{t('admin.fabricLibrary.form.name')} *</Label>
         <Input
@@ -493,6 +539,30 @@ export default function FabricEditorForm({
             </span>
           )}
         </div>
+        <div>
+          <Button
+            type="button"
+            size="sm"
+            variant="outline"
+            onClick={() => {
+              // Prefill from whatever was typed in the search box.
+              setNewColourName(colourQuery.trim());
+              setAddColourOpen(true);
+            }}
+          >
+            <Plus size={13} />
+            <span className="ml-1">
+              {colourQuery.trim()
+                ? t('admin.fabricLibrary.colours.addNamed', {
+                    defaultValue: 'Add "{{name}}"',
+                    name: colourQuery.trim(),
+                  })
+                : t('admin.fabricLibrary.colours.add', {
+                    defaultValue: 'Add colour',
+                  })}
+            </span>
+          </Button>
+        </div>
         <p className="text-[11px] text-[var(--color-muted-foreground)]">
           {t('admin.fabricLibrary.colours.help', {
             defaultValue:
@@ -500,6 +570,69 @@ export default function FabricEditorForm({
           })}
         </p>
       </div>
+
+      {/* New-colour popup — creates a Colour-master row, then selects it. */}
+      <Dialog
+        open={addColourOpen}
+        onClose={() => {
+          setAddColourOpen(false);
+          setNewColourName('');
+        }}
+        title={t('admin.fabricLibrary.colours.newTitle', {
+          defaultValue: 'New colour',
+        })}
+        initialFocusRef={newColourRef}
+        footer={
+          <>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => {
+                setAddColourOpen(false);
+                setNewColourName('');
+              }}
+            >
+              {t('common.cancel', { defaultValue: 'Cancel' })}
+            </Button>
+            <Button
+              size="sm"
+              disabled={!newColourName.trim() || addingColour}
+              onClick={() => void submitNewColour()}
+            >
+              {addingColour
+                ? t('common.saving', { defaultValue: 'Saving…' })
+                : t('common.create', { defaultValue: 'Create' })}
+            </Button>
+          </>
+        }
+      >
+        <div className="space-y-2">
+          <Label>
+            {t('admin.fabricLibrary.colours.nameLabel', {
+              defaultValue: 'Colour name',
+            })}{' '}
+            *
+          </Label>
+          <Input
+            ref={newColourRef}
+            value={newColourName}
+            onChange={(e) => setNewColourName(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' && newColourName.trim()) {
+                e.preventDefault();
+                void submitNewColour();
+              }
+            }}
+            placeholder="e.g. Sage Green"
+          />
+          <p className="text-[11px] text-[var(--color-muted-foreground)]">
+            {t('admin.fabricLibrary.colours.newHelp', {
+              defaultValue:
+                'Adds it to the shared colour master, then ticks it for this fabric.',
+            })}
+          </p>
+        </div>
+      </Dialog>
 
       <div>
         <Label>{t('admin.fabricLibrary.form.notes')}</Label>
@@ -509,7 +642,8 @@ export default function FabricEditorForm({
         />
       </div>
 
-      <div className="flex justify-end gap-2 pt-2">
+      </div>
+      <div className="flex justify-end gap-2 pt-3 mt-1 border-t border-[var(--color-border)] shrink-0">
         <Button variant="outline" size="sm" onClick={onCancel}>
           {t('common.cancel', { defaultValue: 'Cancel' })}
         </Button>

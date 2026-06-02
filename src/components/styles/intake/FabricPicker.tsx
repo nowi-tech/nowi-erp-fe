@@ -54,21 +54,47 @@ export default function FabricPicker({
   const [seedName, setSeedName] = useState<string>('');
 
   const options = useMemo<ComboboxOption<number>[]>(() => {
-    return fabrics.map((f) => {
-      const qty = f.availableQuantity;
-      const uom = f.unitOfMeasure ?? '';
-      const sub =
-        qty !== undefined && qty !== null && qty > 0
-          ? `${qty} ${uom} available`
-          : 'No stock';
-      return {
-        value: f.id,
-        label: f.name,
-        sublabel: sub,
-        searchText: `${f.name} ${f.typeLabel ?? ''}`,
-        trailing: <StockPill qty={qty} />,
-      };
+    const opts: ComboboxOption<number>[] = [];
+
+    fabrics.forEach((f) => {
+      // If fabric has colours, create one option per colour
+      if (f.colours && f.colours.length > 0) {
+        f.colours.forEach((c) => {
+          const qty = c.availableQuantity;
+          const uom = f.unitOfMeasure ?? "";
+          const sub =
+            qty !== undefined && qty !== null && qty > 0
+              ? `${qty} ${uom} available`
+              : "No stock";
+
+          opts.push({
+            value: f.id,
+            label: `${f.name} — ${c.name}`,
+            sublabel: sub,
+            searchText: `${f.name} ${c.name} ${f.typeLabel ?? ""}`,
+            trailing: <StockPill qty={qty} />,
+          });
+        });
+      } else {
+        // Fallback: if no colours, show fabric alone (shouldn't happen but safe)
+        const qty = f.availableQuantity;
+        const uom = f.unitOfMeasure ?? "";
+        const sub =
+          qty !== undefined && qty !== null && qty > 0
+            ? `${qty} ${uom} available`
+            : "No stock";
+
+        opts.push({
+          value: f.id,
+          label: f.name,
+          sublabel: sub,
+          searchText: `${f.name} ${f.typeLabel ?? ""}`,
+          trailing: <StockPill qty={qty} />,
+        });
+      }
     });
+
+    return opts;
   }, [fabrics]);
 
   return (

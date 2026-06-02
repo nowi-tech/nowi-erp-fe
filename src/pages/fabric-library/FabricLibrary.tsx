@@ -350,6 +350,11 @@ export default function FabricLibrary() {
                     )
                   }
                 />
+                <th className="text-left font-medium px-3 py-2 hidden lg:table-cell">
+                  {t('admin.fabricLibrary.cols.colours', {
+                    defaultValue: 'Colours',
+                  })}
+                </th>
                 <th className="text-right font-medium px-3 py-2 hidden md:table-cell">
                   {t('admin.fabricLibrary.cols.gsm')}
                 </th>
@@ -397,7 +402,7 @@ export default function FabricLibrary() {
               {loading && (
                 <tr>
                   <td
-                    colSpan={8}
+                    colSpan={9}
                     className="px-3 py-8 text-center text-[var(--color-muted-foreground)]"
                   >
                     Loading…
@@ -407,7 +412,7 @@ export default function FabricLibrary() {
               {!loading && filtered.length === 0 && (
                 <tr>
                   <td
-                    colSpan={8}
+                    colSpan={9}
                     className="px-3 py-8 text-center text-[var(--color-muted-foreground)]"
                   >
                     {t('admin.fabricLibrary.empty')}
@@ -441,6 +446,44 @@ export default function FabricLibrary() {
                     </td>
                     <td className="px-3 py-2 hidden lg:table-cell text-xs text-[var(--color-muted-foreground)]">
                       {contentSummary(f)}
+                    </td>
+                    <td className="px-3 py-2 hidden lg:table-cell">
+                      {f.colours && f.colours.length > 0 ? (
+                        <div className="flex flex-wrap items-center gap-1">
+                          {f.colours.slice(0, 5).map((c) => (
+                            <span
+                              key={c.id}
+                              title={
+                                c.availableQuantity != null
+                                  ? `${c.name} — ${c.availableQuantity}${
+                                      f.unitOfMeasure
+                                        ? ` ${UOM_SHORT[f.unitOfMeasure]}`
+                                        : ''
+                                    }`
+                                  : c.name
+                              }
+                              className="inline-flex items-center gap-1 rounded-full border border-[var(--color-border)] pl-1 pr-1.5 py-0.5 text-[11px] text-[var(--color-foreground)]"
+                            >
+                              <span
+                                className="h-2.5 w-2.5 rounded-full border border-black/10"
+                                style={{
+                                  backgroundColor: c.hex || c.name.toLowerCase(),
+                                }}
+                              />
+                              {c.name}
+                            </span>
+                          ))}
+                          {f.colours.length > 5 && (
+                            <span className="text-[11px] text-[var(--color-muted-foreground)]">
+                              +{f.colours.length - 5}
+                            </span>
+                          )}
+                        </div>
+                      ) : (
+                        <span className="text-[var(--color-muted-foreground)]">
+                          —
+                        </span>
+                      )}
                     </td>
                     <td className="px-3 py-2 text-right tabular-nums hidden md:table-cell">
                       {f.gsm != null ? f.gsm : '—'}
