@@ -792,40 +792,45 @@ const StyleIntakeForm = forwardRef<StyleIntakeFormHandle, StyleIntakeFormProps>(
           </div>
         )}
 
-        {/* Source — the reference link drives the auto-fill; fabric sits
-            beside the image, and the article identity fills in below. */}
-        <IntakeCard
-          title={t("admin.styles.intake.inspiration")}
-          subtitle={t("admin.styles.intake.inspirationSubtitle")}
+        {/* 3-column "swapped" layout (Stitch redesign): Inspiration | Article
+            (auto-filled) | Fabric rail. Collapses to 2 columns for china-import
+            (no fabric/CAD) and stacks to 1 on small screens. */}
+        <div
+          className={cn(
+            "grid grid-cols-1 gap-4",
+            isChinaImport ? "lg:grid-cols-2" : "lg:grid-cols-3",
+          )}
         >
-          <div className="space-y-4">
-            <div>
-              <Label>{t("admin.styles.intake.referenceLink")}</Label>
-              <Input
-                value={form.referenceLink}
-                onChange={(e) => set("referenceLink", e.target.value)}
-                placeholder="https://…"
-              />
-              {linkStatus?.loading ? (
-                <p className="mt-1.5 text-[12px] text-[var(--color-muted-foreground)]">
-                  ✨ Reading link…
-                </p>
-              ) : linkStatus?.result ? (
-                linkStatus.result.ok ? (
-                  <p className="mt-1.5 text-[12px] text-violet-600">
-                    {summarizeExtract(linkStatus.result)}
+          {/* Inspiration — the reference link drives the auto-fill */}
+          <IntakeCard
+            title={t("admin.styles.intake.inspiration")}
+            subtitle={t("admin.styles.intake.inspirationSubtitle")}
+          >
+            <div className="space-y-4">
+              <div>
+                <Label>{t("admin.styles.intake.referenceLink")}</Label>
+                <Input
+                  value={form.referenceLink}
+                  onChange={(e) => set("referenceLink", e.target.value)}
+                  placeholder="https://…"
+                />
+                {linkStatus?.loading ? (
+                  <p className="mt-1.5 text-[12px] text-[var(--color-muted-foreground)]">
+                    ✨ Reading link…
                   </p>
-                ) : (
-                  <p className="mt-1.5 text-[12px] text-amber-600">
-                    {linkStatus.result.reason ??
-                      "Couldn’t read that link — paste or upload the image."}
-                  </p>
-                )
-              ) : null}
-            </div>
-
-            {/* Reference image (left) | Fabric & sampling (right) */}
-            <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+                ) : linkStatus?.result ? (
+                  linkStatus.result.ok ? (
+                    <p className="mt-1.5 text-[12px] text-violet-600">
+                      {summarizeExtract(linkStatus.result)}
+                    </p>
+                  ) : (
+                    <p className="mt-1.5 text-[12px] text-amber-600">
+                      {linkStatus.result.reason ??
+                        "Couldn’t read that link — paste or upload the image."}
+                    </p>
+                  )
+                ) : null}
+              </div>
               <div>
                 <Label>{t("admin.styles.intake.referenceImage")}</Label>
                 <ReferenceImageGrid
@@ -839,112 +844,36 @@ const StyleIntakeForm = forwardRef<StyleIntakeFormHandle, StyleIntakeFormProps>(
                 />
               </div>
               {!isChinaImport && (
-                <div className="space-y-4">
-                  <div>
-                    <Label>{t("admin.styles.intake.fabric")}</Label>
-                    <FabricPicker
-                      fabrics={fabrics}
-                      fabricId={form.fabricId}
-                      fabricColourId={selectedFabricColourId}
-                      onChange={(choice) => {
-                        set("fabricId", choice?.fabricId ?? null);
-                        // Auto-fill the product colour from the chosen
-                        // fabric-colour (still overridable in the colour field).
-                        if (choice?.colourName) {
-                          set("primaryColour", choice.colourName);
-                        }
-                      }}
-                      onFabricCreated={(f) =>
-                        onFabricsChanged([...fabrics, f])
-                      }
-                    />
-                  </div>
-                  <div>
-                    <Label>
-                      {t("admin.styles.intake.sampleFabricRequired")}
-                    </Label>
-                    <div className="relative">
-                      <Input
-                        type="number"
-                        min="0"
-                        step="0.01"
-                        value={form.sampleFabricRequired}
-                        onChange={(e) =>
-                          set("sampleFabricRequired", e.target.value)
-                        }
-                        placeholder={t(
-                          "admin.styles.intake.sampleFabricRequiredHelp",
-                        )}
-                        disabled={!selectedFabric}
-                      />
-                      <span
-                        className="pointer-events-none absolute inset-y-0 right-3 flex items-center text-[12px] font-medium text-[var(--color-muted-foreground)]"
-                        aria-hidden
-                      >
-                        {uomLabel(selectedFabric?.unitOfMeasure ?? null)}
-                      </span>
-                    </div>
-                  </div>
-                  <div>
-                    <Label>{t("admin.styles.intake.samplingTimeline")}</Label>
-                    <div className="relative">
-                      <Input
-                        type="number"
-                        min="0"
-                        step="1"
-                        inputMode="numeric"
-                        value={form.samplingTimeline}
-                        onChange={(e) =>
-                          set("samplingTimeline", e.target.value)
-                        }
-                        placeholder="0"
-                      />
-                      <span
-                        className="pointer-events-none absolute inset-y-0 right-3 flex items-center text-[12px] font-medium text-[var(--color-muted-foreground)]"
-                        aria-hidden
-                      >
-                        {Number(form.samplingTimeline) === 1 ? "day" : "days"}
-                      </span>
-                    </div>
-                  </div>
+                <div>
+                  <Label>
+                    {t("admin.styles.drawer.fields.patternCad", "Pattern / CAD")}
+                  </Label>
+                  <PatternCadInput
+                    entityId={style?.id ?? "new"}
+                    patternCadPaths={form.patternCadPaths}
+                    onChange={(p) => set("patternCadPaths", p)}
+                  />
+                </div>
+              )}
+              {isChinaImport && (
+                <div>
+                  <Label>{t("admin.styles.intake.remark")}</Label>
+                  <Textarea
+                    value={form.remark}
+                    onChange={(e) => set("remark", e.target.value)}
+                    placeholder={t("admin.styles.intake.remarkPh")}
+                  />
                 </div>
               )}
             </div>
+          </IntakeCard>
 
-            {/* Pattern / CAD — full width within the source card */}
-            {!isChinaImport && (
-              <div>
-                <Label>
-                  {t("admin.styles.drawer.fields.patternCad", "Pattern / CAD")}
-                </Label>
-                <PatternCadInput
-                  entityId={style?.id ?? "new"}
-                  patternCadPaths={form.patternCadPaths}
-                  onChange={(p) => set("patternCadPaths", p)}
-                />
-              </div>
-            )}
-
-            {isChinaImport && (
-              <div>
-                <Label>{t("admin.styles.intake.remark")}</Label>
-                <Textarea
-                  value={form.remark}
-                  onChange={(e) => set("remark", e.target.value)}
-                  placeholder={t("admin.styles.intake.remarkPh")}
-                />
-              </div>
-            )}
-          </div>
-        </IntakeCard>
-
-        {/* Article — the auto-filled identity (fills in below the source) */}
-        <div className="mt-4">
+          {/* Article — the auto-filled identity (editable, badged) */}
           <IntakeCard
             title={t("admin.styles.intake.article")}
             subtitle={t("admin.styles.intake.articleSubtitle")}
           >
-            <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+            <div className="space-y-4">
               <div>
                 <Label>
                   {t("admin.styles.intake.workingName")} *
@@ -1034,7 +963,7 @@ const StyleIntakeForm = forwardRef<StyleIntakeFormHandle, StyleIntakeFormProps>(
                 )}
               </div>
               {!isChinaImport && (
-                <div className="md:col-span-2">
+                <div>
                   <Label>{t("admin.styles.intake.developmentReason")}</Label>
                   <Textarea
                     value={form.developmentReason}
@@ -1045,6 +974,78 @@ const StyleIntakeForm = forwardRef<StyleIntakeFormHandle, StyleIntakeFormProps>(
               )}
             </div>
           </IntakeCard>
+
+          {/* Fabric & sampling — right rail (sampling source only) */}
+          {!isChinaImport && (
+            <IntakeCard
+              title={t("admin.styles.intake.samplingSpecifics")}
+              subtitle={t("admin.styles.intake.samplingSpecificsSubtitle")}
+            >
+              <div className="space-y-4">
+                <div>
+                  <Label>{t("admin.styles.intake.fabric")}</Label>
+                  <FabricPicker
+                    fabrics={fabrics}
+                    fabricId={form.fabricId}
+                    fabricColourId={selectedFabricColourId}
+                    onChange={(choice) => {
+                      set("fabricId", choice?.fabricId ?? null);
+                      // Auto-fill the product colour from the chosen
+                      // fabric-colour (still overridable in the colour field).
+                      if (choice?.colourName) {
+                        set("primaryColour", choice.colourName);
+                      }
+                    }}
+                    onFabricCreated={(f) => onFabricsChanged([...fabrics, f])}
+                  />
+                </div>
+                <div>
+                  <Label>{t("admin.styles.intake.sampleFabricRequired")}</Label>
+                  <div className="relative">
+                    <Input
+                      type="number"
+                      min="0"
+                      step="0.01"
+                      value={form.sampleFabricRequired}
+                      onChange={(e) =>
+                        set("sampleFabricRequired", e.target.value)
+                      }
+                      placeholder={t(
+                        "admin.styles.intake.sampleFabricRequiredHelp",
+                      )}
+                      disabled={!selectedFabric}
+                    />
+                    <span
+                      className="pointer-events-none absolute inset-y-0 right-3 flex items-center text-[12px] font-medium text-[var(--color-muted-foreground)]"
+                      aria-hidden
+                    >
+                      {uomLabel(selectedFabric?.unitOfMeasure ?? null)}
+                    </span>
+                  </div>
+                </div>
+                <div>
+                  <Label>{t("admin.styles.intake.samplingTimeline")}</Label>
+                  <div className="relative">
+                    <Input
+                      type="number"
+                      min="0"
+                      step="1"
+                      inputMode="numeric"
+                      value={form.samplingTimeline}
+                      onChange={(e) => set("samplingTimeline", e.target.value)}
+                      placeholder="0"
+                    />
+                    <span
+                      className="pointer-events-none absolute inset-y-0 right-3 flex items-center text-[12px] font-medium text-[var(--color-muted-foreground)]"
+                      aria-hidden
+                    >
+                      {Number(form.samplingTimeline) === 1 ? "day" : "days"}
+                    </span>
+                  </div>
+                </div>
+              </div>
+            </IntakeCard>
+          )}
         </div>
       </>
     );
