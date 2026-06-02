@@ -39,6 +39,8 @@ const ROLES: UserRole[] = [
   'pattern_master_m',
   'china_import_approver',
   'pd_lead',
+  // Cross-cutting data-entry role — can enter data anywhere, approve nothing.
+  'operator',
 ];
 
 interface ApiErrorShape {

@@ -20,6 +20,9 @@ const ROLE_HOMES: Record<UserRole, string> = {
   china_import_approver: '/',
   data_admin: '/',
   pd_lead: '/',
+  // Operator is an office-home role (see OFFICE_HOME_ROLES in App.tsx), so
+  // HomeRoute renders Home directly and this map is only a fallback.
+  operator: '/',
 };
 
 export default function Dashboard() {

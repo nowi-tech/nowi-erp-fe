@@ -93,7 +93,8 @@
     "stitching_master": "Stitching",
     "finishing_master": "Finishing",
     "data_manager": "Data",
-    "viewer": "Viewer"
+    "viewer": "Viewer",
+    "operator": "Operator"
   },
   "floor": {
     "title": "Floor",

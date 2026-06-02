@@ -55,6 +55,7 @@ export default function Home() {
     'sampling_lead',
     'pattern_master_w',
     'pattern_master_m',
+    'operator',
   ]);
 
   const [cards, setCards] = useState<DashboardCards | null>(null);

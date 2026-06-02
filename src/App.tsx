@@ -88,6 +88,9 @@ const OFFICE_HOME_ROLES: UserRole[] = [
   'pattern_master_m',
   'china_import_approver',
   'pd_lead',
+  // Operator has no dedicated floor home — land them on the office Home and
+  // let the sidebar expose every data-entry destination.
+  'operator',
 ];
 
 /**
@@ -182,7 +185,7 @@ function App() {
             <Route
               path="/admin"
               element={
-                <ProtectedRoute allowedRoles={['admin', 'viewer', 'data_manager']}>
+                <ProtectedRoute allowedRoles={['admin', 'viewer', 'data_manager', 'operator']}>
                   <S>
                     <AdminShell />
                   </S>
@@ -228,9 +231,14 @@ function App() {
               <Route
                 path="users"
                 element={
-                  <S>
-                    <UsersPage />
-                  </S>
+                  // User management is admin/viewer/data_manager only — the
+                  // /admin parent now admits 'operator' for Production +
+                  // Dispatches, so re-gate to keep operator out of Users.
+                  <ProtectedRoute allowedRoles={['admin', 'viewer', 'data_manager']}>
+                    <S>
+                      <UsersPage />
+                    </S>
+                  </ProtectedRoute>
                 }
               />
               <Route
@@ -244,9 +252,14 @@ function App() {
               <Route
                 path="edit-requests"
                 element={
-                  <S>
-                    <EditRequestsPage />
-                  </S>
+                  // The lot edit-request approval queue is not operator work
+                  // (BE gates GET /lots/edit-requests to admin). Re-gate to
+                  // exclude operator now that the parent admits it.
+                  <ProtectedRoute allowedRoles={['admin', 'viewer', 'data_manager']}>
+                    <S>
+                      <EditRequestsPage />
+                    </S>
+                  </ProtectedRoute>
                 }
               />
               {/* TODO: build — admin Vendors, SKUs and Settings pages.
@@ -271,7 +284,7 @@ function App() {
             <Route
               path="/floor"
               element={
-                <ProtectedRoute allowedRoles={['floor_manager', 'admin']}>
+                <ProtectedRoute allowedRoles={['floor_manager', 'admin', 'operator']}>
                   <S>
                     <FloorHome />
                   </S>
@@ -281,7 +294,7 @@ function App() {
             <Route
               path="/floor/receive"
               element={
-                <ProtectedRoute allowedRoles={['floor_manager', 'admin']}>
+                <ProtectedRoute allowedRoles={['floor_manager', 'admin', 'operator']}>
                   <S>
                     <ReceiveFromKotty />
                   </S>
@@ -291,7 +304,7 @@ function App() {
             <Route
               path="/floor/lot/:lotId"
               element={
-                <ProtectedRoute allowedRoles={['floor_manager', 'admin']}>
+                <ProtectedRoute allowedRoles={['floor_manager', 'admin', 'operator']}>
                   <S>
                     <FloorLotDetail />
                   </S>
@@ -301,7 +314,7 @@ function App() {
             <Route
               path="/floor/lot/:lotId/edit"
               element={
-                <ProtectedRoute allowedRoles={['floor_manager', 'admin']}>
+                <ProtectedRoute allowedRoles={['floor_manager', 'admin', 'operator']}>
                   <S>
                     <FloorEditLot />
                   </S>
@@ -312,7 +325,7 @@ function App() {
             <Route
               path="/stitching"
               element={
-                <ProtectedRoute allowedRoles={['stitching_master', 'admin', 'viewer']}>
+                <ProtectedRoute allowedRoles={['stitching_master', 'admin', 'viewer', 'operator']}>
                   <S>
                     <StitchingHome />
                   </S>
@@ -324,7 +337,7 @@ function App() {
             <Route
               path="/stitching/receive"
               element={
-                <ProtectedRoute allowedRoles={['floor_manager', 'admin']}>
+                <ProtectedRoute allowedRoles={['floor_manager', 'admin', 'operator']}>
                   <S>
                     <ReceiveFromKotty />
                   </S>
@@ -334,7 +347,7 @@ function App() {
             <Route
               path="/stitching/lot/:lotId"
               element={
-                <ProtectedRoute allowedRoles={['stitching_master', 'admin']}>
+                <ProtectedRoute allowedRoles={['stitching_master', 'admin', 'operator']}>
                   <S>
                     <StitchingReceiveLot />
                   </S>
@@ -344,7 +357,7 @@ function App() {
             <Route
               path="/stitching/worked-on/:lotId"
               element={
-                <ProtectedRoute allowedRoles={['stitching_master', 'admin', 'viewer']}>
+                <ProtectedRoute allowedRoles={['stitching_master', 'admin', 'viewer', 'operator']}>
                   <S>
                     <StitchingWorkedOnDetail />
                   </S>
@@ -354,7 +367,7 @@ function App() {
             <Route
               path="/finishing"
               element={
-                <ProtectedRoute allowedRoles={['finishing_master', 'admin', 'viewer']}>
+                <ProtectedRoute allowedRoles={['finishing_master', 'admin', 'viewer', 'operator']}>
                   <S>
                     <FinishingHome />
                   </S>
@@ -364,7 +377,7 @@ function App() {
             <Route
               path="/finishing/lot/:lotId"
               element={
-                <ProtectedRoute allowedRoles={['finishing_master', 'admin']}>
+                <ProtectedRoute allowedRoles={['finishing_master', 'admin', 'operator']}>
                   <S>
                     <FinishingReceiveLot />
                   </S>
@@ -374,7 +387,7 @@ function App() {
             <Route
               path="/finishing/worked-on/:lotId"
               element={
-                <ProtectedRoute allowedRoles={['finishing_master', 'admin', 'viewer']}>
+                <ProtectedRoute allowedRoles={['finishing_master', 'admin', 'viewer', 'operator']}>
                   <S>
                     <FinishingWorkedOnDetail />
                   </S>
@@ -384,7 +397,7 @@ function App() {
             <Route
               path="/data"
               element={
-                <ProtectedRoute allowedRoles={['data_manager', 'admin', 'viewer']}>
+                <ProtectedRoute allowedRoles={['data_manager', 'admin', 'viewer', 'operator']}>
                   <S>
                     <AdminShell />
                   </S>
@@ -422,6 +435,7 @@ function App() {
                     'data_manager',
                     'data_admin',
                     'pd_lead',
+                    'operator',
                   ]}
                 >
                   <S>
@@ -453,6 +467,7 @@ function App() {
                       'sampling_lead',
                       'pattern_master_w',
                       'pattern_master_m',
+                      'operator',
                     ]}
                   >
                     <S>
@@ -484,6 +499,7 @@ function App() {
                     'pattern_master_w',
                     'pattern_master_m',
                     'china_import_approver',
+                    'operator',
                   ]}
                 >
                   <S>
@@ -513,6 +529,7 @@ function App() {
                     'pattern_master_w',
                     'pattern_master_m',
                     'viewer',
+                    'operator',
                   ]}
                 >
                   <S>
