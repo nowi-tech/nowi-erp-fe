@@ -27,15 +27,18 @@ interface Props {
 }
 
 /**
- * Searchable Colour picker. Suggestions come from `GET /api/styles/colours`
- * (distinct `primaryColour` values across existing styles). There is no
- * master table — `primaryColour` is free text on Style.
+ * Searchable Colour picker for a Style's free-text `primaryColour`.
+ * Suggestion sources, in priority order:
+ *   1. `fabricColours` (when given) — the chosen fabric's colours, surfaced
+ *      first with a swatch; the product colour usually matches the cloth.
+ *   2. `GET /api/styles/colours` — distinct `primaryColour` values already
+ *      used across existing styles.
+ * The committed value is still free text on `Style.primaryColour`; this
+ * picker never writes to the Colour master, so an override is always allowed.
  *
- * UX matches CategoryPicker / FabricPicker:
- *   - Type-ahead filters the suggestions list
- *   - `+ Add` always opens a popup with a Name input prefilled from
- *     whatever was typed (or empty when none). Submit commits the value.
- *     Empty-typed click also opens the popup (used to be a no-op).
+ *   - Type-ahead filters the list.
+ *   - `+ Add` opens a popup with a Name input prefilled from whatever was
+ *     typed (empty-typed click still opens it); submit commits the value.
  */
 export default function ColourPicker({
   value,

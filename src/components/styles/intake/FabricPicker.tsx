@@ -57,8 +57,11 @@ function StockPill({ qty }: { qty: number | null | undefined }) {
 }
 
 /**
- * Searchable Fabric picker. Each row shows the fabric name + a stock
- * pill (yellow when there's stock, red when procurement is needed).
+ * Searchable Fabric picker. When a fabric stocks colours it lists one row
+ * per fabric-colour ("Fabric — Colour"), each with its own per-colour stock
+ * pill; a colourless fabric shows a single row. Selecting a row reports the
+ * chosen fabric-colour (via `onChange`) so the caller can auto-fill the
+ * product colour.
  *
  * "+ Add fabric" opens the full FabricEditorForm — same form the
  * Fabric Library page uses, so the picker has every field a designer
