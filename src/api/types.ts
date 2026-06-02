@@ -201,6 +201,29 @@ export interface FabricComposition {
   percent: string;
 }
 
+/** Curated colour-master swatch (also the source for fabric colours). */
+export interface Colour {
+  id: number;
+  name: string;
+  hex: string | null;
+  family: string | null;
+  isActive: boolean;
+}
+
+/**
+ * A colour a fabric is stocked in. `id` is the FabricColour row id — the
+ * value sent back as `fabricColourId` on stock entries and variants.
+ */
+export interface FabricColour {
+  id: number;
+  colourId: number;
+  name: string;
+  hex: string | null;
+  family: string | null;
+  /** Per-(fabric, colour) availability: SUM of stock entries for this colour. */
+  availableQuantity?: number;
+}
+
 export interface Fabric {
   id: number;
   name: string;
@@ -216,6 +239,8 @@ export interface Fabric {
   unitOfMeasure: FabricUnitOfMeasure | null;
   isBlended: boolean;
   compositions: FabricComposition[];
+  /** Active colours this fabric is stocked in. */
+  colours?: FabricColour[];
   /** Computed: SUM of all stock-ledger entries (signed). */
   availableQuantity?: number;
   updatedAt?: string;
@@ -226,6 +251,10 @@ export type FabricStockEntryType = "receipt" | "consumption" | "adjustment";
 export interface FabricStockEntry {
   id: number;
   fabricId: number;
+  /** Which fabric-colour this entry moves; null = unattributed/legacy. */
+  fabricColourId: number | null;
+  /** Hydrated by the ledger read — the colour name/hex for display. */
+  fabricColour?: { id: number; colour: { name: string; hex: string | null } } | null;
   /** Signed: positive for receipt, negative for consumption. */
   quantity: string;
   entryType: FabricStockEntryType;
@@ -240,15 +269,25 @@ export interface CreateFabricStockEntryInput {
   /** Positive magnitude — the server signs it. */
   quantity: number;
   entryType: FabricStockEntryType;
+  /** Required when the fabric stocks colours; rejected otherwise. */
+  fabricColourId?: number | null;
   note?: string | null;
 }
 
 export interface StyleVariant {
   id: number;
   styleId: number;
+  /** Effective product colour (defaults from the fabric-colour; overridable). */
   colour: string;
   fabricId: number | null;
-  fabric?: Pick<Fabric, "id" | "name"> | null;
+  fabric?: Pick<Fabric, 'id' | 'name'> | null;
+  /** The fabric-colour this variant is cut from (provenance / stock). */
+  fabricColourId: number | null;
+  fabricColour?: {
+    id: number;
+    colourId: number;
+    colour: { name: string; hex: string | null };
+  } | null;
   samplingStatus: string | null;
   sampleApproval: string | null;
   cuttingQty: number | null;

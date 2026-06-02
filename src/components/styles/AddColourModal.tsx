@@ -317,6 +317,7 @@ export default function AddColourModal({
               onChange={setColour}
               placeholder={t("admin.styles.addColour.colourPh")}
               inlineAdd
+              fabricColours={parent.fabric?.colours ?? []}
             />
           </div>
 

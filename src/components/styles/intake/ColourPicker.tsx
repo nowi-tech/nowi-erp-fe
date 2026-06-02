@@ -19,18 +19,26 @@ interface Props {
    *  where nested Dialogs would share the window-level Escape handler
    *  and close both on a single Esc. */
   inlineAdd?: boolean;
+  /** The chosen fabric's colours. When present they're surfaced first
+   *  (with a swatch + "from fabric" hint) as the recommended set — the
+   *  product colour usually matches the fabric. Free text is still
+   *  allowed (garment-dye / prints / marketing names). */
+  fabricColours?: { id: number; name: string; hex: string | null }[];
 }
 
 /**
- * Searchable Colour picker. Suggestions come from `GET /api/styles/colours`
- * (distinct `primaryColour` values across existing styles). There is no
- * master table — `primaryColour` is free text on Style.
+ * Searchable Colour picker for a Style's free-text `primaryColour`.
+ * Suggestion sources, in priority order:
+ *   1. `fabricColours` (when given) — the chosen fabric's colours, surfaced
+ *      first with a swatch; the product colour usually matches the cloth.
+ *   2. `GET /api/styles/colours` — distinct `primaryColour` values already
+ *      used across existing styles.
+ * The committed value is still free text on `Style.primaryColour`; this
+ * picker never writes to the Colour master, so an override is always allowed.
  *
- * UX matches CategoryPicker / FabricPicker:
- *   - Type-ahead filters the suggestions list
- *   - `+ Add` always opens a popup with a Name input prefilled from
- *     whatever was typed (or empty when none). Submit commits the value.
- *     Empty-typed click also opens the popup (used to be a no-op).
+ *   - Type-ahead filters the list.
+ *   - `+ Add` opens a popup with a Name input prefilled from whatever was
+ *     typed (empty-typed click still opens it); submit commits the value.
  */
 export default function ColourPicker({
   value,
@@ -38,6 +46,7 @@ export default function ColourPicker({
   disabled,
   placeholder,
   inlineAdd,
+  fabricColours,
 }: Props) {
   const { t } = useTranslation();
   const [colours, setColours] = useState<string[]>([]);
@@ -59,16 +68,43 @@ export default function ColourPicker({
     };
   }, []);
 
-  // Combine the server list with the currently-selected value so an
-  // off-list colour (just-added or imported) still shows as selected
-  // in the closed trigger.
+  // Options, in priority order:
+  //  1. the chosen fabric's colours (recommended; swatch + "from fabric")
+  //  2. historical free-text colours + the current value (off-list overrides)
+  // Deduped case-insensitively so a fabric colour isn't repeated below.
   const options = useMemo<ComboboxOption<string>[]>(() => {
-    const set = new Set<string>(colours);
-    if (value) set.add(value);
-    return Array.from(set)
-      .sort((a, b) => a.localeCompare(b))
-      .map((c) => ({ value: c, label: c, searchText: c }));
-  }, [colours, value]);
+    const seen = new Set<string>();
+    const opts: ComboboxOption<string>[] = [];
+
+    for (const fc of fabricColours ?? []) {
+      const key = fc.name.toLowerCase();
+      if (seen.has(key)) continue;
+      seen.add(key);
+      opts.push({
+        value: fc.name,
+        label: fc.name,
+        searchText: fc.name,
+        sublabel: t('admin.styles.intake.colourFromFabric', {
+          defaultValue: 'from fabric',
+        }),
+        trailing: (
+          <span
+            className="h-3 w-3 rounded-full border border-black/10"
+            style={{ backgroundColor: fc.hex || fc.name.toLowerCase() }}
+          />
+        ),
+      });
+    }
+
+    const rest = new Set<string>(colours);
+    if (value) rest.add(value);
+    for (const c of Array.from(rest).sort((a, b) => a.localeCompare(b))) {
+      if (seen.has(c.toLowerCase())) continue;
+      seen.add(c.toLowerCase());
+      opts.push({ value: c, label: c, searchText: c });
+    }
+    return opts;
+  }, [colours, value, fabricColours, t]);
 
   const commit = (raw: string) => {
     const v = raw.trim();
