@@ -46,6 +46,12 @@ interface Props {
    *  gender / categoryId / colour) whenever a link is read or an image is
    *  classified. The parent form pre-fills empty fields from it. */
   onExtracted?: (result: LinkExtractResult) => void;
+  /** Optional — link-read status, so the parent can show inline feedback
+   *  under the reference-link input (loading / what was found / failure). */
+  onExtractStatus?: (status: {
+    loading: boolean;
+    result?: LinkExtractResult;
+  }) => void;
 }
 
 function isAbsUrl(v: string): boolean {
@@ -73,10 +79,13 @@ export default function ReferenceImageGrid({
   onChange,
   onPrimaryUrlChange,
   onExtracted,
+  onExtractStatus,
 }: Props) {
   const toast = useToast();
   const fileRef = useRef<HTMLInputElement>(null);
   const [busy, setBusy] = useState(false);
+  // True while a pasted link is being read — shows a loader in the add tile.
+  const [fetchingLink, setFetchingLink] = useState(false);
   const [previews, setPreviews] = useState<Record<string, string>>({});
   // Track which extracted URLs we've already auto-fetched + appended,
   // so re-typing the same link doesn't add duplicate tiles.
@@ -93,22 +102,28 @@ export default function ReferenceImageGrid({
   const onChangeRef = useRef(onChange);
   const onPrimaryUrlChangeRef = useRef(onPrimaryUrlChange);
   const onExtractedRef = useRef(onExtracted);
+  const onExtractStatusRef = useRef(onExtractStatus);
   useEffect(() => {
     valueRef.current = value;
     onChangeRef.current = onChange;
     onPrimaryUrlChangeRef.current = onPrimaryUrlChange;
     onExtractedRef.current = onExtracted;
+    onExtractStatusRef.current = onExtractStatus;
   });
   // True until the component unmounts — used to guard async callbacks
   // from updating state after unmount (replaces the per-effect-run
   // `cancelled` flag that was incorrectly tripping on re-renders).
   const mountedRef = useRef(true);
-  useEffect(
-    () => () => {
+  useEffect(() => {
+    // Reset on (re)mount — React 19 StrictMode mounts → unmounts → remounts
+    // in dev, so without restoring this to true the cleanup's `false` would
+    // stick and every async .then below would silently bail (no image add,
+    // no field fill, no status update).
+    mountedRef.current = true;
+    return () => {
       mountedRef.current = false;
-    },
-    [],
-  );
+    };
+  }, []);
 
   // Resolve signed URLs for any GCS object paths in `value`.
   useEffect(() => {
@@ -165,9 +180,16 @@ export default function ReferenceImageGrid({
     if (lastFetchedFor.current === url) return;
     if (valueRef.current.length >= MAX_IMAGES) return;
     lastFetchedFor.current = url;
+    onExtractStatusRef.current?.({ loading: true });
+    setFetchingLink(true);
     extractLink(url)
       .then((r) => {
-        if (!mountedRef.current || !r.ok) return;
+        if (!mountedRef.current) return;
+        setFetchingLink(false);
+        // Always report status so the form can show inline feedback below
+        // the link input (success summary or the failure reason).
+        onExtractStatusRef.current?.({ loading: false, result: r });
+        if (!r.ok) return;
         // Bubble AI attributes (gender / category / colour) to the form
         // even when no image came back — url-context often reads the page
         // attributes without yielding a usable image.
@@ -185,7 +207,13 @@ export default function ReferenceImageGrid({
         );
       })
       .catch(() => {
-        /* silent — non-blocking */
+        if (mountedRef.current) {
+          setFetchingLink(false);
+          onExtractStatusRef.current?.({
+            loading: false,
+            result: { ok: false, reason: "Could not read that link." },
+          });
+        }
       });
   }, [debouncedLink, toast]);
 
@@ -327,6 +355,9 @@ export default function ReferenceImageGrid({
                 alt="Reference 1 (primary)"
                 className="h-full w-full object-cover"
                 draggable={false}
+                // Marketplace CDNs (flixcart/myntassets) reject cross-site
+                // hotlinks that carry a Referer — strip it so the image loads.
+                referrerPolicy="no-referrer"
               />
             ) : (
               <div className="flex h-full w-full items-center justify-center text-[var(--color-muted-foreground)]">
@@ -386,6 +417,7 @@ export default function ReferenceImageGrid({
                   alt={`Reference ${idx + 1}`}
                   className="h-full w-full object-cover"
                   draggable={false}
+                  referrerPolicy="no-referrer"
                 />
               ) : (
                 <div className="flex h-full w-full items-center justify-center text-[var(--color-muted-foreground)]">
@@ -440,8 +472,15 @@ export default function ReferenceImageGrid({
                 : 'Add reference image'
             }
           >
-            {busy ? (
-              <Loader2 size={addIsLarge ? 24 : 18} className="animate-spin" />
+            {busy || fetchingLink ? (
+              <>
+                <Loader2 size={addIsLarge ? 24 : 18} className="animate-spin" />
+                {addIsLarge && fetchingLink && (
+                  <span className="text-[11px] text-[var(--color-muted-foreground)]">
+                    Fetching from link…
+                  </span>
+                )}
+              </>
             ) : (
               <>
                 <ImagePlus size={addIsLarge ? 28 : 20} />

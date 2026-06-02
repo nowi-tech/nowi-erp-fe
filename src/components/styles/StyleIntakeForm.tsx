@@ -11,6 +11,7 @@ import { useTranslation } from "react-i18next";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
+import { Skeleton } from "@/components/ui/skeleton";
 import { Combobox, type ComboboxOption } from "@/components/ui/combobox";
 
 import PatternCadInput from "@/components/shared/PatternCadInput";
@@ -451,6 +452,15 @@ const StyleIntakeForm = forwardRef<StyleIntakeFormHandle, StyleIntakeFormProps>(
     const genderTouched = useRef(false);
     const [aiFilled, setAiFilled] = useState<Record<string, boolean>>({});
     const [aiLowConfidence, setAiLowConfidence] = useState(false);
+    // Inline feedback shown under the reference-link input.
+    const [linkStatus, setLinkStatus] = useState<{
+      loading: boolean;
+      result?: LinkExtractResult;
+    } | null>(null);
+    // While a link is being read, shimmer the auto-fillable fields that are
+    // still empty so the user sees they're about to populate.
+    const extracting = !!linkStatus?.loading;
+    const FIELD_SKELETON = <Skeleton className="h-10 w-full" />;
 
     const clearAiBadge = (k: string) =>
       setAiFilled((prev) => (prev[k] ? { ...prev, [k]: false } : prev));
@@ -463,6 +473,12 @@ const StyleIntakeForm = forwardRef<StyleIntakeFormHandle, StyleIntakeFormProps>(
       const filled: string[] = [];
       setForm((f) => {
         const patch: Partial<FormState> = {};
+        // Working name — only when still blank. Prefer the AI-cleaned `name`
+        // (no brand/SEO), never the raw marketplace title.
+        if (!f.workingName.trim() && r.name) {
+          patch.workingName = r.name;
+          filled.push("name");
+        }
         if (!genderTouched.current && r.gender) {
           patch.gender = toFormGender(r.gender);
           filled.push("gender");
@@ -495,6 +511,23 @@ const StyleIntakeForm = forwardRef<StyleIntakeFormHandle, StyleIntakeFormProps>(
 
     // Gender → category cascade. Switching gender resets category if
     // the current one isn't valid for the new gender bucket.
+    // Human summary of what a link read produced, for the inline hint.
+    const summarizeExtract = (r: LinkExtractResult): string => {
+      const bits: string[] = [];
+      if (r.imageUrl) bits.push("image");
+      if (r.name) bits.push(`“${r.name}”`);
+      if (r.gender)
+        bits.push({ W: "Women", M: "Men", U: "Unisex" }[r.gender]);
+      if (r.categoryId != null) {
+        const c = categories.find((x) => x.id === r.categoryId);
+        if (c) bits.push(c.name);
+      }
+      if (r.colour) bits.push(r.colour);
+      return bits.length
+        ? `From link: ${bits.join(" · ")}`
+        : "Read the link, but couldn’t detect details — fill them manually.";
+    };
+
     const onGenderChange = (next: Gender) => {
       genderTouched.current = true;
       clearAiBadge("gender");
@@ -746,21 +779,40 @@ const StyleIntakeForm = forwardRef<StyleIntakeFormHandle, StyleIntakeFormProps>(
           </div>
         )}
 
-        {/* Two-up grid: Inspiration | Article */}
-        <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-          <IntakeCard
-            title={t("admin.styles.intake.inspiration")}
-            subtitle={t("admin.styles.intake.inspirationSubtitle")}
-          >
-            <div className="space-y-4">
-              <div>
-                <Label>{t("admin.styles.intake.referenceLink")}</Label>
-                <Input
-                  value={form.referenceLink}
-                  onChange={(e) => set("referenceLink", e.target.value)}
-                  placeholder="https://…"
-                />
-              </div>
+        {/* Source — the reference link drives the auto-fill; fabric sits
+            beside the image, and the article identity fills in below. */}
+        <IntakeCard
+          title={t("admin.styles.intake.inspiration")}
+          subtitle={t("admin.styles.intake.inspirationSubtitle")}
+        >
+          <div className="space-y-4">
+            <div>
+              <Label>{t("admin.styles.intake.referenceLink")}</Label>
+              <Input
+                value={form.referenceLink}
+                onChange={(e) => set("referenceLink", e.target.value)}
+                placeholder="https://…"
+              />
+              {linkStatus?.loading ? (
+                <p className="mt-1.5 text-[12px] text-[var(--color-muted-foreground)]">
+                  ✨ Reading link…
+                </p>
+              ) : linkStatus?.result ? (
+                linkStatus.result.ok ? (
+                  <p className="mt-1.5 text-[12px] text-violet-600">
+                    {summarizeExtract(linkStatus.result)}
+                  </p>
+                ) : (
+                  <p className="mt-1.5 text-[12px] text-amber-600">
+                    {linkStatus.result.reason ??
+                      "Couldn’t read that link — paste or upload the image."}
+                  </p>
+                )
+              ) : null}
+            </div>
+
+            {/* Reference image (left) | Fabric & sampling (right) */}
+            <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
               <div>
                 <Label>{t("admin.styles.intake.referenceImage")}</Label>
                 <ReferenceImageGrid
@@ -770,49 +822,145 @@ const StyleIntakeForm = forwardRef<StyleIntakeFormHandle, StyleIntakeFormProps>(
                   onChange={(next) => set("referenceImages", next)}
                   onPrimaryUrlChange={(u) => set("referenceImageUrl", u)}
                   onExtracted={handleExtracted}
+                  onExtractStatus={setLinkStatus}
                 />
               </div>
-              {isChinaImport && (
-                <div>
-                  <Label>{t("admin.styles.intake.remark")}</Label>
-                  <Textarea
-                    value={form.remark}
-                    onChange={(e) => set("remark", e.target.value)}
-                    placeholder={t("admin.styles.intake.remarkPh")}
-                  />
+              {!isChinaImport && (
+                <div className="space-y-4">
+                  <div>
+                    <Label>{t("admin.styles.intake.fabric")}</Label>
+                    <FabricPicker
+                      fabrics={fabrics}
+                      value={form.fabricId}
+                      onChange={(next) => set("fabricId", next)}
+                      onFabricCreated={(f) =>
+                        onFabricsChanged([...fabrics, f])
+                      }
+                    />
+                  </div>
+                  <div>
+                    <Label>
+                      {t("admin.styles.intake.sampleFabricRequired")}
+                    </Label>
+                    <div className="relative">
+                      <Input
+                        type="number"
+                        min="0"
+                        step="0.01"
+                        value={form.sampleFabricRequired}
+                        onChange={(e) =>
+                          set("sampleFabricRequired", e.target.value)
+                        }
+                        placeholder={t(
+                          "admin.styles.intake.sampleFabricRequiredHelp",
+                        )}
+                        disabled={!selectedFabric}
+                      />
+                      <span
+                        className="pointer-events-none absolute inset-y-0 right-3 flex items-center text-[12px] font-medium text-[var(--color-muted-foreground)]"
+                        aria-hidden
+                      >
+                        {uomLabel(selectedFabric?.unitOfMeasure ?? null)}
+                      </span>
+                    </div>
+                  </div>
+                  <div>
+                    <Label>{t("admin.styles.intake.samplingTimeline")}</Label>
+                    <div className="relative">
+                      <Input
+                        type="number"
+                        min="0"
+                        step="1"
+                        inputMode="numeric"
+                        value={form.samplingTimeline}
+                        onChange={(e) =>
+                          set("samplingTimeline", e.target.value)
+                        }
+                        placeholder="0"
+                      />
+                      <span
+                        className="pointer-events-none absolute inset-y-0 right-3 flex items-center text-[12px] font-medium text-[var(--color-muted-foreground)]"
+                        aria-hidden
+                      >
+                        {Number(form.samplingTimeline) === 1 ? "day" : "days"}
+                      </span>
+                    </div>
+                  </div>
                 </div>
               )}
             </div>
-          </IntakeCard>
 
+            {/* Pattern / CAD — full width within the source card */}
+            {!isChinaImport && (
+              <div>
+                <Label>
+                  {t("admin.styles.drawer.fields.patternCad", "Pattern / CAD")}
+                </Label>
+                <PatternCadInput
+                  entityId={style?.id ?? "new"}
+                  patternCadPaths={form.patternCadPaths}
+                  onChange={(p) => set("patternCadPaths", p)}
+                />
+              </div>
+            )}
+
+            {isChinaImport && (
+              <div>
+                <Label>{t("admin.styles.intake.remark")}</Label>
+                <Textarea
+                  value={form.remark}
+                  onChange={(e) => set("remark", e.target.value)}
+                  placeholder={t("admin.styles.intake.remarkPh")}
+                />
+              </div>
+            )}
+          </div>
+        </IntakeCard>
+
+        {/* Article — the auto-filled identity (fills in below the source) */}
+        <div className="mt-4">
           <IntakeCard
             title={t("admin.styles.intake.article")}
             subtitle={t("admin.styles.intake.articleSubtitle")}
           >
-            <div className="space-y-4">
+            <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
               <div>
-                <Label>{t("admin.styles.intake.workingName")} *</Label>
-                <Input
-                  value={form.workingName}
-                  onChange={(e) => set("workingName", e.target.value)}
-                  placeholder={t("admin.styles.intake.workingNamePh")}
-                  autoFocus={!isEdit}
-                />
+                <Label>
+                  {t("admin.styles.intake.workingName")} *
+                  {aiFilled.name && <AiFilledBadge />}
+                </Label>
+                {extracting && !form.workingName.trim() ? (
+                  FIELD_SKELETON
+                ) : (
+                  <Input
+                    value={form.workingName}
+                    onChange={(e) => {
+                      clearAiBadge("name");
+                      set("workingName", e.target.value);
+                    }}
+                    placeholder={t("admin.styles.intake.workingNamePh")}
+                    autoFocus={!isEdit}
+                  />
+                )}
               </div>
               <div>
                 <Label>
                   {t("admin.styles.intake.gender")}
                   {aiFilled.gender && <AiFilledBadge />}
                 </Label>
-                <GenderSegment
-                  value={form.gender}
-                  onChange={onGenderChange}
-                  labels={{
-                    women: t("admin.styles.intake.genderWomen"),
-                    men: t("admin.styles.intake.genderMen"),
-                    unisex: t("admin.styles.intake.genderUnisex"),
-                  }}
-                />
+                {extracting && !genderTouched.current ? (
+                  FIELD_SKELETON
+                ) : (
+                  <GenderSegment
+                    value={form.gender}
+                    onChange={onGenderChange}
+                    labels={{
+                      women: t("admin.styles.intake.genderWomen"),
+                      men: t("admin.styles.intake.genderMen"),
+                      unisex: t("admin.styles.intake.genderUnisex"),
+                    }}
+                  />
+                )}
               </div>
               <div>
                 <Label>
@@ -821,42 +969,50 @@ const StyleIntakeForm = forwardRef<StyleIntakeFormHandle, StyleIntakeFormProps>(
                     <AiFilledBadge low={aiLowConfidence} />
                   )}
                 </Label>
-                <CategoryPicker
-                  categories={categories}
-                  value={form.categoryId}
-                  fallbackCode={
-                    (form.categoryCode as FineCategoryCode | null) ?? null
-                  }
-                  gender={form.gender}
-                  onChange={({ categoryId, code }) => {
-                    clearAiBadge("category");
-                    setForm((f) => ({
-                      ...f,
-                      categoryId,
-                      categoryCode: code,
-                    }));
-                  }}
-                  onCategoryCreated={(c) =>
-                    onCategoriesChanged([...categories, c])
-                  }
-                />
+                {extracting && form.categoryId == null ? (
+                  FIELD_SKELETON
+                ) : (
+                  <CategoryPicker
+                    categories={categories}
+                    value={form.categoryId}
+                    fallbackCode={
+                      (form.categoryCode as FineCategoryCode | null) ?? null
+                    }
+                    gender={form.gender}
+                    onChange={({ categoryId, code }) => {
+                      clearAiBadge("category");
+                      setForm((f) => ({
+                        ...f,
+                        categoryId,
+                        categoryCode: code,
+                      }));
+                    }}
+                    onCategoryCreated={(c) =>
+                      onCategoriesChanged([...categories, c])
+                    }
+                  />
+                )}
               </div>
               <div>
                 <Label>
                   {t("admin.styles.intake.primaryColour")}
                   {aiFilled.colour && <AiFilledBadge />}
                 </Label>
-                <ColourPicker
-                  value={form.primaryColour}
-                  onChange={(next) => {
-                    clearAiBadge("colour");
-                    set("primaryColour", next);
-                  }}
-                  placeholder={t("admin.styles.intake.primaryColourPh")}
-                />
+                {extracting && !form.primaryColour.trim() ? (
+                  FIELD_SKELETON
+                ) : (
+                  <ColourPicker
+                    value={form.primaryColour}
+                    onChange={(next) => {
+                      clearAiBadge("colour");
+                      set("primaryColour", next);
+                    }}
+                    placeholder={t("admin.styles.intake.primaryColourPh")}
+                  />
+                )}
               </div>
               {!isChinaImport && (
-                <div>
+                <div className="md:col-span-2">
                   <Label>{t("admin.styles.intake.developmentReason")}</Label>
                   <Textarea
                     value={form.developmentReason}
@@ -868,85 +1024,6 @@ const StyleIntakeForm = forwardRef<StyleIntakeFormHandle, StyleIntakeFormProps>(
             </div>
           </IntakeCard>
         </div>
-
-        {/* Sampling specifics — full-width row, sampling only */}
-        {!isChinaImport && (
-          <div className="mt-4">
-            <IntakeCard
-              title={t("admin.styles.intake.samplingSpecifics")}
-              subtitle={t("admin.styles.intake.samplingSpecificsSubtitle")}
-            >
-              <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-                <div>
-                  <Label>{t("admin.styles.intake.fabric")}</Label>
-                  <FabricPicker
-                    fabrics={fabrics}
-                    value={form.fabricId}
-                    onChange={(next) => set("fabricId", next)}
-                    onFabricCreated={(f) => onFabricsChanged([...fabrics, f])}
-                  />
-                </div>
-                <div>
-                  <Label>{t("admin.styles.intake.sampleFabricRequired")}</Label>
-                  <div className="relative">
-                    <Input
-                      type="number"
-                      min="0"
-                      step="0.01"
-                      value={form.sampleFabricRequired}
-                      onChange={(e) =>
-                        set("sampleFabricRequired", e.target.value)
-                      }
-                      placeholder={t(
-                        "admin.styles.intake.sampleFabricRequiredHelp",
-                      )}
-                      disabled={!selectedFabric}
-                    />
-                    <span
-                      className="pointer-events-none absolute inset-y-0 right-3 flex items-center text-[12px] font-medium text-[var(--color-muted-foreground)]"
-                      aria-hidden
-                    >
-                      {uomLabel(selectedFabric?.unitOfMeasure ?? null)}
-                    </span>
-                  </div>
-                </div>
-                <div>
-                  <Label>{t("admin.styles.intake.samplingTimeline")}</Label>
-                  <div className="relative">
-                    <Input
-                      type="number"
-                      min="0"
-                      step="1"
-                      inputMode="numeric"
-                      value={form.samplingTimeline}
-                      onChange={(e) => set("samplingTimeline", e.target.value)}
-                      placeholder="0"
-                    />
-                    <span
-                      className="pointer-events-none absolute inset-y-0 right-3 flex items-center text-[12px] font-medium text-[var(--color-muted-foreground)]"
-                      aria-hidden
-                    >
-                      {Number(form.samplingTimeline) === 1 ? "day" : "days"}
-                    </span>
-                  </div>
-                </div>
-                <div className="md:col-span-2">
-                  <Label>
-                    {t(
-                      "admin.styles.drawer.fields.patternCad",
-                      "Pattern / CAD",
-                    )}
-                  </Label>
-                  <PatternCadInput
-                    entityId={style?.id ?? "new"}
-                    patternCadPaths={form.patternCadPaths}
-                    onChange={(p) => set("patternCadPaths", p)}
-                  />
-                </div>
-              </div>
-            </IntakeCard>
-          </div>
-        )}
       </>
     );
   },

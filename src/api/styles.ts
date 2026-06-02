@@ -148,6 +148,8 @@ export interface LinkExtractResult {
   categoryId?: number;
   /** Free-text colour → primaryColour. */
   colour?: string;
+  /** Concise AI-suggested working name (no brand/SEO filler). */
+  name?: string;
   /** 0..1 — drives a "please confirm" hint when low. */
   confidence?: number;
   source?:
