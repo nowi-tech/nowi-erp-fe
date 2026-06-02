@@ -1,4 +1,4 @@
-import { Fragment, useEffect, useMemo, useState } from 'react';
+import { Fragment, useEffect, useMemo, useState } from "react";
 import {
   CheckCircle2,
   ChevronDown,
@@ -6,47 +6,50 @@ import {
   ExternalLink,
   Pause,
   Play,
-} from 'lucide-react';
-import { useTranslation } from 'react-i18next';
-import { Badge } from '@/components/ui/badge';
-import { Button } from '@/components/ui/button';
-import { ColumnFilter, type ColumnFilterOption } from '@/components/ui/column-filter';
-import InlineStatusCell from '@/components/styles/InlineStatusCell';
-import { useToast } from '@/components/ui/toast';
-import { useAuth } from '@/context/auth';
-import { hasAnyRole } from '@/lib/userRoles';
-import { patchStyle } from '@/api/styles';
-import type { Style, UserRole } from '@/api/types';
-import { cn } from '@/lib/utils';
-import { formatStyleRef } from '@/lib/styleRef';
+} from "lucide-react";
+import { useTranslation } from "react-i18next";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import {
+  ColumnFilter,
+  type ColumnFilterOption,
+} from "@/components/ui/column-filter";
+import InlineStatusCell from "@/components/styles/InlineStatusCell";
+import { useToast } from "@/components/ui/toast";
+import { useAuth } from "@/context/auth";
+import { hasAnyRole } from "@/lib/userRoles";
+import { patchStyle } from "@/api/styles";
+import type { Style, UserRole } from "@/api/types";
+import { cn } from "@/lib/utils";
+import { formatStyleRef } from "@/lib/styleRef";
 
 // Enum option labels — mirror the BE Prisma enums and the same set the
 // approval dialogs + SampleStateCard already use. Kept here so the
 // table doesn't need to round-trip to `/api/styles/options`.
 const SAMPLING_STATUS_OPTIONS = [
-  'in_progress_pattern_dev',
-  'in_progress_fabric_sourcing',
-  'in_progress_cutting',
-  'ready_for_inspection',
-  'corrections_needed',
-  'approved_for_production',
+  "in_progress_pattern_dev",
+  "in_progress_fabric_sourcing",
+  "in_progress_cutting",
+  "ready_for_inspection",
+  "corrections_needed",
+  "approved_for_production",
 ] as const;
 
 const SAMPLE_APPROVAL_OPTIONS = [
-  'approved_for_production',
-  'under_review_corrections',
-  'pattern_correction_approved',
+  "approved_for_production",
+  "under_review_corrections",
+  "pattern_correction_approved",
 ] as const;
 
 // Roles allowed to flip status cells inline — matches the styles WRITE
 // set on the BE. Viewers see plain read-only badges.
 const WRITE_ROLES: readonly UserRole[] = [
-  'admin',
-  'sampling_editor',
-  'sampling_lead',
-  'pattern_master_w',
-  'pattern_master_m',
-  'operator',
+  "admin",
+  "sampling_editor",
+  "sampling_lead",
+  "pattern_master_w",
+  "pattern_master_m",
+  "operator",
 ] as const;
 
 // Row-action role gates — mirror the BE guards (and the dashboard
@@ -56,11 +59,11 @@ const WRITE_ROLES: readonly UserRole[] = [
 //    "Withdraw" is a detail-page action, not a queue button).
 // BE still enforces; this is UX.
 const APPROVER_ROLES: readonly UserRole[] = [
-  'admin',
-  'sampling_lead',
-  'pattern_master_w',
-  'pattern_master_m',
-  'china_import_approver',
+  "admin",
+  "sampling_lead",
+  "pattern_master_w",
+  "pattern_master_m",
+  "china_import_approver",
 ] as const;
 
 /**
@@ -68,7 +71,7 @@ const APPROVER_ROLES: readonly UserRole[] = [
  * the column-filter popover. `getKey` is what we filter on (string, or
  * the empty token below for nulls), `getLabel` is what we render.
  */
-const NONE_TOKEN = '__none__';
+const NONE_TOKEN = "__none__";
 
 function distinct(
   rows: Style[],
@@ -78,13 +81,13 @@ function distinct(
   const counts = new Map<string, number>();
   for (const s of rows) {
     const raw = getKey(s);
-    const key = raw == null || raw === '' ? NONE_TOKEN : String(raw);
+    const key = raw == null || raw === "" ? NONE_TOKEN : String(raw);
     counts.set(key, (counts.get(key) ?? 0) + 1);
   }
   return Array.from(counts.entries())
     .map(([value, count]) => ({
       value,
-      label: value === NONE_TOKEN ? '— (none)' : getLabel(value),
+      label: value === NONE_TOKEN ? "— (none)" : getLabel(value),
       count,
     }))
     .sort((a, b) =>
@@ -113,14 +116,14 @@ interface Props {
    * `"compact"` — minimal set for non-sampling flows (China Import): Style #,
    *   Working Name, Colour, Updated. Hides Stage / Approval / Web.
    */
-  variant?: 'full' | 'compact';
+  variant?: "full" | "compact";
 }
 
-function lifecycleVariant(l: Style['lifecycle']) {
-  if (l === 'sample_approved' || l === 'dispatched') return 'success';
-  if (l === 'parked' || l === 'archived') return 'outline';
-  if (l === 'qc' || l === 'in_pd' || l === 'in_sampling') return 'stitch';
-  return 'secondary';
+function lifecycleVariant(l: Style["lifecycle"]) {
+  if (l === "sample_approved" || l === "dispatched") return "success";
+  if (l === "parked" || l === "archived") return "outline";
+  if (l === "qc" || l === "in_pd" || l === "in_sampling") return "stitch";
+  return "secondary";
 }
 
 /**
@@ -131,13 +134,13 @@ function lifecycleVariant(l: Style['lifecycle']) {
  *   • neither               → "New design"
  */
 function styleType(s: Style): {
-  kind: 'new' | 'colour' | 'based_on';
+  kind: "new" | "colour" | "based_on";
   ref: string | null;
 } {
-  if (s.familyCode) return { kind: 'colour', ref: s.familyCode };
+  if (s.familyCode) return { kind: "colour", ref: s.familyCode };
   if (s.basedOnStyleId != null)
-    return { kind: 'based_on', ref: s.basedOnStyle?.styleId ?? null };
-  return { kind: 'new', ref: null };
+    return { kind: "based_on", ref: s.basedOnStyle?.styleId ?? null };
+  return { kind: "new", ref: null };
 }
 
 /**
@@ -148,29 +151,29 @@ function styleType(s: Style): {
 function StyleTypePill({ style }: { style: Style }) {
   const { t } = useTranslation();
   const { kind, ref } = styleType(style);
-  if (kind === 'colour') {
+  if (kind === "colour") {
     return (
       <Badge variant="stitch" className="text-[10px]" title={ref ?? undefined}>
-        {t('admin.styles.table.type.colourOf', {
-          code: ref ?? '—',
-          defaultValue: `Colour of ${ref ?? '—'}`,
+        {t("admin.styles.table.type.colourOf", {
+          code: ref ?? "—",
+          defaultValue: `Colour of ${ref ?? "—"}`,
         })}
       </Badge>
     );
   }
-  if (kind === 'based_on') {
+  if (kind === "based_on") {
     return (
       <Badge variant="outline" className="text-[10px]" title={ref ?? undefined}>
-        {t('admin.styles.table.type.basedOn', {
-          code: ref ?? '—',
-          defaultValue: `Based on ${ref ?? '—'}`,
+        {t("admin.styles.table.type.basedOn", {
+          code: ref ?? "—",
+          defaultValue: `Based on ${ref ?? "—"}`,
         })}
       </Badge>
     );
   }
   return (
     <Badge variant="secondary" className="text-[10px]">
-      {t('admin.styles.table.type.new', { defaultValue: 'New design' })}
+      {t("admin.styles.table.type.new", { defaultValue: "New design" })}
     </Badge>
   );
 }
@@ -190,12 +193,12 @@ export default function StylesTable({
   onApprove,
   onPark,
   onRevive,
-  variant = 'full',
+  variant = "full",
 }: Props) {
   const { t } = useTranslation();
   const { user } = useAuth();
   const toast = useToast();
-  const isCompact = variant === 'compact';
+  const isCompact = variant === "compact";
   const [expanded, setExpanded] = useState<Set<number>>(new Set());
   // Inline-edit gating for the status cells.
   const canEdit = hasAnyRole(user, WRITE_ROLES);
@@ -213,8 +216,8 @@ export default function StylesTable({
     } catch (e: unknown) {
       const m =
         (e as { response?: { data?: { message?: string | string[] } } })
-          ?.response?.data?.message ?? 'Could not save change.';
-      toast.show(Array.isArray(m) ? m.join(', ') : String(m), 'error');
+          ?.response?.data?.message ?? "Could not save change.";
+      toast.show(Array.isArray(m) ? m.join(", ") : String(m), "error");
       throw e;
     }
   };
@@ -242,42 +245,52 @@ export default function StylesTable({
   // every value even when other filters narrow the visible set.
   const lifecycleOptions = useMemo(
     () =>
-      distinct(rows, (s) => s.lifecycle, (v) =>
-        t(`admin.styles.lifecycle.${v}` as const, { defaultValue: v }),
+      distinct(
+        rows,
+        (s) => s.lifecycle,
+        (v) => t(`admin.styles.lifecycle.${v}` as const, { defaultValue: v }),
       ),
     [rows, t],
   );
   const samplingStatusOptions = useMemo(
     () =>
-      distinct(rows, (s) => s.samplingStatus, (v) =>
-        t(`admin.styles.samplingSteps.${v}` as const, {
-          defaultValue: v.replace(/_/g, ' '),
-        }),
+      distinct(
+        rows,
+        (s) => s.samplingStatus,
+        (v) =>
+          t(`admin.styles.samplingSteps.${v}` as const, {
+            defaultValue: v.replace(/_/g, " "),
+          }),
       ),
     [rows, t],
   );
   const sampleApprovalOptions = useMemo(
     () =>
-      distinct(rows, (s) => s.sampleApproval, (v) =>
-        t(`admin.styles.sampleApproval.${v}` as const, {
-          defaultValue: v.replace(/_/g, ' '),
-        }),
+      distinct(
+        rows,
+        (s) => s.sampleApproval,
+        (v) =>
+          t(`admin.styles.sampleApproval.${v}` as const, {
+            defaultValue: v.replace(/_/g, " "),
+          }),
       ),
     [rows, t],
   );
   const colourOptions = useMemo(
-    () => distinct(rows, (s) => s.primaryColour, (v) => v),
+    () =>
+      distinct(
+        rows,
+        (s) => s.primaryColour,
+        (v) => v,
+      ),
     [rows],
   );
 
   // Apply filters. NONE_TOKEN is the key for missing values.
   const filteredRows = useMemo(() => {
-    const checkExcl = (
-      val: string | null | undefined,
-      excluded: string[],
-    ) => {
+    const checkExcl = (val: string | null | undefined, excluded: string[]) => {
       if (excluded.length === 0) return true;
-      const key = val == null || val === '' ? NONE_TOKEN : String(val);
+      const key = val == null || val === "" ? NONE_TOKEN : String(val);
       return !excluded.includes(key);
     };
     return rows.filter(
@@ -287,13 +300,7 @@ export default function StylesTable({
         checkExcl(s.sampleApproval, excSampleApproval) &&
         checkExcl(s.primaryColour, excColour),
     );
-  }, [
-    rows,
-    excLifecycle,
-    excSamplingStatus,
-    excSampleApproval,
-    excColour,
-  ]);
+  }, [rows, excLifecycle, excSamplingStatus, excSampleApproval, excColour]);
 
   /**
    * Colour-family grouping. Build a parent → child[] index from the
@@ -356,7 +363,7 @@ export default function StylesTable({
     );
 
   const rowClasses =
-    'border-t border-[var(--color-border)] cursor-pointer hover:bg-[var(--color-muted)] focus:outline-none focus-visible:bg-[var(--color-muted)]';
+    "border-t border-[var(--color-border)] cursor-pointer hover:bg-[var(--color-muted)] focus:outline-none focus-visible:bg-[var(--color-muted)]";
 
   // compact = expand + style# + name + type + colour + updated + chevron
   // full    = expand + style# + name + type + stage + approval + web + updated + chevron
@@ -371,7 +378,7 @@ export default function StylesTable({
             onClick={toggleAll}
             className="text-xs text-[var(--color-primary)] hover:underline"
           >
-            {allExpanded ? 'Collapse all' : 'Expand all'}
+            {allExpanded ? "Collapse all" : "Expand all"}
           </button>
         </div>
       )}
@@ -382,10 +389,10 @@ export default function StylesTable({
               <th className="w-8" />
               <th className="text-left font-medium px-3 py-2">
                 <span className="inline-flex items-center gap-1">
-                  {t('admin.styles.table.styleNo')}
+                  {t("admin.styles.table.styleNo")}
                   <ColumnFilter
-                    title={t('admin.styles.lifecycle.label', {
-                      defaultValue: 'Lifecycle',
+                    title={t("admin.styles.lifecycle.label", {
+                      defaultValue: "Lifecycle",
                     })}
                     options={lifecycleOptions}
                     excluded={excLifecycle}
@@ -394,17 +401,17 @@ export default function StylesTable({
                 </span>
               </th>
               <th className="text-left font-medium px-3 py-2">
-                {t('admin.styles.table.workingName')}
+                {t("admin.styles.table.workingName")}
               </th>
               <th className="text-left font-medium px-3 py-2 hidden sm:table-cell">
-                {t('admin.styles.table.type.label', { defaultValue: 'Type' })}
+                {t("admin.styles.table.type.label", { defaultValue: "Type" })}
               </th>
               {isCompact ? (
                 <th className="text-left font-medium px-3 py-2 hidden sm:table-cell">
                   <span className="inline-flex items-center gap-1">
-                    {t('admin.styles.table.colour')}
+                    {t("admin.styles.table.colour")}
                     <ColumnFilter
-                      title={t('admin.styles.table.colour')}
+                      title={t("admin.styles.table.colour")}
                       options={colourOptions}
                       excluded={excColour}
                       onChange={setExcColour}
@@ -415,12 +422,12 @@ export default function StylesTable({
                 <>
                   <th className="text-left font-medium px-3 py-2 hidden lg:table-cell">
                     <span className="inline-flex items-center gap-1">
-                      {t('admin.styles.table.stage')}
+                      {t("admin.styles.table.stage")}
                       {/* Stage cell renders samplingStatus — filter
                           matches what's displayed in the column. */}
                       <ColumnFilter
-                        title={t('admin.styles.table.samplingStatus', {
-                          defaultValue: 'Sampling status',
+                        title={t("admin.styles.table.samplingStatus", {
+                          defaultValue: "Sampling status",
                         })}
                         options={samplingStatusOptions}
                         excluded={excSamplingStatus}
@@ -430,9 +437,9 @@ export default function StylesTable({
                   </th>
                   <th className="text-left font-medium px-3 py-2 hidden lg:table-cell">
                     <span className="inline-flex items-center gap-1">
-                      {t('admin.styles.table.approval')}
+                      {t("admin.styles.table.approval")}
                       <ColumnFilter
-                        title={t('admin.styles.table.approval')}
+                        title={t("admin.styles.table.approval")}
                         options={sampleApprovalOptions}
                         excluded={excSampleApproval}
                         onChange={setExcSampleApproval}
@@ -442,12 +449,12 @@ export default function StylesTable({
                   <th className="text-left font-medium px-3 py-2 hidden sm:table-cell">
                     {/* Web cell is just an external-link icon — no
                         filtering needed. */}
-                    {t('admin.styles.table.web')}
+                    {t("admin.styles.table.web")}
                   </th>
                 </>
               )}
               <th className="text-left font-medium px-3 py-2 hidden md:table-cell">
-                {t('admin.styles.table.updated')}
+                {t("admin.styles.table.updated")}
               </th>
               <th />
             </tr>
@@ -469,7 +476,7 @@ export default function StylesTable({
                   colSpan={COL_COUNT}
                   className="px-3 py-8 text-center text-[var(--color-muted-foreground)]"
                 >
-                  {t('admin.styles.table.empty')}
+                  {t("admin.styles.table.empty")}
                 </td>
               </tr>
             )}
@@ -487,18 +494,18 @@ export default function StylesTable({
                       tabIndex={0}
                       onClick={() => onRowClick?.(s)}
                       onKeyDown={(e) => {
-                        if (e.key === 'Enter' || e.key === ' ') {
+                        if (e.key === "Enter" || e.key === " ") {
                           e.preventDefault();
                           onRowClick?.(s);
                         }
                       }}
-                      className={cn(rowClasses, 'font-medium')}
+                      className={cn(rowClasses, "font-medium")}
                     >
                       <td className="px-2 py-2 text-center">
                         {hasChildren ? (
                           <button
                             type="button"
-                            aria-label={isOpen ? 'Collapse' : 'Expand'}
+                            aria-label={isOpen ? "Collapse" : "Expand"}
                             aria-expanded={isOpen}
                             onClick={(e) => {
                               e.stopPropagation();
@@ -525,11 +532,11 @@ export default function StylesTable({
                               onStyleNoClick?.(s);
                             }}
                             className={cn(
-                              'text-left font-mono text-[var(--color-primary)]',
-                              onStyleNoClick && 'hover:underline',
+                              "text-left font-mono text-[var(--color-primary)]",
+                              onStyleNoClick && "hover:underline",
                             )}
                           >
-                            {formatStyleRef(s, `(${t('admin.styles.draft')})`)}
+                            {formatStyleRef(s, `(${t("admin.styles.draft")})`)}
                           </button>
                           <div className="flex gap-1 flex-wrap">
                             <Badge
@@ -542,10 +549,10 @@ export default function StylesTable({
                         </div>
                       </td>
                       <td className="px-3 py-2">
-                        {s.workingName ?? '—'}
+                        {s.workingName ?? "—"}
                         {variants.length > 0 && (
                           <Badge variant="outline" className="ml-2 text-[10px]">
-                            {t('admin.styles.table.variantsCount', {
+                            {t("admin.styles.table.variantsCount", {
                               count: variants.length,
                             })}
                           </Badge>
@@ -554,9 +561,12 @@ export default function StylesTable({
                           <Badge
                             variant="outline"
                             className="ml-2 text-[10px]"
-                            title={[s.primaryColour, ...colourChildren.map((c) => c.primaryColour)]
+                            title={[
+                              s.primaryColour,
+                              ...colourChildren.map((c) => c.primaryColour),
+                            ]
                               .filter(Boolean)
-                              .join(', ')}
+                              .join(", ")}
                           >
                             {`${1 + colourChildren.length} colours`}
                           </Badge>
@@ -567,7 +577,7 @@ export default function StylesTable({
                       </td>
                       {isCompact ? (
                         <td className="px-3 py-2 hidden sm:table-cell text-[var(--color-muted-foreground)]">
-                          {s.primaryColour ?? '—'}
+                          {s.primaryColour ?? "—"}
                         </td>
                       ) : (
                         <>
@@ -576,14 +586,14 @@ export default function StylesTable({
                             onClick={(e) => e.stopPropagation()}
                           >
                             <InlineStatusCell
-                              value={s.samplingStatus ?? ''}
+                              value={s.samplingStatus ?? ""}
                               displayLabel={
                                 s.samplingStatus
                                   ? t(
                                       `admin.styles.samplingSteps.${s.samplingStatus}` as const,
                                       { defaultValue: s.samplingStatus },
                                     )
-                                  : '—'
+                                  : "—"
                               }
                               options={SAMPLING_STATUS_OPTIONS.map((v) => ({
                                 value: v,
@@ -606,14 +616,14 @@ export default function StylesTable({
                             onClick={(e) => e.stopPropagation()}
                           >
                             <InlineStatusCell
-                              value={s.sampleApproval ?? ''}
+                              value={s.sampleApproval ?? ""}
                               displayLabel={
                                 s.sampleApproval
                                   ? t(
                                       `admin.styles.sampleApproval.${s.sampleApproval}` as const,
                                       { defaultValue: s.sampleApproval },
                                     )
-                                  : '—'
+                                  : "—"
                               }
                               options={SAMPLE_APPROVAL_OPTIONS.map((v) => ({
                                 value: v,
@@ -644,7 +654,7 @@ export default function StylesTable({
                                 <ExternalLink size={14} />
                               </a>
                             ) : (
-                              '—'
+                              "—"
                             )}
                           </td>
                         </>
@@ -703,7 +713,7 @@ export default function StylesTable({
                           key={v.id}
                           className={cn(
                             rowClasses,
-                            'bg-[var(--color-surface-2)]/40',
+                            "bg-[var(--color-surface-2)]/40",
                           )}
                           onClick={() => onRowClick?.(s)}
                         >
@@ -711,7 +721,7 @@ export default function StylesTable({
                           <td className="px-3 py-2 pl-8">
                             <span className="text-[var(--color-muted-foreground)]">
                               ↳
-                            </span>{' '}
+                            </span>{" "}
                             <span className="font-medium">{v.colour}</span>
                             {v.fabric && (
                               <span className="text-[var(--color-muted-foreground)] font-normal ml-1.5">
@@ -721,9 +731,7 @@ export default function StylesTable({
                           </td>
                           <td className="px-3 py-2 hidden sm:table-cell" />
                           <td className="px-3 py-2 text-[var(--color-muted-foreground)]">
-                            {v.cuttingQty != null
-                              ? `Cut ${v.cuttingQty}`
-                              : '—'}
+                            {v.cuttingQty != null ? `Cut ${v.cuttingQty}` : "—"}
                           </td>
                           {isCompact ? (
                             <td className="px-3 py-2 hidden sm:table-cell" />
@@ -735,18 +743,21 @@ export default function StylesTable({
                                       `admin.styles.samplingSteps.${v.samplingStatus}` as const,
                                       { defaultValue: v.samplingStatus },
                                     )
-                                  : '—'}
+                                  : "—"}
                               </td>
                               <td className="px-3 py-2 hidden lg:table-cell">
-                                {v.sampleApproval ?? '—'}
+                                {v.sampleApproval ?? "—"}
                               </td>
                               <td className="px-3 py-2 hidden sm:table-cell">
-                                {v.websiteLive === 'live' ? (
-                                  <Badge variant="ready" className="text-[10px]">
+                                {v.websiteLive === "live" ? (
+                                  <Badge
+                                    variant="ready"
+                                    className="text-[10px]"
+                                  >
                                     Live
                                   </Badge>
                                 ) : (
-                                  '—'
+                                  "—"
                                 )}
                               </td>
                             </>
@@ -787,19 +798,17 @@ function RowActions({
 }) {
   const { user } = useAuth();
   const canApprove =
-    style.lifecycle === 'draft' && hasAnyRole(user, APPROVER_ROLES);
+    style.lifecycle === "draft" && hasAnyRole(user, APPROVER_ROLES);
   // Inline Park belongs only on DRAFT (inbox) rows — it means "decide not
   // to develop." Once a style is approved (past draft) parking a committed
   // design is a rare admin/lead "Withdraw" on the detail page, not a queue
-  // button (2026-06-01 refinement, STYLE_SUBMISSION_FLOWS.md).
-  const canPark =
-    style.lifecycle === 'draft' && hasAnyRole(user, WRITE_ROLES);
+  // button (2026-06-01 refinement; see the workspace submission-flow spec,
+  // docs/STYLE_SUBMISSION_FLOWS.md in the erp workspace root).
+  const canPark = style.lifecycle === "draft" && hasAnyRole(user, WRITE_ROLES);
   const canRevive =
-    style.lifecycle === 'parked' && hasAnyRole(user, WRITE_ROLES);
+    style.lifecycle === "parked" && hasAnyRole(user, WRITE_ROLES);
   const hasAny =
-    (canApprove && onApprove) ||
-    (canPark && onPark) ||
-    (canRevive && onRevive);
+    (canApprove && onApprove) || (canPark && onPark) || (canRevive && onRevive);
 
   if (!hasAny) {
     return (
@@ -857,22 +866,22 @@ function RowActions({
  * so the dot still renders.
  */
 function colourSwatch(name: string | null | undefined): string {
-  if (!name) return 'var(--color-muted-foreground)';
+  if (!name) return "var(--color-muted-foreground)";
   const n = name.trim().toLowerCase();
   const overrides: Record<string, string> = {
-    cream: '#f5e9c8',
-    'off white': '#f5f1e6',
-    offwhite: '#f5f1e6',
-    natural: '#ece1c8',
-    nude: '#e8c7a0',
-    blush: '#f4c2c2',
-    sage: '#a8b9a0',
-    olive: '#708238',
-    mustard: '#e1b800',
-    rust: '#b7410e',
-    burgundy: '#800020',
-    charcoal: '#36454f',
-    navy: '#0a1f44',
+    cream: "#f5e9c8",
+    "off white": "#f5f1e6",
+    offwhite: "#f5f1e6",
+    natural: "#ece1c8",
+    nude: "#e8c7a0",
+    blush: "#f4c2c2",
+    sage: "#a8b9a0",
+    olive: "#708238",
+    mustard: "#e1b800",
+    rust: "#b7410e",
+    burgundy: "#800020",
+    charcoal: "#36454f",
+    navy: "#0a1f44",
   };
   return overrides[n] ?? n;
 }
@@ -917,24 +926,24 @@ function ColourFamilySubTable({
         <thead className="bg-[var(--color-surface-2)]/60 text-[var(--color-muted-foreground)] text-[10px] uppercase tracking-wider">
           <tr>
             <th className="text-left font-medium px-3 py-1.5">
-              {t('admin.styles.table.styleNo')}
+              {t("admin.styles.table.styleNo")}
             </th>
             <th className="text-left font-medium px-3 py-1.5">
-              {t('admin.styles.table.colour', { defaultValue: 'Colour' })}
+              {t("admin.styles.table.colour", { defaultValue: "Colour" })}
             </th>
             {!isCompact && (
               <>
                 <th className="text-left font-medium px-3 py-1.5 hidden lg:table-cell">
-                  {t('admin.styles.table.stage')}
+                  {t("admin.styles.table.stage")}
                 </th>
                 <th className="text-left font-medium px-3 py-1.5 hidden lg:table-cell">
-                  {t('admin.styles.table.approval')}
+                  {t("admin.styles.table.approval")}
                 </th>
               </>
             )}
             <th className="text-left font-medium px-3 py-1.5">
-              {t('admin.styles.table.actions', {
-                defaultValue: 'Actions',
+              {t("admin.styles.table.actions", {
+                defaultValue: "Actions",
               })}
             </th>
           </tr>
@@ -947,7 +956,7 @@ function ColourFamilySubTable({
               tabIndex={0}
               onClick={() => onRowClick?.(v)}
               onKeyDown={(e) => {
-                if (e.key === 'Enter' || e.key === ' ') {
+                if (e.key === "Enter" || e.key === " ") {
                   e.preventDefault();
                   onRowClick?.(v);
                 }
@@ -963,7 +972,7 @@ function ColourFamilySubTable({
                   }}
                   className="text-left font-mono text-[var(--color-primary)] hover:underline"
                 >
-                  {formatStyleRef(v, `(${t('admin.styles.draft')})`)}
+                  {formatStyleRef(v, `(${t("admin.styles.draft")})`)}
                 </button>
               </td>
               <td className="px-3 py-2">
@@ -973,7 +982,7 @@ function ColourFamilySubTable({
                     className="inline-block h-2.5 w-2.5 rounded-full border border-[var(--color-border)]"
                     style={{ background: colourSwatch(v.primaryColour) }}
                   />
-                  {v.primaryColour ?? '—'}
+                  {v.primaryColour ?? "—"}
                 </span>
               </td>
               {!isCompact && (
@@ -984,7 +993,7 @@ function ColourFamilySubTable({
                           `admin.styles.samplingSteps.${v.samplingStatus}` as const,
                           { defaultValue: v.samplingStatus },
                         )
-                      : '—'}
+                      : "—"}
                   </td>
                   <td className="px-3 py-2 hidden lg:table-cell">
                     {v.sampleApproval
@@ -992,7 +1001,7 @@ function ColourFamilySubTable({
                           `admin.styles.sampleApproval.${v.sampleApproval}` as const,
                           { defaultValue: v.sampleApproval },
                         )
-                      : '—'}
+                      : "—"}
                   </td>
                 </>
               )}

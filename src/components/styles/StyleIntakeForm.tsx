@@ -39,7 +39,8 @@ import type {
 
 /**
  * The three submission paths offered at the top of a *new* sampling
- * intake (the A/B/C fork from STYLE_SUBMISSION_FLOWS.md):
+ * intake (the A/B/C fork from the workspace submission-flow spec,
+ * docs/STYLE_SUBMISSION_FLOWS.md in the erp workspace root):
  *   - `new`       — net-new design → full sampling.
  *   - `colour`    — a colour of an existing style → spawned as a colour
  *                   variant (skips sampling, inherits the family).
@@ -275,11 +276,11 @@ function ForkCard({
 const TYPED_CODE_ID = -1;
 
 /**
- * Picker for the colour / based-on fork. Loads existing sampling
- * products once via `listStyles({ search })` and filters them
- * client-side through the Combobox, OR — when `allowCode` (the based-on
- * branch) — lets the user type a free-text style code the BE will
- * resolve. The colour branch needs a real row (the spawn endpoint
+ * Picker for the colour / based-on fork. Loads one page of existing
+ * sampling products once (`listStyles({ source: "sampling", take: 100 })`)
+ * and filters them client-side through the Combobox, OR — when `allowCode`
+ * (the based-on branch) — lets the user type a free-text style code the BE
+ * will resolve. The colour branch needs a real row (the spawn endpoint
  * addresses the parent by id), so it never enables the free-text path.
  */
 function StyleRefPicker({

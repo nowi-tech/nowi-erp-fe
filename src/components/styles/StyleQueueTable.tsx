@@ -25,7 +25,8 @@ import { cn } from "@/lib/utils";
  * Sampling queue show submission columns (type / colour / reviewer).
  *
  * Layout is intentionally FLAT — colour and based-on styles are their own
- * rows carrying a TYPE pill (per STYLE_SUBMISSION_FLOWS.md), replacing the
+ * rows carrying a TYPE pill (per the workspace submission-flow spec,
+ * docs/STYLE_SUBMISSION_FLOWS.md in the erp workspace root), replacing the
  * old expand/collapse colour-family nesting.
  */
 export interface QueueColumn<R> {
@@ -316,7 +317,7 @@ export function TypePill({ style }: { style: Style }) {
         className={cn(base, "border border-blue-200 bg-blue-100 text-blue-900")}
         title={ref}
       >
-        {t("admin.styles.table.type.basedOn", { code: ref ?? "" })}
+        {t("admin.styles.table.type.basedOn", { code: ref ?? "—" })}
       </span>
     );
   }

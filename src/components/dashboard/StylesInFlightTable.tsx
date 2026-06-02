@@ -303,17 +303,27 @@ export default function StylesInFlightTable({
         onRowClick={openStyle}
         rowAccent={(row) => row.lifecycle === "draft"}
         renderActions={(row) => {
-          if (canApprove(row)) {
-            return <ApproveButton onClick={() => setApprovalTarget(row)} />;
-          }
-          if (canPark(row)) {
-            return (
-              <GhostActionButton icon="park" onClick={() => setParkTarget(row)}>
-                {t("dashboard.table.actions.park")}
-              </GhostActionButton>
-            );
-          }
-          return <RowChevron />;
+          const approve = canApprove(row);
+          const park = canPark(row);
+          if (!approve && !park) return <RowChevron />;
+          // Show BOTH when both apply (a draft an approver can also park) —
+          // don't let Approve hide the Park action. Park then Approve to
+          // match the sampling queue's right-aligned cluster order.
+          return (
+            <>
+              {park && (
+                <GhostActionButton
+                  icon="park"
+                  onClick={() => setParkTarget(row)}
+                >
+                  {t("dashboard.table.actions.park")}
+                </GhostActionButton>
+              )}
+              {approve && (
+                <ApproveButton onClick={() => setApprovalTarget(row)} />
+              )}
+            </>
+          );
         }}
       />
 

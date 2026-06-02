@@ -179,21 +179,20 @@ export default function StylesRegistry() {
   // Inline row actions — Approve now opens the Approval #1 dialog so
   // the approver explicitly ticks fabric / price / collection checks
   // before the Style # is minted. Park / Revive remain one-click.
-  const onRowApprove = (s: Style) => {
-    setApprovalTarget(s);
-  };
-  const onRowPark = (s: Style) => {
-    setParkTarget(s);
-  };
-  const onRowRevive = async (s: Style) => {
-    try {
-      await reviveStyle(s.id);
-      toast.show("Revived.", "success");
-      void load();
-    } catch {
-      toast.show("Could not revive.", "error");
-    }
-  };
+  const onRowApprove = useCallback((s: Style) => setApprovalTarget(s), []);
+  const onRowPark = useCallback((s: Style) => setParkTarget(s), []);
+  const onRowRevive = useCallback(
+    async (s: Style) => {
+      try {
+        await reviveStyle(s.id);
+        toast.show("Revived.", "success");
+        void load();
+      } catch {
+        toast.show("Could not revive.", "error");
+      }
+    },
+    [load, toast],
+  );
 
   // Column set for the flat Sampling Queue — Compact View. Built from the
   // shared cell helpers so the registry reads identically to the
@@ -315,9 +314,9 @@ export default function StylesRegistry() {
         </>
       );
     },
-    // onRowApprove/onRowPark/onRowRevive are stable across renders.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [user, t],
+    // onRowRevive closes over `load` (changes with tab/search/filter), so
+    // include the handlers — the action cluster must never call a stale `load`.
+    [user, t, onRowApprove, onRowPark, onRowRevive],
   );
 
   const tabDefs = useMemo(
