@@ -269,16 +269,18 @@ const StyleIntakeForm = forwardRef<StyleIntakeFormHandle, StyleIntakeFormProps>(
       [fabrics, form.fabricId],
     );
 
-    // When the chosen fabric stocks exactly one colour, default the (empty)
-    // product colour to it — the common cut-and-sew case. Multiple-colour
-    // fabrics surface their colours as the picker's top suggestions instead,
-    // and an existing colour is never overwritten.
-    useEffect(() => {
-      if (selectedFabric?.colours?.length === 1 && !form.primaryColour.trim()) {
-        set('primaryColour', selectedFabric.colours[0].name);
-      }
-      // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [selectedFabric]);
+    // Resolve which fabric-colour row is active by matching the current
+    // product colour back to the fabric's colours (the Style stores colour
+    // as text, not a FabricColour id). Keeps the picker highlighted on edit;
+    // null when the colour was overridden off the fabric's list.
+    const selectedFabricColourId = useMemo(() => {
+      const name = form.primaryColour.trim().toLowerCase();
+      if (!name || !selectedFabric?.colours?.length) return null;
+      return (
+        selectedFabric.colours.find((c) => c.name.toLowerCase() === name)?.id ??
+        null
+      );
+    }, [selectedFabric, form.primaryColour]);
 
     const isValid = form.workingName.trim().length > 0;
 
@@ -486,8 +488,16 @@ const StyleIntakeForm = forwardRef<StyleIntakeFormHandle, StyleIntakeFormProps>(
                   <Label>{t('admin.styles.intake.fabric')}</Label>
                   <FabricPicker
                     fabrics={fabrics}
-                    value={form.fabricId}
-                    onChange={(next) => set('fabricId', next)}
+                    fabricId={form.fabricId}
+                    fabricColourId={selectedFabricColourId}
+                    onChange={(choice) => {
+                      set('fabricId', choice?.fabricId ?? null);
+                      // Auto-fill the product colour from the chosen
+                      // fabric-colour (still overridable in the colour field).
+                      if (choice?.colourName) {
+                        set('primaryColour', choice.colourName);
+                      }
+                    }}
                     onFabricCreated={(f) =>
                       onFabricsChanged([...fabrics, f])
                     }
