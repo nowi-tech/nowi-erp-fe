@@ -402,7 +402,13 @@
           "colourOf": "Colour of {{code}}",
           "basedOn": "Based on {{code}}"
         },
-        "empty": "No styles. Click \"New design submission\" to create one."
+        "empty": "No styles. Click \"New design submission\" to create one.",
+        "draftNo": "Draft #",
+        "genderCategory": "Gender · Category",
+        "fabric": "Fabric",
+        "reviewer": "Reviewer",
+        "age": "Age",
+        "queueNote": "Approve opens the Approval #1 checks. New designs go to sampling; colour & based-on skip to production."
       },
       "draft": "Draft",
       "source": {
