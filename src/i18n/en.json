@@ -1188,11 +1188,11 @@
       },
       "columns": {
         "style": "Style",
-        "factory": "Factory",
         "lifecycle": "Lifecycle",
         "stage": "Stage",
         "updated": "Updated",
-        "actions": "Actions"
+        "actions": "Actions",
+        "colour": "Colour"
       },
       "actions": {
         "approve": "Approve",
