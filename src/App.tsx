@@ -252,10 +252,11 @@ function App() {
               <Route
                 path="edit-requests"
                 element={
-                  // The lot edit-request approval queue is not operator work
-                  // (BE gates GET /lots/edit-requests to admin). Re-gate to
-                  // exclude operator now that the parent admits it.
-                  <ProtectedRoute allowedRoles={['admin', 'viewer', 'data_manager']}>
+                  // The lot edit-request approval queue is admin-only: BE gates
+                  // GET /lots/edit-requests to admin and the sidebar only shows
+                  // it to admin, so match that here (the /admin parent now also
+                  // admits operator + viewer + data_manager).
+                  <ProtectedRoute allowedRoles={['admin']}>
                     <S>
                       <EditRequestsPage />
                     </S>
