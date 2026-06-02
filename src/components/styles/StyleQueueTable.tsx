@@ -19,7 +19,7 @@ import { cn } from "@/lib/utils";
  *
  * The shell is column-CONFIGURABLE: each page passes its own
  * {@link QueueColumn}[] built from the exported cell helpers
- * (`StyleRefLink`, `TypePill`, `ColourCell`, `ReviewerCell`, `AgeCell`,
+ * (`StyleRefLink`, `TypePill`, `ColourCell`, `ApproverOrPanelCell`, `AgeCell`,
  * `LifecycleBadge`, `Thumbnail`). That keeps the chrome identical while
  * letting the dashboard show operational columns (factory / stage) and the
  * Sampling queue show submission columns (type / colour / reviewer).
@@ -367,6 +367,52 @@ export function ReviewerCell({ name }: { name: string | null }) {
   );
 }
 
+/**
+ * Sampling-queue Reviewer column. There's no per-style reviewer
+ * assignment — the cell answers "who approves this submission?":
+ *   • approver present  → a single avatar + the approver's name (it's
+ *     already been approved by them).
+ *   • no approver yet   → a compact avatar stack of up to 3 panel members'
+ *     initials ("Pa Pr Ru"), titled with their full names, conveying
+ *     "reviewed by the panel". Empty panel renders "—".
+ */
+export function ApproverOrPanelCell({
+  approver,
+  panel,
+}: {
+  approver: { name: string } | null | undefined;
+  panel: { id: number; name: string }[];
+}) {
+  if (approver?.name) {
+    return <ReviewerCell name={approver.name} />;
+  }
+  if (panel.length === 0) {
+    return <span className="text-[var(--color-muted-foreground)]">—</span>;
+  }
+  const shown = panel.slice(0, 3);
+  return (
+    <span
+      className="flex items-center -space-x-1"
+      title={panel.map((p) => p.name).join(", ")}
+    >
+      {shown.map((p) => (
+        <span
+          key={p.id}
+          aria-hidden
+          className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full border border-[var(--color-surface)] bg-[var(--color-surface-2)] text-[10px] font-bold text-[var(--color-foreground)]"
+        >
+          {initials(p.name)}
+        </span>
+      ))}
+      {panel.length > shown.length && (
+        <span className="pl-2 text-[11px] text-[var(--color-muted-foreground)]">
+          +{panel.length - shown.length}
+        </span>
+      )}
+    </span>
+  );
+}
+
 /** Compact age, right-aligned ("3d", "2h", "now"). */
 export function AgeCell({ iso }: { iso: string | null | undefined }) {
   return (
@@ -452,30 +498,6 @@ export function lifecycleVariant(l: StyleLifecycle) {
   if (l === "parked" || l === "archived") return "outline";
   if (l === "qc" || l === "in_pd" || l === "in_sampling") return "stitch";
   return "secondary";
-}
-
-/**
- * Reviewer routing is not yet modeled on the BE (no reviewer field on
- * Style). Seed the one documented fact — women's-wear submissions route
- * to Parul (STYLE_SUBMISSION_FLOWS.md "Submit to Parul") — and read a
- * future per-style `reviewer.name` defensively when the BE adds it.
- * Unmapped genders fall back to null ("—"). TODO: replace with a real
- * assigned-reviewer field from the API.
- *
- * Keyed on BOTH the short BE code ('W') and the long form ('women'):
- * Style.gender is typed `Gender` but arrives as the StyleGender short
- * code at runtime, so we match either.
- */
-const REVIEWER_BY_GENDER: Record<string, string> = {
-  W: "Parul",
-  women: "Parul",
-};
-
-export function reviewerName(style: Style): string | null {
-  const explicit = (style as { reviewer?: { name?: string } | null }).reviewer
-    ?.name;
-  if (explicit) return explicit;
-  return (style.gender && REVIEWER_BY_GENDER[style.gender]) ?? null;
 }
 
 function initials(name: string): string {

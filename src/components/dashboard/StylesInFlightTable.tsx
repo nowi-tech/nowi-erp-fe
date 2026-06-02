@@ -13,6 +13,7 @@ import {
   StyleRefLink,
   Thumbnail,
   LifecycleBadge,
+  ColourCell,
   AgeCell,
   ApproveButton,
   GhostActionButton,
@@ -195,12 +196,14 @@ export default function StylesInFlightTable({
       key: "style",
       header: t("dashboard.table.columns.style", { defaultValue: "Style" }),
       cell: (row) => {
+        // Colour has its own column now; the subline only surfaces the
+        // colour-family fan-out count when there are variants.
         const subLine =
           row.colourVariantCount > 0
             ? t("dashboard.table.colourCount", {
                 count: row.colourVariantCount,
               })
-            : (row.primaryColour ?? "");
+            : "";
         return (
           <div className="flex items-center gap-2.5">
             <Thumbnail
@@ -248,18 +251,11 @@ export default function StylesInFlightTable({
       },
     },
     {
-      key: "factory",
-      header: t("dashboard.table.columns.factory", { defaultValue: "Factory" }),
-      className: "hidden lg:table-cell",
-      headerClassName: "hidden lg:table-cell",
-      cell: (row) =>
-        row.factory ? (
-          <Badge variant="outline" className="text-[10px]">
-            {row.factory.name}
-          </Badge>
-        ) : (
-          <span className="text-[var(--color-muted-foreground)]">—</span>
-        ),
+      key: "colour",
+      header: t("dashboard.table.columns.colour", { defaultValue: "Colour" }),
+      className: "hidden sm:table-cell",
+      headerClassName: "hidden sm:table-cell",
+      cell: (row) => <ColourCell name={row.primaryColour} />,
     },
     {
       key: "age",

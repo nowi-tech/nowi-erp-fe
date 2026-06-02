@@ -1,5 +1,5 @@
-import { apiClient } from './apiClient';
-import type { User, UserRole } from './types';
+import { apiClient } from "./apiClient";
+import type { Reviewer, User, UserRole } from "./types";
 
 export interface ListUsersParams {
   search?: string;
@@ -9,7 +9,7 @@ export interface ListUsersParams {
 }
 
 export async function listUsers(params: ListUsersParams = {}): Promise<User[]> {
-  const res = await apiClient.get<User[]>('/api/users', { params });
+  const res = await apiClient.get<User[]>("/api/users", { params });
   return res.data;
 }
 
@@ -26,13 +26,13 @@ export interface CreateUserInput {
 }
 
 export async function createUser(input: CreateUserInput): Promise<User> {
-  const res = await apiClient.post<User>('/api/users', input);
+  const res = await apiClient.post<User>("/api/users", input);
   return res.data;
 }
 
 export async function updateUser(
   userId: string | number,
-  patch: Partial<Pick<User, 'name' | 'role' | 'isTrainingMode' | 'isActive'>>,
+  patch: Partial<Pick<User, "name" | "role" | "isTrainingMode" | "isActive">>,
 ): Promise<User> {
   const res = await apiClient.patch<User>(`/api/users/${userId}`, patch);
   return res.data;
@@ -59,10 +59,9 @@ export async function grantUserRole(
   userId: string | number,
   role: UserRole,
 ): Promise<UserRole[]> {
-  const res = await apiClient.post<UserRole[]>(
-    `/api/users/${userId}/roles`,
-    { role },
-  );
+  const res = await apiClient.post<UserRole[]>(`/api/users/${userId}/roles`, {
+    role,
+  });
   return res.data;
 }
 
@@ -78,12 +77,14 @@ export async function revokeUserRole(
 }
 
 export async function markOnboarded(): Promise<User> {
-  const res = await apiClient.post<User>('/api/auth/me/onboarded');
+  const res = await apiClient.post<User>("/api/auth/me/onboarded");
   return res.data;
 }
 
 /** @deprecated kept so older callers compile; prefer markOnboarded() */
-export async function updateOnboardedAt(_userId: string | number): Promise<User> {
+export async function updateOnboardedAt(
+  _userId: string | number,
+): Promise<User> {
   return markOnboarded();
 }
 
@@ -103,11 +104,25 @@ export interface MasterWithLoad {
 export type StitchingMaster = MasterWithLoad;
 
 export async function listStitchingMasters(): Promise<MasterWithLoad[]> {
-  const res = await apiClient.get<MasterWithLoad[]>('/api/users/stitching-masters');
+  const res = await apiClient.get<MasterWithLoad[]>(
+    "/api/users/stitching-masters",
+  );
   return res.data;
 }
 
 export async function listFinishingMasters(): Promise<MasterWithLoad[]> {
-  const res = await apiClient.get<MasterWithLoad[]>('/api/users/finishing-masters');
+  const res = await apiClient.get<MasterWithLoad[]>(
+    "/api/users/finishing-masters",
+  );
+  return res.data;
+}
+
+/**
+ * Fixed sampling reviewer panel (active approver-role users). The sampling
+ * queue's Reviewer column shows the approver when present, else this panel.
+ * BE: GET /api/users/reviewers.
+ */
+export async function listReviewers(): Promise<Reviewer[]> {
+  const res = await apiClient.get<Reviewer[]>("/api/users/reviewers");
   return res.data;
 }

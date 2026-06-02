@@ -1,22 +1,22 @@
 // Hand-written minimal types. Will be regenerated from BE OpenAPI via `pnpm gen:api`.
 
 export type UserRole =
-  | 'admin'
-  | 'floor_manager'
-  | 'stitching_master'
-  | 'finishing_master'
-  | 'data_manager'
-  | 'viewer'
-  | 'sampling_editor'
+  | "admin"
+  | "floor_manager"
+  | "stitching_master"
+  | "finishing_master"
+  | "data_manager"
+  | "viewer"
+  | "sampling_editor"
   // ── Product Development (Phase 4-8) multi-role values ──────────────
-  | 'sampling_lead'
-  | 'pattern_master_w'
-  | 'pattern_master_m'
-  | 'china_import_approver'
-  | 'data_admin'
-  | 'pd_lead'
+  | "sampling_lead"
+  | "pattern_master_w"
+  | "pattern_master_m"
+  | "china_import_approver"
+  | "data_admin"
+  | "pd_lead"
   // Cross-cutting data-entry role: creates/edits everywhere, approves nothing.
-  | 'operator';
+  | "operator";
 
 export interface User {
   id: string;
@@ -65,14 +65,14 @@ export interface Sku {
 // ─── Orders / lots ────────────────────────────────────────────────────────
 
 export type OrderStatus =
-  | 'receiving'
-  | 'in_stitching'
-  | 'in_finishing'
-  | 'in_rework'
-  | 'dispatched'
-  | 'closed'
-  | 'closed_with_adjustment'
-  | 'stuck';
+  | "receiving"
+  | "in_stitching"
+  | "in_finishing"
+  | "in_rework"
+  | "dispatched"
+  | "closed"
+  | "closed_with_adjustment"
+  | "stuck";
 
 export interface Order {
   id: string;
@@ -119,7 +119,7 @@ export interface Lot {
     stageId: number;
     sizeLabel: string;
     qty: number;
-    kind: 'forward' | 'rework_return' | 'rework_redo';
+    kind: "forward" | "rework_return" | "rework_redo";
     receivedAt: string;
   }>;
   /**
@@ -146,7 +146,7 @@ export interface Lot {
   style?: {
     id: number;
     styleId: string;
-    gender: 'W' | 'M' | 'U';
+    gender: "W" | "M" | "U";
     categoryCode: string;
     category?: { id: number; code: string; name: string };
   } | null;
@@ -156,7 +156,7 @@ export interface Lot {
 // ─── Styles ───────────────────────────────────────────────────────────────
 
 /** W = Women, M = Men, U = Unisex. Mirrors the BE enum. */
-export type StyleGender = 'W' | 'M' | 'U';
+export type StyleGender = "W" | "M" | "U";
 
 export interface CategoryWithStyleCode {
   id: number;
@@ -175,25 +175,25 @@ export interface CategoryWithStyleCode {
 // ─── Product Development — Styles, variants, inspections, channels ──
 // Source of truth: docs/PRODUCT_DEV_MODULE_PLAN.md §6.
 
-export type StyleSource = 'sampling' | 'china_import' | 'legacy_floor_intake';
+export type StyleSource = "sampling" | "china_import" | "legacy_floor_intake";
 
 export type StyleLifecycle =
-  | 'draft'
-  | 'parked'
-  | 'in_sampling'
-  | 'sample_approved'
-  | 'archived'
+  | "draft"
+  | "parked"
+  | "in_sampling"
+  | "sample_approved"
+  | "archived"
   // v2 lifecycle states (kept for forward compat / type completeness):
-  | 'in_pd'
-  | 'qc'
-  | 'dispatched';
+  | "in_pd"
+  | "qc"
+  | "dispatched";
 
-export type ChannelName = 'myntra' | 'nykaa' | 'nowi_shopify' | 'other';
-export type ChannelState = 'off' | 'draft' | 'live';
-export type InspectionVerdict = 'pending' | 'corrections_needed' | 'approved';
-export type Gender = 'women' | 'men' | 'unisex';
+export type ChannelName = "myntra" | "nykaa" | "nowi_shopify" | "other";
+export type ChannelState = "off" | "draft" | "live";
+export type InspectionVerdict = "pending" | "corrections_needed" | "approved";
+export type Gender = "women" | "men" | "unisex";
 
-export type FabricUnitOfMeasure = 'meter' | 'kg' | 'oz';
+export type FabricUnitOfMeasure = "meter" | "kg" | "oz";
 
 export interface FabricComposition {
   id?: number;
@@ -221,7 +221,7 @@ export interface Fabric {
   updatedAt?: string;
 }
 
-export type FabricStockEntryType = 'receipt' | 'consumption' | 'adjustment';
+export type FabricStockEntryType = "receipt" | "consumption" | "adjustment";
 
 export interface FabricStockEntry {
   id: number;
@@ -248,13 +248,13 @@ export interface StyleVariant {
   styleId: number;
   colour: string;
   fabricId: number | null;
-  fabric?: Pick<Fabric, 'id' | 'name'> | null;
+  fabric?: Pick<Fabric, "id" | "name"> | null;
   samplingStatus: string | null;
   sampleApproval: string | null;
   cuttingQty: number | null;
   stitchingOutput: number | null;
   packagingQty: number | null;
-  websiteLive: 'live' | 'not_live' | null;
+  websiteLive: "live" | "not_live" | null;
   isArchived: boolean;
   createdAt: string;
   updatedAt: string;
@@ -398,7 +398,7 @@ export interface Style {
   // Approval #1
   approvedBy: number | null;
   approvedAt: string | null;
-  /** Hydrated by detail reads (BE `detailInclude.approver`). */
+  /** Who approved this submission (BE `listInclude`/`detailInclude.approver`). */
   approver?: { id: number; name: string } | null;
   /** Approval #1 recorded checks (sampling flow only). */
   approval1FabricFeasible: boolean | null;
@@ -430,6 +430,16 @@ export interface Style {
   inspections?: StyleInspection[];
   channelListings?: StyleChannelListing[];
   auditLogs?: StyleAuditLog[];
+}
+
+/**
+ * A member of the fixed sampling reviewer panel (an active approver-role
+ * user). The inbox shows the approver when present, else this panel.
+ * BE: GET /api/users/reviewers.
+ */
+export interface Reviewer {
+  id: number;
+  name: string;
 }
 
 // ─── Inbound ──────────────────────────────────────────────────────────────
@@ -515,7 +525,7 @@ export interface ReworkIssue {
   /** GCS object paths of defect photos attached at finishing. */
   photoPaths?: string[];
   attemptNumber: number;
-  status: 'open' | 'in_progress' | 'resolved' | 'exceeded_limit';
+  status: "open" | "in_progress" | "resolved" | "exceeded_limit";
   openedAt: string;
 }
 
@@ -680,7 +690,7 @@ export interface SkuDetailReceipt {
   at: string;
   stage: string;
   qty: number;
-  kind: 'forward' | 'rework' | 'scrap' | string;
+  kind: "forward" | "rework" | "scrap" | string;
 }
 
 export interface SkuDetailResponse {
@@ -751,18 +761,18 @@ export interface CycleTimeResponse {
 // ─── Dispatches ───────────────────────────────────────────────────────────
 
 export type DispatchStatus =
-  | 'draft'
-  | 'awaiting_confirmation'
-  | 'synced'
-  | 'manual_pdf'
-  | 'awaiting_grn'
-  | 'grn_received'
-  | 'grn_mismatch'
-  | 'sync_failed'
-  | 'closed'
-  | 'closed_with_adjustment';
+  | "draft"
+  | "awaiting_confirmation"
+  | "synced"
+  | "manual_pdf"
+  | "awaiting_grn"
+  | "grn_received"
+  | "grn_mismatch"
+  | "sync_failed"
+  | "closed"
+  | "closed_with_adjustment";
 
-export type DispatchSyncMode = 'easyecom' | 'manual_pdf';
+export type DispatchSyncMode = "easyecom" | "manual_pdf";
 
 export interface DispatchItem {
   id: string;

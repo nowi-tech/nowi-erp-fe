@@ -12,12 +12,11 @@ import {
   StyleRefLink,
   TypePill,
   ColourCell,
-  ReviewerCell,
+  ApproverOrPanelCell,
   AgeCell,
   ApproveButton,
   GhostActionButton,
   RowChevron,
-  reviewerName,
   type QueueColumn,
 } from "@/components/styles/StyleQueueTable";
 import Approval1Dialog from "@/components/styles/Approval1Dialog";
@@ -33,7 +32,8 @@ import {
   type SamplingStatus,
   type StyleTab,
 } from "@/api/styles";
-import type { Style, UserRole } from "@/api/types";
+import { listReviewers } from "@/api/users";
+import type { Reviewer, Style, UserRole } from "@/api/types";
 
 const TABS: StyleTab[] = ["inbox", "in_sampling", "parked", "in_pd", "all"];
 
@@ -105,6 +105,10 @@ export default function StylesRegistry() {
   );
   const [rows, setRows] = useState<Style[]>([]);
   const [loading, setLoading] = useState(true);
+  // Fixed reviewer panel (active approver-role users). The Reviewer column
+  // shows a row's approver when present, else this panel. Tolerate failure
+  // (e.g. role can't list reviewers) → empty array renders "—".
+  const [reviewerPanel, setReviewerPanel] = useState<Reviewer[]>([]);
 
   const [searchText, setSearchText] = useState("");
   const [samplingStatus, setSamplingStatus] = useState<string>("");
@@ -138,6 +142,22 @@ export default function StylesRegistry() {
     const t = setTimeout(() => void load(), 200);
     return () => clearTimeout(t);
   }, [load]);
+
+  // Fetch the reviewer panel once. Failures are non-fatal — the column
+  // falls back to "—" when no approver is set.
+  useEffect(() => {
+    let cancelled = false;
+    listReviewers()
+      .then((panel) => {
+        if (!cancelled) setReviewerPanel(panel);
+      })
+      .catch(() => {
+        if (!cancelled) setReviewerPanel([]);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   // Honor a deep-link `?tab=` change (e.g. back/forward navigation or a
   // fresh card click while already on the page) by re-syncing the tab.
@@ -249,7 +269,9 @@ export default function StylesRegistry() {
         header: t("admin.styles.table.reviewer", { defaultValue: "Reviewer" }),
         className: "hidden lg:table-cell",
         headerClassName: "hidden lg:table-cell",
-        cell: (row) => <ReviewerCell name={reviewerName(row)} />,
+        cell: (row) => (
+          <ApproverOrPanelCell approver={row.approver} panel={reviewerPanel} />
+        ),
       },
       {
         key: "age",
@@ -258,7 +280,7 @@ export default function StylesRegistry() {
         cell: (row) => <AgeCell iso={row.createdAt} />,
       },
     ],
-    [t, navigate],
+    [t, navigate, reviewerPanel],
   );
 
   // Role + lifecycle gated row actions — replicated from the legacy
