@@ -1,5 +1,6 @@
-import { useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
+import { Info } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Dialog } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
@@ -8,7 +9,8 @@ import { useToast } from "@/components/ui/toast";
 import ColourPicker from "@/components/styles/intake/ColourPicker";
 import ReferenceImageGrid from "@/components/styles/intake/ReferenceImageGrid";
 import { spawnColourVariant } from "@/api/styles";
-import type { Style } from "@/api/types";
+import { listReviewers } from "@/api/users";
+import type { Reviewer, Style } from "@/api/types";
 import { cn } from "@/lib/utils";
 
 interface Props {
@@ -58,6 +60,21 @@ export default function AddColourModal({
   const [referenceImages, setReferenceImages] = useState<string[]>([]);
   const [saving, setSaving] = useState(false);
   const submitRef = useRef<HTMLButtonElement>(null);
+
+  // The fixed reviewer panel this submission routes to — shown so the
+  // designer sees who reviews it (it's a submission, not an inline
+  // approval). Fetched when the modal opens; failure is non-fatal.
+  const [reviewers, setReviewers] = useState<Reviewer[]>([]);
+  useEffect(() => {
+    if (!open) return;
+    let cancelled = false;
+    listReviewers()
+      .then((r) => !cancelled && setReviewers(r))
+      .catch(() => !cancelled && setReviewers([]));
+    return () => {
+      cancelled = true;
+    };
+  }, [open]);
 
   // Existing colours in the whole family — drives the "already done" chip
   // strip in the header AND the duplicate guard so designers don't double
@@ -266,6 +283,21 @@ export default function AddColourModal({
       }
     >
       <div className="space-y-4">
+        {/* Colour-variant flow banner (Stitch parity) — reuses the parent's
+            approved sample, skips re-sampling, but still needs Approval #1. */}
+        <div className="flex items-start gap-2 rounded-[var(--radius-sm)] border border-[var(--color-border)] bg-[var(--color-primary)]/[0.05] p-3 text-[12px] text-[var(--color-foreground)]">
+          <Info
+            size={15}
+            className="mt-0.5 shrink-0 text-[var(--color-primary)]"
+          />
+          <span>
+            {t("admin.styles.addColour.reuseBanner", {
+              defaultValue:
+                "A colour variant reuses this design's approved sample — no re-sampling. It still needs Approval #1.",
+            })}
+          </span>
+        </div>
+
         {header}
 
         <div>
@@ -307,9 +339,46 @@ export default function AddColourModal({
             />
           </div>
         </div>
+
+        {/* Who reviews this — the submission routes to the fixed panel. */}
+        {reviewers.length > 0 && (
+          <div className="flex items-center gap-2.5 rounded-[var(--radius-sm)] border border-[var(--color-border)] bg-[var(--color-surface-2)] p-3">
+            <div className="flex -space-x-1.5">
+              {reviewers.slice(0, 3).map((r) => (
+                <span
+                  key={r.id}
+                  title={r.name}
+                  className="flex h-6 w-6 items-center justify-center rounded-full bg-[var(--color-surface)] text-[10px] font-bold text-[var(--color-foreground)] ring-1 ring-[var(--color-border)]"
+                >
+                  {reviewerInitials(r.name)}
+                </span>
+              ))}
+            </div>
+            <p className="min-w-0 text-[12px] text-[var(--color-muted-foreground)]">
+              {t("admin.styles.addColour.routesTo", {
+                defaultValue: "Routes to",
+              })}{" "}
+              <span className="text-[var(--color-foreground)]">
+                {reviewers.map((r) => r.name).join(", ")}
+              </span>{" "}
+              {t("admin.styles.addColour.routesToHint", {
+                defaultValue: "— auto-assigned to the review panel.",
+              })}
+            </p>
+          </div>
+        )}
       </div>
     </Dialog>
   );
+}
+
+function reviewerInitials(name: string): string {
+  const parts = name.trim().split(/\s+/);
+  const raw =
+    parts.length === 1
+      ? parts[0].slice(0, 2)
+      : (parts[0][0] ?? "") + (parts[parts.length - 1][0] ?? "");
+  return raw.toUpperCase();
 }
 
 function AttrPair({ label, value }: { label: string; value: string }) {
