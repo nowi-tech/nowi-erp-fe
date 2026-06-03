@@ -59,8 +59,10 @@ const TABS: DashboardStyleTab[] = [
 ];
 
 // Roles allowed to Park a style once it's past `draft` (Approval #1 has
-// minted the Style #). Mirrors the post-approval park guard in the spec.
-const POST_APPROVAL_PARK_ROLES = ['admin', 'sampling_lead'] as const;
+// minted the Style #). Mirrors the post-approval park guard in the spec
+// and in StyleWorkspace.POST_APPROVAL_PARK — pd_lead can pull a committed
+// design back out, same as on the detail page (the BE allows it too).
+const POST_APPROVAL_PARK_ROLES = ['admin', 'sampling_lead', 'pd_lead'] as const;
 
 // Roles allowed to Approve (Approval #1) — mirrors the BE APPROVER_ROLES
 // set in dashboard.service.ts. Home's allow-list is wide (viewers,

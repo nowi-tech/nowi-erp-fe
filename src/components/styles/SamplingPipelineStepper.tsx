@@ -93,6 +93,12 @@ export default function SamplingPipelineStepper({
       onApproveClick?.();
       return;
     }
+    // Don't let a tap on an already-completed (past) node silently regress
+    // the live samplingStatus. Re-selecting the current step or moving
+    // forward is fine; going BACKWARD is the explicit "Send back for
+    // corrections" off-ramp in the host's action bar, not a casual node tap.
+    const target = STEPS.indexOf(step);
+    if (idx >= 0 && target >= 0 && target < idx) return;
     onStepClick?.(step);
   };
 
@@ -129,12 +135,15 @@ export default function SamplingPipelineStepper({
               >
                 <button
                   type="button"
-                  disabled={!clickable}
+                  // Completed nodes are non-interactive — clicking one would
+                  // only ever regress, which is the explicit corrections
+                  // off-ramp, not this strip.
+                  disabled={!clickable || isDone}
                   aria-current={isActive ? 'step' : undefined}
                   onClick={() => onNode(step)}
                   className={cn(
                     'flex h-6 w-6 items-center justify-center rounded-full text-[10px] font-semibold transition-colors',
-                    clickable && 'cursor-pointer hover:opacity-90',
+                    clickable && !isDone && 'cursor-pointer hover:opacity-90',
                     isDone
                       ? 'bg-[var(--color-primary)] text-[var(--color-primary-foreground)]'
                       : isActive

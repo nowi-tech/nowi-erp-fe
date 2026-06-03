@@ -125,7 +125,10 @@ export function Combobox<V extends string | number = string | number>({
       // The menu lives in a body portal, so a click inside it is NOT inside
       // rootRef — check the portal explicitly too.
       if (!rootRef.current?.contains(t) && !dropdownRef.current?.contains(t)) {
+        // Clear the query on close (mirrors close() used by Esc/selection) so
+        // reopening shows the full option list, not a stale pre-filtered one.
         setOpen(false);
+        setQuery('');
       }
     };
     document.addEventListener('mousedown', onDown);

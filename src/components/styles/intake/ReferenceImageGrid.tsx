@@ -249,6 +249,14 @@ export default function ReferenceImageGrid({
         .filter((f) => f.type.startsWith('image/'))
         .slice(0, remainingSlots);
       if (imageFiles.length === 0) return;
+      // Only the FIRST reference image drives attribute extraction. Captured
+      // before we mutate `value` below: an empty grid ⇒ this upload is the
+      // first image. Once the grid already holds an image (uploaded earlier
+      // or auto-fetched from a link), later uploads are just extra reference
+      // shots — re-classifying them would re-suggest gender/category/colour
+      // and clobber fields the user may have since edited (and burn a Vertex
+      // call each time).
+      const isFirstImage = value.length === 0;
       setBusy(true);
       try {
         const next = [...value];
@@ -264,9 +272,11 @@ export default function ReferenceImageGrid({
         onChange(next);
         // Classify the first uploaded image for attribute suggestions —
         // the vision fallback that covers sites url-context can't read
-        // (e.g. Amazon). Reports status (origin:'image') so the form shows
-        // the same loader/skeletons + summary it does for a link.
-        if (uploaded[0]) {
+        // (e.g. Amazon). Runs only when this is the first image in the grid
+        // (see `isFirstImage`) so later uploads don't re-suggest attributes.
+        // Reports status (origin:'image') so the form shows the same
+        // loader/skeletons + summary it does for a link.
+        if (isFirstImage && uploaded[0]) {
           onExtractStatusRef.current?.({ loading: true, origin: 'image' });
           classifyImage(uploaded[0])
             .then((r) => {

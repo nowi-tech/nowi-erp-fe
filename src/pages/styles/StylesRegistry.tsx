@@ -48,6 +48,10 @@ const WRITE_ROLES: readonly UserRole[] = [
   'sampling_lead',
   'pattern_master_w',
   'pattern_master_m',
+  // operator is the cross-cutting data-entry role — it belongs in every
+  // write/create/edit gate (mirrors the BE writer sets + the dashboard's
+  // PARK_WRITE_ROLES). Its omission here hid Park/Revive from operators.
+  'operator',
 ] as const;
 
 const APPROVER_ROLES: readonly UserRole[] = [
@@ -300,14 +304,14 @@ export default function StylesRegistry() {
         <>
           {canRevive && (
             <GhostActionButton icon="revive" onClick={() => onRowRevive(row)}>
-              {t('admin.styles.table.actions.revive', {
+              {t('admin.styles.table.rowActions.revive', {
                 defaultValue: 'Revive',
               })}
             </GhostActionButton>
           )}
           {canPark && (
             <GhostActionButton icon="park" onClick={() => onRowPark(row)}>
-              {t('admin.styles.table.actions.park', { defaultValue: 'Park' })}
+              {t('admin.styles.table.rowActions.park', { defaultValue: 'Park' })}
             </GhostActionButton>
           )}
           {canApprove && <ApproveButton onClick={() => onRowApprove(row)} />}
