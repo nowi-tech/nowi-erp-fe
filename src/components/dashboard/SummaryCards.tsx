@@ -91,24 +91,26 @@ export default function SummaryCards({ cards }: Props) {
     <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
       {items.map((item) => (
         // Whole card is the click target (not just the "View →" cue).
+        // Stitch "Precision Industrial" chrome — matches StyleQueueTable's
+        // card (rounded-md + border + surface + soft shadow, label-caps).
         <Link
           key={item.key}
           to={item.to}
-          className="group flex flex-col rounded-[var(--radius-lg)] border border-[var(--color-border)] bg-[var(--color-surface)] px-4 pt-3.5 pb-3.5 transition-colors hover:border-[var(--color-border-strong)] hover:bg-[var(--color-surface-2)]/40 focus:outline-none focus-visible:border-[var(--color-primary)]"
+          className="group flex flex-col rounded-[var(--radius-md)] border border-[var(--color-border)] bg-[var(--color-surface)] p-5 shadow-sm transition-colors hover:border-[var(--color-border-strong)] hover:bg-[var(--color-surface-2)]/40 focus:outline-none focus-visible:border-[var(--color-primary)]"
         >
-          {/* Label — plain charcoal/muted, never coloured. */}
-          <span className="text-[11px] font-mono uppercase tracking-[0.11em] leading-tight text-[var(--color-foreground-3)]">
+          {/* Label — Stitch label-caps, muted, never coloured. */}
+          <span className="text-[11px] font-bold uppercase tracking-[0.05em] text-[var(--color-muted-foreground)]">
             {item.label}
           </span>
 
-          {/* Big tabular-numerals count — plain foreground. */}
-          <span className="mt-3 font-serif text-[32px] font-medium leading-none tabular-nums tracking-[-0.015em] text-[var(--color-foreground)]">
+          {/* Big tabular-numerals count — display style, plain foreground. */}
+          <span className="mt-3 text-[32px] font-bold leading-tight tabular-nums text-[var(--color-foreground)]">
             {item.count}
           </span>
 
           {/* The ONLY coloured element: the indigo "View →" cue. The whole
               card navigates; this stays as the visual affordance. */}
-          <span className="mt-3 inline-flex items-center gap-1 text-[13px] font-medium text-[var(--color-primary)] group-hover:underline">
+          <span className="mt-3 inline-flex items-center gap-1 text-[13px] text-[var(--color-primary)] group-hover:underline">
             {t('dashboard.cards.view', { defaultValue: 'View' })}
             <ArrowRight size={13} strokeWidth={2.25} aria-hidden />
           </span>

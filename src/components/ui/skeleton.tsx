@@ -14,12 +14,16 @@ import { cn } from '@/lib/utils';
 export function Skeleton({
   className,
   ...props
-}: React.HTMLAttributes<HTMLDivElement>) {
+}: React.HTMLAttributes<HTMLSpanElement>) {
+  // Rendered as a <span> (not <div>) so it's valid HTML inside a <p> or other
+  // phrasing context — e.g. an inline subtitle placeholder — while `block` in
+  // the base keeps standalone usages behaving like the old block element. A
+  // caller's `inline-block` still wins (Tailwind orders it after `block`).
   return (
-    <div
+    <span
       aria-hidden
       className={cn(
-        'relative isolate overflow-hidden rounded-[var(--radius-sm)] bg-[var(--color-muted)]',
+        'block relative isolate overflow-hidden rounded-[var(--radius-sm)] bg-[var(--color-muted)]',
         'before:absolute before:inset-0 before:-translate-x-full',
         'before:bg-gradient-to-r before:from-transparent before:via-[color-mix(in_oklab,var(--color-border)_60%,transparent)] before:to-transparent',
         'before:animate-[shimmer_1.5s_infinite]',

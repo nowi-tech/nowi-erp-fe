@@ -1,24 +1,27 @@
-import { Fragment, useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Check, ChevronDown, ChevronRight, Lock, Undo2 } from 'lucide-react';
+import { Check, Undo2 } from 'lucide-react';
 import type { SamplingStatus } from '@/api/styles';
 import { cn } from '@/lib/utils';
 
 /**
- * Forward steps only — the linear sampling pipeline. `corrections_needed`
- * is intentionally NOT in this array: it's a regression / off-ramp, not
- * step 7. It surfaces as a separate "Send back for corrections" button
- * rendered next to the stepper. Approved sits at the end and is rendered
- * with a lock affordance — clicking it routes through the sample sign-off
- * dialog instead of patching the value directly.
+ * Forward steps only — the linear sampling pipeline, matching the Stitch
+ * workspace mock's 5-node stepper exactly: Pattern dev → Fabric sourcing →
+ * Cutting → Ready for inspection → Sample sign-off. The legacy
+ * `in_progress_stitching` / `handed_over_for_inspection` statuses are NOT
+ * shown here (the mock collapses them); a row still carrying one of those
+ * resolves to index -1, which the highlight logic already tolerates.
+ *
+ * `corrections_needed` is intentionally NOT in this array: it's a
+ * regression / off-ramp, surfaced as a separate "Send back for
+ * corrections" button. `approved_for_production` sits at the end (rendered
+ * as "Sample sign-off" with a lock affordance) — clicking it routes
+ * through the sample sign-off dialog instead of patching the value.
  */
 const STEPS: SamplingStatus[] = [
   'in_progress_pattern_dev',
   'in_progress_fabric_sourcing',
   'in_progress_cutting',
-  'in_progress_stitching',
   'ready_for_inspection',
-  'handed_over_for_inspection',
   'approved_for_production',
 ];
 
@@ -32,38 +35,36 @@ interface Props {
    * rather than patching `samplingStatus` straight to approved.
    */
   onApproveClick?: () => void;
-  /**
-   * Invoked when the user clicks "Send back for corrections". Sets
-   * `samplingStatus = corrections_needed` via the host page so the
-   * audit + side-effects stay consistent.
-   */
-  onSendBack?: () => void;
 }
 
 /**
- * Read-only progress strip + a single writable chip (the active step).
+ * Horizontal connected-node progress stepper — matches the Stitch
+ * workspace mock 1:1: a continuous hairline rail behind five evenly-
+ * spaced nodes (Pattern dev → Fabric sourcing → Cutting → Ready for
+ * inspection → Sample sign-off), labels below each node.
  *
- *   ① Pattern dev → ② Fabric ✓ → [③ Cutting ▾] → ④ Stitching → ⑤ Ready
- *
- * The strip shows linear progression at a glance. The active pill is
- * the only clickable one — it carries a chevron and opens a popover
- * with all 7 options so the user can advance, skip, or regress to any
- * step from a single control. The remaining pills are non-interactive
- * (numbered ticks + checkmarks). This is the Linear / GitHub status
- * pattern: visualize progress as a strip, but write through one chip.
- *
- * "Send back for corrections" stays a separate, demoted button.
- * `approved_for_production` is gated by the host's sign-off dialog —
- * picking it from the popover routes through `onApproveClick` instead
- * of patching the value directly.
+ * Done nodes render a filled check, the active node a ringed dot, and
+ * upcoming nodes their index. Clicking a node advances the live
+ * `samplingStatus` via `onStepClick`; the terminal node routes through
+ * the host's sign-off dialog (`onApproveClick`) instead of patching the
+ * value directly. "Send back for corrections" lives in the host's action
+ * bar, not in this strip.
  */
 export default function SamplingPipelineStepper({
   samplingStatus,
   onStepClick,
   onApproveClick,
-  onSendBack,
 }: Props) {
   const { t } = useTranslation();
+  // The terminal node reads "Sample sign-off" per the Stitch mock (the
+  // shared `samplingSteps.approved_for_production` label — "Approved" — is
+  // kept untouched for the registry/table surfaces).
+  const stepLabel = (step: SamplingStatus) =>
+    step === 'approved_for_production'
+      ? t('admin.styles.workspace.sampleSignOff', {
+          defaultValue: 'Sample sign-off',
+        })
+      : t(`admin.styles.samplingSteps.${step}`);
   const inCorrections = samplingStatus === 'corrections_needed';
   // Index into the forward STEPS array. `corrections_needed` doesn't
   // map to an index and intentionally returns -1 → no pill highlighted.
@@ -83,238 +84,91 @@ export default function SamplingPipelineStepper({
   const writableIdx = inCorrections ? -1 : idx === -1 ? 0 : idx;
   const clickable = !!onStepClick;
 
-  // Popover open state for the writable chip. Click-outside dismiss
-  // is wired manually rather than via a portal to keep the markup
-  // colocated with the strip.
-  const [open, setOpen] = useState(false);
-  const wrapperRef = useRef<HTMLDivElement>(null);
-  useEffect(() => {
-    if (!open) return;
-    const onDoc = (e: MouseEvent) => {
-      if (!wrapperRef.current?.contains(e.target as Node)) setOpen(false);
-    };
-    document.addEventListener('mousedown', onDoc);
-    return () => document.removeEventListener('mousedown', onDoc);
-  }, [open]);
-
-  const pickStep = (step: SamplingStatus) => {
-    setOpen(false);
-    if (step === 'approved_for_production' && onApproveClick) {
-      onApproveClick();
+  // Click handler for a node — advances the live samplingStatus. The
+  // terminal node routes through the host's sign-off dialog rather than
+  // patching the value directly.
+  const onNode = (step: SamplingStatus) => {
+    if (!clickable) return;
+    if (step === 'approved_for_production') {
+      onApproveClick?.();
       return;
     }
     onStepClick?.(step);
   };
 
   return (
-    <div className="space-y-2">
+    <div className="space-y-3">
       {inCorrections && (
         <div className="inline-flex items-center gap-2 rounded-full bg-[var(--status-rework-bg,var(--color-surface-2))] border border-[var(--color-border)] px-3 py-1 text-xs text-[var(--color-foreground)]">
           <Undo2 size={13} aria-hidden />
           {t('admin.styles.workspace.inCorrections', {
             defaultValue: 'Sent back for corrections',
           })}
-          {clickable && (
-            <button
-              type="button"
-              onClick={() => setOpen((v) => !v)}
-              aria-haspopup="listbox"
-              aria-expanded={open}
-              className="ml-2 inline-flex items-center gap-1 text-[var(--color-primary)] hover:underline"
-            >
-              {t('admin.styles.workspace.resumeSampling', {
-                defaultValue: 'Resume…',
-              })}
-              <ChevronDown size={11} aria-hidden />
-            </button>
-          )}
         </div>
       )}
 
-      <div
-        ref={wrapperRef}
-        className="relative flex flex-wrap items-center gap-y-2"
-      >
-        <ol className="flex flex-wrap items-center gap-y-2">
+      {/* Horizontal connected-node stepper — matches the Stitch mock 1:1:
+          a continuous hairline behind evenly-spaced nodes, labels below.
+          Done nodes carry a check, the active node a ringed dot, upcoming
+          nodes their index. Rendered in the app's tokens. */}
+      <div className="relative flex w-full items-start">
+        {/* Connector rail behind the node circles (top-aligned to the
+            12px node radius). */}
+        <div
+          aria-hidden
+          className="absolute left-0 right-0 top-3 h-px bg-[var(--color-border)]"
+        />
+        <ol className="relative z-10 flex w-full justify-between">
           {STEPS.map((step, i) => {
-            const isWritable = clickable && i === writableIdx;
-            const isActive = i === idx;
+            const isActive = i === idx || (idx === -1 && i === writableIdx);
             const isDone = idx >= 0 && i < idx;
-            const isApprovedFinal = step === 'approved_for_production';
             return (
-              <Fragment key={step}>
-                <li>
-                  {isWritable ? (
-                    <button
-                      type="button"
-                      onClick={() => setOpen((v) => !v)}
-                      aria-haspopup="listbox"
-                      aria-expanded={open}
-                      className={cn(
-                        'flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs border font-medium transition-colors cursor-pointer hover:opacity-90',
-                        isApprovedFinal
-                          ? 'bg-[var(--status-ready-bg)] text-[var(--status-ready-ink)] border-[var(--status-ready-acc)]'
-                          : 'bg-[var(--stage-stitch-bg)] text-[var(--stage-stitch-ink)] border-[var(--stage-stitch-acc)]',
-                      )}
-                    >
-                      <span
-                        aria-hidden
-                        className={cn(
-                          'w-4 h-4 rounded-full inline-flex items-center justify-center text-[9px] font-bold',
-                          isApprovedFinal
-                            ? 'bg-[var(--status-ready-acc)] text-white'
-                            : 'bg-[var(--stage-stitch-acc)] text-white',
-                        )}
-                      >
-                        {isApprovedFinal ? (
-                          <Check size={9} strokeWidth={3} />
-                        ) : (
-                          i + 1
-                        )}
-                      </span>
-                      <span>
-                        {t(`admin.styles.samplingSteps.${step}`)}
-                      </span>
-                      <ChevronDown
-                        size={12}
-                        aria-hidden
-                        className="opacity-70"
-                      />
-                    </button>
-                  ) : (
-                    <span
-                      aria-current={isActive ? 'step' : undefined}
-                      className={cn(
-                        'flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs border cursor-default',
-                        isApprovedFinal
-                          ? isDone
-                            ? 'bg-[var(--status-ready-bg)] text-[var(--status-ready-ink)] border-[var(--status-ready-acc)] font-medium'
-                            : 'bg-[var(--color-surface)] text-[var(--status-ready-ink)] border-[var(--status-ready-acc)]/60'
-                          : isDone
-                            ? 'bg-[var(--color-surface-2)] text-[var(--color-foreground)] border-[var(--color-border)]'
-                            : 'bg-[var(--color-surface)] text-[var(--color-muted-foreground)] border-[var(--color-border)]',
-                      )}
-                    >
-                      <span
-                        aria-hidden
-                        className={cn(
-                          'w-4 h-4 rounded-full inline-flex items-center justify-center text-[9px] font-bold',
-                          isDone
-                            ? 'bg-[var(--status-ready-acc)] text-white'
-                            : 'bg-[var(--color-muted)] text-[var(--color-muted-foreground)]',
-                        )}
-                      >
-                        {isApprovedFinal && !isDone ? (
-                          <Lock size={9} strokeWidth={2.5} />
-                        ) : isDone ? (
-                          <Check size={9} strokeWidth={3} />
-                        ) : (
-                          i + 1
-                        )}
-                      </span>
-                      <span>
-                        {t(`admin.styles.samplingSteps.${step}`)}
-                      </span>
-                    </span>
+              <li
+                key={step}
+                className="flex flex-col items-center gap-2 bg-[var(--color-surface)] px-2"
+              >
+                <button
+                  type="button"
+                  disabled={!clickable}
+                  aria-current={isActive ? 'step' : undefined}
+                  onClick={() => onNode(step)}
+                  className={cn(
+                    'flex h-6 w-6 items-center justify-center rounded-full text-[10px] font-semibold transition-colors',
+                    clickable && 'cursor-pointer hover:opacity-90',
+                    isDone
+                      ? 'bg-[var(--color-primary)] text-[var(--color-primary-foreground)]'
+                      : isActive
+                        ? 'border-2 border-[var(--color-primary)] bg-[var(--color-surface)]'
+                        : 'border border-[var(--color-border-strong)] bg-[var(--color-surface)] text-[var(--color-muted-foreground)]',
                   )}
-                </li>
-                {i < STEPS.length - 1 && (
-                  <li
-                    aria-hidden
-                    role="presentation"
-                    className="inline-flex items-center"
-                  >
-                    <ChevronRight
-                      size={14}
-                      className={cn(
-                        'mx-0.5 shrink-0',
-                        isDone
-                          ? 'text-[var(--status-ready-acc)]'
-                          : 'text-[var(--color-muted-foreground)]/60',
-                      )}
+                >
+                  {isDone ? (
+                    <Check size={14} strokeWidth={3} aria-hidden />
+                  ) : isActive ? (
+                    <span
+                      aria-hidden
+                      className="h-2 w-2 rounded-full bg-[var(--color-primary)]"
                     />
-                  </li>
-                )}
-              </Fragment>
+                  ) : (
+                    i + 1
+                  )}
+                </button>
+                <span
+                  className={cn(
+                    'text-[10px] uppercase tracking-[0.05em] text-center',
+                    isActive
+                      ? 'font-bold text-[var(--color-primary)]'
+                      : isDone
+                        ? 'text-[var(--color-foreground)]'
+                        : 'text-[var(--color-muted-foreground)]',
+                  )}
+                >
+                  {stepLabel(step)}
+                </span>
+              </li>
             );
           })}
         </ol>
-
-        {/* "Send back for corrections" — visually demoted ghost button
-            sitting next to the stepper. Hidden when there's no handler
-            bound, or the style is already in corrections. */}
-        {onSendBack && !inCorrections && (
-          <button
-            type="button"
-            onClick={onSendBack}
-            className="ml-3 inline-flex items-center gap-1.5 text-xs text-[var(--color-muted-foreground)] hover:text-[var(--color-foreground)] underline-offset-2 hover:underline"
-          >
-            <Undo2 size={13} aria-hidden />
-            {t('admin.styles.workspace.sendBack', {
-              defaultValue: 'Send back for corrections',
-            })}
-          </button>
-        )}
-
-        {/* Status popover — list of all 7 steps with number + label +
-            (for Approved) a small lock icon. Picking a step calls
-            pickStep, which routes Approved through onApproveClick. */}
-        {open && clickable && (
-          <div
-            role="listbox"
-            aria-label={t('admin.styles.workspace.samplingStatus', {
-              defaultValue: 'Sampling status',
-            })}
-            className="absolute z-20 top-full left-0 mt-1.5 min-w-[240px] rounded-[var(--radius-md)] border border-[var(--color-border)] bg-[var(--color-surface)] shadow-[var(--shadow-pop)] py-1"
-          >
-            {STEPS.map((step, i) => {
-              const isCurrent = i === idx;
-              const isApprovedFinal = step === 'approved_for_production';
-              return (
-                <button
-                  key={step}
-                  type="button"
-                  role="option"
-                  aria-selected={isCurrent}
-                  onClick={() => pickStep(step)}
-                  className={cn(
-                    'flex w-full items-center gap-2 px-3 py-2 text-left text-xs hover:bg-[var(--color-muted)]',
-                    isCurrent && 'bg-[var(--color-muted)]/60',
-                  )}
-                >
-                  <span
-                    aria-hidden
-                    className={cn(
-                      'w-4 h-4 rounded-full inline-flex items-center justify-center text-[9px] font-bold shrink-0',
-                      isApprovedFinal
-                        ? 'bg-[var(--status-ready-acc)] text-white'
-                        : 'bg-[var(--color-muted)] text-[var(--color-muted-foreground)]',
-                    )}
-                  >
-                    {i + 1}
-                  </span>
-                  <span className="flex-1 truncate">
-                    {t(`admin.styles.samplingSteps.${step}`)}
-                  </span>
-                  {isApprovedFinal && (
-                    <Lock
-                      size={11}
-                      aria-hidden
-                      className="text-[var(--color-muted-foreground)]"
-                    />
-                  )}
-                  {isCurrent && (
-                    <Check
-                      size={12}
-                      aria-hidden
-                      className="text-[var(--color-primary)]"
-                    />
-                  )}
-                </button>
-              );
-            })}
-          </div>
-        )}
       </div>
     </div>
   );

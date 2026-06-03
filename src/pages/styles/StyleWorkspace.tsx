@@ -2,23 +2,28 @@ import { useCallback, useEffect, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import {
-  ArrowLeft,
-  Palette,
-  Pause,
+  ChevronRight,
+  Clock,
   Pencil,
-  Play,
+  Plus,
+  Upload,
   CheckCircle2,
-  ExternalLink,
 } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Dialog } from '@/components/ui/dialog';
+import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 import { Textarea } from '@/components/ui/textarea';
 import { useToast } from '@/components/ui/toast';
 import SamplingPipelineStepper from '@/components/styles/SamplingPipelineStepper';
 import PatternCadPreview from '@/components/styles/PatternCadPreview';
 import AddColourModal from '@/components/styles/AddColourModal';
 import StyleEditModal from '@/components/styles/StyleEditModal';
+import {
+  CoreSpecsEditModal,
+  BomEditModal,
+  PatternCadEditModal,
+} from '@/components/styles/ScopedStyleEditModals';
 import Approval1Dialog from '@/components/styles/Approval1Dialog';
 import ParkDialog from '@/components/styles/ParkDialog';
 import {
@@ -29,37 +34,118 @@ import {
   sampleApproveStyle,
   patchStyle,
   listFabrics,
+  colourGroup,
   type SamplingStatus,
   type SampleApprovalStatus,
   type SampleApproveStyleBody,
 } from '@/api/styles';
-import { listUsers } from '@/api/users';
 import type {
   Fabric,
   Style,
-  User as ApiUser,
+  StyleAuditLog,
+  StyleLifecycle,
+  UserRole,
 } from '@/api/types';
+import { useAuth } from '@/context/auth';
+import { userAllRoles } from '@/lib/userRoles';
 import { cn } from '@/lib/utils';
 import { formatStyleRef } from '@/lib/styleRef';
 
+// Add-Colour is only meaningful once the family has an approved sample to
+// inherit (a colour sibling skips sampling). `StyleLifecycle` is
+// NON-ORDINAL — enumerate the post-sampling states explicitly, never `>=`.
+// ⚠️ DRIFT HAZARD: this set is duplicated server-side as the spawn gate in
+// `nowi-erp-api` (`spawnColourVariant`, styles-actions.service) and in the
+// LLD §Phase 3 `POST_SAMPLING` list — keep all three in sync.
+const POST_SAMPLING = new Set<StyleLifecycle>([
+  'sample_approved',
+  'in_pd',
+  'qc',
+  'dispatched',
+]);
+
+// Roles allowed to WRITE a new colour (spawn a sibling submission).
+const COLOUR_WRITE: readonly UserRole[] = [
+  'admin',
+  'sampling_editor',
+  'sampling_lead',
+  'pattern_master_w',
+  'pattern_master_m',
+  'china_import_approver',
+];
+
+// Roles allowed to "Withdraw" (re-park) a style that has already passed
+// Approval #1. Drafts can be parked by anyone; post-approval is gated.
+const POST_APPROVAL_PARK: readonly UserRole[] = [
+  'admin',
+  'sampling_lead',
+  'pd_lead',
+];
+
+// Gender may arrive as a code (W/M/U) or long form (women/men/unisex)
+// depending on the row — render the human label either way so the header /
+// specs read "Women · Dress", never "W · JC".
+const GENDER_LABEL: Record<string, string> = {
+  W: 'Women',
+  M: 'Men',
+  U: 'Unisex',
+  women: 'Women',
+  men: 'Men',
+  unisex: 'Unisex',
+};
+const genderLabel = (g: string | null | undefined) =>
+  (g ? GENDER_LABEL[g] : null) ?? g ?? '—';
+
+// Snapshot field → English label, for describing WHAT an audit entry
+// changed (mirrors StylesService.diffSnapshot on the BE). Admin-facing
+// only → English-only by design (no Hindi).
+const AUDIT_FIELD_LABELS: Record<string, string> = {
+  workingName: 'Working name',
+  fabricId: 'Fabric',
+  sampleFabricRequired: 'Sample fabric',
+  primaryColour: 'Primary colour',
+  referenceLink: 'Reference link',
+  referenceImage: 'Reference image',
+  referenceImageUrl: 'Reference image',
+  samplingStatus: 'Stage',
+  samplingTimeline: 'Timeline',
+  patternCadPaths: 'CAD files',
+  sampleApproval: 'Sample verdict',
+  developmentReason: 'Dev reason',
+  remark: 'Remark',
+  gender: 'Gender',
+  lifecycle: 'Lifecycle',
+  styleId: 'Style #',
+  familyCode: 'Colour family',
+  basedOnStyleId: 'Based on',
+  reason: 'Reason',
+};
+
 /**
- * Per-style deep page (canonical_style_workspace.html).
+ * Per-style deep page.
  *
- * Header: style # + collection + source chip + last-updated.
- * Action bar: Edit · Print Tech Pack · Park/Revive · Send to PD (v2)
- *             + Approve / Sample-approve when lifecycle allows.
- * Body: sampling pipeline stepper · core specs · variants matrix ·
- *       pattern approval (gender-routed) · channels & virtual inventory ·
- *       inspection history · fabric notes · inspiration.
+ * Two lifecycle-conditional layouts, both 1:1 with the Stitch mocks:
  *
- * `:styleId` URL param accepts either the numeric DB id or the Style #
- * (e.g. `NOWI-W-DR-1001`). The BE getStyle endpoint is expected to
- * resolve both.
+ *  - SAMPLING (`draft` / `in_sampling`): header (Park · Send back for
+ *    corrections · Approve sample) → progress-stepper band (timeline /
+ *    pattern-master meta + horizontal stepper) → 7/5 grid: left = Core
+ *    specifications + Bill of materials; right = Pattern / CAD + Activity
+ *    log.
+ *  - PRODUCTION (`sample_approved`+): header (Park · Start production ·
+ *    Add colour) → colour-family strip → 2-up grid: left = Core
+ *    specifications (+ "Sample approved by …" footer) + Bill of materials;
+ *    right = Pattern / CAD + Activity log.
+ *
+ * China Import keeps its single-approval shell inside the same chrome.
+ *
+ * `:styleId` URL param accepts either the numeric DB id or the Style #.
  */
 export default function StyleWorkspace() {
   const { t } = useTranslation();
   const navigate = useNavigate();
   const toast = useToast();
+  const { user } = useAuth();
+  const roles = userAllRoles(user);
   const { styleId: idParam } = useParams<{ styleId: string }>();
 
   const [style, setStyle] = useState<Style | null>(null);
@@ -69,7 +155,24 @@ export default function StyleWorkspace() {
   const [sampleApproveOpen, setSampleApproveOpen] = useState(false);
   const [colourModalOpen, setColourModalOpen] = useState(false);
   const [editOpen, setEditOpen] = useState(false);
+  // Scoped editors — the Core-specs pencil and the BOM edit affordance
+  // open these small field-subset dialogs instead of the full form.
+  const [coreSpecsEditOpen, setCoreSpecsEditOpen] = useState(false);
+  const [bomEditOpen, setBomEditOpen] = useState(false);
+  // Pattern/CAD upload affordance opens a scoped editor that ONLY
+  // uploads CAD files (patternCadPaths) — not the full StyleEditModal.
+  const [patternCadEditOpen, setPatternCadEditOpen] = useState(false);
   const [parkOpen, setParkOpen] = useState(false);
+  // Two-step Withdraw: confirm pulling a committed (post-Approval-#1)
+  // design out of the pipeline, then open ParkDialog to capture the
+  // reason. Drafts skip this and open ParkDialog directly.
+  const [withdrawConfirmOpen, setWithdrawConfirmOpen] = useState(false);
+  // Colour family (siblings sharing this style's familyCode). Sourced from
+  // the BE colour-group resolver, NOT parent.colourVariants — so opening
+  // Add-Colour from a SIBLING (not the root) still sees the whole family.
+  // parentStyleId drives inbox NESTING; familyCode drives the marketplace
+  // "other colours" GROUP — do NOT unify; based-on shares neither.
+  const [colourFamily, setColourFamily] = useState<Style[]>([]);
   // StyleEditModal lazy-loads its own fabric master on first open;
   // we still pre-warm it here so the user doesn't see the modal
   // flicker into pickers. Collection was dropped from the schema.
@@ -85,15 +188,24 @@ export default function StyleWorkspace() {
     }
   }, [fabrics.length]);
 
-
   const load = useCallback(async () => {
     if (!idParam) return;
     setLoading(true);
     try {
       const s = await getStyle(idParam);
       setStyle(s);
+      // Resolve the whole colour family (every sibling sharing familyCode)
+      // off the canonical numeric id. A based-on style has no familyCode →
+      // empty group → the ColourFamilyCard hides itself. Soft-fail: the
+      // card just shows no siblings if the resolver errors.
+      try {
+        setColourFamily(await colourGroup(s.id));
+      } catch {
+        setColourFamily([]);
+      }
     } catch {
       setStyle(null);
+      setColourFamily([]);
     } finally {
       setLoading(false);
     }
@@ -127,10 +239,13 @@ export default function StyleWorkspace() {
   if (!style) {
     return (
       <div className="space-y-4">
-        <Button variant="outline" size="sm" onClick={() => navigate('/styles')}>
-          <ArrowLeft size={14} />
-          <span className="ml-1">{t('admin.styles.title')}</span>
-        </Button>
+        <button
+          type="button"
+          onClick={() => navigate('/styles')}
+          className="inline-flex items-center gap-1 text-xs text-[var(--color-muted-foreground)] hover:text-[var(--color-primary)]"
+        >
+          <span>{t('admin.styles.title')}</span>
+        </button>
         <p className="text-sm text-[var(--color-muted-foreground)]">
           {t('admin.styles.workspace.notFound')}
         </p>
@@ -142,77 +257,257 @@ export default function StyleWorkspace() {
   // no Approval #2, no inspections. Sampling-only UI is hidden for it.
   const isChinaImport = style.source === 'china_import';
   const canApproveIntake = style.lifecycle === 'draft';
-  const canSampleApprove =
-    !isChinaImport && style.lifecycle === 'in_sampling';
-  const canPark = style.lifecycle !== 'parked' && style.lifecycle !== 'archived';
+  const canSampleApprove = !isChinaImport && style.lifecycle === 'in_sampling';
+
+  // Add-Colour: only once the family has an approved sample to inherit
+  // (POST_SAMPLING), never for china_import, and only for colour-WRITE
+  // roles. A colour add is a SUBMISSION — the spawned draft re-enters the
+  // Inbox for Approval #1 (NOT an inline approval here).
+  const canAddColour =
+    POST_SAMPLING.has(style.lifecycle) &&
+    !isChinaImport &&
+    roles.some((r) => COLOUR_WRITE.includes(r));
+
+  // Park: inline button on drafts (anyone). Post-approval it becomes a
+  // gated "Withdraw" — only admin / sampling_lead / pd_lead can pull a
+  // committed design back out of the pipeline.
+  const isDraft = style.lifecycle === 'draft';
+  const canPark =
+    style.lifecycle !== 'parked' &&
+    style.lifecycle !== 'archived' &&
+    (isDraft || roles.some((r) => POST_APPROVAL_PARK.includes(r)));
+  const isWithdraw = canPark && !isDraft;
   const canRevive = style.lifecycle === 'parked';
   const sourceLabel = t(`admin.styles.source.${style.source}`);
 
+  // "Approve sample" is the primary action while a style is in sampling.
+  const canSampleApproveAction = canSampleApprove;
+  // "Start production" advances an approved sample into PD. Until the BE
+  // exposes that transition we re-home it onto the existing Edit surface so
+  // the button is never a dead end (no new endpoint introduced here).
+  const canStartProduction =
+    !isChinaImport && style.lifecycle === 'sample_approved';
+
+  // Layout selector. The sampling layout (stepper band + 7/5 grid) covers
+  // draft / in_sampling; the production layout (colour strip + 2-up grid)
+  // covers sample_approved and beyond. China Import never samples — it
+  // rides the sampling shell (no band) with its approval-record card.
+  const isProductionLayout = POST_SAMPLING.has(style.lifecycle);
+  const showSamplingBand = !isChinaImport && !isProductionLayout;
+
+  // The second header pill names the current workflow stage. In sampling
+  // it tracks the live sampling step ("Fabric sourcing"); in production it
+  // reads "Ready for production" per the mock.
+  const stagePill = isProductionLayout
+    ? t('admin.styles.workspace.readyForProduction', {
+        defaultValue: 'Ready for production',
+      })
+    : style.samplingStatus
+      ? t(`admin.styles.samplingSteps.${style.samplingStatus}` as const, {
+          defaultValue: '',
+        })
+      : '';
+
+  // Section card chrome — Stitch's "surface card with header strip" look,
+  // rendered in the app's tokens (surface / border / radius), not the
+  // Stitch navy literals.
   const cardClasses =
-    'bg-[var(--color-surface)] border border-[var(--color-border)] rounded-[var(--radius-md)] p-5 shadow-sm';
+    'bg-[var(--color-surface)] border border-[var(--color-border)] rounded-[var(--radius-md)] shadow-sm overflow-hidden flex flex-col';
+
+  // Shared cards — identical in both layouts, only the column wrapper and
+  // a couple of header affordances differ.
+  const coreSpecsCard = (
+    <section className={cardClasses}>
+      <CardHeader
+        title={t('admin.styles.workspace.coreSpecs')}
+        right={
+          <button
+            type="button"
+            aria-label={t('admin.styles.workspace.edit', {
+              defaultValue: 'Edit',
+            })}
+            onClick={() => {
+              void ensureMasterData();
+              setCoreSpecsEditOpen(true);
+            }}
+            className="text-[var(--color-muted-foreground)] hover:text-[var(--color-primary)] transition-colors"
+          >
+            <Pencil size={18} />
+          </button>
+        }
+      />
+      <div className="p-5">
+        <dl className="flex flex-col">
+          <SpecRow label="Gender" value={genderLabel(style.gender)} />
+          <SpecRow
+            label="Category"
+            value={style.category?.name ?? style.categoryCode ?? '—'}
+          />
+          <SpecRow label="Fabric" value={style.fabric?.name ?? '—'} />
+          <SpecRow
+            label="Primary colour"
+            value={
+              <span className="inline-flex items-center gap-2">
+                <ColourSwatch colour={style.primaryColour} />
+                {style.primaryColour ?? '—'}
+              </span>
+            }
+            last={isProductionLayout}
+          />
+          {/* Sampling layout carries the sample-fabric requirement; the
+              production layout drops it (mock has neither sampling row). */}
+          {!isProductionLayout &&
+            !isChinaImport &&
+            style.sampleFabricRequired != null && (
+              <SpecRow
+                label="Sample fabric required"
+                value={`${style.sampleFabricRequired} ${
+                  style.fabric?.unitOfMeasure === 'meter'
+                    ? 'm'
+                    : (style.fabric?.unitOfMeasure ?? 'm')
+                }`}
+                last
+              />
+            )}
+        </dl>
+      </div>
+      {/* Production layout footers the card with the sample sign-off
+          record (e.g. "Sample approved by <approver> · 2 days ago"). */}
+      {isProductionLayout && style.sampleApprovedAt && (
+        <div className="px-3 py-3 border-t border-[var(--color-border)] bg-[var(--color-surface-2)] text-right text-xs text-[var(--color-muted-foreground)]">
+          {t('admin.styles.workspace.sampleApprovedBy', {
+            defaultValue: 'Sample approved by {{name}} · {{when}}',
+            name: style.approver?.name ?? '—',
+            when: new Date(style.sampleApprovedAt).toLocaleDateString(),
+          })}
+        </div>
+      )}
+    </section>
+  );
+
+  const billOfMaterialsCard = (
+    <BillOfMaterialsCard
+      style={style}
+      cardClasses={cardClasses}
+      production={isProductionLayout}
+      onEdit={() => {
+        void ensureMasterData();
+        setBomEditOpen(true);
+      }}
+    />
+  );
+
+  const patternCadCard = (
+    <section className={cardClasses}>
+      <CardHeader
+        title={t('admin.styles.drawer.patternCad.label', {
+          defaultValue: 'Pattern / CAD',
+        })}
+        right={
+          // The sampling mock exposes an upload affordance in the header;
+          // the production mock has none. Opens a scoped CAD-only editor.
+          !isProductionLayout ? (
+            <button
+              type="button"
+              aria-label={t('admin.styles.drawer.patternCad.upload', {
+                defaultValue: 'Upload CAD file',
+              })}
+              onClick={() => setPatternCadEditOpen(true)}
+              className="text-[var(--color-muted-foreground)] hover:text-[var(--color-primary)] transition-colors"
+            >
+              <Upload size={18} />
+            </button>
+          ) : undefined
+        }
+      />
+      <div className="p-5">
+        {style.patternCadPaths && style.patternCadPaths.length > 0 ? (
+          <PatternCadPreview patternCadPaths={style.patternCadPaths} />
+        ) : (
+          <p className="text-sm text-[var(--color-muted-foreground)]">
+            {t('admin.styles.drawer.patternCad.none', {
+              defaultValue:
+                'No pattern or CAD files uploaded yet. Use the upload button to add .dxf / .pdf / .png / .jpg.',
+            })}
+          </p>
+        )}
+      </div>
+    </section>
+  );
+
+  const activityLogCard = (
+    <ActivityTimelineCard style={style} cardClasses={cardClasses} />
+  );
 
   return (
     <div className="space-y-5">
-      {/* Header */}
-      <div className="flex items-start justify-between gap-3 flex-wrap">
+      {/* ── Header: breadcrumb · large style code + status pills · subtitle ──
+          Action bar (lifecycle-conditional) sits top-right. */}
+      <header className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
         <div className="min-w-0">
-          <div className="flex items-center gap-2 text-xs text-[var(--color-muted-foreground)]">
+          <nav
+            aria-label="Breadcrumb"
+            className="flex items-center gap-1.5 text-xs text-[var(--color-muted-foreground)] mb-2"
+          >
             <button
               type="button"
               onClick={() => navigate('/styles')}
-              className="hover:underline inline-flex items-center"
+              className="hover:text-[var(--color-primary)] transition-colors"
             >
-              <ArrowLeft size={12} />
-              <span className="ml-1">{t('admin.styles.title')}</span>
+              {t('admin.styles.title')}
             </button>
-            <span>/</span>
-            <span>{style.workingName ?? '—'}</span>
-          </div>
-          <h1 className="font-mono text-2xl font-semibold text-[var(--color-primary)] mt-1 tracking-wide">
-            {formatStyleRef(style, `(${t('admin.styles.draft')})`)}
-          </h1>
-          <div className="flex items-center gap-2 mt-2 flex-wrap">
-            {/* For China Import styles the source IS the story — surface
-                it. For sampling styles the NOWI prefix already implies
-                source, and the lifecycle chip below carries the same
-                "in sampling" signal, so the source chip is redundant
-                and we omit it. */}
-            {isChinaImport && (
-              <Badge variant="stitch">{sourceLabel}</Badge>
-            )}
-            <Badge variant="secondary">
+            <ChevronRight size={13} aria-hidden className="shrink-0" />
+            <span className="text-[var(--color-foreground)] truncate max-w-[240px]">
+              {formatStyleRef(style, style.workingName ?? '—')}
+            </span>
+          </nav>
+          <div className="flex items-center gap-3 flex-wrap">
+            <h1 className="font-mono text-3xl font-semibold text-[var(--color-primary)] tracking-tight m-0">
+              {formatStyleRef(style, `(${t('admin.styles.draft')})`)}
+            </h1>
+            {/* For China Import styles the source IS the story — surface it.
+                For sampling styles the NOWI prefix already implies source,
+                so the source chip is redundant and we omit it. */}
+            {isChinaImport && <Badge variant="stitch">{sourceLabel}</Badge>}
+            <Badge variant={isProductionLayout ? 'ready' : 'secondary'}>
               {t(`admin.styles.lifecycle.${style.lifecycle}`)}
             </Badge>
-            <span className="text-xs text-[var(--color-muted-foreground)]">
-              {t('admin.styles.workspace.lastUpdated', {
-                when: new Date(style.updatedAt).toLocaleString(),
-              })}
-            </span>
+            {/* Stage pill — names the current workflow stage. */}
+            {!isChinaImport && stagePill && (
+              <Badge variant="outline">{stagePill}</Badge>
+            )}
           </div>
+          <p className="mt-1.5 text-sm text-[var(--color-muted-foreground)]">
+            {[
+              style.workingName,
+              style.gender ? genderLabel(style.gender) : null,
+              style.category?.name ?? style.categoryCode,
+            ]
+              .filter(Boolean)
+              .join(' · ') || '—'}
+          </p>
         </div>
-        <div className="flex flex-wrap items-center gap-2">
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => {
-              void ensureMasterData();
-              setEditOpen(true);
-            }}
-          >
-            <Pencil size={14} />
-            <span className="ml-1">
-              {t('admin.styles.workspace.edit', { defaultValue: 'Edit' })}
-            </span>
-          </Button>
+
+        {/* Action bar — lifecycle-conditional, matching each mock exactly.
+            in_sampling → Park · Send back for corrections · Approve sample
+            sample_approved+ → Park · Start production · Add colour */}
+        <div className="flex flex-wrap items-center gap-2 md:justify-end shrink-0">
           {canPark && (
             <Button
               variant="outline"
               size="sm"
               disabled={busy !== null}
-              onClick={() => setParkOpen(true)}
+              onClick={() =>
+                isWithdraw ? setWithdrawConfirmOpen(true) : setParkOpen(true)
+              }
             >
-              <Pause size={14} />
-              <span className="ml-1">{t('admin.styles.workspace.park')}</span>
+              {isWithdraw
+                ? t('admin.styles.workspace.withdraw', {
+                    defaultValue: 'Withdraw',
+                  })
+                : t('admin.styles.workspace.parkAction', {
+                    defaultValue: 'Park',
+                  })}
             </Button>
           )}
           {canRevive && (
@@ -220,55 +515,187 @@ export default function StyleWorkspace() {
               variant="outline"
               size="sm"
               disabled={busy !== null}
-              onClick={() => void doAction('revive', () => reviveStyle(style.id))}
+              onClick={() =>
+                void doAction('revive', () => reviveStyle(style.id))
+              }
             >
-              <Play size={14} />
-              <span className="ml-1">{t('admin.styles.workspace.revive')}</span>
+              {t('admin.styles.workspace.revive')}
             </Button>
           )}
+          {/* Send back for corrections — sampling action bar only. Patches
+              samplingStatus = corrections_needed (same wiring the stepper
+              previously carried). */}
+          {canSampleApprove && (
+            <Button
+              variant="outline"
+              size="sm"
+              disabled={busy !== null}
+              onClick={() =>
+                void doAction('send-back', () =>
+                  patchStyle(style.id, {
+                    samplingStatus: 'corrections_needed',
+                  }),
+                )
+              }
+            >
+              {t('admin.styles.workspace.sendBack', {
+                defaultValue: 'Send back for corrections',
+              })}
+            </Button>
+          )}
+          {/* Start production — sample_approved+ only. Re-homed onto the
+              Edit surface (no new BE transition introduced here). */}
+          {canStartProduction && (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => {
+                void ensureMasterData();
+                setEditOpen(true);
+              }}
+            >
+              {t('admin.styles.workspace.startProduction', {
+                defaultValue: 'Start production',
+              })}
+            </Button>
+          )}
+          {/* + Add colour — spawns a sibling Style that re-enters the Inbox
+              for Approval #1. Gated to POST_SAMPLING + colour-WRITE roles. */}
+          {canAddColour && (
+            <Button size="sm" onClick={() => setColourModalOpen(true)}>
+              <Plus size={16} />
+              <span className="ml-1">
+                {t('admin.styles.workspace.addColour', 'Add colour')}
+              </span>
+            </Button>
+          )}
+          {/* Approve intake (Approval #1) — drafts only. China Import keeps
+              the lightweight single-click approve; sampling opens the
+              checklist dialog. */}
           {canApproveIntake && (
             <Button
               size="sm"
               disabled={busy !== null}
               onClick={() => {
                 if (isChinaImport) {
-                  // China Import keeps the lightweight single-click approve.
                   void doAction('approve', () => approveStyle(style.id));
                 } else {
                   setApproveOpen(true);
                 }
               }}
             >
-              <CheckCircle2 size={14} />
-              <span className="ml-1">{t('admin.styles.workspace.approve')}</span>
+              {t('admin.styles.workspace.approve')}
             </Button>
           )}
-          {/* Sample sign-off ("Approve sample") used to live as a header
-              button here. It now lives inside the pipeline stepper —
-              clicking the locked "Approved" pill opens the same dialog.
-              Keeping it in one place avoids the orphaned-floating-button
-              feel and reinforces that approval is the terminal step of
-              the pipeline, not a separate action. */}
-          {/* + Add colour — spawns a sibling Style inheriting fabric/CAD
-              from this one. Only meaningful once the parent style number
-              is minted (i.e. past draft). */}
-          {style.styleId && !isChinaImport && (
+          {/* Approve sample (Approval #2) — primary action while in_sampling.
+              Opens the SampleApproveDialog. */}
+          {canSampleApproveAction && (
             <Button
-              variant="outline"
               size="sm"
-              onClick={() => setColourModalOpen(true)}
+              disabled={busy !== null}
+              onClick={() => setSampleApproveOpen(true)}
             >
-              <Palette size={14} />
-              <span className="ml-1">
-                {t('admin.styles.workspace.addColour', 'Add colour')}
-              </span>
+              {t('admin.styles.workspace.sampleApprove', {
+                defaultValue: 'Approve sample',
+              })}
             </Button>
           )}
         </div>
-      </div>
+      </header>
+
+      {/* ── Context band — lifecycle-conditional ──
+          in_sampling (+ earlier): progress-stepper band (timeline /
+            pattern-master meta line + horizontal stepper).
+          sample_approved+: colour-family strip. */}
+      {showSamplingBand && (
+        <section className={cn(cardClasses, 'p-4')}>
+          <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between mb-4">
+            <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-[var(--color-muted-foreground)]">
+              <Clock size={14} aria-hidden />
+              <span>
+                {t('admin.styles.workspace.samplingTimelineMeta', {
+                  defaultValue: 'Sampling timeline: {{timeline}}',
+                  timeline: renderSamplingTimeline(style.samplingTimeline),
+                })}
+              </span>
+            </div>
+            <p className="text-xs italic text-[var(--color-muted-foreground)]">
+              {t('admin.styles.workspace.coloursAfterApproval', {
+                defaultValue:
+                  'Colours are added after sample approval — not during sampling.',
+              })}
+            </p>
+          </div>
+          {/* Horizontal sampling pipeline — driven by the live SamplingStatus
+              enum. The terminal step opens the sample sign-off dialog. */}
+          <SamplingPipelineStepper
+            samplingStatus={style.samplingStatus as SamplingStatus | null}
+            onStepClick={
+              // Sampling status is editable only after intake is approved
+              // (lifecycle = in_sampling). Drafts render the stepper read-only.
+              style.lifecycle === 'in_sampling'
+                ? (next) =>
+                    void doAction('step', () =>
+                      patchStyle(style.id, { samplingStatus: next }),
+                    )
+                : undefined
+            }
+            onApproveClick={
+              canSampleApprove ? () => setSampleApproveOpen(true) : undefined
+            }
+          />
+        </section>
+      )}
+
+      {isProductionLayout && (
+        <ColourFamilyCard
+          style={style}
+          family={colourFamily}
+          canAddColour={canAddColour}
+          onAddColour={() => setColourModalOpen(true)}
+        />
+      )}
+
+      {/* China Import: simple "Approved by X on DATE" record card. */}
+      {isChinaImport && style.approvedAt && (
+        <ChinaImportApprovalCard style={style} cardClasses={cardClasses} />
+      )}
+
+      {/* ── Main area — two columns ──
+          Sampling layout: 7/5 split. Production layout: even 2-up. Both
+          place Core specs + Bill of materials left, Pattern/CAD + Activity
+          log right (mock order). */}
+      {isProductionLayout ? (
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 items-start lg:items-stretch">
+          <div className="space-y-4">
+            {coreSpecsCard}
+            {billOfMaterialsCard}
+          </div>
+          <div className="space-y-4 lg:space-y-0 lg:flex lg:flex-col lg:gap-4 lg:min-h-0">
+            {patternCadCard}
+            {activityLogCard}
+          </div>
+        </div>
+      ) : (
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 items-start lg:items-stretch">
+          <div className="lg:col-span-7 space-y-4">
+            {coreSpecsCard}
+            {billOfMaterialsCard}
+          </div>
+          <div className="lg:col-span-5 space-y-4 lg:space-y-0 lg:flex lg:flex-col lg:gap-4 lg:min-h-0">
+            {patternCadCard}
+            {activityLogCard}
+          </div>
+        </div>
+      )}
 
       <AddColourModal
         parent={style}
+        // Whole colour family (every sibling sharing familyCode), resolved
+        // off the BE — so the duplicate guard + "existing colours" strip
+        // are correct even when Add-Colour is opened from a SIBLING rather
+        // than the root. Not parent.colourVariants (root-only).
+        family={colourFamily}
         open={colourModalOpen}
         onClose={() => setColourModalOpen(false)}
         onCreated={(created) => {
@@ -280,9 +707,7 @@ export default function StyleWorkspace() {
       />
 
       {/* Full editor — renders the SAME shared form the /styles/new
-          page uses, wrapped in a centered modal. One UX surface for
-          create + edit; the page chrome (breadcrumb / source toggle /
-          reviewer card) just gets swapped for a Dialog + Save button. */}
+          page uses, wrapped in a centered modal. */}
       <StyleEditModal
         open={editOpen}
         style={style}
@@ -299,146 +724,85 @@ export default function StyleWorkspace() {
         }}
       />
 
-      {/* Inspiration — visual anchor at the top of the body, above the
-          workflow state. Empty when the style has no images / link. */}
-      <InspirationCard style={style} cardClasses={cardClasses} />
+      {/* Scoped Core-specifications editor — working name, gender,
+          category, fabric, primary colour, sampling timeline only. */}
+      <CoreSpecsEditModal
+        open={coreSpecsEditOpen}
+        style={style}
+        fabrics={fabrics}
+        onClose={() => setCoreSpecsEditOpen(false)}
+        onSaved={(saved) => {
+          if (saved.styleId && saved.styleId !== style.styleId) {
+            navigate(`/styles/${saved.styleId}`);
+          } else {
+            void load();
+          }
+        }}
+      />
 
-      {/* China Import: simple "Approved by X on DATE" record card.
-          Gurukul flow has no sampling phase — just the single intake
-          approval by Dheeraj that mints the NW- number. Shown only
-          after approval; pre-approval the only thing on the page is
-          Inspiration + Specs + Activity. */}
-      {isChinaImport && style.approvedAt && (
-        <ChinaImportApprovalCard style={style} cardClasses={cardClasses} />
-      )}
+      {/* Scoped Bill-of-materials editor — fabric + sample fabric
+          required only. */}
+      <BomEditModal
+        open={bomEditOpen}
+        style={style}
+        fabrics={fabrics}
+        onClose={() => setBomEditOpen(false)}
+        onSaved={(saved) => {
+          if (saved.styleId && saved.styleId !== style.styleId) {
+            navigate(`/styles/${saved.styleId}`);
+          } else {
+            void load();
+          }
+        }}
+      />
 
+      {/* Scoped Pattern / CAD editor — uploads CAD files and patches
+          patternCadPaths only (no full intake form). */}
+      <PatternCadEditModal
+        open={patternCadEditOpen}
+        style={style}
+        onClose={() => setPatternCadEditOpen(false)}
+        onSaved={(saved) => {
+          if (saved.styleId && saved.styleId !== style.styleId) {
+            navigate(`/styles/${saved.styleId}`);
+          } else {
+            void load();
+          }
+        }}
+      />
 
-      {/* Sampling pipeline — not applicable to China Import styles.
-          Approved pill in the stepper opens the sample sign-off dialog
-          (same one the explicit "Approve sample" button would have
-          opened); "Send back" sets samplingStatus = corrections_needed
-          via patchStyle so the audit log + side-effects stay clean. */}
-      {!isChinaImport && (
-        <section className={cardClasses}>
-          <h2 className="font-serif text-lg mb-3">
-            {t('admin.styles.workspace.samplingPipeline')}
-          </h2>
-          <SamplingPipelineStepper
-            samplingStatus={style.samplingStatus as SamplingStatus | null}
-            onStepClick={(next) =>
-              void doAction('step', () =>
-                patchStyle(style.id, { samplingStatus: next }),
-              )
-            }
-            onApproveClick={
-              canSampleApprove ? () => setSampleApproveOpen(true) : undefined
-            }
-            onSendBack={() =>
-              void doAction('send-back', () =>
-                patchStyle(style.id, {
-                  samplingStatus: 'corrections_needed',
-                }),
-              )
-            }
-          />
-        </section>
-      )}
-
-      {/* Inline sample-workflow state editor. Pattern Master updates
-          Sampling Status / DXF / Fit Session without going through
-          either approval dialog. Sampling source only. */}
-      {!isChinaImport && (
-        <section className={cardClasses}>
-          <SampleStateCard
-            style={style}
-            busy={busy !== null}
-            onSave={(patch) =>
-              void doAction('state', () => patchStyle(style.id, patch))
-            }
-          />
-        </section>
-      )}
-
-      {/* Specs (left) + Pattern/CAD preview (right). Two-up on lg.
-          The CAD card always renders so the designer can see at a
-          glance whether files have been uploaded — empty state nudges
-          them to the edit drawer. */}
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-4">
-        <section className={cn(cardClasses, 'lg:col-span-6')}>
-          <h2 className="font-serif text-lg mb-3">
-            {t('admin.styles.workspace.coreSpecs')}
-          </h2>
-          <dl className="grid grid-cols-2 sm:grid-cols-3 gap-x-4 gap-y-3 text-sm">
-            <Spec label="Gender" value={style.gender ?? '—'} />
-            <Spec label="Category" value={style.categoryCode ?? '—'} />
-            <Spec label="Fabric" value={style.fabric?.name ?? '—'} />
-            <Spec
-              label="Primary colour"
-              value={style.primaryColour ?? '—'}
-            />
-            {!isChinaImport && (
-              <Spec
-                label="Sampling timeline"
-                value={renderSamplingTimeline(style.samplingTimeline)}
-              />
-            )}
-            {!isChinaImport &&
-              style.sampleFabricRequired != null && (
-                <Spec
-                  label="Sample fabric required"
-                  value={`${style.sampleFabricRequired} ${
-                    // Default to "m" when the fabric record has no
-                    // unit-of-measure set, so the spec never reads as a
-                    // bare number.
-                    style.fabric?.unitOfMeasure === 'meter'
-                      ? 'm'
-                      : (style.fabric?.unitOfMeasure ?? 'm')
-                  }`}
-                />
-              )}
-          </dl>
-        </section>
-
-        <section className={cn(cardClasses, 'lg:col-span-6')}>
-          <h2 className="font-serif text-lg mb-3">
-            {t('admin.styles.drawer.patternCad.label', {
-              defaultValue: 'Pattern / CAD',
-            })}
-          </h2>
-          {style.patternCadPaths && style.patternCadPaths.length > 0 ? (
-            <PatternCadPreview patternCadPaths={style.patternCadPaths} />
-          ) : (
-            <p className="text-sm text-[var(--color-muted-foreground)]">
-              {t('admin.styles.drawer.patternCad.none', {
-                defaultValue:
-                  'No pattern or CAD files uploaded yet. Use Edit to upload .dxf / .pdf / .png / .jpg.',
-              })}
-            </p>
-          )}
-        </section>
-      </div>
-
-      {/* Colour family chips — siblings + parent linked via
-          parentStyleId. Now on its own row so the CAD preview gets
-          the full right column above. */}
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-4">
-        <ColourFamilyCard
-          style={style}
-          canAddColour={!!style.styleId && !isChinaImport}
-          onAddColour={() => setColourModalOpen(true)}
-        />
-      </div>
-
-      {/* Activity timeline — surfaces who did what when. Reads
-          straight from style.auditLogs (already hydrated by the
-          detail include). Replaces the old InspectionTimeline. */}
-      <ActivityTimelineCard style={style} cardClasses={cardClasses} />
+      {/* Withdraw confirmation — only for post-approval styles. */}
+      <ConfirmDialog
+        open={withdrawConfirmOpen}
+        destructive
+        title={t('admin.styles.workspace.withdrawConfirmTitle', {
+          defaultValue: 'Withdraw this style?',
+        })}
+        message={t('admin.styles.workspace.withdrawConfirmBody', {
+          defaultValue:
+            'This style has already passed Approval #1. Withdrawing pulls a committed design out of the pipeline and parks it. You can revive it later. Continue?',
+        })}
+        confirmLabel={t('admin.styles.workspace.withdraw', {
+          defaultValue: 'Withdraw',
+        })}
+        cancelLabel={t('common.cancel', { defaultValue: 'Cancel' })}
+        onCancel={() => setWithdrawConfirmOpen(false)}
+        onConfirm={() => {
+          setWithdrawConfirmOpen(false);
+          setParkOpen(true);
+        }}
+      />
 
       {/* Park confirmation — captures the reason for the audit log. */}
       <ParkDialog
         open={parkOpen}
         busy={busy !== null}
-        styleLabel={style.styleId ?? (style.draftNo != null ? `D-${style.draftNo}` : style.workingName) ?? null}
+        approved={isWithdraw}
+        styleLabel={
+          style.styleId ??
+          (style.draftNo != null ? `D-${style.draftNo}` : style.workingName) ??
+          null
+        }
         onClose={() => setParkOpen(false)}
         onConfirm={(reason) => {
           setParkOpen(false);
@@ -450,7 +814,6 @@ export default function StyleWorkspace() {
       <Approval1Dialog
         open={approveOpen}
         busy={busy !== null}
-        defaultPatternMasterId={style.patternMasterId}
         gender={style.gender}
         onClose={() => setApproveOpen(false)}
         onConfirm={(body) => {
@@ -459,14 +822,10 @@ export default function StyleWorkspace() {
         }}
       />
 
-      {/* Approval #2 (sample sign-off) dialog — captures the Gurukul
-          enums: verdict, DXF, fit session. Replaces the old single-
-          click sample-approve. */}
+      {/* Approval #2 (sample sign-off) dialog */}
       <SampleApproveDialog
         open={sampleApproveOpen}
         busy={busy !== null}
-        currentDxfApproved={style.dxfApproved}
-        currentModelFitSession={style.modelFitSession}
         onClose={() => setSampleApproveOpen(false)}
         onConfirm={(body) => {
           setSampleApproveOpen(false);
@@ -485,19 +844,14 @@ const SAMPLE_APPROVAL_OPTIONS: SampleApprovalStatus[] = [
   'pattern_correction_approved',
 ];
 
-
 function SampleApproveDialog({
   open,
   busy,
-  currentDxfApproved,
-  currentModelFitSession,
   onClose,
   onConfirm,
 }: {
   open: boolean;
   busy: boolean;
-  currentDxfApproved: Style['dxfApproved'];
-  currentModelFitSession: Style['modelFitSession'];
   onClose: () => void;
   onConfirm: (body: SampleApproveStyleBody) => void;
 }) {
@@ -505,22 +859,14 @@ function SampleApproveDialog({
   const [verdict, setVerdict] = useState<SampleApprovalStatus>(
     'approved_for_production',
   );
-  const [dxfApproved, setDxfApproved] = useState<'yes' | 'no' | ''>('');
-  const [modelFitSession, setModelFitSession] = useState<
-    'yes' | 'pending' | 'no' | ''
-  >('');
   const [note, setNote] = useState('');
 
   useEffect(() => {
     if (open) {
       setVerdict('approved_for_production');
-      setDxfApproved((currentDxfApproved as 'yes' | 'no' | null) ?? '');
-      setModelFitSession(
-        (currentModelFitSession as 'yes' | 'pending' | 'no' | null) ?? '',
-      );
       setNote('');
     }
-  }, [open, currentDxfApproved, currentModelFitSession]);
+  }, [open]);
 
   return (
     <Dialog
@@ -540,8 +886,6 @@ function SampleApproveDialog({
             onClick={() =>
               onConfirm({
                 sampleApproval: verdict,
-                dxfApproved: dxfApproved || undefined,
-                modelFitSession: modelFitSession || undefined,
                 note: note.trim() || undefined,
               })
             }
@@ -583,47 +927,6 @@ function SampleApproveDialog({
             ))}
           </select>
         </div>
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-          <div>
-            <label className="block text-xs text-[var(--color-muted-foreground)] mb-1">
-              {t('admin.styles.approval2.dxfApproved', {
-                defaultValue: 'DXF approved (Karan)',
-              })}
-            </label>
-            <select
-              value={dxfApproved}
-              onChange={(e) =>
-                setDxfApproved(e.target.value as 'yes' | 'no' | '')
-              }
-              className="flex h-10 w-full rounded-[var(--radius-sm)] border border-[var(--color-border)] bg-white px-2.5 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-ring)]"
-            >
-              <option value="">—</option>
-              <option value="yes">Yes</option>
-              <option value="no">No</option>
-            </select>
-          </div>
-          <div>
-            <label className="block text-xs text-[var(--color-muted-foreground)] mb-1">
-              {t('admin.styles.approval2.modelFitSession', {
-                defaultValue: 'Model / live fit session',
-              })}
-            </label>
-            <select
-              value={modelFitSession}
-              onChange={(e) =>
-                setModelFitSession(
-                  e.target.value as 'yes' | 'pending' | 'no' | '',
-                )
-              }
-              className="flex h-10 w-full rounded-[var(--radius-sm)] border border-[var(--color-border)] bg-white px-2.5 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-ring)]"
-            >
-              <option value="">—</option>
-              <option value="yes">Yes</option>
-              <option value="pending">Pending</option>
-              <option value="no">No</option>
-            </select>
-          </div>
-        </div>
         <div>
           <label className="block text-xs text-[var(--color-muted-foreground)] mb-1">
             {t('admin.styles.approval2.note', { defaultValue: 'Note' })}
@@ -638,198 +941,6 @@ function SampleApproveDialog({
         </div>
       </div>
     </Dialog>
-  );
-}
-
-/**
- * Inline "Sample workflow" card — Excel-style. Every field is a live
- * dropdown; picking a value PATCHes immediately. No edit/save mode.
- *
- * Per-field saved/saving status lives next to each dropdown so the user
- * gets feedback without a blocking spinner. The Sampling Status field
- * also drives the SamplingPipelineStepper above (same column).
- */
-function SampleStateCard({
-  style,
-  busy: _busy,
-  onSave,
-}: {
-  style: Style;
-  busy: boolean;
-  onSave: (patch: {
-    samplingStatus?: SamplingStatus | null;
-    dxfApproved?: 'yes' | 'no' | null;
-    modelFitSession?: 'yes' | 'pending' | 'no' | null;
-    patternMasterId?: number | null;
-  }) => void;
-}) {
-  const { t } = useTranslation();
-  // Per-field saving / just-saved state — Excel-like ✓ flash after a
-  // successful PATCH. We track by field key so two simultaneous saves
-  // (e.g. clicking Sampling Status while DXF is still flashing) don't
-  // step on each other.
-  const [savedFlash, setSavedFlash] = useState<Record<string, true>>({});
-  const flash = (key: string) => {
-    setSavedFlash((cur) => ({ ...cur, [key]: true }));
-    window.setTimeout(
-      () =>
-        setSavedFlash((cur) => {
-          const next = { ...cur };
-          delete next[key];
-          return next;
-        }),
-      1500,
-    );
-  };
-
-  const [pmCandidates, setPmCandidates] = useState<ApiUser[]>([]);
-  useEffect(() => {
-    let cancelled = false;
-    void listUsers({ take: 200 })
-      .then((rows) => {
-        if (cancelled) return;
-        setPmCandidates(
-          rows.filter(
-            (u) =>
-              u.role === 'pattern_master_w' ||
-              u.role === 'pattern_master_m' ||
-              u.role === 'admin',
-          ),
-        );
-      })
-      .catch(() => {
-        if (!cancelled) setPmCandidates([]);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, []);
-
-  return (
-    <div>
-      <div className="flex items-center justify-between mb-3">
-        <h2 className="font-serif text-lg">
-          {t('admin.styles.workspace.sampleDetails', {
-            defaultValue: 'Sample details',
-          })}
-        </h2>
-        <span className="text-[11px] text-[var(--color-muted-foreground)]">
-          {t('admin.styles.workspace.sampleWorkflowHint', {
-            defaultValue: 'Picks save instantly',
-          })}
-        </span>
-      </div>
-
-      {/* Sampling status is owned by the pipeline stepper above —
-          dropping the dropdown here removes the redundant control
-          and leaves only the independent fields (DXF / fit session /
-          pattern master) in this card. */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-sm">
-        <FieldDropdown
-          label="DXF approved"
-          value={style.dxfApproved ?? ''}
-          options={[
-            { value: 'yes', label: 'Yes' },
-            { value: 'no', label: 'No' },
-          ]}
-          flashing={!!savedFlash.dxfApproved}
-          onChange={(v) => {
-            onSave({ dxfApproved: (v as 'yes' | 'no') || null });
-            flash('dxfApproved');
-          }}
-        />
-        <FieldDropdown
-          label="Model / live fit session"
-          value={style.modelFitSession ?? ''}
-          options={[
-            { value: 'yes', label: 'Yes' },
-            { value: 'pending', label: 'Pending' },
-            { value: 'no', label: 'No' },
-          ]}
-          flashing={!!savedFlash.modelFitSession}
-          onChange={(v) => {
-            onSave({
-              modelFitSession:
-                (v as 'yes' | 'pending' | 'no') || null,
-            });
-            flash('modelFitSession');
-          }}
-        />
-        <FieldDropdown
-          label="Pattern Master"
-          value={style.patternMasterId != null ? String(style.patternMasterId) : ''}
-          options={pmCandidates.map((u) => ({
-            value: String(u.id),
-            label: `${u.name}${
-              u.role === 'pattern_master_w'
-                ? " (Women's)"
-                : u.role === 'pattern_master_m'
-                  ? " (Men's)"
-                  : ''
-            }`,
-          }))}
-          unsetLabel="— Unassigned"
-          flashing={!!savedFlash.patternMasterId}
-          onChange={(v) => {
-            onSave({ patternMasterId: v ? Number(v) : null });
-            flash('patternMasterId');
-          }}
-        />
-      </div>
-    </div>
-  );
-}
-
-/**
- * Single labelled dropdown that PATCHes on change. Renders a small
- * "Saved ✓" pill for 1.5s after a successful pick, then fades. Empty
- * string is the "unset" sentinel — picking it sends null.
- */
-function FieldDropdown({
-  label,
-  value,
-  options,
-  unsetLabel = '— Unset',
-  flashing,
-  onChange,
-}: {
-  label: string;
-  value: string;
-  options: Array<{ value: string; label: string }>;
-  unsetLabel?: string;
-  flashing: boolean;
-  onChange: (next: string) => void;
-}) {
-  return (
-    <div>
-      <div className="flex items-center justify-between mb-1">
-        <label className="text-xs text-[var(--color-muted-foreground)]">
-          {label}
-        </label>
-        {flashing && (
-          <span className="text-[10px] text-[var(--status-ready-acc)] inline-flex items-center gap-0.5 transition-opacity">
-            <CheckCircle2 size={11} /> Saved
-          </span>
-        )}
-      </div>
-      <select
-        value={value}
-        onChange={(e) => onChange(e.target.value)}
-        className={cn(
-          'flex h-10 w-full rounded-[var(--radius-sm)] border bg-white px-2.5 transition-colors',
-          flashing
-            ? 'border-[var(--status-ready-acc)]'
-            : 'border-[var(--color-border)]',
-        )}
-      >
-        <option value="">{unsetLabel}</option>
-        {options.map((o) => (
-          <option key={o.value} value={o.value}>
-            {o.label}
-          </option>
-        ))}
-      </select>
-    </div>
   );
 }
 
@@ -855,207 +966,276 @@ function renderSamplingTimeline(value: string | null | undefined): string {
   return trimmed;
 }
 
-function Spec({ label, value }: { label: string; value: React.ReactNode }) {
-  // Wrap each label/value pair in a single grid cell so the parent
-  // `grid-cols-N` lays out pairs side-by-side instead of splitting
-  // dt/dd into separate cells (which made values drift one column to
-  // the right of their label).
+/**
+ * Section card header strip — the Stitch "title bar on a tinted band"
+ * look, rendered in the app's surface-2 / border tokens. Optional trailing
+ * slot (e.g. an edit / upload affordance) sits on the right.
+ */
+function CardHeader({
+  title,
+  right,
+}: {
+  title: React.ReactNode;
+  right?: React.ReactNode;
+}) {
   return (
-    <div className="min-w-0">
-      <dt className="text-xs text-[var(--color-muted-foreground)] mb-0.5">
-        {label}
-      </dt>
-      <dd className="text-sm text-[var(--color-foreground)] break-words">
-        {value}
-      </dd>
+    <div className="flex items-center justify-between gap-3 px-5 py-3 border-b border-[var(--color-border)] bg-[var(--color-surface-2)]">
+      <h3 className="font-serif text-base font-semibold m-0">{title}</h3>
+      {right}
     </div>
   );
 }
 
 /**
- * Inspiration card — visual anchor for the page. Shows the multi-image
- * grid (referenceImages[] up to 5) with the primary tile larger, plus
- * the reference link. Replaces the small bottom-row "Inspiration"
- * section that was easy to miss.
+ * Core-specs table row — label cell on a tinted band, value cell beside
+ * it. Mirrors the mock's `<th>`/`<td>` row structure (uppercase caps
+ * label + tabular value), rendered as a flex row in the app's tokens.
  */
-function InspirationCard({
+function SpecRow({
+  label,
+  value,
+  last = false,
+}: {
+  label: string;
+  value: React.ReactNode;
+  last?: boolean;
+}) {
+  return (
+    <div
+      className={cn(
+        'flex items-start gap-4 py-3',
+        !last && 'border-b border-[var(--color-border)]',
+      )}
+    >
+      <span className="w-1/3 shrink-0 text-[11px] uppercase tracking-[0.05em] font-semibold text-[var(--color-muted-foreground)]">
+        {label}
+      </span>
+      <span className="flex-1 font-mono text-[13px] text-[var(--color-foreground)] break-words">
+        {value}
+      </span>
+    </div>
+  );
+}
+
+/**
+ * Small round colour swatch. We only know `primaryColour` as a free-text
+ * name; pass it straight to CSS (most catalogue names — Indigo, Black,
+ * Sand — resolve), and fall back to a neutral filled dot otherwise so the
+ * element is always present per the mock.
+ */
+function ColourSwatch({ colour }: { colour: string | null }) {
+  return (
+    <span
+      aria-hidden
+      className="inline-block h-4 w-4 rounded-full border border-[var(--color-border-strong)] shadow-sm"
+      style={{
+        backgroundColor: colour ?? 'var(--color-muted-foreground-2)',
+      }}
+    />
+  );
+}
+
+/**
+ * Bill of materials card. The mock lists a materials table (Main fabric,
+ * trims …). The Style model only carries the main fabric today, so we
+ * render the single derived "Main fabric" row from `style.fabric` (+ the
+ * sample-fabric requirement as the quantity). The header affordance is an
+ * "add" icon in the sampling mock and an "Edit BOM" button in production;
+ * both route to the Edit surface (no inline BOM editor on this page).
+ */
+function BillOfMaterialsCard({
   style,
   cardClasses,
+  production,
+  onEdit,
 }: {
   style: Style;
   cardClasses: string;
+  production: boolean;
+  onEdit: () => void;
 }) {
   const { t } = useTranslation();
-  const images = (
-    style.referenceImages && style.referenceImages.length > 0
-      ? style.referenceImages
-      : style.referenceImageUrl
-        ? [style.referenceImageUrl]
-        : []
-  ).slice(0, 5);
-  if (images.length === 0 && !style.referenceLink) return null;
-  const [primary, ...rest] = images;
+  const fabricName = style.fabric?.name ?? '—';
+  const qty =
+    style.sampleFabricRequired != null
+      ? `${style.sampleFabricRequired} ${
+          style.fabric?.unitOfMeasure === 'meter'
+            ? 'm'
+            : (style.fabric?.unitOfMeasure ?? 'm')
+        }`
+      : '—';
   return (
     <section className={cardClasses}>
-      <div className="flex items-baseline justify-between mb-3">
-        <h2 className="font-serif text-lg">
-          {t('admin.styles.workspace.inspiration', {
-            defaultValue: 'Inspiration & references',
-          })}
-        </h2>
-        {style.referenceLink && (
-          <a
-            href={style.referenceLink}
-            target="_blank"
-            rel="noreferrer"
-            className="text-xs text-[var(--color-primary)] hover:underline inline-flex items-center gap-1"
-          >
-            <ExternalLink size={12} />
-            <span className="truncate max-w-[280px]">
-              {style.referenceLink.replace(/^https?:\/\//, '')}
-            </span>
-          </a>
-        )}
-      </div>
-      {images.length > 0 ? (
-        <div className="grid grid-cols-1 sm:grid-cols-[2fr_1fr_1fr] gap-2">
-          {primary && (
-            <a
-              href={primary}
-              target="_blank"
-              rel="noreferrer"
-              className="block aspect-square overflow-hidden rounded-[var(--radius-md)] border border-[var(--color-border)] bg-[var(--color-surface-2)]/40"
+      <CardHeader
+        title={t('admin.styles.workspace.billOfMaterials', {
+          defaultValue: 'Bill of materials',
+        })}
+        right={
+          production ? (
+            <button
+              type="button"
+              onClick={onEdit}
+              className="px-2 py-1 rounded-[var(--radius-sm)] border border-[var(--color-border-strong)] text-[var(--color-foreground)] text-xs hover:bg-[var(--color-surface-2)] transition-colors"
             >
-              {/* eslint-disable-next-line jsx-a11y/img-redundant-alt */}
-              <img
-                src={primary}
-                alt="Primary reference"
-                className="h-full w-full object-cover"
-              />
-            </a>
-          )}
-          {rest.length > 0 && (
-            <div className="grid grid-cols-2 sm:grid-cols-1 sm:col-span-2 gap-2">
-              {rest.map((u) => (
-                <a
-                  key={u}
-                  href={u}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="block aspect-square overflow-hidden rounded-[var(--radius-md)] border border-[var(--color-border)] bg-[var(--color-surface-2)]/40"
-                >
-                  <img src={u} alt="Reference" className="h-full w-full object-cover" />
-                </a>
-              ))}
-            </div>
-          )}
-        </div>
-      ) : (
-        <p className="text-sm text-[var(--color-muted-foreground)]">—</p>
-      )}
+              {t('admin.styles.workspace.editBom', {
+                defaultValue: 'Edit BOM',
+              })}
+            </button>
+          ) : (
+            <button
+              type="button"
+              aria-label={t('admin.styles.workspace.editBom', {
+                defaultValue: 'Edit BOM',
+              })}
+              onClick={onEdit}
+              className="text-[var(--color-muted-foreground)] hover:text-[var(--color-primary)] transition-colors"
+            >
+              <Plus size={18} />
+            </button>
+          )
+        }
+      />
+      <div className="w-full overflow-x-auto">
+        <table className="w-full text-left border-collapse">
+          <thead>
+            <tr className="bg-[var(--color-surface-2)] border-b border-[var(--color-border)]">
+              <th className="px-4 py-2 text-[11px] uppercase tracking-[0.05em] font-semibold text-[var(--color-muted-foreground)]">
+                {production
+                  ? t('admin.styles.workspace.bomItem', {
+                      defaultValue: 'Item',
+                    })
+                  : t('admin.styles.workspace.bomType', {
+                      defaultValue: 'Type',
+                    })}
+              </th>
+              <th className="px-4 py-2 text-[11px] uppercase tracking-[0.05em] font-semibold text-[var(--color-muted-foreground)]">
+                {production
+                  ? t('admin.styles.workspace.bomSpec', {
+                      defaultValue: 'Spec',
+                    })
+                  : t('admin.styles.workspace.bomDescription', {
+                      defaultValue: 'Description',
+                    })}
+              </th>
+              <th className="px-4 py-2 text-right text-[11px] uppercase tracking-[0.05em] font-semibold text-[var(--color-muted-foreground)]">
+                {production
+                  ? t('admin.styles.workspace.bomQty', { defaultValue: 'Qty' })
+                  : t('admin.styles.workspace.bomQuantity', {
+                      defaultValue: 'Quantity',
+                    })}
+              </th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr className="hover:bg-[var(--color-surface-2)] transition-colors">
+              <td className="px-4 py-3 font-mono text-[13px] text-[var(--color-foreground)]">
+                {t('admin.styles.workspace.bomMainFabric', {
+                  defaultValue: 'Main fabric',
+                })}
+              </td>
+              <td className="px-4 py-3 text-[13px] text-[var(--color-foreground-2)]">
+                {fabricName}
+              </td>
+              <td className="px-4 py-3 font-mono text-[13px] text-[var(--color-foreground)] text-right">
+                {qty}
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
     </section>
   );
 }
 
 /**
- * Compact "Colour family" card. Lists this style + its sibling colour
- * variants (linked via parentStyleId / colourVariants). Click a chip
- * to navigate to that variant's detail page. Replaces the old
- * fabric-×-colour Variants matrix which was the pre-Gurukul model.
- *
- * The "+ Add colour" chip at the end of the variant strip opens the
- * AddColourModal — the primary entry point for adding a new colour
- * to the family, more discoverable than the header action button.
- * Hidden for china_import (no colour-family flow there) and pre-mint
- * drafts (need a styleId on the parent to spawn).
+ * Compact "Colour family" strip. Lists every sibling sharing this style's
+ * `familyCode` — the marketplace "other colours" group — resolved off the
+ * BE colour-group endpoint and passed in as `family`. The current style is
+ * marked "this style"; the rest render as chips. The trailing "+ Add
+ * colour" chip opens the AddColourModal (gated upstream).
  */
 function ColourFamilyCard({
   style,
+  family,
   canAddColour,
   onAddColour,
 }: {
   style: Style;
-  /** True for sample-approved sampling styles with a minted styleId. */
+  /** Whole colour family from the BE — every sibling sharing familyCode,
+   *  including `style` itself. Empty for a style with no family. */
+  family: Style[];
+  /** Gated POST_SAMPLING + colour-WRITE — see canAddColour upstream. */
   canAddColour: boolean;
   onAddColour: () => void;
 }) {
   const { t } = useTranslation();
   const navigate = useNavigate();
-  // Family = the parent's family if I'm a variant, else my own.
-  const parent = style.parentStyle ?? {
-    id: style.id,
-    styleId: style.styleId,
-    workingName: style.workingName,
-    primaryColour: style.primaryColour,
-  };
-  const variants = style.colourVariants ?? [];
-  const hasFamily = variants.length > 0 || !!style.parentStyleId;
-  // Hide entirely when there's no family AND no add affordance — keeps
-  // pre-approval drafts uncluttered.
+  // Siblings = every family member that isn't the style we're viewing.
+  const siblings = family.filter((f) => f.id !== style.id);
+  const hasFamily = family.length > 1;
+  // Hide entirely when there's no family AND no add affordance.
   if (!hasFamily && !canAddColour) return null;
   return (
-    <section className="lg:col-span-5 rounded-[var(--radius-md)] border border-[var(--color-border)] bg-[var(--color-surface)] p-4">
-      <h2 className="font-serif text-lg mb-3">
-        {t('admin.styles.workspace.colourFamily', {
-          defaultValue: 'Colour family',
-        })}
-      </h2>
-      {hasFamily && (
-        <>
-          <div className="text-[11px] uppercase tracking-[0.06em] text-[var(--color-muted-foreground)] mb-1.5">
-            {t('admin.styles.workspace.colourFamilyParent', {
-              defaultValue: 'Parent',
-            })}
-          </div>
-          <button
-            type="button"
-            onClick={() => parent.styleId && navigate(`/styles/${parent.styleId}`)}
-            className="w-full text-left rounded-[var(--radius-sm)] border border-[var(--color-border)] bg-[var(--color-surface-2)]/40 px-3 py-2 hover:bg-[var(--color-muted)] mb-3"
-          >
-            <div className="font-mono text-sm text-[var(--color-primary)]">
-              {parent.styleId ?? `#${parent.id}`}
-            </div>
-            <div className="text-xs text-[var(--color-muted-foreground)]">
-              {parent.workingName ?? '—'} · {parent.primaryColour ?? '—'}
-            </div>
-          </button>
-        </>
-      )}
-
-      <div className="text-[11px] uppercase tracking-[0.06em] text-[var(--color-muted-foreground)] mb-1.5">
-        {variants.length > 0
-          ? t('admin.styles.workspace.colourFamilyVariants', {
-              defaultValue: 'Variants ({{count}})',
-              count: variants.length,
-            })
-          : t('admin.styles.workspace.colourFamilyNoVariants', {
-              defaultValue: 'No variants yet',
-            })}
+    <section className="rounded-[var(--radius-md)] border border-[var(--color-border)] bg-[var(--color-surface)] shadow-sm px-5 py-4">
+      <div className="flex flex-wrap items-center gap-x-4 gap-y-1 mb-3">
+        <h2 className="font-serif text-base font-semibold m-0">
+          {t('admin.styles.workspace.colourFamily', {
+            defaultValue: 'Colour family',
+          })}
+          {hasFamily && (
+            <span className="text-[var(--color-muted-foreground)] font-normal">
+              {' · '}
+              {family.length}
+            </span>
+          )}
+        </h2>
+        <p className="text-xs text-[var(--color-muted-foreground)] m-0">
+          {t('admin.styles.workspace.colourFamilySubtitle', {
+            defaultValue:
+              'Same design, different colours — grouped as "other colours" on marketplaces.',
+          })}
+        </p>
       </div>
-      <div className="flex flex-wrap gap-1.5">
-        {variants.map((v) => (
+      <div className="flex flex-wrap items-center gap-3">
+        {/* Current style — the highlighted "this style" chip. */}
+        <span
+          className="inline-flex items-center gap-2 rounded-full border border-[var(--color-primary)] bg-[var(--color-primary-soft)] px-3 py-1.5 text-xs text-[var(--color-primary)]"
+          title={style.styleId ?? undefined}
+        >
+          <ColourSwatch colour={style.primaryColour} />
+          <span className="font-mono">
+            {style.primaryColour ?? '—'}
+            {' · '}
+            {t('admin.styles.workspace.colourFamilyThisStyle', {
+              defaultValue: 'this style',
+            })}
+          </span>
+        </span>
+        {siblings.map((v) => (
           <button
             key={v.id}
             type="button"
-            onClick={() => v.styleId && navigate(`/styles/${v.styleId}`)}
-            className="inline-flex items-center gap-1.5 rounded-full bg-white border border-[var(--color-border)] px-2.5 py-1 text-xs hover:bg-[var(--color-muted)]"
+            onClick={() => navigate(`/styles/${v.styleId ?? v.id}`)}
+            className="inline-flex items-center gap-2 rounded-full bg-[var(--color-surface)] border border-[var(--color-border)] px-3 py-1.5 text-xs text-[var(--color-foreground-2)] hover:bg-[var(--color-surface-2)] transition-colors"
+            title={v.styleId ?? undefined}
           >
-            <span className="inline-block h-2 w-2 rounded-full bg-[var(--color-muted-foreground)]" />
-            {v.primaryColour ?? '—'}
+            <ColourSwatch colour={v.primaryColour} />
+            <span className="font-mono">
+              {v.primaryColour ?? '—'}
+              {v.styleId ? ` → ${v.styleId}` : ''}
+            </span>
           </button>
         ))}
         {canAddColour && (
-          // Primary add-colour entry point — sits inline with the
-          // existing colour chips so it reads as "add another one"
-          // contextually. Header still has the same button for users
-          // who haven't scrolled to this card yet.
           <button
             type="button"
             onClick={onAddColour}
-            className="inline-flex items-center gap-1.5 rounded-full border border-dashed border-[var(--color-primary)]/60 bg-[var(--color-primary)]/5 text-[var(--color-primary)] px-2.5 py-1 text-xs hover:bg-[var(--color-primary)]/10"
+            className="inline-flex items-center gap-1.5 rounded-full border border-dashed border-[var(--color-border-strong)] text-[var(--color-muted-foreground)] px-3 py-1.5 text-xs hover:text-[var(--color-primary)] hover:border-[var(--color-primary)] transition-colors"
           >
-            <Palette size={12} />
-            {t('admin.styles.workspace.addColour', { defaultValue: 'Add colour' })}
+            <Plus size={16} />
+            {t('admin.styles.workspace.addColour', {
+              defaultValue: 'Add colour',
+            })}
           </button>
         )}
       </div>
@@ -1065,10 +1245,8 @@ function ColourFamilyCard({
 
 /**
  * China Import approval card. Gurukul flow has no sampling phase —
- * just a single intake approval by Dheeraj that mints the NW- number
- * and takes the style to terminal lifecycle. This card surfaces the
- * approver + when + the (optional) remark; that's the entire workflow
- * record for a china_import style.
+ * just a single intake approval that mints the NW- number
+ * and takes the style to terminal lifecycle.
  */
 function ChinaImportApprovalCard({
   style,
@@ -1081,62 +1259,74 @@ function ChinaImportApprovalCard({
   const approvedAt = style.approvedAt ? new Date(style.approvedAt) : null;
   return (
     <section className={cardClasses}>
-      <div className="flex items-baseline justify-between mb-3">
-        <h2 className="font-serif text-lg">
-          {t('admin.styles.workspace.chinaImportApproval.title', {
-            defaultValue: 'Approval',
-          })}
-        </h2>
-        <Badge variant="success" className="text-[10px]">
-          <CheckCircle2 size={11} className="mr-1" />
-          {t('admin.styles.workspace.chinaImportApproval.approved', {
-            defaultValue: 'Approved',
-          })}
-        </Badge>
-      </div>
-      <dl className="grid grid-cols-1 sm:grid-cols-3 gap-x-4 gap-y-2 text-sm">
-        <Spec
-          label={t('admin.styles.workspace.chinaImportApproval.approvedBy', {
-            defaultValue: 'Approved by',
-          })}
-          value={style.approver?.name ?? '—'}
-        />
-        <Spec
-          label={t('admin.styles.workspace.chinaImportApproval.approvedOn', {
-            defaultValue: 'Approved on',
-          })}
-          value={approvedAt ? approvedAt.toLocaleString() : '—'}
-        />
-        <Spec
-          label={t('admin.styles.workspace.chinaImportApproval.styleNumber', {
-            defaultValue: 'Style # minted',
-          })}
-          value={
-            <span className="font-mono">{style.styleId ?? '—'}</span>
-          }
-        />
-      </dl>
-      {style.remark && (
-        <div className="mt-3 pt-3 border-t border-[var(--color-border)]">
-          <div className="text-[10px] uppercase tracking-[0.06em] text-[var(--color-muted-foreground)] mb-1">
-            {t('admin.styles.workspace.chinaImportApproval.remark', {
-              defaultValue: 'Remark',
+      <CardHeader
+        title={t('admin.styles.workspace.chinaImportApproval.title', {
+          defaultValue: 'Approval',
+        })}
+        right={
+          <Badge variant="success" className="text-[10px]">
+            <CheckCircle2 size={11} className="mr-1" />
+            {t('admin.styles.workspace.chinaImportApproval.approved', {
+              defaultValue: 'Approved',
             })}
+          </Badge>
+        }
+      />
+      <div className="p-5">
+        <dl className="grid grid-cols-1 sm:grid-cols-3 gap-x-4 gap-y-2 text-sm">
+          <div className="min-w-0">
+            <dt className="text-xs text-[var(--color-muted-foreground)] mb-0.5">
+              {t('admin.styles.workspace.chinaImportApproval.approvedBy', {
+                defaultValue: 'Approved by',
+              })}
+            </dt>
+            <dd className="text-sm text-[var(--color-foreground)] break-words">
+              {style.approver?.name ?? '—'}
+            </dd>
           </div>
-          <p className="text-sm italic whitespace-pre-wrap text-[var(--color-foreground-2)]">
-            {style.remark}
-          </p>
-        </div>
-      )}
+          <div className="min-w-0">
+            <dt className="text-xs text-[var(--color-muted-foreground)] mb-0.5">
+              {t('admin.styles.workspace.chinaImportApproval.approvedOn', {
+                defaultValue: 'Approved on',
+              })}
+            </dt>
+            <dd className="text-sm text-[var(--color-foreground)] break-words">
+              {approvedAt ? approvedAt.toLocaleString() : '—'}
+            </dd>
+          </div>
+          <div className="min-w-0">
+            <dt className="text-xs text-[var(--color-muted-foreground)] mb-0.5">
+              {t('admin.styles.workspace.chinaImportApproval.styleNumber', {
+                defaultValue: 'Style # minted',
+              })}
+            </dt>
+            <dd className="text-sm text-[var(--color-foreground)] break-words">
+              <span className="font-mono">{style.styleId ?? '—'}</span>
+            </dd>
+          </div>
+        </dl>
+        {style.remark && (
+          <div className="mt-3 pt-3 border-t border-[var(--color-border)]">
+            <div className="text-[10px] uppercase tracking-[0.06em] text-[var(--color-muted-foreground)] mb-1">
+              {t('admin.styles.workspace.chinaImportApproval.remark', {
+                defaultValue: 'Remark',
+              })}
+            </div>
+            <p className="text-sm italic whitespace-pre-wrap text-[var(--color-foreground-2)]">
+              {style.remark}
+            </p>
+          </div>
+        )}
+      </div>
     </section>
   );
 }
 
 /**
  * Activity timeline — surfaces the audit log already hydrated by the
- * detail include. Compact list of "actor · action · time". Replaces
- * the old structured InspectionTimeline component (which assumed a
- * model the Gurukul flow doesn't have).
+ * detail include. Compact list of "actor · action · time". The most-recent
+ * entry's dot is brand-primary; older ones are muted, matching the mock's
+ * activity-log treatment.
  */
 function ActivityTimelineCard({
   style,
@@ -1148,38 +1338,142 @@ function ActivityTimelineCard({
   const { t } = useTranslation();
   const logs = style.auditLogs ?? [];
   if (logs.length === 0) return null;
-  return (
-    <section className={cardClasses}>
-      <h2 className="font-serif text-lg mb-3">
-        {t('admin.styles.workspace.activity', {
-          defaultValue: 'Activity',
-        })}
-      </h2>
-      <ol className="space-y-2">
-        {logs.slice(0, 20).map((log) => (
-          <li
-            key={log.id}
-            className="flex items-baseline gap-3 text-sm border-b border-[var(--color-border)] last:border-0 pb-2 last:pb-0"
-          >
-            <span className="text-[11px] text-[var(--color-muted-foreground)] tabular-nums shrink-0 w-32">
-              {new Date(log.createdAt).toLocaleString(undefined, {
+
+  // Describe WHAT each entry changed by diffing its before/after snapshots
+  // (BE StylesService.diffSnapshot). `chips` = changed fields, showing the
+  // new value for enum-ish fields (reusing the samplingSteps / sampleApproval
+  // i18n labels); `note` = any free text (e.g. a park reason). `created` has
+  // no `before`, so its verb label ("Created") stands on its own.
+  const summarize = (
+    log: StyleAuditLog,
+  ): { chips: string[]; note: string | null } => {
+    const note = log.notes ?? null;
+    const before = log.before as Record<string, unknown> | null;
+    const after = (log.after ?? {}) as Record<string, unknown>;
+    if (!before) return { chips: [], note };
+    const fmt = (k: string, v: unknown): string | null => {
+      if (v === null || v === undefined || v === '') return null;
+      switch (k) {
+        case 'samplingStatus':
+          return t(`admin.styles.samplingSteps.${String(v)}` as const, {
+            defaultValue: String(v),
+          });
+        case 'sampleApproval':
+          return t(`admin.styles.sampleApproval.${String(v)}` as const, {
+            defaultValue: String(v),
+          });
+        case 'gender':
+          return genderLabel(String(v));
+        case 'lifecycle':
+          return String(v).replace(/_/g, ' ');
+        case 'samplingTimeline': {
+          // Guard against non-ISO values (e.g. legacy day-count strings)
+          // so the chip never reads "Invalid Date" — mirrors the guard in
+          // renderSamplingTimeline.
+          const d = new Date(String(v));
+          return Number.isNaN(d.getTime())
+            ? String(v)
+            : d.toLocaleDateString(undefined, {
                 month: 'short',
                 day: 'numeric',
-                hour: '2-digit',
-                minute: '2-digit',
-              })}
-            </span>
-            <span className="font-medium text-[var(--color-foreground)] shrink-0">
-              {log.actor?.name ?? '—'}
-            </span>
-            <span className="text-[var(--color-muted-foreground)]">
-              {t(`admin.styles.audit.${log.action}` as const, {
-                defaultValue: log.action,
-              })}
-            </span>
-          </li>
-        ))}
-      </ol>
+              });
+        }
+        case 'sampleFabricRequired':
+          // A Decimal quantity in metres (serialized "2.50"), not a flag —
+          // show the actual value that changed, not a boolean label.
+          return `${String(v)} m`;
+        case 'styleId':
+        case 'primaryColour':
+        case 'reason':
+          return String(v);
+        default:
+          // Long/opaque text (working name, remark, links) → label only.
+          return null;
+      }
+    };
+    const chips: string[] = [];
+    for (const k of new Set([...Object.keys(before), ...Object.keys(after)])) {
+      if (JSON.stringify(before[k]) === JSON.stringify(after[k])) continue;
+      const label = AUDIT_FIELD_LABELS[k] ?? k;
+      const v = fmt(k, after[k]);
+      chips.push(v ? `${label}: ${v}` : label);
+    }
+    return { chips, note };
+  };
+
+  return (
+    <section className={cn(cardClasses, 'lg:flex-1 lg:min-h-0')}>
+      <CardHeader
+        title={t('admin.styles.workspace.activity', {
+          defaultValue: 'Activity log',
+        })}
+      />
+      {/* On desktop the log fills the column's remaining height and scrolls
+          inside it. The list is positioned absolute so its length doesn't
+          drive the column height — the left column (Core specs + Bill of
+          materials) does, keeping the two columns level. Mobile falls back
+          to a capped 280px scroll. A thin, always-visible scrollbar signals
+          there's more to scroll (vs. macOS overlay bars that hide). */}
+      <div className="relative lg:flex-1 lg:min-h-0">
+        <div className="overflow-y-auto p-5 max-h-[280px] lg:absolute lg:inset-0 lg:max-h-none [scrollbar-width:thin] [scrollbar-color:var(--color-muted-foreground-2)_transparent] [&::-webkit-scrollbar]:w-2 [&::-webkit-scrollbar-track]:bg-transparent [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-[var(--color-muted-foreground-2)]">
+          <ol className="relative ml-1.5 border-l border-[var(--color-border)] space-y-5">
+            {logs.slice(0, 20).map((log, i) => {
+              const { chips, note } = summarize(log);
+              return (
+                <li key={log.id} className="relative pl-5">
+                  <span
+                    aria-hidden
+                    className={cn(
+                      'absolute -left-[5px] top-1.5 h-2.5 w-2.5 rounded-full ring-2 ring-[var(--color-surface)]',
+                      i === 0
+                        ? 'bg-[var(--color-primary)]'
+                        : 'bg-[var(--color-muted-foreground-2)]',
+                    )}
+                  />
+                  <div className="text-sm text-[var(--color-foreground)]">
+                    <span className="font-medium">
+                      {log.actor?.name ?? '—'}
+                    </span>
+                    {' — '}
+                    <span className="text-[var(--color-muted-foreground)]">
+                      {t(`admin.styles.audit.${log.action}` as const, {
+                        defaultValue: log.action,
+                      })}
+                    </span>
+                  </div>
+                  {/* What actually changed — chips of field → new value, so
+                      the entry reads "Stage: QC" instead of a bare "Updated". */}
+                  {chips.length > 0 && (
+                    <div className="mt-1.5 flex flex-wrap gap-1">
+                      {chips.map((c) => (
+                        <span
+                          key={c}
+                          className="rounded-[6px] bg-[var(--color-muted)] px-1.5 py-0.5 text-[11px] text-[var(--color-foreground)]"
+                        >
+                          {c}
+                        </span>
+                      ))}
+                    </div>
+                  )}
+                  {note && (
+                    <div className="mt-1.5 text-[12px] italic text-[var(--color-muted-foreground)]">
+                      “{note}”
+                    </div>
+                  )}
+                  <div className="mt-1 text-[11px] text-[var(--color-muted-foreground)] tabular-nums">
+                    {new Date(log.createdAt).toLocaleString(undefined, {
+                      month: 'short',
+                      day: 'numeric',
+                      hour: '2-digit',
+                      minute: '2-digit',
+                    })}
+                  </div>
+                </li>
+              );
+            })}
+          </ol>
+        </div>
+      </div>
     </section>
   );
 }

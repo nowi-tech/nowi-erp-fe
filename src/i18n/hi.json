@@ -643,9 +643,67 @@
         "sampleFabricRequired": "सैंपल के लिए आवश्यक कपड़ा",
         "sampleFabricRequiredHelp": "प्रति सैंपल खपत मात्रा",
         "developmentReason": "यह style क्यों बनाई जा रही है?",
-        "developmentReasonPh": "जैसे: AW26 women's bottom-wear range में कमी पूरी करना"
+        "developmentReasonPh": "जैसे: AW26 women's bottom-wear range में कमी पूरी करना",
+        "fork": {
+          "title": "आप क्या submit कर रहे हैं?",
+          "subtitle": "रास्ता चुनें — इससे तय होता है कि इस design की sampling होगी या नहीं।",
+          "newTitle": "नया design",
+          "newDesc": "बिल्कुल नया design। पूरी sampling प्रक्रिया चलती है।",
+          "colourTitle": "किसी मौजूदा style का colour",
+          "colourDesc": "वही design, नया colour। Sampling छोड़ देता है।",
+          "basedOnTitle": "किसी मौजूदा sample पर आधारित",
+          "basedOnDesc": "अलग design जिसने एक approved sample दोबारा इस्तेमाल किया। Sampling छोड़ देता है।",
+          "colourPickLabel": "Parent style",
+          "basedOnPickLabel": "Source style",
+          "pickPlaceholder": "Style खोजें या code टाइप करें",
+          "pickEmpty": "कोई मिलती style नहीं",
+          "addCode": "यह style code इस्तेमाल करें",
+          "colourHelp": "Family से inherit होता है — fabric, gender, category और CAD parent से आते हैं।",
+          "basedOnHelp": "केवल sampling provenance रिकॉर्ड करता है। यह अपनी अलग independent style रहती है।",
+          "needsTarget": "Submit करने के लिए वह style चुनें जिस पर यह आधारित है",
+          "skipsSampling": "sampling छोड़ता है",
+          "submitColour": "Colour submit करें",
+          "submitBasedOn": "Approval के लिए submit करें"
+        }
+      },
+      "workspace": {
+        "parkAction": "पार्क करें",
+        "revive": "पुनः सक्रिय करें",
+        "approve": "इनटेक अनुमोदित करें",
+        "sampleApprove": "सैंपल अनुमोदित करें",
+        "withdraw": "वापस लें",
+        "addColour": "रंग जोड़ें",
+        "startProduction": "उत्पादन शुरू करें",
+        "readyForProduction": "उत्पादन के लिए तैयार",
+        "sendBack": "सुधार के लिए वापस भेजें",
+        "sampleSignOff": "सैंपल साइन-ऑफ",
+        "sampleApprovedBy": "सैंपल {{name}} द्वारा अनुमोदित · {{when}}",
+        "billOfMaterials": "सामग्री विवरण",
+        "editBom": "BOM संपादित करें",
+        "editCoreSpecs": "मुख्य विनिर्देश संपादित करें",
+        "editBomTitle": "सामग्री विवरण संपादित करें",
+        "bomType": "प्रकार",
+        "bomItem": "आइटम",
+        "bomDescription": "विवरण",
+        "bomSpec": "स्पेक",
+        "bomQuantity": "मात्रा",
+        "bomQty": "मात्रा",
+        "bomMainFabric": "मुख्य कपड़ा",
+        "coreSpecs": "मुख्य विनिर्देश",
+        "samplingTimelineMeta": "सैंपलिंग टाइमलाइन: {{timeline}}",
+        "patternMasterMeta": "पैटर्न मास्टर: {{name}}",
+        "coloursAfterApproval": "रंग सैंपल अनुमोदन के बाद जोड़े जाते हैं — सैंपलिंग के दौरान नहीं।",
+        "sampleDetails": "सैंपल विवरण",
+        "sampleWorkflowHint": "चयन तुरंत सेव होते हैं",
+        "activity": "गतिविधि लॉग",
+        "colourFamily": "रंग परिवार",
+        "colourFamilySubtitle": "वही डिज़ाइन, अलग रंग — मार्केटप्लेस पर \"other colours\" के रूप में समूहित।",
+        "colourFamilyThisStyle": "यह स्टाइल"
       },
       "drawer": {
+        "patternCad": {
+          "label": "पैटर्न / CAD"
+        },
         "fields": {
           "sampleFabricRequired": "सैंपल के लिए आवश्यक कपड़ा",
           "sampleFabricRequiredHelp": "प्रति सैंपल खपत मात्रा",
@@ -657,7 +715,7 @@
         "in_progress_fabric_sourcing": "कपड़ा सोर्सिंग",
         "in_progress_cutting": "कटिंग",
         "in_progress_stitching": "सिलाई",
-        "ready_for_inspection": "निरीक्षण के लिए तैयार",
+        "ready_for_inspection": "क्यूसी",
         "handed_over_for_inspection": "निरीक्षण के लिए दिया",
         "corrections_needed": "सुधार चाहिए",
         "approved_for_production": "अनुमोदित"
@@ -669,6 +727,14 @@
       },
       "park": {
         "approvedWarning": "यह स्टाइल पहले ही Approval #1 पास कर चुकी है — दोबारा पार्क करने से एक तय डिज़ाइन पाइपलाइन से बाहर हो जाती है। केवल एडमिन और सैंपलिंग लीड ही ऐसा कर सकते हैं।"
+      },
+      "table": {
+        "type": {
+          "label": "प्रकार",
+          "new": "नया डिज़ाइन",
+          "colourOf": "{{code}} का रंग",
+          "basedOn": "{{code}} पर आधारित"
+        }
       }
     }
   },
@@ -822,11 +888,11 @@
       },
       "columns": {
         "style": "स्टाइल",
-        "factory": "फ़ैक्टरी",
         "lifecycle": "लाइफसाइकल",
         "stage": "चरण",
         "updated": "अपडेट",
-        "actions": "क्रियाएँ"
+        "actions": "क्रियाएँ",
+        "colour": "रंग"
       },
       "actions": {
         "approve": "स्वीकृत करें",

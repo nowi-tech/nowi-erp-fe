@@ -6,6 +6,7 @@ import {
   useState,
   type ReactNode,
 } from 'react';
+import { createPortal } from 'react-dom';
 import { Check, ChevronDown, Plus, Search } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
@@ -86,6 +87,15 @@ export function Combobox<V extends string | number = string | number>({
   const [activeIdx, setActiveIdx] = useState(0);
   const rootRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
+  const dropdownRef = useRef<HTMLDivElement>(null);
+  // The menu is portalled to <body> so an ancestor `overflow:auto` (e.g. a
+  // Dialog's scroll container) can't clip it. Track the trigger's rect to
+  // position the fixed menu directly under it.
+  const [menuRect, setMenuRect] = useState<{
+    top: number;
+    left: number;
+    width: number;
+  } | null>(null);
 
   const selected = useMemo(
     () => options.find((o) => o.value === value) ?? null,
@@ -96,7 +106,8 @@ export function Combobox<V extends string | number = string | number>({
     const q = query.trim().toLowerCase();
     if (!q) return options;
     return options.filter((o) => {
-      const hay = `${o.label} ${o.sublabel ?? ''} ${o.searchText ?? ''}`.toLowerCase();
+      const hay =
+        `${o.label} ${o.sublabel ?? ''} ${o.searchText ?? ''}`.toLowerCase();
       return hay.includes(q);
     });
   }, [options, query]);
@@ -110,7 +121,10 @@ export function Combobox<V extends string | number = string | number>({
   useEffect(() => {
     if (!open) return;
     const onDown = (e: MouseEvent) => {
-      if (!rootRef.current?.contains(e.target as Node)) {
+      const t = e.target as Node;
+      // The menu lives in a body portal, so a click inside it is NOT inside
+      // rootRef — check the portal explicitly too.
+      if (!rootRef.current?.contains(t) && !dropdownRef.current?.contains(t)) {
         setOpen(false);
       }
     };
@@ -126,10 +140,45 @@ export function Combobox<V extends string | number = string | number>({
     }
   }, [open]);
 
+  // Position the portalled menu under the trigger; recompute on open and on
+  // scroll/resize so it tracks (the trigger may sit in a scrolling Dialog).
+  useEffect(() => {
+    if (!open) return;
+    const place = () => {
+      const r = rootRef.current?.getBoundingClientRect();
+      if (r) setMenuRect({ top: r.bottom + 4, left: r.left, width: r.width });
+    };
+    place();
+    window.addEventListener('scroll', place, true);
+    window.addEventListener('resize', place);
+    return () => {
+      window.removeEventListener('scroll', place, true);
+      window.removeEventListener('resize', place);
+    };
+  }, [open]);
+
   const close = useCallback(() => {
     setOpen(false);
     setQuery('');
   }, []);
+
+  // Escape while the menu is open closes ONLY the menu — it must not bubble
+  // to an ancestor <Dialog>, whose window-level keydown listener would
+  // otherwise also fire its discard-confirm. Capture on window so this runs
+  // before that bubble-phase listener, then stop the event right here. (The
+  // menu is portalled to <body>, so React's synthetic stopPropagation can't
+  // be relied on to reach the window listener.)
+  useEffect(() => {
+    if (!open) return;
+    const onEsc = (e: KeyboardEvent) => {
+      if (e.key !== 'Escape') return;
+      e.preventDefault();
+      e.stopPropagation();
+      close();
+    };
+    window.addEventListener('keydown', onEsc, true);
+    return () => window.removeEventListener('keydown', onEsc, true);
+  }, [open, close]);
 
   const commit = useCallback(
     (opt: ComboboxOption<V>) => {
@@ -147,11 +196,8 @@ export function Combobox<V extends string | number = string | number>({
       }
       return;
     }
-    if (e.key === 'Escape') {
-      e.preventDefault();
-      close();
-      return;
-    }
+    // Escape is handled by the capture-phase window listener above so it
+    // never bubbles to an ancestor Dialog — don't duplicate it here.
     if (e.key === 'ArrowDown') {
       e.preventDefault();
       setActiveIdx((i) => Math.min(i + 1, Math.max(filtered.length - 1, 0)));
@@ -227,96 +273,108 @@ export function Combobox<V extends string | number = string | number>({
         />
       </button>
 
-      {open && (
-        <div
-          className="absolute z-30 mt-1 w-full rounded-[var(--radius-md)] border border-[var(--color-border)] bg-[var(--color-surface)] shadow-lg"
-          role="listbox"
-        >
-          <div className="flex items-center gap-2 border-b border-[var(--color-border)] px-2.5 py-2">
-            <Search
-              size={14}
-              className="shrink-0 text-[var(--color-muted-foreground)]"
-            />
-            <input
-              ref={inputRef}
-              value={query}
-              onChange={(e) => setQuery(e.target.value)}
-              onKeyDown={onKeyDown}
-              placeholder="Search…"
-              className="w-full bg-transparent text-[14px] focus:outline-none placeholder:text-[var(--color-muted-foreground)]"
-            />
-          </div>
+      {open &&
+        menuRect &&
+        createPortal(
+          <div
+            ref={dropdownRef}
+            style={{
+              position: 'fixed',
+              top: menuRect.top,
+              left: menuRect.left,
+              width: menuRect.width,
+            }}
+            className="z-50 rounded-[var(--radius-md)] border border-[var(--color-border)] bg-[var(--color-surface)] shadow-lg"
+            role="listbox"
+          >
+            <div className="flex items-center gap-2 border-b border-[var(--color-border)] px-2.5 py-2">
+              <Search
+                size={14}
+                className="shrink-0 text-[var(--color-muted-foreground)]"
+              />
+              <input
+                ref={inputRef}
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+                onKeyDown={onKeyDown}
+                placeholder="Search…"
+                className="w-full bg-transparent text-[14px] focus:outline-none placeholder:text-[var(--color-muted-foreground)]"
+              />
+            </div>
 
-          <div className="max-h-[260px] overflow-y-auto py-1">
-            {onAddNew && addRowLabel && (
-              <button
-                type="button"
-                onClick={() => {
-                  const typed = trimmedQuery;
-                  close();
-                  onAddNew(typed);
-                }}
-                className="flex w-full items-center gap-2 px-3 py-2 text-left text-[14px] text-[var(--color-primary)] hover:bg-[var(--color-muted)]"
-              >
-                <Plus size={14} />
-                <span className="font-medium">{addRowLabel}</span>
-              </button>
-            )}
-            {onAddNew && addRowLabel && filtered.length > 0 && (
-              <div className="my-1 border-t border-[var(--color-border)]" />
-            )}
+            <div className="max-h-[260px] overflow-y-auto py-1">
+              {onAddNew && addRowLabel && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    const typed = trimmedQuery;
+                    close();
+                    onAddNew(typed);
+                  }}
+                  className="flex w-full items-center gap-2 px-3 py-2 text-left text-[14px] text-[var(--color-primary)] hover:bg-[var(--color-muted)]"
+                >
+                  <Plus size={14} />
+                  <span className="font-medium">{addRowLabel}</span>
+                </button>
+              )}
+              {onAddNew && addRowLabel && filtered.length > 0 && (
+                <div className="my-1 border-t border-[var(--color-border)]" />
+              )}
 
-            {filtered.length === 0 ? (
-              <div className="px-3 py-2 text-[13px] text-[var(--color-muted-foreground)]">
-                {emptyLabel}
-              </div>
-            ) : (
-              filtered.map((o, idx) => {
-                const isSelected = o.value === value;
-                const isActive = idx === activeIdx;
-                return (
-                  <button
-                    key={String(o.value)}
-                    type="button"
-                    role="option"
-                    aria-selected={isSelected}
-                    disabled={o.disabled}
-                    onMouseEnter={() => setActiveIdx(idx)}
-                    onClick={() => commit(o)}
-                    className={cn(
-                      'flex w-full items-center justify-between gap-2 px-3 py-2 text-left text-[14px]',
-                      o.disabled
-                        ? 'cursor-not-allowed opacity-50'
-                        : 'cursor-pointer',
-                      isActive
-                        ? 'bg-[var(--color-muted)]'
-                        : 'hover:bg-[var(--color-muted)]',
-                    )}
-                  >
-                    <span className="min-w-0 flex-1">
-                      <span className="block truncate text-[var(--color-foreground)]">
-                        {o.label}
-                      </span>
-                      {o.sublabel && (
-                        <span className="block truncate text-[12px] text-[var(--color-muted-foreground)]">
-                          {o.sublabel}
-                        </span>
+              {filtered.length === 0 ? (
+                <div className="px-3 py-2 text-[13px] text-[var(--color-muted-foreground)]">
+                  {emptyLabel}
+                </div>
+              ) : (
+                filtered.map((o, idx) => {
+                  const isSelected = o.value === value;
+                  const isActive = idx === activeIdx;
+                  return (
+                    <button
+                      key={String(o.value)}
+                      type="button"
+                      role="option"
+                      aria-selected={isSelected}
+                      disabled={o.disabled}
+                      onMouseEnter={() => setActiveIdx(idx)}
+                      onClick={() => commit(o)}
+                      className={cn(
+                        'flex w-full items-center justify-between gap-2 px-3 py-2 text-left text-[14px]',
+                        o.disabled
+                          ? 'cursor-not-allowed opacity-50'
+                          : 'cursor-pointer',
+                        isActive
+                          ? 'bg-[var(--color-muted)]'
+                          : 'hover:bg-[var(--color-muted)]',
                       )}
-                    </span>
-                    {o.trailing && <span className="shrink-0">{o.trailing}</span>}
-                    {isSelected && !o.trailing && (
-                      <Check
-                        size={14}
-                        className="shrink-0 text-[var(--color-primary)]"
-                      />
-                    )}
-                  </button>
-                );
-              })
-            )}
-          </div>
-        </div>
-      )}
+                    >
+                      <span className="min-w-0 flex-1">
+                        <span className="block truncate text-[var(--color-foreground)]">
+                          {o.label}
+                        </span>
+                        {o.sublabel && (
+                          <span className="block truncate text-[12px] text-[var(--color-muted-foreground)]">
+                            {o.sublabel}
+                          </span>
+                        )}
+                      </span>
+                      {o.trailing && (
+                        <span className="shrink-0">{o.trailing}</span>
+                      )}
+                      {isSelected && !o.trailing && (
+                        <Check
+                          size={14}
+                          className="shrink-0 text-[var(--color-primary)]"
+                        />
+                      )}
+                    </button>
+                  );
+                })
+              )}
+            </div>
+          </div>,
+          document.body,
+        )}
     </div>
   );
 }

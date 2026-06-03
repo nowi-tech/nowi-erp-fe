@@ -37,9 +37,7 @@ export type SamplingStatus =
   | 'in_progress_pattern_dev'
   | 'in_progress_fabric_sourcing'
   | 'in_progress_cutting'
-  | 'in_progress_stitching'
   | 'ready_for_inspection'
-  | 'handed_over_for_inspection'
   | 'corrections_needed'
   | 'approved_for_production';
 
@@ -56,7 +54,6 @@ export type ProductionStatus =
   | 'packing_dispatch'
   | 'warehouse_dispatch';
 
-export type FitSession = 'yes' | 'pending' | 'no';
 export type YesNo = 'yes' | 'no';
 export type LiveStatus = 'live' | 'not_live';
 
@@ -74,7 +71,6 @@ export interface ListStylesParams {
   tab?: StyleTab;
   collectionId?: number;
   samplingStatus?: SamplingStatus;
-  patternMasterId?: number;
   search?: string;
   skip?: number;
   take?: number;
@@ -101,6 +97,11 @@ export type CreateStyleRequest = Partial<
 > & {
   source: StyleSource;
   category: ArticleCategory;
+  /** Submit fork (case C): link this design to an existing approved
+   *  sample to skip sampling. Resolve by picking an existing style id… */
+  basedOnStyleId?: number;
+  /** …or by entering its minted style code (BE resolves to the id). */
+  basedOnStyleCode?: string;
 };
 
 export type UpdateStyleRequest = Partial<CreateStyleRequest>;
@@ -114,8 +115,6 @@ export interface StyleOptions {
   samplingStatus: Option[];
   sampleApproval: Option[];
   productionStatus: Option[];
-  modelFitSession: Option[];
-  dxfApproved: Option[];
   websiteLive: Option[];
 }
 
@@ -141,7 +140,26 @@ export interface LinkExtractResult {
   title?: string;
   price?: number;
   currency?: string;
-  source?: 'jsonld' | 'opengraph' | 'flipkart' | 'myntra';
+  // AI-extracted, editable suggestions (best-effort):
+  /** NOWI StyleGender (W/M/U). */
+  gender?: 'W' | 'M' | 'U';
+  /** Category.styleCode the model picked. */
+  categoryCode?: string;
+  /** Resolved categoryId for the picked code (when known). */
+  categoryId?: number;
+  /** Free-text colour → primaryColour. */
+  colour?: string;
+  /** Concise AI-suggested working name (no brand/SEO filler). */
+  name?: string;
+  /** 0..1 — drives a "please confirm" hint when low. */
+  confidence?: number;
+  source?:
+    | 'jsonld'
+    | 'opengraph'
+    | 'flipkart'
+    | 'myntra'
+    | 'gemini_url_context'
+    | 'gemini_vision';
   reason?: string;
 }
 
@@ -161,6 +179,24 @@ export async function getStyle(styleId: number | string): Promise<Style> {
 export async function getStyleOptions(): Promise<StyleOptions> {
   const res = await apiClient.get<StyleOptions>('/api/styles/options');
   return res.data;
+}
+
+/** Resolve the colour family for a style — every sibling sharing its
+ *  `familyCode` (the family root's stylecode). Drives the detail-page
+ *  "Colour family" strip and the marketplace "other colours" group.
+ *  Test-data-consistent (a family never straddles the test/prod line). */
+/** BE returns the group envelope `{ familyCode, groupId, members }` (the
+ *  groupId is the marketplace "other colours" group key). Consumers only need
+ *  the sibling list, so we unwrap `members`; `?? []` guards a standalone /
+ *  based-on style (familyCode null → empty members) and any shape surprise. */
+export interface ColourGroup {
+  familyCode: string | null;
+  groupId: string | null;
+  members: Style[];
+}
+export async function colourGroup(id: number): Promise<Style[]> {
+  const res = await apiClient.get<ColourGroup>(`/api/styles/${id}/colour-group`);
+  return res.data?.members ?? [];
 }
 
 export async function getStylesSummary(): Promise<StylesSummary> {
@@ -224,29 +260,25 @@ export async function hardDeleteStyle(styleId: number): Promise<void> {
 
 // ─── Style actions ────────────────────────────────────────────────────
 /**
- * Optional body for Approval #1 — the merchandiser's intake checks plus
- * the initial sample-workflow state (Sampling Status, Pattern Master).
+ * Optional body for Approval #1 — the merchandiser's intake checks
+ * (fabric feasible / price OK / collection fit) plus an optional note.
+ * The BE auto-sets `samplingStatus = Pattern dev` on approval, so the
+ * dialog no longer asks for an initial status.
  */
 export interface ApproveStyleBody {
   approval1FabricFeasible?: boolean;
   approval1PriceOk?: boolean;
   approval1CollectionFit?: boolean;
   approval1Note?: string;
-  /** Initial Sampling Status set at intake approval. */
-  samplingStatus?: SamplingStatus;
-  /** Pattern Master override — defaults to gender-routed user when null. */
-  patternMasterId?: number | null;
 }
 
 /**
  * Optional body for Approval #2 — sample sign-off. Captures the
- * sample-verdict enum plus the Gurukul fit-session / DXF flags.
- * Defaults to `approved_for_production` server-side when omitted.
+ * sample-verdict enum. Defaults to `approved_for_production`
+ * server-side when omitted.
  */
 export interface SampleApproveStyleBody {
   sampleApproval?: SampleApprovalStatus;
-  dxfApproved?: 'yes' | 'no';
-  modelFitSession?: 'yes' | 'pending' | 'no';
   note?: string;
 }
 
@@ -370,6 +402,25 @@ export async function extractLink(url: string): Promise<LinkExtractResult> {
       ok: false,
       reason: 'Could not reach the extractor — paste or upload the image.',
     };
+  }
+}
+
+/**
+ * Classify an already-uploaded reference image (GCS objectPath) with Gemini
+ * vision — the fallback for sites url-context can't read (e.g. Amazon).
+ * Best-effort: resolves even when classification fails (ok:false).
+ */
+export async function classifyImage(
+  objectPath: string,
+): Promise<LinkExtractResult> {
+  try {
+    const res = await apiClient.post<LinkExtractResult>(
+      '/api/styles/classify-image',
+      { objectPath },
+    );
+    return res.data;
+  } catch {
+    return { ok: false, reason: 'Could not classify the image.' };
   }
 }
 

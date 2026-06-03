@@ -8,7 +8,7 @@ import {
 } from 'react';
 import { ImagePlus, Loader2, Sparkles, Star, Upload, X } from 'lucide-react';
 import { useToast } from '@/components/ui/toast';
-import { extractLink } from '@/api/styles';
+import { classifyImage, extractLink, type LinkExtractResult } from '@/api/styles';
 import { getReadUrls, uploadPhoto } from '@/api/storage';
 import { useDebounced } from '@/lib/useDebounced';
 import { cn } from '@/lib/utils';
@@ -42,6 +42,24 @@ interface Props {
    *  primary tile changes. Used to keep the legacy `referenceImageUrl`
    *  field roughly in sync for downstream displays. */
   onPrimaryUrlChange?: (url: string | null) => void;
+  /** Optional — receives the full extraction result (incl. AI-inferred
+   *  gender / categoryId / colour) whenever a link is read or an image is
+   *  classified. The parent form pre-fills empty fields from it. */
+  onExtracted?: (
+    result: LinkExtractResult,
+    origin: 'link' | 'image',
+  ) => void;
+  /** Optional — extraction status, so the parent can show inline feedback
+   *  (loading / what was found / failure) for BOTH the pasted link and an
+   *  uploaded image being classified. */
+  onExtractStatus?: (status: {
+    loading: boolean;
+    result?: LinkExtractResult;
+    /** 'link' = reading a pasted URL; 'image' = classifying an upload. */
+    origin: 'link' | 'image';
+    /** Re-run the read for the current link (set on a failed result). */
+    retry?: () => void;
+  }) => void;
 }
 
 function isAbsUrl(v: string): boolean {
@@ -68,11 +86,17 @@ export default function ReferenceImageGrid({
   entityId,
   onChange,
   onPrimaryUrlChange,
+  onExtracted,
+  onExtractStatus,
 }: Props) {
   const toast = useToast();
   const fileRef = useRef<HTMLInputElement>(null);
   const [busy, setBusy] = useState(false);
+  // True while a pasted link is being read — shows a loader in the add tile.
+  const [fetchingLink, setFetchingLink] = useState(false);
   const [previews, setPreviews] = useState<Record<string, string>>({});
+  // Bumped by the Retry action to re-run a failed read for the same URL.
+  const [retryNonce, setRetryNonce] = useState(0);
   // Track which extracted URLs we've already auto-fetched + appended,
   // so re-typing the same link doesn't add duplicate tiles.
   const lastFetchedFor = useRef<string | null>(null);
@@ -87,21 +111,29 @@ export default function ReferenceImageGrid({
   const valueRef = useRef(value);
   const onChangeRef = useRef(onChange);
   const onPrimaryUrlChangeRef = useRef(onPrimaryUrlChange);
+  const onExtractedRef = useRef(onExtracted);
+  const onExtractStatusRef = useRef(onExtractStatus);
   useEffect(() => {
     valueRef.current = value;
     onChangeRef.current = onChange;
     onPrimaryUrlChangeRef.current = onPrimaryUrlChange;
+    onExtractedRef.current = onExtracted;
+    onExtractStatusRef.current = onExtractStatus;
   });
   // True until the component unmounts — used to guard async callbacks
   // from updating state after unmount (replaces the per-effect-run
   // `cancelled` flag that was incorrectly tripping on re-renders).
   const mountedRef = useRef(true);
-  useEffect(
-    () => () => {
+  useEffect(() => {
+    // Reset on (re)mount — React 19 StrictMode mounts → unmounts → remounts
+    // in dev, so without restoring this to true the cleanup's `false` would
+    // stick and every async .then below would silently bail (no image add,
+    // no field fill, no status update).
+    mountedRef.current = true;
+    return () => {
       mountedRef.current = false;
-    },
-    [],
-  );
+    };
+  }, []);
 
   // Resolve signed URLs for any GCS object paths in `value`.
   useEffect(() => {
@@ -152,16 +184,40 @@ export default function ReferenceImageGrid({
   // .then so the effect doesn't re-run (and cancel itself) on every
   // parent re-render. `lastFetchedFor` dedupes against re-typing the
   // same URL; `mountedRef` guards against post-unmount state writes.
+  // Retry a failed read for the SAME url: clear the dedup + bump the nonce
+  // so the effect below re-runs and re-fetches (the BE no longer caches
+  // failures, so this is a fresh attempt).
+  const retry = useCallback(() => {
+    lastFetchedFor.current = null;
+    setRetryNonce((n) => n + 1);
+  }, []);
+
   useEffect(() => {
     const url = debouncedLink.trim();
     if (!url || !isAbsUrl(url)) return;
     if (lastFetchedFor.current === url) return;
     if (valueRef.current.length >= MAX_IMAGES) return;
     lastFetchedFor.current = url;
+    onExtractStatusRef.current?.({ loading: true, origin: 'link' });
+    setFetchingLink(true);
     extractLink(url)
       .then((r) => {
         if (!mountedRef.current) return;
-        if (!r.ok || !r.imageUrl) return;
+        setFetchingLink(false);
+        // Always report status so the form can show inline feedback below
+        // the link input (success summary or the failure reason).
+        onExtractStatusRef.current?.({
+          loading: false,
+          result: r,
+          origin: 'link',
+          retry: r.ok ? undefined : retry,
+        });
+        if (!r.ok) return;
+        // Bubble AI attributes (gender / category / colour) to the form
+        // even when no image came back — url-context often reads the page
+        // attributes without yielding a usable image.
+        onExtractedRef.current?.(r, 'link');
+        if (!r.imageUrl) return;
         // Re-read current value from the ref (not the effect closure)
         // so a tile that landed via upload while extractLink was in
         // flight isn't clobbered.
@@ -174,9 +230,17 @@ export default function ReferenceImageGrid({
         );
       })
       .catch(() => {
-        /* silent — non-blocking */
+        if (mountedRef.current) {
+          setFetchingLink(false);
+          onExtractStatusRef.current?.({
+            loading: false,
+            result: { ok: false, reason: 'Could not read that link.' },
+            origin: 'link',
+            retry,
+          });
+        }
       });
-  }, [debouncedLink, toast]);
+  }, [debouncedLink, toast, retryNonce, retry]);
 
   const doUpload = useCallback(
     async (files: File[]) => {
@@ -188,14 +252,38 @@ export default function ReferenceImageGrid({
       setBusy(true);
       try {
         const next = [...value];
+        const uploaded: string[] = [];
         for (const file of imageFiles) {
           const { objectPath } = await uploadPhoto('style', entityId, file);
           next.push(objectPath);
+          uploaded.push(objectPath);
           // Optimistic local preview so the tile fills before the signed
           // URL round-trips.
           setPreviews((p) => ({ ...p, [objectPath]: URL.createObjectURL(file) }));
         }
         onChange(next);
+        // Classify the first uploaded image for attribute suggestions —
+        // the vision fallback that covers sites url-context can't read
+        // (e.g. Amazon). Reports status (origin:'image') so the form shows
+        // the same loader/skeletons + summary it does for a link.
+        if (uploaded[0]) {
+          onExtractStatusRef.current?.({ loading: true, origin: 'image' });
+          classifyImage(uploaded[0])
+            .then((r) => {
+              if (!mountedRef.current) return;
+              onExtractStatusRef.current?.({
+                loading: false,
+                result: r,
+                origin: 'image',
+              });
+              if (r.ok) onExtractedRef.current?.(r, 'image');
+            })
+            .catch(() => {
+              if (mountedRef.current) {
+                onExtractStatusRef.current?.({ loading: false, origin: 'image' });
+              }
+            });
+        }
       } catch {
         toast.show('Upload failed — try again.', 'error');
       } finally {
@@ -259,6 +347,48 @@ export default function ReferenceImageGrid({
     [doUpload],
   );
 
+  // A bare <div onPaste> only fires when a focused child input receives the
+  // paste — and the grid has no input inside it — so Cmd/Ctrl+V silently did
+  // nothing. Listen at the document level so paste works without focus.
+  useEffect(() => {
+    const handler = (e: ClipboardEvent) => {
+      const files = [...(e.clipboardData?.items ?? [])]
+        .filter((i) => i.type.startsWith('image/'))
+        .map((i) => i.getAsFile())
+        .filter((f): f is File => f !== null);
+      if (files.length) {
+        e.preventDefault();
+        void doUpload(files);
+      }
+    };
+    document.addEventListener('paste', handler);
+    return () => document.removeEventListener('paste', handler);
+  }, [doUpload]);
+
+  // Explicit click-to-paste (the hint's "Paste" button) — a click can't
+  // dispatch a paste event, so read the clipboard via the async API.
+  const pasteFromClipboard = useCallback(async () => {
+    try {
+      const items = await navigator.clipboard.read();
+      const files: File[] = [];
+      for (const item of items) {
+        const type = item.types.find((tp) => tp.startsWith('image/'));
+        if (!type) continue;
+        const blob = await item.getType(type);
+        files.push(
+          new File([blob], `pasted.${type.split('/')[1] || 'png'}`, { type }),
+        );
+      }
+      if (files.length) void doUpload(files);
+      else toast.show('No image on the clipboard — copy one first.', 'error');
+    } catch {
+      toast.show(
+        'Couldn’t read the clipboard — press ⌘/Ctrl+V or upload instead.',
+        'error',
+      );
+    }
+  }, [doUpload, toast]);
+
   const remaining = MAX_IMAGES - value.length;
 
   // Featured layout: 3-column grid where the primary tile spans 2×2,
@@ -302,6 +432,9 @@ export default function ReferenceImageGrid({
                 alt="Reference 1 (primary)"
                 className="h-full w-full object-cover"
                 draggable={false}
+                // Marketplace CDNs (flixcart/myntassets) reject cross-site
+                // hotlinks that carry a Referer — strip it so the image loads.
+                referrerPolicy="no-referrer"
               />
             ) : (
               <div className="flex h-full w-full items-center justify-center text-[var(--color-muted-foreground)]">
@@ -361,6 +494,7 @@ export default function ReferenceImageGrid({
                   alt={`Reference ${idx + 1}`}
                   className="h-full w-full object-cover"
                   draggable={false}
+                  referrerPolicy="no-referrer"
                 />
               ) : (
                 <div className="flex h-full w-full items-center justify-center text-[var(--color-muted-foreground)]">
@@ -415,8 +549,15 @@ export default function ReferenceImageGrid({
                 : 'Add reference image'
             }
           >
-            {busy ? (
-              <Loader2 size={addIsLarge ? 24 : 18} className="animate-spin" />
+            {busy || fetchingLink ? (
+              <>
+                <Loader2 size={addIsLarge ? 24 : 18} className="animate-spin" />
+                {addIsLarge && fetchingLink && (
+                  <span className="text-[11px] text-[var(--color-muted-foreground)]">
+                    Fetching from link…
+                  </span>
+                )}
+              </>
             ) : (
               <>
                 <ImagePlus size={addIsLarge ? 28 : 20} />
@@ -439,7 +580,14 @@ export default function ReferenceImageGrid({
       <div className="flex items-center justify-between gap-2 text-[12px] text-[var(--color-muted-foreground)]">
         <span className="inline-flex items-center gap-1">
           <Upload size={11} />
-          Paste, drop, or click to upload — up to {MAX_IMAGES}.
+          <button
+            type="button"
+            onClick={() => void pasteFromClipboard()}
+            className="underline underline-offset-2 hover:text-[var(--color-foreground)]"
+          >
+            Paste
+          </button>
+          , drop, or click to upload — up to {MAX_IMAGES}.
         </span>
         <span>
           {value.length}/{MAX_IMAGES}

@@ -103,6 +103,15 @@ export default function ColourPicker({
       seen.add(c.toLowerCase());
       opts.push({ value: c, label: c, searchText: c });
     }
+    // Guarantee the current value is selectable with its EXACT casing.
+    // The case-insensitive dedup above can keep a different casing (e.g. a
+    // historical lowercase "yellow") and drop the exact value, which makes
+    // the Combobox's exact `o.value === value` match fail — so a
+    // programmatically-set colour like "Yellow" (from AI vision) would
+    // render blank. Prepend it when missing.
+    if (value && !opts.some((o) => o.value === value)) {
+      opts.unshift({ value, label: value, searchText: value });
+    }
     return opts;
   }, [colours, value, fabricColours, t]);
 

@@ -1,18 +1,32 @@
-import { useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
+import { Info } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Dialog } from '@/components/ui/dialog';
+import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { useToast } from '@/components/ui/toast';
 import ColourPicker from '@/components/styles/intake/ColourPicker';
 import ReferenceImageGrid from '@/components/styles/intake/ReferenceImageGrid';
 import { spawnColourVariant } from '@/api/styles';
-import type { Style } from '@/api/types';
+import { listReviewers } from '@/api/users';
+import type { Reviewer, Style } from '@/api/types';
 import { cn } from '@/lib/utils';
 
 interface Props {
   /** Parent style — the family the new colour belongs to. */
   parent: Style;
+  /**
+   * The whole colour family resolved off the BE — every sibling sharing
+   * the family's `familyCode`, including the parent itself. Drives the
+   * duplicate guard + "existing colours" strip so opening Add-Colour from
+   * a SIBLING (not the root) still sees the complete family. Falls back to
+   * `parent.colourVariants` when not supplied.
+   *
+   * parentStyleId drives inbox NESTING; familyCode drives the marketplace
+   * "other colours" GROUP — do NOT unify; based-on shares neither.
+   */
+  family?: Style[];
   open: boolean;
   onClose: () => void;
   /** Receives the newly-created child Style on success. */
@@ -20,9 +34,13 @@ interface Props {
 }
 
 /**
- * Spawn a colour-variant Style from an existing parent. Inherits
- * fabric / gender / category / CAD from the parent; the designer only
- * supplies the new colour + (optionally) fresh reference images / link.
+ * Spawn a colour-variant Style from an existing parent — a SUBMISSION, not
+ * an inline approval. `spawnColourVariant` creates a DRAFT that lands in
+ * the Inbox for Approval #1, the SAME flow as a brand-new design; there
+ * are deliberately NO inline approval checks in this modal (the spawned
+ * sibling skips re-sampling server-side, but a reviewer still approves it).
+ * It inherits fabric / gender / category / CAD from the parent; the
+ * designer only supplies the new colour + (optionally) fresh refs.
  *
  * Mirrors the Stitch design `79e6039778a14087b6f7a2bb1c31c6fc` — a rich
  * header card surfacing every inherited attribute (no hidden state),
@@ -30,6 +48,7 @@ interface Props {
  */
 export default function AddColourModal({
   parent,
+  family,
   open,
   onClose,
   onCreated,
@@ -42,9 +61,34 @@ export default function AddColourModal({
   const [saving, setSaving] = useState(false);
   const submitRef = useRef<HTMLButtonElement>(null);
 
-  // Existing sibling colours under the same parent — drives the "already
-  // done" chip strip in the header so designers don't duplicate.
+  // The fixed reviewer panel this submission routes to — shown so the
+  // designer sees who reviews it (it's a submission, not an inline
+  // approval). Fetched when the modal opens; failure is non-fatal.
+  const [reviewers, setReviewers] = useState<Reviewer[]>([]);
+  useEffect(() => {
+    if (!open) return;
+    let cancelled = false;
+    listReviewers()
+      .then((r) => !cancelled && setReviewers(r))
+      .catch(() => !cancelled && setReviewers([]));
+    return () => {
+      cancelled = true;
+    };
+  }, [open]);
+
+  // Existing colours in the whole family — drives the "already done" chip
+  // strip in the header AND the duplicate guard so designers don't double
+  // up. Prefer the BE-resolved `family` (correct even when opened from a
+  // sibling); fall back to parent.colourVariants + the parent's own colour
+  // when the group wasn't passed in.
   const siblings = useMemo(() => {
+    if (family && family.length > 0) {
+      return family.map((s) => ({
+        id: s.id,
+        styleId: s.styleId,
+        primaryColour: s.primaryColour,
+      }));
+    }
     const list = parent.colourVariants ?? [];
     // Include the parent's own colour as the first chip — it's also a
     // member of the family.
@@ -59,7 +103,7 @@ export default function AddColourModal({
       ];
     }
     return list;
-  }, [parent]);
+  }, [family, parent]);
 
   const reset = () => {
     setColour('');
@@ -94,7 +138,8 @@ export default function AddColourModal({
       const created = await spawnColourVariant(parent.id, {
         primaryColour: v,
         referenceLink: referenceLink.trim() || null,
-        referenceImages: referenceImages.length > 0 ? referenceImages : undefined,
+        referenceImages:
+          referenceImages.length > 0 ? referenceImages : undefined,
       });
       toast.show(
         t('admin.styles.addColour.createdToast', { colour: v }),
@@ -144,10 +189,6 @@ export default function AddColourModal({
           value={parent.fabric?.name ?? '—'}
         />
         <AttrPair
-          label={t('admin.styles.addColour.attrs.patternMaster')}
-          value={parent.patternMaster?.name ?? '—'}
-        />
-        <AttrPair
           label={t('admin.styles.addColour.attrs.cad')}
           value={
             parent.patternCadPaths && parent.patternCadPaths.length > 0
@@ -182,8 +223,8 @@ export default function AddColourModal({
               <span
                 key={s.id}
                 className={cn(
-                  'inline-flex items-center gap-1.5 rounded-full px-2 py-0.5 text-[12px]',
-                  'bg-white border border-[var(--color-border)] text-[var(--color-foreground-3)]',
+                  'inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-[12px]',
+                  'bg-[var(--color-surface)] border border-[var(--color-border)] text-[var(--color-foreground-2)]',
                 )}
                 title={s.styleId ?? undefined}
               >
@@ -212,10 +253,10 @@ export default function AddColourModal({
       title={t('admin.styles.addColour.title')}
       footer={
         <div className="flex items-center justify-between gap-3 w-full">
-          <span className="text-[11px] text-[var(--color-muted-foreground)]">
+          <span className="min-w-0 truncate text-[11px] leading-snug text-[var(--color-muted-foreground)]">
             {t('admin.styles.addColour.mintHint')}
           </span>
-          <div className="flex gap-2">
+          <div className="flex shrink-0 gap-2">
             <Button
               variant="outline"
               size="sm"
@@ -242,20 +283,35 @@ export default function AddColourModal({
       }
     >
       <div className="space-y-4">
+        {/* Colour-variant flow banner (Stitch parity) — reuses the parent's
+            approved sample, skips re-sampling, but still needs Approval #1. */}
+        <div className="flex items-start gap-2 rounded-[var(--radius-sm)] border border-[var(--color-border)] bg-[var(--color-primary)]/[0.05] p-3 text-[12px] text-[var(--color-foreground)]">
+          <Info
+            size={15}
+            className="mt-0.5 shrink-0 text-[var(--color-primary)]"
+          />
+          <span>
+            {t('admin.styles.addColour.reuseBanner', {
+              defaultValue:
+                "A colour variant reuses this design's approved sample — no re-sampling. It still needs Approval #1.",
+            })}
+          </span>
+        </div>
+
         {header}
 
         <div>
-          <h3 className="font-serif text-[18px] text-[var(--color-foreground)] mb-1">
+          <h3 className="font-serif text-[16px] text-[var(--color-foreground)]">
             {t('admin.styles.addColour.newColourHeading')}
           </h3>
-          <p className="text-[12px] text-[var(--color-muted-foreground)]">
+          <p className="mt-0.5 text-[12px] text-[var(--color-muted-foreground)]">
             {t('admin.styles.addColour.newColourHelp')}
           </p>
         </div>
 
-        <div className="space-y-3">
+        <div className="space-y-4">
           <div>
-            <Label>{t('admin.styles.addColour.colourLabel')} *</Label>
+            <Label required>{t('admin.styles.addColour.colourLabel')}</Label>
             <ColourPicker
               value={colour}
               onChange={setColour}
@@ -277,17 +333,53 @@ export default function AddColourModal({
 
           <div>
             <Label>{t('admin.styles.addColour.refLinkLabel')}</Label>
-            <input
+            <Input
               value={referenceLink}
               onChange={(e) => setReferenceLink(e.target.value)}
               placeholder="https://…"
-              className="w-full h-10 rounded-[var(--radius-sm)] border border-[var(--color-border)] bg-white px-3 text-[14px] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-ring)]"
             />
           </div>
         </div>
+
+        {/* Who reviews this — the submission routes to the fixed panel. */}
+        {reviewers.length > 0 && (
+          <div className="flex items-center gap-2.5 rounded-[var(--radius-sm)] border border-[var(--color-border)] bg-[var(--color-surface-2)] p-3">
+            <div className="flex -space-x-1.5">
+              {reviewers.slice(0, 3).map((r) => (
+                <span
+                  key={r.id}
+                  title={r.name}
+                  className="flex h-6 w-6 items-center justify-center rounded-full bg-[var(--color-surface)] text-[10px] font-bold text-[var(--color-foreground)] ring-1 ring-[var(--color-border)]"
+                >
+                  {reviewerInitials(r.name)}
+                </span>
+              ))}
+            </div>
+            <p className="min-w-0 text-[12px] text-[var(--color-muted-foreground)]">
+              {t('admin.styles.addColour.routesTo', {
+                defaultValue: 'Routes to',
+              })}{' '}
+              <span className="text-[var(--color-foreground)]">
+                {reviewers.map((r) => r.name).join(', ')}
+              </span>{' '}
+              {t('admin.styles.addColour.routesToHint', {
+                defaultValue: '— auto-assigned to the review panel.',
+              })}
+            </p>
+          </div>
+        )}
       </div>
     </Dialog>
   );
+}
+
+function reviewerInitials(name: string): string {
+  const parts = name.trim().split(/\s+/);
+  const raw =
+    parts.length === 1
+      ? parts[0].slice(0, 2)
+      : (parts[0][0] ?? '') + (parts[parts.length - 1][0] ?? '');
+  return raw.toUpperCase();
 }
 
 function AttrPair({ label, value }: { label: string; value: string }) {

@@ -10,14 +10,16 @@ import {
 import { useTranslation } from 'react-i18next';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { ColumnFilter, type ColumnFilterOption } from '@/components/ui/column-filter';
+import {
+  ColumnFilter,
+  type ColumnFilterOption,
+} from '@/components/ui/column-filter';
 import InlineStatusCell from '@/components/styles/InlineStatusCell';
 import { useToast } from '@/components/ui/toast';
 import { useAuth } from '@/context/auth';
 import { hasAnyRole } from '@/lib/userRoles';
 import { patchStyle } from '@/api/styles';
-import { listUsers } from '@/api/users';
-import type { Style, User as ApiUser, UserRole } from '@/api/types';
+import type { Style, UserRole } from '@/api/types';
 import { cn } from '@/lib/utils';
 import { formatStyleRef } from '@/lib/styleRef';
 
@@ -28,9 +30,7 @@ const SAMPLING_STATUS_OPTIONS = [
   'in_progress_pattern_dev',
   'in_progress_fabric_sourcing',
   'in_progress_cutting',
-  'in_progress_stitching',
   'ready_for_inspection',
-  'handed_over_for_inspection',
   'corrections_needed',
   'approved_for_production',
 ] as const;
@@ -55,18 +55,15 @@ const WRITE_ROLES: readonly UserRole[] = [
 // Row-action role gates — mirror the BE guards (and the dashboard
 // StylesInFlightTable) so /styles never shows a button that 403s:
 //  • Approve (Approval #1) → APPROVE set (Option A drops sampling_editor).
-//  • Park of a post-Approval-#1 style → admins + sampling leads only.
-// (Draft park + revive reuse WRITE_ROLES.) BE still enforces; this is UX.
+//  • Inline Park → DRAFT rows only, reusing WRITE_ROLES (post-approval
+//    "Withdraw" is a detail-page action, not a queue button).
+// BE still enforces; this is UX.
 const APPROVER_ROLES: readonly UserRole[] = [
   'admin',
   'sampling_lead',
   'pattern_master_w',
   'pattern_master_m',
   'china_import_approver',
-] as const;
-const POST_APPROVAL_PARK_ROLES: readonly UserRole[] = [
-  'admin',
-  'sampling_lead',
 ] as const;
 
 /**
@@ -114,10 +111,10 @@ interface Props {
   /** Row-level Revive action — null hides the button. */
   onRevive?: (style: Style) => void;
   /**
-   * `"full"` (default) — all sampling-workflow columns (Pattern Master, Stage,
-   *   Approval, Web, Updated).
+   * `"full"` (default) — all sampling-workflow columns (Stage, Approval,
+   *   Web, Updated).
    * `"compact"` — minimal set for non-sampling flows (China Import): Style #,
-   *   Working Name, Colour, Updated. Hides Pattern Master / Stage / Approval / Web.
+   *   Working Name, Colour, Updated. Hides Stage / Approval / Web.
    */
   variant?: 'full' | 'compact';
 }
@@ -127,6 +124,58 @@ function lifecycleVariant(l: Style['lifecycle']) {
   if (l === 'parked' || l === 'archived') return 'outline';
   if (l === 'qc' || l === 'in_pd' || l === 'in_sampling') return 'stitch';
   return 'secondary';
+}
+
+/**
+ * The submit-fork type of a style, derived from the two link columns
+ * (mutually exclusive — XOR enforced on the BE):
+ *   • `familyCode` set      → "Colour of <root code>"
+ *   • `basedOnStyleId` set  → "Based on <code>"
+ *   • neither               → "New design"
+ */
+function styleType(s: Style): {
+  kind: 'new' | 'colour' | 'based_on';
+  ref: string | null;
+} {
+  if (s.familyCode) return { kind: 'colour', ref: s.familyCode };
+  if (s.basedOnStyleId != null)
+    return { kind: 'based_on', ref: s.basedOnStyle?.styleId ?? null };
+  return { kind: 'new', ref: null };
+}
+
+/**
+ * Small pill in the Type column showing the submit-fork the style came
+ * in through. Colour / based-on variants also carry the root code they
+ * link to so the family is legible at a glance.
+ */
+function StyleTypePill({ style }: { style: Style }) {
+  const { t } = useTranslation();
+  const { kind, ref } = styleType(style);
+  if (kind === 'colour') {
+    return (
+      <Badge variant="stitch" className="text-[10px]" title={ref ?? undefined}>
+        {t('admin.styles.table.type.colourOf', {
+          code: ref ?? '—',
+          defaultValue: `Colour of ${ref ?? '—'}`,
+        })}
+      </Badge>
+    );
+  }
+  if (kind === 'based_on') {
+    return (
+      <Badge variant="outline" className="text-[10px]" title={ref ?? undefined}>
+        {t('admin.styles.table.type.basedOn', {
+          code: ref ?? '—',
+          defaultValue: `Based on ${ref ?? '—'}`,
+        })}
+      </Badge>
+    );
+  }
+  return (
+    <Badge variant="secondary" className="text-[10px]">
+      {t('admin.styles.table.type.new', { defaultValue: 'New design' })}
+    </Badge>
+  );
 }
 
 /**
@@ -151,31 +200,8 @@ export default function StylesTable({
   const toast = useToast();
   const isCompact = variant === 'compact';
   const [expanded, setExpanded] = useState<Set<number>>(new Set());
-  // Inline-edit gating + Pattern Master picker source.
+  // Inline-edit gating for the status cells.
   const canEdit = hasAnyRole(user, WRITE_ROLES);
-  const [pmCandidates, setPmCandidates] = useState<ApiUser[]>([]);
-  useEffect(() => {
-    if (!canEdit) return;
-    let cancelled = false;
-    listUsers({ take: 200 })
-      .then((rows) => {
-        if (cancelled) return;
-        setPmCandidates(
-          rows.filter(
-            (u) =>
-              u.role === 'pattern_master_w' ||
-              u.role === 'pattern_master_m' ||
-              u.role === 'admin',
-          ),
-        );
-      })
-      .catch(() => {
-        // Soft-fail — picker will just have an empty list. Non-blocking.
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [canEdit]);
 
   /**
    * Wrapper around `patchStyle` that emits a toast on failure and
@@ -210,7 +236,6 @@ export default function StylesTable({
   // Empty excluded list = filter inactive. Filters apply to top-level
   // (parent) rows only; nested variant rows always render with their
   // parent for now.
-  const [excPatternMaster, setExcPatternMaster] = useState<string[]>([]);
   const [excLifecycle, setExcLifecycle] = useState<string[]>([]);
   const [excSamplingStatus, setExcSamplingStatus] = useState<string[]>([]);
   const [excSampleApproval, setExcSampleApproval] = useState<string[]>([]);
@@ -218,66 +243,64 @@ export default function StylesTable({
 
   // Distinct values come from the unfiltered rows so the popover lists
   // every value even when other filters narrow the visible set.
-  const patternMasterOptions = useMemo(
-    () => distinct(rows, (s) => s.patternMaster?.name ?? null, (v) => v),
-    [rows],
-  );
   const lifecycleOptions = useMemo(
     () =>
-      distinct(rows, (s) => s.lifecycle, (v) =>
-        t(`admin.styles.lifecycle.${v}` as const, { defaultValue: v }),
+      distinct(
+        rows,
+        (s) => s.lifecycle,
+        (v) => t(`admin.styles.lifecycle.${v}` as const, { defaultValue: v }),
       ),
     [rows, t],
   );
   const samplingStatusOptions = useMemo(
     () =>
-      distinct(rows, (s) => s.samplingStatus, (v) =>
-        t(`admin.styles.samplingSteps.${v}` as const, {
-          defaultValue: v.replace(/_/g, ' '),
-        }),
+      distinct(
+        rows,
+        (s) => s.samplingStatus,
+        (v) =>
+          t(`admin.styles.samplingSteps.${v}` as const, {
+            defaultValue: v.replace(/_/g, ' '),
+          }),
       ),
     [rows, t],
   );
   const sampleApprovalOptions = useMemo(
     () =>
-      distinct(rows, (s) => s.sampleApproval, (v) =>
-        t(`admin.styles.sampleApproval.${v}` as const, {
-          defaultValue: v.replace(/_/g, ' '),
-        }),
+      distinct(
+        rows,
+        (s) => s.sampleApproval,
+        (v) =>
+          t(`admin.styles.sampleApproval.${v}` as const, {
+            defaultValue: v.replace(/_/g, ' '),
+          }),
       ),
     [rows, t],
   );
   const colourOptions = useMemo(
-    () => distinct(rows, (s) => s.primaryColour, (v) => v),
+    () =>
+      distinct(
+        rows,
+        (s) => s.primaryColour,
+        (v) => v,
+      ),
     [rows],
   );
 
   // Apply filters. NONE_TOKEN is the key for missing values.
   const filteredRows = useMemo(() => {
-    const checkExcl = (
-      val: string | null | undefined,
-      excluded: string[],
-    ) => {
+    const checkExcl = (val: string | null | undefined, excluded: string[]) => {
       if (excluded.length === 0) return true;
       const key = val == null || val === '' ? NONE_TOKEN : String(val);
       return !excluded.includes(key);
     };
     return rows.filter(
       (s) =>
-        checkExcl(s.patternMaster?.name, excPatternMaster) &&
         checkExcl(s.lifecycle, excLifecycle) &&
         checkExcl(s.samplingStatus, excSamplingStatus) &&
         checkExcl(s.sampleApproval, excSampleApproval) &&
         checkExcl(s.primaryColour, excColour),
     );
-  }, [
-    rows,
-    excPatternMaster,
-    excLifecycle,
-    excSamplingStatus,
-    excSampleApproval,
-    excColour,
-  ]);
+  }, [rows, excLifecycle, excSamplingStatus, excSampleApproval, excColour]);
 
   /**
    * Colour-family grouping. Build a parent → child[] index from the
@@ -342,9 +365,9 @@ export default function StylesTable({
   const rowClasses =
     'border-t border-[var(--color-border)] cursor-pointer hover:bg-[var(--color-muted)] focus:outline-none focus-visible:bg-[var(--color-muted)]';
 
-  // compact = 5 cols (expand + style# + name + colour + updated + chevron)
-  // full    = 9 cols (expand + style# + name + patternMaster + stage + approval + web + updated + chevron)
-  const COL_COUNT = isCompact ? 6 : 9;
+  // compact = expand + style# + name + type + colour + updated + chevron
+  // full    = expand + style# + name + type + stage + approval + web + updated + chevron
+  const COL_COUNT = isCompact ? 7 : 9;
 
   return (
     <div className="space-y-2">
@@ -380,6 +403,9 @@ export default function StylesTable({
               <th className="text-left font-medium px-3 py-2">
                 {t('admin.styles.table.workingName')}
               </th>
+              <th className="text-left font-medium px-3 py-2 hidden sm:table-cell">
+                {t('admin.styles.table.type.label', { defaultValue: 'Type' })}
+              </th>
               {isCompact ? (
                 <th className="text-left font-medium px-3 py-2 hidden sm:table-cell">
                   <span className="inline-flex items-center gap-1">
@@ -394,17 +420,6 @@ export default function StylesTable({
                 </th>
               ) : (
                 <>
-                  <th className="text-left font-medium px-3 py-2 hidden md:table-cell">
-                    <span className="inline-flex items-center gap-1">
-                      {t('admin.styles.table.patternMaster')}
-                      <ColumnFilter
-                        title={t('admin.styles.table.patternMaster')}
-                        options={patternMasterOptions}
-                        excluded={excPatternMaster}
-                        onChange={setExcPatternMaster}
-                      />
-                    </span>
-                  </th>
                   <th className="text-left font-medium px-3 py-2 hidden lg:table-cell">
                     <span className="inline-flex items-center gap-1">
                       {t('admin.styles.table.stage')}
@@ -546,7 +561,10 @@ export default function StylesTable({
                           <Badge
                             variant="outline"
                             className="ml-2 text-[10px]"
-                            title={[s.primaryColour, ...colourChildren.map((c) => c.primaryColour)]
+                            title={[
+                              s.primaryColour,
+                              ...colourChildren.map((c) => c.primaryColour),
+                            ]
                               .filter(Boolean)
                               .join(', ')}
                           >
@@ -554,43 +572,15 @@ export default function StylesTable({
                           </Badge>
                         )}
                       </td>
+                      <td className="px-3 py-2 hidden sm:table-cell">
+                        <StyleTypePill style={s} />
+                      </td>
                       {isCompact ? (
                         <td className="px-3 py-2 hidden sm:table-cell text-[var(--color-muted-foreground)]">
                           {s.primaryColour ?? '—'}
                         </td>
                       ) : (
                         <>
-                          <td
-                            className="px-3 py-2 hidden md:table-cell"
-                            onClick={(e) => e.stopPropagation()}
-                          >
-                            <InlineStatusCell
-                              value={
-                                s.patternMasterId != null
-                                  ? String(s.patternMasterId)
-                                  : ''
-                              }
-                              displayLabel={s.patternMaster?.name ?? '—'}
-                              options={pmCandidates.map((u) => ({
-                                value: String(u.id),
-                                label: `${u.name}${
-                                  u.role === 'pattern_master_w'
-                                    ? " (W)"
-                                    : u.role === 'pattern_master_m'
-                                      ? " (M)"
-                                      : ''
-                                }`,
-                              }))}
-                              badgeVariant="outline"
-                              unsetLabel="— Unassigned"
-                              editable={canEdit}
-                              onCommit={(next) =>
-                                commitStylePatch(s.id, {
-                                  patternMasterId: next ? Number(next) : null,
-                                })
-                              }
-                            />
-                          </td>
                           <td
                             className="px-3 py-2 hidden lg:table-cell"
                             onClick={(e) => e.stopPropagation()}
@@ -706,9 +696,6 @@ export default function StylesTable({
                             parent={s}
                             children={colourChildren}
                             isCompact={isCompact}
-                            canEdit={canEdit}
-                            pmCandidates={pmCandidates}
-                            commitStylePatch={commitStylePatch}
                             onRowClick={onRowClick}
                             onStyleNoClick={onStyleNoClick}
                             onApprove={onApprove}
@@ -742,25 +729,31 @@ export default function StylesTable({
                               </span>
                             )}
                           </td>
+                          <td className="px-3 py-2 hidden sm:table-cell" />
                           <td className="px-3 py-2 text-[var(--color-muted-foreground)]">
-                            {v.cuttingQty != null
-                              ? `Cut ${v.cuttingQty}`
-                              : '—'}
+                            {v.cuttingQty != null ? `Cut ${v.cuttingQty}` : '—'}
                           </td>
                           {isCompact ? (
                             <td className="px-3 py-2 hidden sm:table-cell" />
                           ) : (
                             <>
-                              <td className="px-3 py-2 hidden md:table-cell" />
                               <td className="px-3 py-2 hidden lg:table-cell">
-                                {v.samplingStatus ?? '—'}
+                                {v.samplingStatus
+                                  ? t(
+                                      `admin.styles.samplingSteps.${v.samplingStatus}` as const,
+                                      { defaultValue: v.samplingStatus },
+                                    )
+                                  : '—'}
                               </td>
                               <td className="px-3 py-2 hidden lg:table-cell">
                                 {v.sampleApproval ?? '—'}
                               </td>
                               <td className="px-3 py-2 hidden sm:table-cell">
                                 {v.websiteLive === 'live' ? (
-                                  <Badge variant="ready" className="text-[10px]">
+                                  <Badge
+                                    variant="ready"
+                                    className="text-[10px]"
+                                  >
                                     Live
                                   </Badge>
                                 ) : (
@@ -806,21 +799,16 @@ function RowActions({
   const { user } = useAuth();
   const canApprove =
     style.lifecycle === 'draft' && hasAnyRole(user, APPROVER_ROLES);
-  const canPark =
-    style.lifecycle !== 'parked' &&
-    style.lifecycle !== 'archived' &&
-    style.lifecycle !== 'dispatched' &&
-    // Post-Approval-#1 styles: only admins + sampling leads may park.
-    hasAnyRole(
-      user,
-      style.lifecycle === 'draft' ? WRITE_ROLES : POST_APPROVAL_PARK_ROLES,
-    );
+  // Inline Park belongs only on DRAFT (inbox) rows — it means "decide not
+  // to develop." Once a style is approved (past draft) parking a committed
+  // design is a rare admin/lead "Withdraw" on the detail page, not a queue
+  // button (2026-06-01 refinement; see the workspace submission-flow spec,
+  // docs/STYLE_SUBMISSION_FLOWS.md in the erp workspace root).
+  const canPark = style.lifecycle === 'draft' && hasAnyRole(user, WRITE_ROLES);
   const canRevive =
     style.lifecycle === 'parked' && hasAnyRole(user, WRITE_ROLES);
   const hasAny =
-    (canApprove && onApprove) ||
-    (canPark && onPark) ||
-    (canRevive && onRevive);
+    (canApprove && onApprove) || (canPark && onPark) || (canRevive && onRevive);
 
   if (!hasAny) {
     return (
@@ -915,9 +903,6 @@ function ColourFamilySubTable({
   parent,
   children,
   isCompact,
-  canEdit,
-  pmCandidates,
-  commitStylePatch,
   onRowClick,
   onStyleNoClick,
   onApprove,
@@ -927,12 +912,6 @@ function ColourFamilySubTable({
   parent: Style;
   children: Style[];
   isCompact: boolean;
-  canEdit: boolean;
-  pmCandidates: ApiUser[];
-  commitStylePatch: (
-    styleId: number,
-    patch: Parameters<typeof patchStyle>[1],
-  ) => Promise<void>;
   onRowClick?: (style: Style) => void;
   onStyleNoClick?: (style: Style) => void;
   onApprove?: (style: Style) => void;
@@ -954,9 +933,6 @@ function ColourFamilySubTable({
             </th>
             {!isCompact && (
               <>
-                <th className="text-left font-medium px-3 py-1.5 hidden md:table-cell">
-                  {t('admin.styles.table.patternMaster')}
-                </th>
                 <th className="text-left font-medium px-3 py-1.5 hidden lg:table-cell">
                   {t('admin.styles.table.stage')}
                 </th>
@@ -1011,37 +987,6 @@ function ColourFamilySubTable({
               </td>
               {!isCompact && (
                 <>
-                  <td
-                    className="px-3 py-2 hidden md:table-cell"
-                    onClick={(e) => e.stopPropagation()}
-                  >
-                    <InlineStatusCell
-                      value={
-                        v.patternMasterId != null
-                          ? String(v.patternMasterId)
-                          : ''
-                      }
-                      displayLabel={v.patternMaster?.name ?? '—'}
-                      options={pmCandidates.map((u) => ({
-                        value: String(u.id),
-                        label: `${u.name}${
-                          u.role === 'pattern_master_w'
-                            ? ' (W)'
-                            : u.role === 'pattern_master_m'
-                              ? ' (M)'
-                              : ''
-                        }`,
-                      }))}
-                      badgeVariant="outline"
-                      unsetLabel="— Unassigned"
-                      editable={canEdit}
-                      onCommit={(next) =>
-                        commitStylePatch(v.id, {
-                          patternMasterId: next ? Number(next) : null,
-                        })
-                      }
-                    />
-                  </td>
                   <td className="px-3 py-2 hidden lg:table-cell">
                     {v.samplingStatus
                       ? t(

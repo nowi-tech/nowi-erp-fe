@@ -405,13 +405,21 @@ export interface Style {
     lifecycle?: StyleLifecycle;
   }>;
 
+  /** Colour-family group key = the family ROOT's minted stylecode. Flat,
+   *  denormalized (NOT an FK). Set on every colour sibling. XOR with
+   *  `basedOnStyleId` — a style carries one or neither, never both.
+   *  Drives the marketplace "other colours" grouping. */
+  familyCode?: string | null;
+  /** Sampling-bypass provenance self-FK ("this design reused that
+   *  approved sample to skip sampling"). Never co-exists with
+   *  `familyCode`. Set at submit. */
+  basedOnStyleId?: number | null;
+  /** Hydrated mirror of the based-on style when reads include it. */
+  basedOnStyle?: { id: number; styleId: string | null } | null;
+
   // Sampling state
   samplingStatus: string | null;
   samplingTimeline: string | null;
-  patternMasterId: number | null;
-  patternMaster?: { id: number; name: string } | null;
-  modelFitSession: 'yes' | 'pending' | 'no' | null;
-  dxfApproved: 'yes' | 'no' | null;
   /** GCS object paths of uploaded pattern / CAD files (.dxf/.pdf/image). */
   patternCadPaths: string[];
 
@@ -429,7 +437,7 @@ export interface Style {
   // Approval #1
   approvedBy: number | null;
   approvedAt: string | null;
-  /** Hydrated by detail reads (BE `detailInclude.approver`). */
+  /** Who approved this submission (BE `listInclude`/`detailInclude.approver`). */
   approver?: { id: number; name: string } | null;
   /** Approval #1 recorded checks (sampling flow only). */
   approval1FabricFeasible: boolean | null;
@@ -461,6 +469,16 @@ export interface Style {
   inspections?: StyleInspection[];
   channelListings?: StyleChannelListing[];
   auditLogs?: StyleAuditLog[];
+}
+
+/**
+ * A member of the fixed sampling reviewer panel (an active approver-role
+ * user). The inbox shows the approver when present, else this panel.
+ * BE: GET /api/users/reviewers.
+ */
+export interface Reviewer {
+  id: number;
+  name: string;
 }
 
 // ─── Inbound ──────────────────────────────────────────────────────────────
