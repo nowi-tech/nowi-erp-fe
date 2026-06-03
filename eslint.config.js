@@ -7,7 +7,9 @@ import tseslint from 'typescript-eslint'
 import { defineConfig, globalIgnores } from 'eslint/config'
 
 export default defineConfig([
-  globalIgnores(['dist']),
+  // Build output + native shells (Capacitor copies minified bundles into
+  // android/ios build dirs — linting those crashes the formatter).
+  globalIgnores(['dist', 'android', 'ios']),
   {
     files: ['**/*.{js,jsx}'],
     extends: [
