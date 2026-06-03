@@ -391,6 +391,10 @@
         "web": "Web",
         "updated": "Updated",
         "actions": "",
+        "rowActions": {
+          "park": "Park",
+          "revive": "Revive"
+        },
         "noStyleNo": "—",
         "variantsCount_one": "{{count}} variant",
         "variantsCount_other": "{{count}} variants",
