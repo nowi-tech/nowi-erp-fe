@@ -1,124 +1,53 @@
-# NOWI ERP Frontend — Project Memory
+# NOWI ERP Frontend — project memory
 
-React 19 + Vite 7 SPA. Tailwind CSS 4 for styles, Axios for HTTP, React Router 7 for routing. **Plain JS** (no TypeScript), no test runner, no global state manager.
+Vite 7 + **React 19 + TypeScript (strict)** SPA. Tailwind v4 (CSS-first) +
+shadcn/Radix primitives, Axios, React Router 7, react-i18next (en + hi). A
+**Capacitor** Android shell loads the deployed remote bundle. Deploys to Vercel.
 
-For the full reference, see `DOCUMENTATION.md` in this folder and the system-wide `../DOCUMENTATION.md`.
+> Full walkthrough: `../docs/FRONTEND.md` (root repo). This file is the
+> agent-facing conventions + gotchas only.
 
-> ⚠️ Parts of this file below describe the **pre-revamp plain-JS app** and are stale. The live code is TypeScript (`src/*.tsx`, `@/` alias, opaque sessions). Trust the code + the workspace-root `../CLAUDE.md` over the stale sections here.
+## Stack reality (don't trust older notes)
 
-## Releasing the Android APK
+- **TypeScript, not plain JS.** Real entry is `src/main.tsx` + `src/App.tsx`;
+  `vite.config.ts` defines the **`@/` → `src/`** alias. `tsc -b` is part of
+  `build`; `npm run typecheck` / `lint` (ESLint flat, **single quotes** for TS).
+- **No global state manager, no test runner** (still true). State = `useState`
+  + Axios + one auth context. `api/types.ts` is generated (`gen:api`).
 
-The app is a Capacitor thin shell over `erp.nowi.fashion`, distributed as a public GCS link (no Play Store). To ship a new APK version:
+## Layout
 
-```bash
-./scripts/release-apk.sh <versionName> "release notes"
-# e.g.  ./scripts/release-apk.sh 1.3 "Faster dispatch screen"
-```
-
-This bumps `versionCode` (auto) + `versionName` in `android/app/build.gradle`, builds the signed APK, uploads it to the **stable** link `https://storage.googleapis.com/nowi-erp-apk/nowi-erp.apk`, and updates `latest.json` so installed apps prompt to update on next launch. Then **commit the build.gradle bump and deploy the FE to Vercel** — the in-app update prompt + status-bar fix run from the deployed bundle, not the freshly built APK. Signing keystore is gitignored locally and backed up in Secret Manager (`ANDROID_KEYSTORE_*`, project `nowi-erp-496406`); losing it forces every user to reinstall. Native shell code lives in `src/native/`.
-
-Git hooks (activate once: `git config core.hooksPath scripts/git-hooks`) block committing signing/credential files and gate pushes to `main` on a clean build.
-
-## Layout in one glance
-
-```
-index.html                  Vite entry. Title is "Production Tracking".
-vite.config.js              plugins: [react()] only — no aliases.
-vercel.json                 SPA rewrite to /.
-tailwind.config.js          v4 — content scan over index.html + src/**/*.{js,ts,jsx,tsx}
-src/
-  main.jsx                  StrictMode + <App />
-  App.jsx                   BrowserRouter + AuthProvider + every route declared inline
-  api/client.js             Single Axios instance + namespaced helpers (authAPI, lotsAPI, ...)
-  context/AuthContext.jsx   useAuth() hook; localStorage-backed token + user
-  components/
-    Navbar.jsx, ProtectedRoute.jsx
-  pages/
-    Login.jsx, Dashboard.jsx (redirect-only)
-    cutting/{CuttingDashboard,CreateLot,ViewLot}.jsx
-    stage/{StageDashboard,ReceiveLot}.jsx
-    operator/{OperatorDashboard,UserManagement,SkuConfig,SkuLinks}.jsx
-```
+`src/`: `pages/`, `components/{ui,layout,styles,dashboard,floor,fabrics,admin,shared}`,
+`api/` (Axios client + one typed module per resource), `context/auth.tsx`,
+`lib/` (`userRoles.ts`, `utils.ts` `cn()`), `i18n/`, `native/`, `services/`.
 
 ## Critical conventions
 
-- **Auth lives in `localStorage`.** Keys: `token` (JWT) and `user` (JSON of `{ id, username, name, role }`). Reads/writes happen ONLY in `AuthContext` and the Axios interceptors.
-- **Axios 401 = hard reload.** The response interceptor calls `window.location.href = '/login'` (not `useNavigate`) on any 401. This intentionally wipes in-memory state.
-- **PDFs/Excels are blobs.** All download helpers in `api/client.js` use `responseType: 'blob'`. Pages turn the blob into an object URL and click a synthetic `<a>`.
-- **Blocking guards via `<ProtectedRoute>`.** `loading` → spinner; not authed → `/login`; `allowedRoles` mismatch → `/dashboard`. Don't add per-page role checks; use this component.
-- **No TypeScript.** `@types/react*` packages are present for editor IntelliSense only.
-
-## Stage names are hardcoded in 3 places
-
-If a stage is renamed via the API, update:
-
-1. `pages/Dashboard.jsx` — role → URL map (`stitching_master → /stage/stitching`, etc.).
-2. `pages/stage/StageDashboard.jsx` — `stageIcons` map (`stitching: '🧵'`, `finishing: '✨'`, `dispatch: '📦'`).
-3. `pages/stage/ReceiveLot.jsx` — same `stageIcons` map.
-
-The default fallback icon is 📋, so renames silently lose the emoji. The route `/stage/:stageName` itself works because `StageDashboard` looks up `stageName` against `stagesAPI.list()`.
-
-## Routing summary
-
-| Path                                    | Allowed roles                          |
-| --------------------------------------- | -------------------------------------- |
-| `/login`                                | public                                 |
-| `/dashboard`                            | any auth (redirects by role)           |
-| `/cutting`                              | `cutting_master`, `operator`           |
-| `/cutting/create`                       | `cutting_master`                       |
-| `/cutting/lot/:lotNo`                   | `cutting_master`, `operator`           |
-| `/stage/:stageName[/receive/:lotNo]`    | any auth (server enforces stage role)  |
-| `/operator[/users\|/sku-config\|/sku-links]` | `operator`                          |
-| `/`, `*`                                | redirect to `/dashboard`               |
-
-## Pages that are tricky
-
-- **`pages/cutting/CreateLot.jsx`** — runs `Promise.all` for 5 fetches on mount (lot number preview, brands, genders, categories, sizes). Computes `totalPieces = patterns × layers` live. Sizes input is comma-separated and parsed against the sizes lookup; unknown labels surface as inline errors. Submit must produce `validSizes` (with `pattern_count > 0`) AND `validRolls` (with `roll_no` and `layers > 0`). The backend accepts both pattern-mode and direct-quantity-mode — but the UI only sends pattern-mode.
-- **`pages/stage/StageDashboard.jsx`** — resolves the stage by `stageName` URL param against `stagesAPI.list()` because the backend expects a numeric `stage_id`. Two distinct flows: searching for a lot, OR showing "my recent receipts" grouped by lot.
-- **`pages/stage/ReceiveLot.jsx`** — quantities are capped via `max={canReceive}` on the inputs, but server still validates. After submit, opens a success modal with a receipt-challan download (uses the `:timestamp` route).
-- **`pages/operator/OperatorDashboard.jsx`** — defines local `Tooltip`, `LinkBadge`, `StageIndicator` components.
-
-## Conventions
-
-- **No TypeScript types.** Use `useState` defaults that match the eventual shape (`useState(null)`, `useState([])`, `useState({})`).
-- **Errors** come from `err.response?.data?.error || 'fallback'` and render in inline alert boxes. There is **no global error boundary**.
-- **Tailwind v4** — utility classes only. There is no `@layer` config or custom theme. Default palette: green for primary, blue for secondary, red for errors/destructive.
-- **Forms use uncontrolled-ish patterns**: each field has its own `useState`. Submit handlers gather values and call the API; loading state is a per-handler `useState`.
-- **`autoFocus` attributes** are common — preserve them; they matter for the data-entry flow on mobile.
-
-## Env
-
-```
-VITE_API_URL=http://localhost:3001    # backend URL
-```
-
-In production (Vercel), set this in the project settings. Don't import it anywhere except `api/client.js`.
-
-## Local dev
-
-```bash
-npm install
-cp .env.example .env
-npm run dev      # http://localhost:5173
-npm run build    # outputs to dist/
-npm run lint
-```
-
-ESLint flat config in `eslint.config.js`:
-
-- `no-unused-vars` ignores capitalized identifiers (`varsIgnorePattern: '^[A-Z_]'`).
-- `react-hooks` recommended + `react-refresh/only-export-components` (for fast refresh).
-
-## When extending
-
-- New API endpoint → add to `api/client.js` under the existing namespace; if it's a new resource group, create a new namespace export and mirror the existing CRUD shape.
-- New page → add a `<Route>` in `App.jsx` wrapped in `<ProtectedRoute allowedRoles={[...]}>` if needed. Add it to the `Navbar` link list if it should be top-level for any role.
-- New role → update the constants in `pages/operator/UserManagement.jsx` (`ROLES` array), the `getRoleDisplay` / `getRoleBadgeColor` maps in `Navbar.jsx`, and the role-redirect map in `Dashboard.jsx`. Coordinate with the BE.
-- New stage → no FE change required for the route to work, but icons fall back to 📋 unless you update the `stageIcons` map.
+- **Auth = opaque OTP sessions (NOT JWT).** `localStorage` holds `token`
+  (opaque) + `user` (JSON). Read/write only inside `context/auth.tsx` + the
+  Axios interceptors — use `useAuth()` elsewhere.
+- **Axios 401 → hard redirect** (`window.location.href = '/login'`) in
+  `api/apiClient.ts`; request interceptor attaches the bearer. A network error
+  on `/me` must NOT log out (only a real 401 does).
+- **Route guards via `ProtectedRouteV2`** with `allowedRoles`; checks use
+  `hasAnyRole()` (primary role + `roleAssignments`). Don't add per-page role
+  checks.
+- **Roles**: `UserRole` (14 values) in `api/types.ts` mirrors the BE. **`operator`**
+  must appear in every `UserRole` union / `App.tsx` guard / `AdminShell` nav /
+  PD write-gate — never in an approver set. Helpers in `lib/userRoles.ts`.
+- **i18n**: `t('a.b.c')` via `useTranslation`; keys in `i18n/{en,hi}.json` —
+  add to **both** locales, don't hardcode user-facing strings.
+- **Downloads** are blobs → object URL → synthetic `<a>` click.
+- **Native shell** behaviour (`src/native/`) is in this bundle and only takes
+  effect once **deployed to Vercel**, not when the APK is built. APK is a thin
+  Capacitor shell (`appId fashion.nowi.erp`) loading `erp.nowi.fashion`; see
+  root `CLAUDE.md` "Android APK".
 
 ## Don't
 
-- Don't reach into `localStorage` directly outside `AuthContext` / Axios interceptors. If you need user info, use `useAuth()`.
-- Don't bypass `ProtectedRoute` — duplicating role checks per-page is how things get out of sync.
-- Don't break the `responseType: 'blob'` pattern for downloads — pages won't be able to construct the object URL otherwise.
-- Don't introduce a state library for one feature. The codebase is intentionally minimal; `useState` + Axios is the pattern.
+- **Never `window.alert/confirm/prompt`** — use `components/ui/confirm-dialog`.
+- Don't reach into `localStorage` outside the auth context / Axios interceptors.
+- Don't break the blob `responseType` pattern for downloads.
+- Don't introduce a state library for one feature — `useState` + Axios is the
+  pattern.
+- Don't let an editor reformat TS to double quotes — ESLint enforces single.
