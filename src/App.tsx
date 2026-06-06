@@ -55,6 +55,9 @@ const ChinaImportRegistry = lazy(
 const NewIntake = lazy(() => import('./pages/styles/NewIntake'));
 const StyleWorkspace = lazy(() => import('./pages/styles/StyleWorkspace'));
 const FabricLibrary = lazy(() => import('./pages/fabric-library/FabricLibrary'));
+const ReceiveFabricChallan = lazy(
+  () => import('./pages/fabric-library/ReceiveFabricChallan'),
+);
 
 function PageSkeleton() {
   // Inline shimmer — calm, sits inside whatever shell already rendered
@@ -544,6 +547,14 @@ function App() {
                 element={
                   <S>
                     <FabricLibrary />
+                  </S>
+                }
+              />
+              <Route
+                path="receive"
+                element={
+                  <S>
+                    <ReceiveFabricChallan />
                   </S>
                 }
               />

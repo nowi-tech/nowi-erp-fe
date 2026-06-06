@@ -274,6 +274,61 @@ export interface CreateFabricStockEntryInput {
   note?: string | null;
 }
 
+// ── Fabric receipt challans ──────────────────────────────────────────────
+
+/** One fabric line of a challan to record (becomes a `receipt` entry). */
+export interface FabricChallanLineInput {
+  fabricId: number;
+  /** Required when the fabric stocks colours; rejected otherwise. */
+  fabricColourId?: number | null;
+  /** Positive magnitude in the fabric's UoM. */
+  quantity: number;
+  note?: string | null;
+}
+
+export interface CreateFabricChallanInput {
+  challanNo: string;
+  /** ISO yyyy-mm-dd (the date printed on the paper challan). */
+  challanDate: string;
+  supplier: string;
+  transportMode?: string | null;
+  placeOfSupply?: string | null;
+  note?: string | null;
+  lines: FabricChallanLineInput[];
+}
+
+/** A recorded challan line (the underlying receipt entry), hydrated for view. */
+export interface FabricChallanLine {
+  id: number;
+  fabricId: number;
+  fabricColourId: number | null;
+  quantity: string;
+  note: string | null;
+  fabric?: {
+    id: number;
+    name: string;
+    unitOfMeasure: FabricUnitOfMeasure | null;
+  } | null;
+  fabricColour?: { id: number; colour: { name: string; hex: string | null } } | null;
+}
+
+export interface FabricChallan {
+  id: number;
+  challanNo: string;
+  challanDate: string;
+  supplier: string;
+  transportMode: string | null;
+  placeOfSupply: string | null;
+  note: string | null;
+  createdBy: number | null;
+  createdAt: string;
+  isTestData?: boolean;
+  /** Present on the detail read. */
+  entries?: FabricChallanLine[];
+  /** Present on the list read. */
+  _count?: { entries: number };
+}
+
 export interface StyleVariant {
   id: number;
   styleId: number;

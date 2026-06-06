@@ -5,7 +5,8 @@ import {
   useState,
   type ReactNode,
 } from 'react';
-import { Plus, ChevronUp, ChevronDown } from 'lucide-react';
+import { Plus, ChevronUp, ChevronDown, Truck } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -60,6 +61,7 @@ function contentSummary(f: Fabric): string {
 export default function FabricLibrary() {
   const { t } = useTranslation();
   const toast = useToast();
+  const navigate = useNavigate();
 
   const [fabrics, setFabrics] = useState<Fabric[]>([]);
   const [filters, setFilters] = useState<FabricFilters>(EMPTY_FILTERS);
@@ -296,10 +298,20 @@ export default function FabricLibrary() {
             {t('admin.fabricLibrary.subtitle')}
           </p>
         </div>
-        <Button onClick={openCreate}>
-          <Plus size={16} />
-          <span className="ml-1">{t('admin.fabricLibrary.newFabric')}</span>
-        </Button>
+        <div className="flex items-center gap-2">
+          <Button variant="outline" onClick={() => navigate('receive')}>
+            <Truck size={16} />
+            <span className="ml-1">
+              {t('admin.fabricLibrary.receiveFabric', {
+                defaultValue: 'Receive fabric',
+              })}
+            </span>
+          </Button>
+          <Button onClick={openCreate}>
+            <Plus size={16} />
+            <span className="ml-1">{t('admin.fabricLibrary.newFabric')}</span>
+          </Button>
+        </div>
       </div>
 
       <FabricFilterBar
