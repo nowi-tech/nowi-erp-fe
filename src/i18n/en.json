@@ -423,10 +423,16 @@
         "parked": "Parked",
         "in_sampling": "In sampling",
         "sample_approved": "Sample approved",
+        "cataloguing": "Cataloguing",
+        "live": "Live",
         "archived": "Archived",
         "in_pd": "In PD",
         "qc": "QC",
         "dispatched": "Dispatched"
+      },
+      "cataloguingStatus": {
+        "pending": "Cataloguing · pending",
+        "done": "Cataloguing · done"
       },
       "intake": {
         "title": "New intake",
@@ -542,6 +548,14 @@
         "approve": "Approve intake",
         "sampleApprove": "Approve sample",
         "startProduction": "Start production",
+        "startCataloguing": "Start cataloguing",
+        "markCataloguingDone": "Mark cataloguing done",
+        "goLive": "Go live",
+        "liveStage": "Live",
+        "channelsTitle": "Channels",
+        "channelsNone": "No channels are live yet. Use \"Go live\" to open listings.",
+        "viewListing": "View listing",
+        "noListingUrl": "No URL",
         "addColour": "Add colour",
         "samplingPipeline": "Sampling pipeline",
         "samplingTimelineMeta": "Sampling timeline: {{timeline}}",
@@ -602,6 +616,9 @@
         "parked": "Parked",
         "revived": "Un-parked",
         "sample_approved": "Sample approved",
+        "cataloguing_started": "Cataloguing started",
+        "cataloguing_done": "Cataloguing done",
+        "went_live": "Went live",
         "channel_state_changed": "Channel updated",
         "inspection_added": "Inspection added",
         "inspection_updated": "Inspection updated"
@@ -615,6 +632,7 @@
         "myntra": "Myntra",
         "nykaa": "Nykaa",
         "nowi_shopify": "Nowi Shopify",
+        "amazon": "Amazon",
         "other": "Other",
         "state": {
           "off": "Off",
@@ -623,6 +641,12 @@
         },
         "virtualInventory": "Virtual inventory",
         "qty": "Qty"
+      },
+      "goLive": {
+        "dialogTitle": "Go live",
+        "dialogIntro": "Select the channels this style is going live on and paste each public listing URL (optional). Selecting at least one channel is required.",
+        "urlPlaceholder": "https://… (optional)",
+        "confirm": "Go live"
       },
       "verdict": {
         "pending": "Pending",

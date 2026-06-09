@@ -8,11 +8,14 @@ import {
   Plus,
   Upload,
   CheckCircle2,
+  ExternalLink,
+  Rocket,
 } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Dialog } from '@/components/ui/dialog';
 import { ConfirmDialog } from '@/components/ui/confirm-dialog';
+import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { useToast } from '@/components/ui/toast';
 import SamplingPipelineStepper from '@/components/styles/SamplingPipelineStepper';
@@ -37,14 +40,20 @@ import {
   patchStyle,
   listFabrics,
   colourGroup,
+  startCataloguing,
+  markCataloguingDone,
+  goLive,
   type SamplingStatus,
   type SampleApprovalStatus,
   type SampleApproveStyleBody,
+  type GoLiveChannel,
 } from '@/api/styles';
 import type {
+  ChannelName,
   Fabric,
   Style,
   StyleAuditLog,
+  StyleChannelListing,
   StyleLifecycle,
   UserRole,
 } from '@/api/types';
@@ -61,6 +70,8 @@ import { formatStyleRef } from '@/lib/styleRef';
 // LLD §Phase 3 `POST_SAMPLING` list — keep all three in sync.
 const POST_SAMPLING = new Set<StyleLifecycle>([
   'sample_approved',
+  'cataloguing',
+  'live',
   'in_pd',
   'qc',
   'dispatched',
@@ -159,6 +170,9 @@ export default function StyleWorkspace() {
   // uploads CAD files (patternCadPaths) — not the full StyleEditModal.
   const [patternCadEditOpen, setPatternCadEditOpen] = useState(false);
   const [parkOpen, setParkOpen] = useState(false);
+  // Go-live: opens a small dialog to pick channel(s) + paste a listing URL
+  // before flipping the lifecycle to `live`.
+  const [goLiveOpen, setGoLiveOpen] = useState(false);
   // Two-step Withdraw: confirm pulling a committed (post-Approval-#1)
   // design out of the pipeline, then open ParkDialog to capture the
   // reason. Drafts skip this and open ParkDialog directly.
@@ -290,6 +304,21 @@ export default function StyleWorkspace() {
   const canStartProduction =
     canWrite && !isChinaImport && style.lifecycle === 'sample_approved';
 
+  // ── Go-to-market lifecycle actions (writers only, never china_import) ──
+  // sample_approved → cataloguing (status=pending)
+  const canStartCataloguing =
+    canWrite && !isChinaImport && style.lifecycle === 'sample_approved';
+  // cataloguing + pending → done
+  const canMarkCataloguingDone =
+    canWrite &&
+    style.lifecycle === 'cataloguing' &&
+    style.cataloguingStatus === 'pending';
+  // cataloguing + done → live (opens channel-pick dialog)
+  const canGoLive =
+    canWrite &&
+    style.lifecycle === 'cataloguing' &&
+    style.cataloguingStatus === 'done';
+
   // Layout selector. The sampling layout (stepper band + 7/5 grid) covers
   // draft / in_sampling; the production layout (colour strip + 2-up grid)
   // covers sample_approved and beyond. China Import never samples — it
@@ -298,17 +327,33 @@ export default function StyleWorkspace() {
   const showSamplingBand = !isChinaImport && !isProductionLayout;
 
   // The second header pill names the current workflow stage. In sampling
-  // it tracks the live sampling step ("Fabric sourcing"); in production it
-  // reads "Ready for production" per the mock.
-  const stagePill = isProductionLayout
-    ? t('admin.styles.workspace.readyForProduction', {
-        defaultValue: 'Ready for production',
-      })
-    : style.samplingStatus
-      ? t(`admin.styles.samplingSteps.${style.samplingStatus}` as const, {
-          defaultValue: '',
-        })
-      : '';
+  // it tracks the live sampling step ("Fabric sourcing"); in the go-to-market
+  // states it names that stage (Cataloguing · pending/done / Live); otherwise
+  // (sample_approved / in_pd / qc / dispatched) it reads "Ready for production".
+  let stagePill = '';
+  if (style.lifecycle === 'cataloguing') {
+    stagePill = t(
+      `admin.styles.cataloguingStatus.${style.cataloguingStatus ?? 'pending'}` as const,
+      {
+        defaultValue:
+          style.cataloguingStatus === 'done'
+            ? 'Cataloguing · done'
+            : 'Cataloguing · pending',
+      },
+    );
+  } else if (style.lifecycle === 'live') {
+    stagePill = t('admin.styles.workspace.liveStage', {
+      defaultValue: 'Live',
+    });
+  } else if (isProductionLayout) {
+    stagePill = t('admin.styles.workspace.readyForProduction', {
+      defaultValue: 'Ready for production',
+    });
+  } else if (style.samplingStatus) {
+    stagePill = t(`admin.styles.samplingSteps.${style.samplingStatus}` as const, {
+      defaultValue: '',
+    });
+  }
 
   // Section card chrome — Stitch's "surface card with header strip" look,
   // rendered in the app's tokens (surface / border / radius), not the
@@ -468,6 +513,19 @@ export default function StyleWorkspace() {
     <ActivityTimelineCard style={style} cardClasses={cardClasses} />
   );
 
+  // Channels / live-listings — surfaced once the style enters the
+  // go-to-market lifecycle (cataloguing / live). Lists each channel listing
+  // with its state and a clickable listing URL when present.
+  const showChannels =
+    style.lifecycle === 'cataloguing' || style.lifecycle === 'live';
+  const channelsCard = showChannels ? (
+    <ChannelsCard
+      style={style}
+      cardClasses={cardClasses}
+      cataloguingStatus={style.cataloguingStatus}
+    />
+  ) : null;
+
   return (
     <div className="space-y-5">
       {/* ── Header: breadcrumb · large style code + status pills · subtitle ──
@@ -588,6 +646,55 @@ export default function StyleWorkspace() {
               })}
             </Button>
           )}
+          {/* Start cataloguing — sample_approved → cataloguing (pending). */}
+          {canStartCataloguing && (
+            <Button
+              variant="outline"
+              size="sm"
+              disabled={busy !== null}
+              onClick={() =>
+                void doAction('start-cataloguing', () =>
+                  startCataloguing(style.id),
+                )
+              }
+            >
+              {t('admin.styles.workspace.startCataloguing', {
+                defaultValue: 'Start cataloguing',
+              })}
+            </Button>
+          )}
+          {/* Mark cataloguing done — cataloguing + pending → done. */}
+          {canMarkCataloguingDone && (
+            <Button
+              variant="outline"
+              size="sm"
+              disabled={busy !== null}
+              onClick={() =>
+                void doAction('cataloguing-done', () =>
+                  markCataloguingDone(style.id),
+                )
+              }
+            >
+              {t('admin.styles.workspace.markCataloguingDone', {
+                defaultValue: 'Mark cataloguing done',
+              })}
+            </Button>
+          )}
+          {/* Go live — cataloguing + done → live. Opens the channel dialog. */}
+          {canGoLive && (
+            <Button
+              size="sm"
+              disabled={busy !== null}
+              onClick={() => setGoLiveOpen(true)}
+            >
+              <Rocket size={16} />
+              <span className="ml-1">
+                {t('admin.styles.workspace.goLive', {
+                  defaultValue: 'Go live',
+                })}
+              </span>
+            </Button>
+          )}
           {/* + Add colour — spawns a sibling Style that re-enters the Inbox
               for Approval #1. Gated to POST_SAMPLING + colour-WRITE roles. */}
           {canAddColour && (
@@ -700,6 +807,7 @@ export default function StyleWorkspace() {
           {coreSpecsCard}
           {billOfMaterialsCard}
           {patternCadCard}
+          {channelsCard}
           {activityLogCard}
         </div>
       </div>
@@ -849,7 +957,253 @@ export default function StyleWorkspace() {
           );
         }}
       />
+
+      {/* Go-live channel picker — cataloguing + done → live */}
+      <GoLiveDialog
+        open={goLiveOpen}
+        busy={busy !== null}
+        existing={style.channelListings ?? []}
+        onClose={() => setGoLiveOpen(false)}
+        onConfirm={(channels) => {
+          setGoLiveOpen(false);
+          void doAction('go-live', () => goLive(style.id, { channels }));
+        }}
+      />
     </div>
+  );
+}
+
+// Channels the go-live dialog can publish to. `nowi_shopify` first since
+// it's the owned storefront; the marketplaces follow.
+const GO_LIVE_CHANNELS: ChannelName[] = [
+  'nowi_shopify',
+  'myntra',
+  'nykaa',
+  'amazon',
+  'other',
+];
+
+/**
+ * Go-live dialog. Pick one or more channels and (optionally) paste the
+ * public listing URL for each, then flip the style to `live`. At least one
+ * channel must be selected. URLs are optional per channel.
+ */
+function GoLiveDialog({
+  open,
+  busy,
+  existing,
+  onClose,
+  onConfirm,
+}: {
+  open: boolean;
+  busy: boolean;
+  existing: StyleChannelListing[];
+  onClose: () => void;
+  onConfirm: (channels: GoLiveChannel[]) => void;
+}) {
+  const { t } = useTranslation();
+  const [selected, setSelected] = useState<Set<ChannelName>>(new Set());
+  const [urls, setUrls] = useState<Record<string, string>>({});
+
+  useEffect(() => {
+    if (open) {
+      // Pre-seed from any existing listing URLs so re-opening is non-destructive.
+      const seedUrls: Record<string, string> = {};
+      for (const l of existing) {
+        if (l.listingUrl) seedUrls[l.channel] = l.listingUrl;
+      }
+      setUrls(seedUrls);
+      setSelected(new Set());
+    }
+  }, [open, existing]);
+
+  const toggle = (c: ChannelName) =>
+    setSelected((prev) => {
+      const next = new Set(prev);
+      if (next.has(c)) next.delete(c);
+      else next.add(c);
+      return next;
+    });
+
+  const canSubmit = selected.size > 0 && !busy;
+
+  return (
+    <Dialog
+      open={open}
+      onClose={onClose}
+      title={t('admin.styles.goLive.dialogTitle', {
+        defaultValue: 'Go live',
+      })}
+      footer={
+        <>
+          <Button variant="outline" size="sm" disabled={busy} onClick={onClose}>
+            {t('common.cancel', { defaultValue: 'Cancel' })}
+          </Button>
+          <Button
+            size="sm"
+            disabled={!canSubmit}
+            onClick={() =>
+              onConfirm(
+                [...selected].map((channel) => {
+                  const url = urls[channel]?.trim();
+                  return url ? { channel, listingUrl: url } : { channel };
+                }),
+              )
+            }
+          >
+            <Rocket size={14} />
+            <span className="ml-1">
+              {t('admin.styles.goLive.confirm', { defaultValue: 'Go live' })}
+            </span>
+          </Button>
+        </>
+      }
+    >
+      <p className="text-sm text-[var(--color-muted-foreground)] mb-4">
+        {t('admin.styles.goLive.dialogIntro', {
+          defaultValue:
+            'Select the channels this style is going live on and paste each public listing URL (optional). Selecting at least one channel is required.',
+        })}
+      </p>
+      <div className="space-y-2">
+        {GO_LIVE_CHANNELS.map((c) => {
+          const checked = selected.has(c);
+          return (
+            <div
+              key={c}
+              className="rounded-[var(--radius-sm)] border border-[var(--color-border)] p-3"
+            >
+              <label className="flex items-center gap-2 text-sm font-medium cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={checked}
+                  onChange={() => toggle(c)}
+                  className="h-4 w-4 accent-[var(--color-primary)]"
+                />
+                {t(`admin.styles.channel.${c}` as const, { defaultValue: c })}
+              </label>
+              {checked && (
+                <Input
+                  type="url"
+                  className="mt-2 h-9 text-sm"
+                  placeholder={t('admin.styles.goLive.urlPlaceholder', {
+                    defaultValue: 'https://… (optional)',
+                  })}
+                  value={urls[c] ?? ''}
+                  onChange={(e) =>
+                    setUrls((prev) => ({ ...prev, [c]: e.target.value }))
+                  }
+                />
+              )}
+            </div>
+          );
+        })}
+      </div>
+    </Dialog>
+  );
+}
+
+/**
+ * Channels / live-listings card. Surfaced in the go-to-market lifecycle
+ * (cataloguing / live). Renders each StyleChannelListing with its state pill
+ * and a clickable listing URL (new tab) when present.
+ */
+function ChannelsCard({
+  style,
+  cardClasses,
+  cataloguingStatus,
+}: {
+  style: Style;
+  cardClasses: string;
+  cataloguingStatus: Style['cataloguingStatus'];
+}) {
+  const { t } = useTranslation();
+  const listings = (style.channelListings ?? []).filter(
+    (l) => l.state !== 'off',
+  );
+  const stateBadge = (s: StyleChannelListing['state']) =>
+    s === 'live' ? 'success' : s === 'draft' ? 'warning' : 'outline';
+  return (
+    <section className={cardClasses}>
+      <CardHeader
+        title={t('admin.styles.workspace.channelsTitle', {
+          defaultValue: 'Channels',
+        })}
+        right={
+          style.lifecycle === 'cataloguing' ? (
+            <Badge
+              variant={cataloguingStatus === 'done' ? 'success' : 'warning'}
+              className="text-[10px]"
+            >
+              {t(
+                `admin.styles.cataloguingStatus.${cataloguingStatus ?? 'pending'}` as const,
+                {
+                  defaultValue:
+                    cataloguingStatus === 'done'
+                      ? 'Cataloguing · done'
+                      : 'Cataloguing · pending',
+                },
+              )}
+            </Badge>
+          ) : (
+            <Badge variant="success" className="text-[10px]">
+              {t('admin.styles.workspace.liveStage', { defaultValue: 'Live' })}
+            </Badge>
+          )
+        }
+      />
+      <div className="p-5">
+        {listings.length === 0 ? (
+          <p className="text-sm text-[var(--color-muted-foreground)]">
+            {t('admin.styles.workspace.channelsNone', {
+              defaultValue:
+                'No channels are live yet. Use "Go live" to open listings.',
+            })}
+          </p>
+        ) : (
+          <ul className="space-y-2">
+            {listings.map((l) => (
+              <li
+                key={l.id}
+                className="flex items-center justify-between gap-3 rounded-[var(--radius-sm)] border border-[var(--color-border)] px-3 py-2"
+              >
+                <div className="flex items-center gap-2 min-w-0">
+                  <span className="text-sm font-medium">
+                    {t(`admin.styles.channel.${l.channel}` as const, {
+                      defaultValue: l.channel,
+                    })}
+                  </span>
+                  <Badge variant={stateBadge(l.state)} className="text-[10px]">
+                    {t(`admin.styles.channel.state.${l.state}` as const, {
+                      defaultValue: l.state,
+                    })}
+                  </Badge>
+                </div>
+                {l.listingUrl ? (
+                  <a
+                    href={l.listingUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center gap-1 text-xs text-[var(--color-primary)] hover:underline shrink-0"
+                  >
+                    {t('admin.styles.workspace.viewListing', {
+                      defaultValue: 'View listing',
+                    })}
+                    <ExternalLink size={12} aria-hidden />
+                  </a>
+                ) : (
+                  <span className="text-xs text-[var(--color-muted-foreground)] shrink-0">
+                    {t('admin.styles.workspace.noListingUrl', {
+                      defaultValue: 'No URL',
+                    })}
+                  </span>
+                )}
+              </li>
+            ))}
+          </ul>
+        )}
+      </div>
+    </section>
   );
 }
 

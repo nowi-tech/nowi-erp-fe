@@ -182,13 +182,24 @@ export type StyleLifecycle =
   | 'parked'
   | 'in_sampling'
   | 'sample_approved'
+  // Go-to-market lifecycle (between sample_approved and archived):
+  | 'cataloguing'
+  | 'live'
   | 'archived'
   // v2 lifecycle states (kept for forward compat / type completeness):
   | 'in_pd'
   | 'qc'
   | 'dispatched';
 
-export type ChannelName = 'myntra' | 'nykaa' | 'nowi_shopify' | 'other';
+/** Cataloguing sub-state while a style is in the `cataloguing` lifecycle. */
+export type CataloguingStatus = 'pending' | 'done';
+
+export type ChannelName =
+  | 'myntra'
+  | 'nykaa'
+  | 'nowi_shopify'
+  | 'amazon'
+  | 'other';
 export type ChannelState = 'off' | 'draft' | 'live';
 export type InspectionVerdict = 'pending' | 'corrections_needed' | 'approved';
 export type Gender = 'women' | 'men' | 'unisex';
@@ -371,6 +382,8 @@ export interface StyleChannelListing {
   styleId: number;
   channel: ChannelName;
   state: ChannelState;
+  /** Public marketplace listing URL — clickable once the channel is live. */
+  listingUrl: string | null;
   virtualInventoryQty: number | null;
   notes: string | null;
   updatedBy: number | null;
@@ -420,6 +433,8 @@ export interface Style {
   // New PD intake fields
   source: StyleSource;
   lifecycle: StyleLifecycle;
+  /** Sub-state while `lifecycle === 'cataloguing'`; null otherwise. */
+  cataloguingStatus: CataloguingStatus | null;
   workingName: string | null;
   /** Free-text rationale for why this style is being developed. Captured at intake. */
   developmentReason: string | null;

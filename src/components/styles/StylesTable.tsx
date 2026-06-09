@@ -113,9 +113,16 @@ interface Props {
 }
 
 function lifecycleVariant(l: Style['lifecycle']) {
-  if (l === 'sample_approved' || l === 'dispatched') return 'success';
+  if (l === 'sample_approved' || l === 'dispatched' || l === 'live')
+    return 'success';
   if (l === 'parked' || l === 'archived') return 'outline';
-  if (l === 'qc' || l === 'in_pd' || l === 'in_sampling') return 'stitch';
+  if (
+    l === 'qc' ||
+    l === 'in_pd' ||
+    l === 'in_sampling' ||
+    l === 'cataloguing'
+  )
+    return 'stitch';
   return 'secondary';
 }
 

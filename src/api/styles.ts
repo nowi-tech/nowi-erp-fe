@@ -322,6 +322,41 @@ export async function sampleApproveStyle(
   return res.data;
 }
 
+// ─── Go-to-market lifecycle ───────────────────────────────────────────
+/** sample_approved → cataloguing (cataloguingStatus = pending). */
+export async function startCataloguing(styleId: number): Promise<Style> {
+  const res = await apiClient.post<Style>(
+    `/api/styles/${styleId}/actions/start-cataloguing`,
+  );
+  return res.data;
+}
+
+/** cataloguing: cataloguingStatus pending → done. */
+export async function markCataloguingDone(styleId: number): Promise<Style> {
+  const res = await apiClient.post<Style>(
+    `/api/styles/${styleId}/actions/cataloguing-done`,
+  );
+  return res.data;
+}
+
+/** Channel selection payload for goLive. */
+export interface GoLiveChannel {
+  channel: ChannelName;
+  listingUrl?: string;
+}
+
+/** cataloguing + done → live, opening the selected channel listings. */
+export async function goLive(
+  styleId: number,
+  body: { channels: GoLiveChannel[] },
+): Promise<Style> {
+  const res = await apiClient.post<Style>(
+    `/api/styles/${styleId}/actions/go-live`,
+    body,
+  );
+  return res.data;
+}
+
 // ─── Variants ─────────────────────────────────────────────────────────
 /**
  * Add a variant. Either `colour` (free text) or `fabricColourId` must be
