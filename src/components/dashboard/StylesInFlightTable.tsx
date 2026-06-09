@@ -27,7 +27,7 @@ import {
 } from '@/api/dashboard';
 import { approveStyle, parkStyle } from '@/api/styles';
 import { useAuth } from '@/context/auth';
-import { hasAnyRole } from '@/lib/userRoles';
+import { hasAnyRole, PD_WRITE_ROLES } from '@/lib/userRoles';
 import { useDebounced } from '@/lib/useDebounced';
 import { formatStyleRef } from '@/lib/styleRef';
 
@@ -76,16 +76,9 @@ const APPROVER_ROLES = [
   'china_import_approver',
 ] as const;
 
-// Roles allowed to Park a draft (pre-approval) — mirrors StylesTable.tsx
-// WRITE_ROLES (the styles write set on the BE).
-const PARK_WRITE_ROLES = [
-  'admin',
-  'sampling_editor',
-  'sampling_lead',
-  'pattern_master_w',
-  'pattern_master_m',
-  'operator',
-] as const;
+// Roles allowed to Park a draft (pre-approval) — the styles write set on
+// the BE, shared via PD_WRITE_ROLES.
+const PARK_WRITE_ROLES = PD_WRITE_ROLES;
 
 export default function StylesInFlightTable({
   initialTab = 'all',

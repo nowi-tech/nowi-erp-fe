@@ -47,7 +47,7 @@ import type {
   UserRole,
 } from '@/api/types';
 import { useAuth } from '@/context/auth';
-import { userAllRoles } from '@/lib/userRoles';
+import { userAllRoles, PD_WRITE_ROLES } from '@/lib/userRoles';
 import { cn } from '@/lib/utils';
 import { formatStyleRef } from '@/lib/styleRef';
 
@@ -64,15 +64,9 @@ const POST_SAMPLING = new Set<StyleLifecycle>([
   'dispatched',
 ]);
 
-// Roles allowed to WRITE a new colour (spawn a sibling submission).
-const COLOUR_WRITE: readonly UserRole[] = [
-  'admin',
-  'sampling_editor',
-  'sampling_lead',
-  'pattern_master_w',
-  'pattern_master_m',
-  'china_import_approver',
-];
+// Roles allowed to WRITE a new colour (spawn a sibling submission) —
+// mirrors the BE variants write set via the shared PD_WRITE_ROLES.
+const COLOUR_WRITE = PD_WRITE_ROLES;
 
 // Roles allowed to "Withdraw" (re-park) a style that has already passed
 // Approval #1. Drafts can be parked by anyone; post-approval is gated.

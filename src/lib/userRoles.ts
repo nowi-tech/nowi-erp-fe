@@ -12,6 +12,32 @@ import type { User, UserRole } from '@/api/types';
  * sides in sync if the helper contract changes.
  */
 
+/**
+ * The PD "editor" write set — mirrors the backend `PD_WRITE_ROLES`
+ * (`nowi-erp-api/src/modules/auth/roles.constants.ts`). Every authoring +
+ * office editor that may create/edit PD data (styles, variants, channels,
+ * inspections, categories, fabrics, colours) plus the cross-cutting
+ * `operator`, i.e. everyone except the read-only `viewer`.
+ *
+ * Use this for FE write-gates so a button is never shown to a role the BE
+ * will 403 — and, crucially, never hidden from one the BE now allows.
+ * Keep in lock-step with the BE constant.
+ *
+ * Deliberately EXCLUDES approve / withdraw-post-approval — those stay on
+ * their own narrow arrays (`APPROVER_ROLES`, `POST_APPROVAL_PARK`).
+ */
+export const PD_WRITE_ROLES: readonly UserRole[] = [
+  'admin',
+  'sampling_editor',
+  'sampling_lead',
+  'pattern_master_w',
+  'pattern_master_m',
+  'china_import_approver',
+  'data_admin',
+  'pd_lead',
+  'operator',
+];
+
 type RoleSource = Pick<User, 'role'> & {
   roleAssignments?: Array<{ role: UserRole }>;
 };

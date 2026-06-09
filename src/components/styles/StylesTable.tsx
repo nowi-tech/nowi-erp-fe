@@ -17,7 +17,7 @@ import {
 import InlineStatusCell from '@/components/styles/InlineStatusCell';
 import { useToast } from '@/components/ui/toast';
 import { useAuth } from '@/context/auth';
-import { hasAnyRole } from '@/lib/userRoles';
+import { hasAnyRole, PD_WRITE_ROLES } from '@/lib/userRoles';
 import { patchStyle } from '@/api/styles';
 import type { Style, UserRole } from '@/api/types';
 import { cn } from '@/lib/utils';
@@ -42,15 +42,8 @@ const SAMPLE_APPROVAL_OPTIONS = [
 ] as const;
 
 // Roles allowed to flip status cells inline — matches the styles WRITE
-// set on the BE. Viewers see plain read-only badges.
-const WRITE_ROLES: readonly UserRole[] = [
-  'admin',
-  'sampling_editor',
-  'sampling_lead',
-  'pattern_master_w',
-  'pattern_master_m',
-  'operator',
-] as const;
+// set on the BE via the shared PD_WRITE_ROLES. Viewers see read-only badges.
+const WRITE_ROLES = PD_WRITE_ROLES;
 
 // Row-action role gates — mirror the BE guards (and the dashboard
 // StylesInFlightTable) so /styles never shows a button that 403s:

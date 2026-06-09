@@ -13,7 +13,7 @@ import { markChunkLoadSucceeded } from './lib/chunk-reload';
 import Login from './pages/Login';
 import Dashboard from './pages/Dashboard';
 import { useAuth } from './context/auth';
-import { hasAnyRole } from './lib/userRoles';
+import { hasAnyRole, PD_WRITE_ROLES } from './lib/userRoles';
 import type { UserRole } from './api/types';
 
 const AdminShell = lazy(() => import('./components/layout/AdminShell'));
@@ -462,18 +462,10 @@ function App() {
                   // Intake creates a Style (write). The /styles parent now
                   // admits read-only office roles for the registry
                   // drill-down, so re-gate the create form to the PD write
-                  // set — otherwise a read-only role could open the form by
-                  // URL and only hit the 403 on submit.
-                  <ProtectedRoute
-                    allowedRoles={[
-                      'admin',
-                      'sampling_editor',
-                      'sampling_lead',
-                      'pattern_master_w',
-                      'pattern_master_m',
-                      'operator',
-                    ]}
-                  >
+                  // set (shared PD_WRITE_ROLES, mirrors the BE styles WRITE)
+                  // — otherwise a read-only role could open the form by URL
+                  // and only hit the 403 on submit.
+                  <ProtectedRoute allowedRoles={[...PD_WRITE_ROLES]}>
                     <S>
                       <NewIntake />
                     </S>
