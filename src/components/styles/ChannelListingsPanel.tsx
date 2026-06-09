@@ -8,7 +8,13 @@ import { useToast } from '@/components/ui/toast';
 import { updateChannel } from '@/api/styles';
 import type { ChannelName, ChannelState, StyleChannelListing } from '@/api/types';
 
-const CHANNELS: ChannelName[] = ['myntra', 'nykaa', 'nowi_shopify', 'other'];
+const CHANNELS: ChannelName[] = [
+  'myntra',
+  'nykaa',
+  'nowi_shopify',
+  'amazon',
+  'other',
+];
 const STATES: ChannelState[] = ['off', 'draft', 'live'];
 
 interface Props {
