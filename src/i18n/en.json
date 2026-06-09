@@ -616,6 +616,9 @@
         "parked": "Parked",
         "revived": "Un-parked",
         "sample_approved": "Sample approved",
+        "cataloguing_started": "Cataloguing started",
+        "cataloguing_done": "Cataloguing done",
+        "went_live": "Went live",
         "channel_state_changed": "Channel updated",
         "inspection_added": "Inspection added",
         "inspection_updated": "Inspection updated"
