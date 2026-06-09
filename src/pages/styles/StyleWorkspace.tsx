@@ -47,7 +47,7 @@ import type {
   UserRole,
 } from '@/api/types';
 import { useAuth } from '@/context/auth';
-import { userAllRoles } from '@/lib/userRoles';
+import { userAllRoles, PD_WRITE_ROLES } from '@/lib/userRoles';
 import { cn } from '@/lib/utils';
 import { formatStyleRef } from '@/lib/styleRef';
 
@@ -64,15 +64,9 @@ const POST_SAMPLING = new Set<StyleLifecycle>([
   'dispatched',
 ]);
 
-// Roles allowed to WRITE a new colour (spawn a sibling submission).
-const COLOUR_WRITE: readonly UserRole[] = [
-  'admin',
-  'sampling_editor',
-  'sampling_lead',
-  'pattern_master_w',
-  'pattern_master_m',
-  'china_import_approver',
-];
+// Roles allowed to WRITE a new colour (spawn a sibling submission) —
+// mirrors the BE variants write set via the shared PD_WRITE_ROLES.
+const COLOUR_WRITE = PD_WRITE_ROLES;
 
 // Roles allowed to "Withdraw" (re-park) a style that has already passed
 // Approval #1. Drafts can be parked by anyone; post-approval is gated.
@@ -268,6 +262,12 @@ export default function StyleWorkspace() {
     !isChinaImport &&
     roles.some((r) => COLOUR_WRITE.includes(r));
 
+  // Whether the user may edit this style's fields at all — mirrors the BE
+  // styles WRITE set (PD_WRITE_ROLES). Gates the scoped edit affordances
+  // (core-specs pencil / BOM / pattern-CAD upload) and the Edit surface so
+  // a read-only viewer never sees a control that 403s on save.
+  const canWrite = roles.some((r) => PD_WRITE_ROLES.includes(r));
+
   // Park: inline button on drafts (anyone). Post-approval it becomes a
   // gated "Withdraw" — only admin / sampling_lead / pd_lead can pull a
   // committed design back out of the pipeline.
@@ -286,7 +286,7 @@ export default function StyleWorkspace() {
   // exposes that transition we re-home it onto the existing Edit surface so
   // the button is never a dead end (no new endpoint introduced here).
   const canStartProduction =
-    !isChinaImport && style.lifecycle === 'sample_approved';
+    canWrite && !isChinaImport && style.lifecycle === 'sample_approved';
 
   // Layout selector. The sampling layout (stepper band + 7/5 grid) covers
   // draft / in_sampling; the production layout (colour strip + 2-up grid)
@@ -321,19 +321,21 @@ export default function StyleWorkspace() {
       <CardHeader
         title={t('admin.styles.workspace.coreSpecs')}
         right={
-          <button
-            type="button"
-            aria-label={t('admin.styles.workspace.edit', {
-              defaultValue: 'Edit',
-            })}
-            onClick={() => {
-              void ensureMasterData();
-              setCoreSpecsEditOpen(true);
-            }}
-            className="text-[var(--color-muted-foreground)] hover:text-[var(--color-primary)] transition-colors"
-          >
-            <Pencil size={18} />
-          </button>
+          canWrite ? (
+            <button
+              type="button"
+              aria-label={t('admin.styles.workspace.edit', {
+                defaultValue: 'Edit',
+              })}
+              onClick={() => {
+                void ensureMasterData();
+                setCoreSpecsEditOpen(true);
+              }}
+              className="text-[var(--color-muted-foreground)] hover:text-[var(--color-primary)] transition-colors"
+            >
+              <Pencil size={18} />
+            </button>
+          ) : undefined
         }
       />
       <div className="p-5">
@@ -390,10 +392,14 @@ export default function StyleWorkspace() {
       style={style}
       cardClasses={cardClasses}
       production={isProductionLayout}
-      onEdit={() => {
-        void ensureMasterData();
-        setBomEditOpen(true);
-      }}
+      onEdit={
+        canWrite
+          ? () => {
+              void ensureMasterData();
+              setBomEditOpen(true);
+            }
+          : undefined
+      }
     />
   );
 
@@ -406,7 +412,8 @@ export default function StyleWorkspace() {
         right={
           // The sampling mock exposes an upload affordance in the header;
           // the production mock has none. Opens a scoped CAD-only editor.
-          !isProductionLayout ? (
+          // Gated to writers so a read-only viewer sees no upload button.
+          canWrite && !isProductionLayout ? (
             <button
               type="button"
               aria-label={t('admin.styles.drawer.patternCad.upload', {
@@ -1052,7 +1059,8 @@ function BillOfMaterialsCard({
   style: Style;
   cardClasses: string;
   production: boolean;
-  onEdit: () => void;
+  // Absent for read-only viewers — the Edit/＋ affordance is then hidden.
+  onEdit?: () => void;
 }) {
   const { t } = useTranslation();
   const fabricName = style.fabric?.name ?? '—';
@@ -1071,7 +1079,7 @@ function BillOfMaterialsCard({
           defaultValue: 'Bill of materials',
         })}
         right={
-          production ? (
+          !onEdit ? undefined : production ? (
             <button
               type="button"
               onClick={onEdit}

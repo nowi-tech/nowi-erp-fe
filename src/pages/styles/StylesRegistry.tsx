@@ -22,7 +22,7 @@ import {
 import Approval1Dialog from '@/components/styles/Approval1Dialog';
 import ParkDialog from '@/components/styles/ParkDialog';
 import { useAuth } from '@/context/auth';
-import { hasAnyRole } from '@/lib/userRoles';
+import { hasAnyRole, PD_WRITE_ROLES } from '@/lib/userRoles';
 import {
   approveStyle,
   listStyles,
@@ -39,20 +39,10 @@ const TABS: StyleTab[] = ['inbox', 'in_sampling', 'parked', 'in_pd', 'all'];
 
 // Row-action role gates — mirror the legacy StylesTable `RowActions`
 // (and the BE guards) so the queue never shows a button that 403s.
-//  • Park / Revive reuse the styles WRITE set.
+//  • Park / Revive reuse the styles WRITE set (shared PD_WRITE_ROLES).
 //  • Approve (Approval #1) uses the narrower APPROVE set (Option A drops
 //    sampling_editor; china_import_approver kept for parity).
-const WRITE_ROLES: readonly UserRole[] = [
-  'admin',
-  'sampling_editor',
-  'sampling_lead',
-  'pattern_master_w',
-  'pattern_master_m',
-  // operator is the cross-cutting data-entry role — it belongs in every
-  // write/create/edit gate (mirrors the BE writer sets + the dashboard's
-  // PARK_WRITE_ROLES). Its omission here hid Park/Revive from operators.
-  'operator',
-] as const;
+const WRITE_ROLES = PD_WRITE_ROLES;
 
 const APPROVER_ROLES: readonly UserRole[] = [
   'admin',
