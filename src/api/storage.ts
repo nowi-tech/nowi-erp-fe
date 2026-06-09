@@ -1,6 +1,15 @@
 import { apiClient } from './apiClient';
 import type { ReadUrlsResponse, UploadUrlResponse } from './types';
 
+/**
+ * True when `value` is already a usable absolute URL (remote CDN image,
+ * data:/blob: preview) and must NOT be sent to the signer. Everything else
+ * is treated as a GCS object path needing resolution via getReadUrls.
+ */
+export function isAbsoluteUrl(value: string): boolean {
+  return /^(https?:|data:|blob:)/i.test(value);
+}
+
 export interface UploadUrlPayload {
   entityType: string;
   entityId?: string;

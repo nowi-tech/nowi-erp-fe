@@ -20,7 +20,7 @@ import {
   Thumbnail,
   type QueueColumn,
 } from '@/components/styles/StyleQueueTable';
-import { getReadUrls } from '@/api/storage';
+import { useSignedUrls } from '@/hooks/useSignedUrls';
 import Approval1Dialog from '@/components/styles/Approval1Dialog';
 import ParkDialog from '@/components/styles/ParkDialog';
 import { useAuth } from '@/context/auth';
@@ -101,9 +101,6 @@ export default function StylesRegistry() {
   );
   const [rows, setRows] = useState<Style[]>([]);
   const [loading, setLoading] = useState(true);
-  // GCS object path → signed URL, batch-resolved per page of rows so the
-  // thumbnail column renders without an upload-grid round-trip per row.
-  const [thumbUrls, setThumbUrls] = useState<Record<string, string>>({});
   // Fixed reviewer panel (active approver-role users). The Reviewer column
   // shows a row's approver when present, else this panel. Tolerate failure
   // (e.g. role can't list reviewers) → empty array renders "—".
@@ -130,22 +127,6 @@ export default function StylesRegistry() {
       };
       const res = await listStyles(params);
       setRows(res.data);
-      // Resolve the first reference image of each row to a signed URL.
-      const isAbs = (s: string) => /^https?:\/\//i.test(s);
-      const paths = [
-        ...new Set(
-          res.data
-            .map((r) => r.referenceImages?.[0] ?? r.referenceImage ?? null)
-            .filter((p): p is string => !!p && !isAbs(p)),
-        ),
-      ];
-      if (paths.length) {
-        getReadUrls(paths)
-          .then(setThumbUrls)
-          .catch(() => setThumbUrls({}));
-      } else {
-        setThumbUrls({});
-      }
     } catch {
       setRows([]);
     } finally {
@@ -209,6 +190,15 @@ export default function StylesRegistry() {
     [load, toast],
   );
 
+  // Resolve each row's primary reference image to a signed URL (one batched,
+  // cancellation-safe call via the shared hook). Maps path → url; absolute
+  // CDN URLs resolve to themselves.
+  const thumbPaths = useMemo(
+    () => rows.map((r) => r.referenceImages?.[0] ?? r.referenceImage ?? null),
+    [rows],
+  );
+  const thumbUrls = useSignedUrls(thumbPaths);
+
   // Column set for the flat Sampling Queue — Compact View. Built from the
   // shared cell helpers so the registry reads identically to the
   // dashboard "Styles in flight" surface.
@@ -221,8 +211,7 @@ export default function StylesRegistry() {
         headerClassName: 'w-9 pr-0',
         cell: (row) => {
           const path = row.referenceImages?.[0] ?? row.referenceImage ?? null;
-          const isAbs = path ? /^https?:\/\//i.test(path) : false;
-          const src = path ? (isAbs ? path : (thumbUrls[path] ?? null)) : null;
+          const src = path ? (thumbUrls[path] ?? null) : null;
           return (
             <Thumbnail src={src} alt={row.workingName ?? row.styleId ?? ''} />
           );

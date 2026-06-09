@@ -1,8 +1,8 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { ChevronLeft, ChevronRight, ImageOff, Pencil, Plus, X } from 'lucide-react';
-import { getReadUrls } from '@/api/storage';
 import { patchStyle } from '@/api/styles';
+import { useSignedUrls } from '@/hooks/useSignedUrls';
 import { Dialog } from '@/components/ui/dialog';
 import { useToast } from '@/components/ui/toast';
 import ReferenceImageGrid from '@/components/styles/intake/ReferenceImageGrid';
@@ -39,10 +39,7 @@ export default function StyleImagePanel({
   const { t } = useTranslation();
   const toast = useToast();
 
-  const paths = useMemo(() => [...referenceImages], [referenceImages]);
-  const pathsKey = paths.join(',');
-
-  const [urls, setUrls] = useState<Record<string, string>>({});
+  const urls = useSignedUrls(referenceImages);
   const [active, setActive] = useState<string | null>(
     referenceImages[0] ?? null,
   );
@@ -53,42 +50,34 @@ export default function StyleImagePanel({
   const [draft, setDraft] = useState<string[]>(referenceImages);
   const [saving, setSaving] = useState(false);
 
-  useEffect(() => {
-    let cancelled = false;
-    if (paths.length === 0) return;
-    void getReadUrls(paths)
-      .then((map) => {
-        if (!cancelled) setUrls(map);
-      })
-      .catch(() => {
-        /* soft-fail: a signing hiccup just leaves placeholders */
-      });
-    return () => {
-      cancelled = true;
-    };
-    // pathsKey captures the meaningful change; paths is derived from it.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [pathsKey]);
-
   const activePath = active ?? referenceImages[0] ?? null;
   const activeIndex = activePath ? referenceImages.indexOf(activePath) : -1;
 
-  // Lightbox keyboard nav (←/→ cycle, Esc close).
+  // Lightbox keyboard nav (←/→ cycle, Esc close). preventDefault stops the
+  // page behind the overlay from scrolling on arrow keys. Uses a functional
+  // setActive so the listener doesn't re-subscribe on every navigation.
   useEffect(() => {
     if (!lightbox) return;
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') setLightbox(false);
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        setLightbox(false);
+        return;
+      }
       if (referenceImages.length < 2) return;
       if (e.key === 'ArrowRight' || e.key === 'ArrowLeft') {
+        e.preventDefault();
         const dir = e.key === 'ArrowRight' ? 1 : -1;
-        const next =
-          (activeIndex + dir + referenceImages.length) % referenceImages.length;
-        setActive(referenceImages[next]);
+        setActive((cur) => {
+          const i = cur ? referenceImages.indexOf(cur) : 0;
+          const next = (i + dir + referenceImages.length) % referenceImages.length;
+          return referenceImages[next];
+        });
       }
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [lightbox, activeIndex, referenceImages]);
+  }, [lightbox, referenceImages]);
 
   if (referenceImages.length === 0 && !canWrite) return null;
 
