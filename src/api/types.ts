@@ -437,6 +437,10 @@ export interface Style {
   referenceImageUrl: string | null;
   /** Multi-image board, up to 5. First entry is the "primary". */
   referenceImages: string[];
+  /** GCS object path of the per-sample fabric swatch photo (sampling backfill). */
+  fabricImagePath: string | null;
+  /** Original hand-typed sheet code(s) (Gurukul/Live backfill); Myntra cross-ref. */
+  legacyStyleCode: string | null;
 
   /** Self-FK to the "designed-as-a-family" parent style. Set when this
    *  style was spawned via the Add Colour modal. */

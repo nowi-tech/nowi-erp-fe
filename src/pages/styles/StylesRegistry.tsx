@@ -17,8 +17,10 @@ import {
   ApproveButton,
   GhostActionButton,
   RowChevron,
+  Thumbnail,
   type QueueColumn,
 } from '@/components/styles/StyleQueueTable';
+import { useSignedUrls } from '@/hooks/useSignedUrls';
 import Approval1Dialog from '@/components/styles/Approval1Dialog';
 import ParkDialog from '@/components/styles/ParkDialog';
 import { useAuth } from '@/context/auth';
@@ -188,11 +190,33 @@ export default function StylesRegistry() {
     [load, toast],
   );
 
+  // Resolve each row's primary reference image to a signed URL (one batched,
+  // cancellation-safe call via the shared hook). Maps path → url; absolute
+  // CDN URLs resolve to themselves.
+  const thumbPaths = useMemo(
+    () => rows.map((r) => r.referenceImages?.[0] ?? r.referenceImage ?? null),
+    [rows],
+  );
+  const thumbUrls = useSignedUrls(thumbPaths);
+
   // Column set for the flat Sampling Queue — Compact View. Built from the
   // shared cell helpers so the registry reads identically to the
   // dashboard "Styles in flight" surface.
   const columns = useMemo<QueueColumn<Style>[]>(
     () => [
+      {
+        key: 'thumb',
+        header: '',
+        className: 'w-9 pr-0',
+        headerClassName: 'w-9 pr-0',
+        cell: (row) => {
+          const path = row.referenceImages?.[0] ?? row.referenceImage ?? null;
+          const src = path ? (thumbUrls[path] ?? null) : null;
+          return (
+            <Thumbnail src={src} alt={row.workingName ?? row.styleId ?? ''} />
+          );
+        },
+      },
       {
         key: 'ref',
         header: t('admin.styles.table.draftNo', { defaultValue: 'Draft #' }),
@@ -273,7 +297,7 @@ export default function StylesRegistry() {
         cell: (row) => <AgeCell iso={row.createdAt} />,
       },
     ],
-    [t, navigate, reviewerPanel],
+    [t, navigate, reviewerPanel, thumbUrls],
   );
 
   // Role + lifecycle gated row actions — replicated from the legacy

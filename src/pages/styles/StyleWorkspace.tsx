@@ -16,6 +16,8 @@ import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 import { Textarea } from '@/components/ui/textarea';
 import { useToast } from '@/components/ui/toast';
 import SamplingPipelineStepper from '@/components/styles/SamplingPipelineStepper';
+import StyleImagePanel from '@/components/styles/StyleImagePanel';
+import FabricSwatchThumb from '@/components/styles/FabricSwatchThumb';
 import PatternCadPreview from '@/components/styles/PatternCadPreview';
 import AddColourModal from '@/components/styles/AddColourModal';
 import StyleEditModal from '@/components/styles/StyleEditModal';
@@ -316,6 +318,18 @@ export default function StyleWorkspace() {
 
   // Shared cards — identical in both layouts, only the column wrapper and
   // a couple of header affordances differ.
+  // Reference-image gallery + fabric swatch; renders nothing when the style
+  // carries no images (legacy floor-intake styles), so the column is unchanged.
+  const imagePanelCard = (
+    <StyleImagePanel
+      styleId={style.id}
+      referenceImages={style.referenceImages}
+      workingName={style.workingName}
+      canWrite={canWrite}
+      onUpdated={() => void load()}
+    />
+  );
+
   const coreSpecsCard = (
     <section className={cardClasses}>
       <CardHeader
@@ -345,7 +359,15 @@ export default function StyleWorkspace() {
             label="Category"
             value={style.category?.name ?? style.categoryCode ?? '—'}
           />
-          <SpecRow label="Fabric" value={style.fabric?.name ?? '—'} />
+          <SpecRow
+            label="Fabric"
+            value={
+              <span className="inline-flex items-center gap-2">
+                {style.fabric?.name ?? '—'}
+                <FabricSwatchThumb fabricImagePath={style.fabricImagePath} />
+              </span>
+            }
+          />
           <SpecRow
             label="Primary colour"
             value={
@@ -669,32 +691,18 @@ export default function StyleWorkspace() {
       )}
 
       {/* ── Main area — two columns ──
-          Sampling layout: 7/5 split. Production layout: even 2-up. Both
-          place Core specs + Bill of materials left, Pattern/CAD + Activity
-          log right (mock order). */}
-      {isProductionLayout ? (
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 items-start lg:items-stretch">
-          <div className="space-y-4">
-            {coreSpecsCard}
-            {billOfMaterialsCard}
-          </div>
-          <div className="space-y-4 lg:space-y-0 lg:flex lg:flex-col lg:gap-4 lg:min-h-0">
-            {patternCadCard}
-            {activityLogCard}
-          </div>
+          LEFT: product image gallery (compact). RIGHT: Core specs → Bill of
+          materials → Pattern/CAD → Activity log, stacked top-to-bottom.
+          Same shape for both sampling + production layouts. */}
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 items-start">
+        <div className="lg:col-span-4 space-y-4">{imagePanelCard}</div>
+        <div className="lg:col-span-8 space-y-4">
+          {coreSpecsCard}
+          {billOfMaterialsCard}
+          {patternCadCard}
+          {activityLogCard}
         </div>
-      ) : (
-        <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 items-start lg:items-stretch">
-          <div className="lg:col-span-7 space-y-4">
-            {coreSpecsCard}
-            {billOfMaterialsCard}
-          </div>
-          <div className="lg:col-span-5 space-y-4 lg:space-y-0 lg:flex lg:flex-col lg:gap-4 lg:min-h-0">
-            {patternCadCard}
-            {activityLogCard}
-          </div>
-        </div>
-      )}
+      </div>
 
       <AddColourModal
         parent={style}
@@ -1410,20 +1418,19 @@ function ActivityTimelineCard({
   };
 
   return (
-    <section className={cn(cardClasses, 'lg:flex-1 lg:min-h-0')}>
+    <section className={cardClasses}>
       <CardHeader
         title={t('admin.styles.workspace.activity', {
           defaultValue: 'Activity log',
         })}
       />
-      {/* On desktop the log fills the column's remaining height and scrolls
-          inside it. The list is positioned absolute so its length doesn't
-          drive the column height — the left column (Core specs + Bill of
-          materials) does, keeping the two columns level. Mobile falls back
-          to a capped 280px scroll. A thin, always-visible scrollbar signals
-          there's more to scroll (vs. macOS overlay bars that hide). */}
-      <div className="relative lg:flex-1 lg:min-h-0">
-        <div className="overflow-y-auto p-5 max-h-[280px] lg:absolute lg:inset-0 lg:max-h-none [scrollbar-width:thin] [scrollbar-color:var(--color-muted-foreground-2)_transparent] [&::-webkit-scrollbar]:w-2 [&::-webkit-scrollbar-track]:bg-transparent [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-[var(--color-muted-foreground-2)]">
+      {/* The log sits at the bottom of the right-hand stack (Core specs →
+          BoM → Pattern/CAD → Activity log) and scrolls inside a capped
+          height so a long history never pushes the page. A thin,
+          always-visible scrollbar signals there's more to scroll (vs.
+          macOS overlay bars that hide). */}
+      <div className="relative">
+        <div className="overflow-y-auto p-5 max-h-[480px] [scrollbar-width:thin] [scrollbar-color:var(--color-muted-foreground-2)_transparent] [&::-webkit-scrollbar]:w-2 [&::-webkit-scrollbar-track]:bg-transparent [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-[var(--color-muted-foreground-2)]">
           <ol className="relative ml-1.5 border-l border-[var(--color-border)] space-y-5">
             {logs.slice(0, 20).map((log, i) => {
               const { chips, note } = summarize(log);
