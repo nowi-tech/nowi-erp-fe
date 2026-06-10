@@ -16,9 +16,16 @@ import type {
 export type DashboardStyleTab =
   | 'all'
   | 'sampling'
+  | 'cataloguing_done'
   | 'in_production'
   | 'live'
   | 'needs_attention';
+
+/** Inclusive activity window (YYYY-MM-DD), by style updatedAt. */
+export interface DashboardDateRange {
+  from?: string;
+  to?: string;
+}
 
 /** One row of the per-style Home feed. PD styles have no lots, so progress
  * is the coarse lifecycle + manual sampling/production status — never X/Y. */
@@ -62,6 +69,8 @@ export interface DashboardStylesParams {
   search?: string;
   skip?: number;
   take?: number;
+  from?: string;
+  to?: string;
 }
 
 async function getOne<T>(path: string, params?: Record<string, unknown>): Promise<T> {
@@ -97,8 +106,13 @@ export async function getDashboardStyles(
   return res.data;
 }
 
-/** Role-aware counts for the 4 Home summary cards. */
-export async function getDashboardCards(): Promise<DashboardCards> {
-  const res = await apiClient.get<DashboardCards>('/api/dashboard/cards');
+/** Role-aware counts for the 4 Home summary cards, scoped to an optional
+ *  activity window (by style updatedAt) so the date control narrows them. */
+export async function getDashboardCards(
+  range: DashboardDateRange = {},
+): Promise<DashboardCards> {
+  const res = await apiClient.get<DashboardCards>('/api/dashboard/cards', {
+    params: range,
+  });
   return res.data;
 }

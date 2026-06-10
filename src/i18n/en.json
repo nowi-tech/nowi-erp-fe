@@ -1217,6 +1217,7 @@
       "tabs": {
         "all": "All",
         "sampling": "Sampling",
+        "cataloguing_done": "Cataloguing done",
         "in_production": "In production",
         "live": "Live",
         "needs_attention": "Needs attention"

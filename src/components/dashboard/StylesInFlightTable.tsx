@@ -43,6 +43,9 @@ import { formatStyleRef } from '@/lib/styleRef';
 interface Props {
   /** Seed the starting tab — Home passes it from a `?tab=` query param. */
   initialTab?: DashboardStyleTab;
+  /** Activity window (YYYY-MM-DD) from the shared dashboard date control. */
+  from?: string;
+  to?: string;
   /**
    * Called after a successful inline approve/park (in addition to the
    * table's own refetch) so the Home can refresh its summary cards.
@@ -50,10 +53,13 @@ interface Props {
   onActionDone?: () => void;
 }
 
+// `in_production` is intentionally not a visible tab anymore (the PD tab was
+// removed); the In-production summary card still deep-links to it and the BE
+// still supports the filter.
 const TABS: DashboardStyleTab[] = [
   'all',
   'sampling',
-  'in_production',
+  'cataloguing_done',
   'live',
   'needs_attention',
 ];
@@ -82,6 +88,8 @@ const PARK_WRITE_ROLES = PD_WRITE_ROLES;
 
 export default function StylesInFlightTable({
   initialTab = 'all',
+  from,
+  to,
   onActionDone,
 }: Props) {
   const { t } = useTranslation();
@@ -117,6 +125,8 @@ export default function StylesInFlightTable({
       const res = await getDashboardStyles({
         tab,
         search: debouncedSearch.trim() || undefined,
+        from,
+        to,
         take: 100,
       });
       setRows(res.rows);
@@ -126,7 +136,7 @@ export default function StylesInFlightTable({
     } finally {
       setLoading(false);
     }
-  }, [tab, debouncedSearch]);
+  }, [tab, debouncedSearch, from, to]);
 
   useEffect(() => {
     void load();
