@@ -106,7 +106,7 @@ function OtpInput({
   }
 
   return (
-    <div className="flex justify-between gap-2" onPaste={handlePaste}>
+    <div className="flex justify-between gap-2">
       {digits.map((d, i) => (
         <input
           key={i}
@@ -121,6 +121,10 @@ function OtpInput({
           disabled={disabled}
           onChange={(e) => handleChange(i, e.target.value)}
           onKeyDown={(e) => handleKey(i, e)}
+          // Paste handled on the input itself (not the wrapping div) so a
+          // multi-digit clipboard string fills every box — the maxLength={1}
+          // box would otherwise swallow only the first digit on paste.
+          onPaste={handlePaste}
           onFocus={(e) => e.currentTarget.select()}
           aria-label={`OTP digit ${i + 1}`}
           className="h-14 w-12 rounded-[var(--radius-md)] border border-[var(--color-input)] bg-[var(--color-background)] text-center text-2xl font-semibold tabular-nums tracking-tight text-[var(--color-foreground)] outline-none transition focus:border-[var(--color-primary)] focus:ring-2 focus:ring-[var(--color-primary)]/30 disabled:opacity-50"
@@ -178,6 +182,13 @@ async function handleSendOtp(e: FormEvent) {
     } catch (err) {
       const status = getApiStatus(err);
       if (status === 429) setError(t('auth.errors.rateLimit'));
+      else if (status === 403)
+        setError(
+          t('auth.errors.notRegistered', {
+            defaultValue:
+              'This mobile number is not registered. Contact your admin.',
+          }),
+        );
       else if (status === 400) setError(t('auth.errors.invalidMobile'));
       else setError(t('auth.errors.generic'));
     } finally {
@@ -195,6 +206,13 @@ async function handleSendOtp(e: FormEvent) {
     } catch (err) {
       const status = getApiStatus(err);
       if (status === 429) setError(t('auth.errors.rateLimit'));
+      else if (status === 403)
+        setError(
+          t('auth.errors.notRegistered', {
+            defaultValue:
+              'This mobile number is not registered. Contact your admin.',
+          }),
+        );
       else setError(t('auth.errors.generic'));
     } finally {
       setSubmitting(false);

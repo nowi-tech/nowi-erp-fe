@@ -23,6 +23,7 @@ import {
   ChevronDown,
 } from 'lucide-react';
 import { useAuth } from '@/context/auth';
+import { useLogoutConfirm } from '@/components/auth/useLogoutConfirm';
 import { useToast } from '@/components/ui/toast';
 import LanguageToggle from '@/components/LanguageToggle';
 import Logo from '@/components/Logo';
@@ -422,7 +423,8 @@ function PageContext() {
  */
 function AccountMenu({ compact = false }: { compact?: boolean }) {
   const { t } = useTranslation();
-  const { user, logout } = useAuth();
+  const { user } = useAuth();
+  const { requestLogout, dialog: logoutDialog } = useLogoutConfirm();
   const [open, setOpen] = useState(false);
   const rootRef = useRef<HTMLDivElement>(null);
 
@@ -515,7 +517,7 @@ function AccountMenu({ compact = false }: { compact?: boolean }) {
             role="menuitem"
             onClick={() => {
               setOpen(false);
-              void logout();
+              requestLogout();
             }}
             className="flex w-full items-center gap-2 px-3 py-2 text-sm text-[var(--color-foreground-2)] hover:bg-[var(--color-nav-hover-bg)] hover:text-[var(--color-foreground)] transition-colors"
           >
@@ -524,6 +526,7 @@ function AccountMenu({ compact = false }: { compact?: boolean }) {
           </button>
         </div>
       )}
+      {logoutDialog}
     </div>
   );
 }
