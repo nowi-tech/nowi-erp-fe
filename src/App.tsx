@@ -11,6 +11,7 @@ import { hideSplash } from './native/capacitor-init';
 import { markChunkLoadSucceeded } from './lib/chunk-reload';
 
 import Login from './pages/Login';
+import SsoSkucast from './pages/SsoSkucast';
 import Dashboard from './pages/Dashboard';
 import { useAuth } from './context/auth';
 import { hasAnyRole, PD_WRITE_ROLES } from './lib/userRoles';
@@ -134,6 +135,13 @@ function App() {
           <ErrorBoundary>
           <Routes>
             <Route path="/login" element={<Login />} />
+
+            {/* ERP → SkuCast SSO bridge. Standalone (outside ProtectedRoute)
+                like /login — it self-guards, redirecting an unauthenticated
+                visitor to /login?next=/sso/skucast and then minting + handing
+                off to SkuCast once signed in. One-directional: SkuCast trusts
+                the ERP, never the reverse. */}
+            <Route path="/sso/skucast" element={<SsoSkucast />} />
 
             {/* Unified office Home — the single role-aware landing surface.
                 Rendered inside the AdminShell chrome (sidebar + header).
