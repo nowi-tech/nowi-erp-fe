@@ -12,6 +12,12 @@
     "back": "वापस",
     "submit": "सबमिट करें",
     "logout": "Logout",
+    "logoutConfirm": {
+      "title": "Logout करें?",
+      "message": "क्या आप वाकई logout करना चाहते हैं?",
+      "confirm": "हाँ, logout करें",
+      "cancel": "नहीं, home पर जाएँ"
+    },
     "yes": "हाँ",
     "no": "नहीं",
     "error": "कुछ गड़बड़ हो गई",
@@ -68,6 +74,7 @@
       "invalidMobile": "सही 10 अंकों का नंबर डालें",
       "rateLimit": "थोड़ी देर बाद try करें",
       "wrongOtp": "गलत OTP",
+      "notRegistered": "यह नंबर रजिस्टर्ड नहीं है। Admin से संपर्क करें।",
       "generic": "Login नहीं हो पाया"
     }
   },

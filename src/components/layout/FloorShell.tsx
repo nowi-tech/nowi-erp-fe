@@ -3,6 +3,7 @@ import { useTranslation } from 'react-i18next';
 import { Link, NavLink, useNavigate, useLocation } from 'react-router-dom';
 import { Home, LogOut } from 'lucide-react';
 import { useAuth } from '@/context/auth';
+import { useLogoutConfirm } from '@/components/auth/useLogoutConfirm';
 import LanguageToggle from '@/components/LanguageToggle';
 import Logo from '@/components/Logo';
 import { RefreshButton } from '@/components/RefreshButton';
@@ -16,7 +17,8 @@ interface FloorShellProps {
 
 export default function FloorShell({ children }: FloorShellProps) {
   const { t } = useTranslation();
-  const { user, logout } = useAuth();
+  const { user } = useAuth();
+  const { requestLogout, dialog: logoutDialog } = useLogoutConfirm();
   const navigate = useNavigate();
   const location = useLocation();
 
@@ -91,7 +93,7 @@ export default function FloorShell({ children }: FloorShellProps) {
             <LanguageToggle />
             <button
               type="button"
-              onClick={() => void logout()}
+              onClick={requestLogout}
               className="flex items-center gap-1.5 px-2 py-1 rounded-[var(--radius-sm)] hover:bg-[var(--color-muted)] text-sm text-[var(--color-muted-foreground)]"
               aria-label={t('common.logout')}
               title={t('common.logout')}
@@ -122,10 +124,11 @@ export default function FloorShell({ children }: FloorShellProps) {
           <TabButton
             icon={<LogOut size={22} />}
             label={t('common.logout')}
-            onClick={() => void logout()}
+            onClick={requestLogout}
           />
         </div>
       </nav>
+      {logoutDialog}
     </div>
   );
 }

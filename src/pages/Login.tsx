@@ -178,6 +178,13 @@ async function handleSendOtp(e: FormEvent) {
     } catch (err) {
       const status = getApiStatus(err);
       if (status === 429) setError(t('auth.errors.rateLimit'));
+      else if (status === 403)
+        setError(
+          t('auth.errors.notRegistered', {
+            defaultValue:
+              'This mobile number is not registered. Contact your admin.',
+          }),
+        );
       else if (status === 400) setError(t('auth.errors.invalidMobile'));
       else setError(t('auth.errors.generic'));
     } finally {
@@ -195,6 +202,13 @@ async function handleSendOtp(e: FormEvent) {
     } catch (err) {
       const status = getApiStatus(err);
       if (status === 429) setError(t('auth.errors.rateLimit'));
+      else if (status === 403)
+        setError(
+          t('auth.errors.notRegistered', {
+            defaultValue:
+              'This mobile number is not registered. Contact your admin.',
+          }),
+        );
       else setError(t('auth.errors.generic'));
     } finally {
       setSubmitting(false);

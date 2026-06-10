@@ -12,6 +12,12 @@
     "back": "Back",
     "submit": "Submit",
     "logout": "Logout",
+    "logoutConfirm": {
+      "title": "Log out?",
+      "message": "Are you sure you want to log out?",
+      "confirm": "Yes, log out",
+      "cancel": "No, go to home"
+    },
     "yes": "Yes",
     "no": "No",
     "error": "Something went wrong",
@@ -70,6 +76,7 @@
       "invalidMobile": "Enter a valid 10-digit mobile number.",
       "rateLimit": "Too many requests. Please wait before retrying.",
       "wrongOtp": "Wrong OTP. Please try again.",
+      "notRegistered": "This mobile number is not registered. Contact your admin.",
       "generic": "Could not sign in. Please try again."
     }
   },
