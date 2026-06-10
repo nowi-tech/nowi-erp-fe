@@ -88,13 +88,21 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const logout = useCallback(async () => {
-    // Drop the device token while the session is still valid — doing it
-    // after apiLogout() would 401 and trip the axios redirect.
-    await unregisterPush();
-    await apiLogout();
-    localStorage.removeItem(TOKEN_KEY);
-    localStorage.removeItem(USER_KEY);
-    setUser(null);
+    // Always clear local session, even if the server-side calls fail
+    // (network down / session already gone). Otherwise a rejected
+    // apiLogout() would leave the user "logged in" client-side with no
+    // feedback. Drop the device token while the session is still valid —
+    // doing it after apiLogout() would 401 and trip the axios redirect.
+    try {
+      await unregisterPush();
+      await apiLogout();
+    } catch {
+      // best-effort server revoke; local logout below is what matters
+    } finally {
+      localStorage.removeItem(TOKEN_KEY);
+      localStorage.removeItem(USER_KEY);
+      setUser(null);
+    }
   }, []);
 
   const updateUser = useCallback((patch: Partial<User>) => {
