@@ -355,13 +355,6 @@
         "readyForQc": "{{n}} ready for QC",
         "readyToDispatch": "{{n}} ready to dispatch"
       },
-      "kpi": {
-        "developed": "Styles developed",
-        "approved": "Approved",
-        "inProduction": "In production",
-        "live": "Live",
-        "virtualLive": "Virtual-live"
-      },
       "widgets": {
         "samplingFunnel": "▸ Sampling funnel",
         "byCollection": "By collection",
@@ -369,10 +362,12 @@
         "note": "Full dashboard archived — these widgets live here now"
       },
       "tabs": {
-        "inbox": "My inbox",
+        "inbox": "Draft",
         "in_sampling": "In sampling",
         "parked": "Parked",
         "in_pd": "In PD",
+        "cataloguing": "Cataloguing",
+        "live": "Live",
         "all": "All"
       },
       "filters": {
@@ -617,7 +612,7 @@
         "revived": "Un-parked",
         "sample_approved": "Sample approved",
         "cataloguing_started": "Cataloguing started",
-        "cataloguing_done": "Cataloguing done",
+        "cataloguing": "Cataloguing",
         "went_live": "Went live",
         "channel_state_changed": "Channel updated",
         "inspection_added": "Inspection added",
@@ -1195,7 +1190,7 @@
       "pendingApprovals": "pending approvals",
       "inYourQueue": "in your queue",
       "inSampling": "in sampling",
-      "inProduction": "in production",
+      "inCataloguing": "in cataloguing",
       "live": "live",
       "error": "Couldn't load the summary."
     },
@@ -1203,7 +1198,7 @@
       "pendingApprovals": "Pending approvals",
       "mySamplingWork": "My sampling work",
       "inSampling": "In sampling",
-      "inProduction": "In production",
+      "inCataloguing": "In cataloguing",
       "live": "Live",
       "view": "View"
     },
@@ -1216,8 +1211,9 @@
       "colourCount_other": "{{count}} colours",
       "tabs": {
         "all": "All",
+        "draft": "Draft",
         "sampling": "Sampling",
-        "cataloguing_done": "Cataloguing done",
+        "cataloguing": "Cataloguing",
         "in_production": "In production",
         "live": "Live",
         "needs_attention": "Needs attention"
