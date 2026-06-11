@@ -44,8 +44,6 @@ import {
   setMarketplaceListing,
   setEasyecomDone,
   type SamplingStatus,
-  type SampleApprovalStatus,
-  type SampleApproveStyleBody,
 } from '@/api/styles';
 import type {
   ChannelName,
@@ -61,6 +59,7 @@ import { userAllRoles, PD_WRITE_ROLES, APPROVER_ROLES } from '@/lib/userRoles';
 import { cn } from '@/lib/utils';
 import { formatStyleRef } from '@/lib/styleRef';
 import GoLiveDialog from '@/components/styles/GoLiveDialog';
+import SampleApproveDialog from '@/components/styles/SampleApproveDialog';
 
 // Add-Colour is only meaningful once the family has an approved sample to
 // inherit (a colour sibling skips sampling). `StyleLifecycle` is
@@ -173,6 +172,7 @@ export default function StyleWorkspace() {
   // design out of the pipeline, then open ParkDialog to capture the
   // reason. Drafts skip this and open ParkDialog directly.
   const [withdrawConfirmOpen, setWithdrawConfirmOpen] = useState(false);
+  const [reviveConfirmOpen, setReviveConfirmOpen] = useState(false);
   // Colour family (siblings sharing this style's familyCode). Sourced from
   // the BE colour-group resolver, NOT parent.colourVariants — so opening
   // Add-Colour from a SIBLING (not the root) still sees the whole family.
@@ -263,7 +263,12 @@ export default function StyleWorkspace() {
   // no Approval #2, no inspections. Sampling-only UI is hidden for it.
   const isChinaImport = style.source === 'china_import';
   const canApproveIntake = style.lifecycle === 'draft';
-  const canSampleApprove = !isChinaImport && style.lifecycle === 'in_sampling';
+  // Sample sign-off (Approval #2) is approver-only — the BE endpoint is
+  // APPROVE-gated, so don't show the button to writers/operators who'd 403.
+  const canSampleApprove =
+    !isChinaImport &&
+    style.lifecycle === 'in_sampling' &&
+    roles.some((r) => APPROVER_ROLES.includes(r));
 
   // Add-Colour: only once the family has an approved sample to inherit
   // (POST_SAMPLING), never for china_import, and only for colour-WRITE
@@ -611,34 +616,14 @@ export default function StyleWorkspace() {
               variant="outline"
               size="sm"
               disabled={busy !== null}
-              onClick={() =>
-                void doAction('revive', () => reviveStyle(style.id))
-              }
+              onClick={() => setReviveConfirmOpen(true)}
             >
               {t('admin.styles.workspace.revive')}
             </Button>
           )}
-          {/* Send back for corrections — sampling action bar only. Patches
-              samplingStatus = corrections_needed (same wiring the stepper
-              previously carried). */}
-          {canSampleApprove && (
-            <Button
-              variant="outline"
-              size="sm"
-              disabled={busy !== null}
-              onClick={() =>
-                void doAction('send-back', () =>
-                  patchStyle(style.id, {
-                    samplingStatus: 'corrections_needed',
-                  }),
-                )
-              }
-            >
-              {t('admin.styles.workspace.sendBack', {
-                defaultValue: 'Send back for corrections',
-              })}
-            </Button>
-          )}
+          {/* Send-back for corrections is no longer a separate button — it's
+              the "corrections" verdict inside the Approve-sample dialog, so
+              there's one sign-off path (the popup). */}
           {/* Start production — sample_approved+ only. Re-homed onto the
               Edit surface (no new BE transition introduced here). */}
           {canStartProduction && (
@@ -907,6 +892,26 @@ export default function StyleWorkspace() {
         onConfirm={() => {
           setWithdrawConfirmOpen(false);
           setParkOpen(true);
+        }}
+      />
+
+      {/* Revive confirmation — reviving resets sampling state + re-enters
+          Approval #1, so confirm before acting. */}
+      <ConfirmDialog
+        open={reviveConfirmOpen}
+        title={t('admin.styles.revive.title', { defaultValue: 'Revive style?' })}
+        message={t('admin.styles.revive.body', {
+          defaultValue:
+            'This resets sampling state and sends the style back to Approval #1.',
+        })}
+        confirmLabel={t('admin.styles.workspace.revive', {
+          defaultValue: 'Revive',
+        })}
+        cancelLabel={t('common.cancel', { defaultValue: 'Cancel' })}
+        onCancel={() => setReviveConfirmOpen(false)}
+        onConfirm={() => {
+          setReviveConfirmOpen(false);
+          void doAction('revive', () => reviveStyle(style.id));
         }}
       />
 
@@ -1203,112 +1208,6 @@ function ChannelsCard({
         />
       </Dialog>
     </section>
-  );
-}
-
-const SAMPLE_APPROVAL_OPTIONS: SampleApprovalStatus[] = [
-  'approved_for_production',
-  'under_review_corrections',
-  'pattern_correction_approved',
-];
-
-function SampleApproveDialog({
-  open,
-  busy,
-  onClose,
-  onConfirm,
-}: {
-  open: boolean;
-  busy: boolean;
-  onClose: () => void;
-  onConfirm: (body: SampleApproveStyleBody) => void;
-}) {
-  const { t } = useTranslation();
-  const [verdict, setVerdict] = useState<SampleApprovalStatus>(
-    'approved_for_production',
-  );
-  const [note, setNote] = useState('');
-
-  useEffect(() => {
-    if (open) {
-      setVerdict('approved_for_production');
-      setNote('');
-    }
-  }, [open]);
-
-  return (
-    <Dialog
-      open={open}
-      onClose={onClose}
-      title={t('admin.styles.approval2.dialogTitle', {
-        defaultValue: 'Approve sample',
-      })}
-      footer={
-        <>
-          <Button variant="outline" size="sm" disabled={busy} onClick={onClose}>
-            {t('admin.styles.approval2.cancel', { defaultValue: 'Cancel' })}
-          </Button>
-          <Button
-            size="sm"
-            disabled={busy}
-            onClick={() =>
-              onConfirm({
-                sampleApproval: verdict,
-                note: note.trim() || undefined,
-              })
-            }
-          >
-            <CheckCircle2 size={14} />
-            <span className="ml-1">
-              {t('admin.styles.approval2.confirm', {
-                defaultValue: 'Sign off',
-              })}
-            </span>
-          </Button>
-        </>
-      }
-    >
-      <p className="text-sm text-[var(--color-muted-foreground)] mb-4">
-        {t('admin.styles.approval2.dialogIntro', {
-          defaultValue:
-            'Record the sample verdict. Only "Approved for production" advances the lifecycle — other verdicts log the state and keep the style in sampling for rework.',
-        })}
-      </p>
-      <div className="space-y-3">
-        <div>
-          <label className="block text-xs text-[var(--color-muted-foreground)] mb-1">
-            {t('admin.styles.approval2.verdict', {
-              defaultValue: 'Sample verdict',
-            })}
-          </label>
-          <select
-            value={verdict}
-            onChange={(e) => setVerdict(e.target.value as SampleApprovalStatus)}
-            className="flex h-10 w-full rounded-[var(--radius-sm)] border border-[var(--color-border)] bg-white px-2.5 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-ring)]"
-          >
-            {SAMPLE_APPROVAL_OPTIONS.map((v) => (
-              <option key={v} value={v}>
-                {t(`admin.styles.sampleApproval.${v}` as const, {
-                  defaultValue: v,
-                })}
-              </option>
-            ))}
-          </select>
-        </div>
-        <div>
-          <label className="block text-xs text-[var(--color-muted-foreground)] mb-1">
-            {t('admin.styles.approval2.note', { defaultValue: 'Note' })}
-          </label>
-          <Textarea
-            value={note}
-            onChange={(e) => setNote(e.target.value)}
-            placeholder={t('admin.styles.approval2.notePlaceholder', {
-              defaultValue: 'Optional context — defects, corrections, …',
-            })}
-          />
-        </div>
-      </div>
-    </Dialog>
   );
 }
 
