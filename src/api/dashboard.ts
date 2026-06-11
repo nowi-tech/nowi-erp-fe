@@ -15,8 +15,9 @@ import type {
 /** Tab buckets for the Home "Styles in flight" table. */
 export type DashboardStyleTab =
   | 'all'
+  | 'draft'
   | 'sampling'
-  | 'cataloguing_done'
+  | 'cataloguing'
   | 'in_production'
   | 'live'
   | 'needs_attention';
@@ -46,6 +47,18 @@ export interface DashboardStyleRow {
   productionStatus: string | null;
   factory: { id: number; name: string } | null;
   colourVariantCount: number;
+  /** EasyEcom catalog checkpoint (Done/Pending pill on the Cataloguing tab).
+   *  `live` is derived (any channel listing live). */
+  easyecomDone: boolean;
+  live: boolean;
+  /** Live marketplace listings (state=live) — channel + public URL, for the
+   *  "View now" links. */
+  liveListings: { channel: string; url: string | null }[];
+  /** Milestone dates for the context-aware date column (per tab). */
+  createdAt: string;
+  approvedAt: string | null;
+  sampleApprovedAt: string | null;
+  wentLiveAt: string | null;
   updatedAt: string;
 }
 
@@ -60,7 +73,7 @@ export interface DashboardCards {
   pendingApprovals: number;
   mySamplingWork: number;
   inSampling: number;
-  inProduction: number;
+  inCataloguing: number;
   live: number;
 }
 
