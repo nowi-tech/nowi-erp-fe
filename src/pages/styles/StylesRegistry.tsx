@@ -2,7 +2,6 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { Plus, Search } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
-import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Select } from '@/components/ui/select';
 import { useToast } from '@/components/ui/toast';
@@ -37,7 +36,17 @@ import {
 import { listReviewers } from '@/api/users';
 import type { Reviewer, Style, UserRole } from '@/api/types';
 
-const TABS: StyleTab[] = ['inbox', 'in_sampling', 'parked', 'in_pd', 'all'];
+const TABS: StyleTab[] = [
+  'inbox',
+  'in_sampling',
+  'parked',
+  'in_pd',
+  // Go-to-market buckets — mirror the dashboard so the registry surfaces the
+  // full lifecycle (everything in cataloguing + live), not just up to production.
+  'cataloguing',
+  'live',
+  'all',
+];
 
 // Row-action role gates — mirror the legacy StylesTable `RowActions`
 // (and the BE guards) so the queue never shows a button that 403s.
@@ -359,10 +368,15 @@ export default function StylesRegistry() {
             {t('admin.styles.subtitle')}
           </p>
         </div>
-        <Button onClick={openCreateDesign}>
+        {/* Text link rather than a filled button — a quieter affordance. */}
+        <button
+          type="button"
+          onClick={openCreateDesign}
+          className="inline-flex items-center gap-1 text-sm font-medium text-[var(--color-primary)] hover:underline"
+        >
           <Plus size={16} />
-          <span className="ml-1">{t('admin.styles.newDesign')}</span>
-        </Button>
+          {t('admin.styles.newDesign')}
+        </button>
       </div>
 
       {/* Tabs + filter bar + flat queue table */}

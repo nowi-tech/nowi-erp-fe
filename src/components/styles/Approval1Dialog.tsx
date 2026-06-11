@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { CheckCircle2 } from 'lucide-react';
+import { CheckCircle2, Loader2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Dialog } from '@/components/ui/dialog';
 import { Textarea } from '@/components/ui/textarea';
@@ -84,8 +84,20 @@ export default function Approval1Dialog({
               })
             }
           >
-            <CheckCircle2 size={14} />
-            <span className="ml-1">{t('admin.styles.approval1.confirm')}</span>
+            {/* In-flight feedback: spinner + "Approving…" so the click is
+                visibly acknowledged instead of looking frozen. */}
+            {busy ? (
+              <Loader2 size={14} className="animate-spin" />
+            ) : (
+              <CheckCircle2 size={14} />
+            )}
+            <span className="ml-1">
+              {busy
+                ? t('admin.styles.approval1.approving', {
+                    defaultValue: 'Approving…',
+                  })
+                : t('admin.styles.approval1.confirm')}
+            </span>
           </Button>
         </>
       }
