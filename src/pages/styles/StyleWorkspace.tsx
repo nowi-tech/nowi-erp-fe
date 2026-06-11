@@ -52,7 +52,6 @@ import type {
   StyleAuditLog,
   StyleChannelListing,
   StyleLifecycle,
-  UserRole,
 } from '@/api/types';
 import { useAuth } from '@/context/auth';
 import { userAllRoles, PD_WRITE_ROLES, APPROVER_ROLES } from '@/lib/userRoles';
@@ -79,10 +78,6 @@ const POST_SAMPLING = new Set<StyleLifecycle>([
 // Roles allowed to WRITE a new colour (spawn a sibling submission) —
 // mirrors the BE variants write set via the shared PD_WRITE_ROLES.
 const COLOUR_WRITE = PD_WRITE_ROLES;
-
-// Roles allowed to "Withdraw" (re-park) a style that has already passed
-// Approval #1. Drafts can be parked by anyone; post-approval is gated.
-const POST_APPROVAL_PARK: readonly UserRole[] = ['admin'];
 
 // Gender may arrive as a code (W/M/U) or long form (women/men/unisex)
 // depending on the row — render the human label either way so the header /
@@ -171,7 +166,6 @@ export default function StyleWorkspace() {
   // Two-step Withdraw: confirm pulling a committed (post-Approval-#1)
   // design out of the pipeline, then open ParkDialog to capture the
   // reason. Drafts skip this and open ParkDialog directly.
-  const [withdrawConfirmOpen, setWithdrawConfirmOpen] = useState(false);
   const [reviveConfirmOpen, setReviveConfirmOpen] = useState(false);
   // Colour family (siblings sharing this style's familyCode). Sourced from
   // the BE colour-group resolver, NOT parent.colourVariants — so opening
@@ -285,25 +279,18 @@ export default function StyleWorkspace() {
   // a read-only viewer never sees a control that 403s on save.
   const canWrite = roles.some((r) => PD_WRITE_ROLES.includes(r));
 
-  // Park: inline button on drafts (anyone). Post-approval it becomes a
-  // gated "Withdraw" — only admin can pull a committed design back out of
-  // the pipeline.
-  const isDraft = style.lifecycle === 'draft';
+  // Park is only allowed DURING sampling (draft / in_sampling) — once a sample
+  // is signed off the style is committed to the go-to-market path and can't be
+  // parked (which also means a live style can never be parked, stranding its
+  // channel listings). No post-approval "Withdraw".
   const canPark =
-    style.lifecycle !== 'parked' &&
-    style.lifecycle !== 'archived' &&
-    (isDraft || roles.some((r) => POST_APPROVAL_PARK.includes(r)));
-  const isWithdraw = canPark && !isDraft;
+    (style.lifecycle === 'draft' || style.lifecycle === 'in_sampling') &&
+    canWrite;
   const canRevive = style.lifecycle === 'parked';
   const sourceLabel = t(`admin.styles.source.${style.source}`);
 
   // "Approve sample" is the primary action while a style is in sampling.
   const canSampleApproveAction = canSampleApprove;
-  // "Start production" advances an approved sample into PD. Until the BE
-  // exposes that transition we re-home it onto the existing Edit surface so
-  // the button is never a dead end (no new endpoint introduced here).
-  const canStartProduction =
-    canWrite && !isChinaImport && style.lifecycle === 'sample_approved';
 
   // ── Go-to-market lifecycle actions ──
   // These advance the lifecycle and are APPROVE-gated on the BE — gate the
@@ -598,17 +585,11 @@ export default function StyleWorkspace() {
               variant="outline"
               size="sm"
               disabled={busy !== null}
-              onClick={() =>
-                isWithdraw ? setWithdrawConfirmOpen(true) : setParkOpen(true)
-              }
+              onClick={() => setParkOpen(true)}
             >
-              {isWithdraw
-                ? t('admin.styles.workspace.withdraw', {
-                    defaultValue: 'Withdraw',
-                  })
-                : t('admin.styles.workspace.parkAction', {
-                    defaultValue: 'Park',
-                  })}
+              {t('admin.styles.workspace.parkAction', {
+                defaultValue: 'Park',
+              })}
             </Button>
           )}
           {canRevive && (
@@ -624,22 +605,6 @@ export default function StyleWorkspace() {
           {/* Send-back for corrections is no longer a separate button — it's
               the "corrections" verdict inside the Approve-sample dialog, so
               there's one sign-off path (the popup). */}
-          {/* Start production — sample_approved+ only. Re-homed onto the
-              Edit surface (no new BE transition introduced here). */}
-          {canStartProduction && (
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => {
-                void ensureMasterData();
-                setEditOpen(true);
-              }}
-            >
-              {t('admin.styles.workspace.startProduction', {
-                defaultValue: 'Start production',
-              })}
-            </Button>
-          )}
           {/* Start cataloguing — sample_approved → cataloguing (pending). */}
           {canStartCataloguing && (
             <Button
@@ -873,28 +838,6 @@ export default function StyleWorkspace() {
         }}
       />
 
-      {/* Withdraw confirmation — only for post-approval styles. */}
-      <ConfirmDialog
-        open={withdrawConfirmOpen}
-        destructive
-        title={t('admin.styles.workspace.withdrawConfirmTitle', {
-          defaultValue: 'Withdraw this style?',
-        })}
-        message={t('admin.styles.workspace.withdrawConfirmBody', {
-          defaultValue:
-            'This style has already passed Approval #1. Withdrawing pulls a committed design out of the pipeline and parks it. You can revive it later. Continue?',
-        })}
-        confirmLabel={t('admin.styles.workspace.withdraw', {
-          defaultValue: 'Withdraw',
-        })}
-        cancelLabel={t('common.cancel', { defaultValue: 'Cancel' })}
-        onCancel={() => setWithdrawConfirmOpen(false)}
-        onConfirm={() => {
-          setWithdrawConfirmOpen(false);
-          setParkOpen(true);
-        }}
-      />
-
       {/* Revive confirmation — reviving resets sampling state + re-enters
           Approval #1, so confirm before acting. */}
       <ConfirmDialog
@@ -919,7 +862,7 @@ export default function StyleWorkspace() {
       <ParkDialog
         open={parkOpen}
         busy={busy !== null}
-        approved={isWithdraw}
+        approved={false}
         styleLabel={
           style.styleId ??
           (style.draftNo != null ? `D-${style.draftNo}` : style.workingName) ??

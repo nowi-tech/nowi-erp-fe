@@ -15,6 +15,7 @@ import {
   AgeCell,
   ApproveButton,
   GhostActionButton,
+  PrimaryActionButton,
   RowChevron,
   Thumbnail,
   type QueueColumn,
@@ -45,9 +46,10 @@ const TABS: StyleTab[] = [
   'inbox',
   'in_sampling',
   'parked',
-  'in_pd',
   // Go-to-market buckets — mirror the dashboard so the registry surfaces the
   // full lifecycle (everything in cataloguing + live), not just up to production.
+  // (`in_pd` dropped — production lifecycles aren't reachable yet, so that tab
+  // was always empty.)
   'cataloguing',
   'live',
   'all',
@@ -341,8 +343,11 @@ export default function StylesRegistry() {
         row.lifecycle === 'draft' && hasAnyRole(user, APPROVER_ROLES);
       const canRevive =
         row.lifecycle === 'parked' && hasAnyRole(user, WRITE_ROLES);
+      // Park only during sampling (draft / in_sampling) — no park once a
+      // sample is signed off (matches the dashboard + the BE guard).
       const canPark =
-        row.lifecycle === 'draft' && hasAnyRole(user, WRITE_ROLES);
+        (row.lifecycle === 'draft' || row.lifecycle === 'in_sampling') &&
+        hasAnyRole(user, WRITE_ROLES);
       // Approval #2 + start-cataloguing — approver-only lifecycle advances,
       // matching the dashboard + the BE guards.
       const canSampleApprove =
@@ -379,18 +384,18 @@ export default function StylesRegistry() {
             </GhostActionButton>
           )}
           {canStartCataloguing && (
-            <GhostActionButton onClick={() => onRowStartCataloguing(row)}>
+            <PrimaryActionButton onClick={() => onRowStartCataloguing(row)}>
               {t('admin.styles.table.rowActions.startCataloguing', {
                 defaultValue: 'Start cataloguing',
               })}
-            </GhostActionButton>
+            </PrimaryActionButton>
           )}
           {canSampleApprove && (
-            <GhostActionButton onClick={() => onRowSampleApprove(row)}>
+            <PrimaryActionButton onClick={() => onRowSampleApprove(row)}>
               {t('admin.styles.table.rowActions.approveSample', {
                 defaultValue: 'Approve sample',
               })}
-            </GhostActionButton>
+            </PrimaryActionButton>
           )}
           {canApprove && <ApproveButton onClick={() => onRowApprove(row)} />}
         </>
