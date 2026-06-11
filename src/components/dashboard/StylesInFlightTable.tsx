@@ -33,11 +33,15 @@ import {
   patchStyle,
   setEasyecomDone,
   goLive,
+  sampleApproveStyle,
+  startCataloguing,
   type SamplingStatus,
   type GoLiveChannel,
+  type SampleApproveStyleBody,
 } from '@/api/styles';
 import type { StyleChannelListing } from '@/api/types';
 import GoLiveDialog from '@/components/styles/GoLiveDialog';
+import SampleApproveDialog from '@/components/styles/SampleApproveDialog';
 import { useAuth } from '@/context/auth';
 import { hasAnyRole, PD_WRITE_ROLES, APPROVER_ROLES } from '@/lib/userRoles';
 import { useDebounced } from '@/lib/useDebounced';
@@ -86,17 +90,15 @@ const POST_APPROVAL_PARK_ROLES = ['admin'] as const;
 // the BE, shared via PD_WRITE_ROLES.
 const PARK_WRITE_ROLES = PD_WRITE_ROLES;
 
-// Sampling-status options for the inline Stage editor — the 5 live stages +
-// the Corrections off-ramp. Mirrors StylesRegistry.SAMPLING_STATUS_FILTER_OPTIONS;
-// the removed in_progress_stitching / handed_over statuses are intentionally
-// absent. Labels render via the `admin.styles.samplingSteps.*` i18n keys.
+// Sampling-status options for the inline Stage editor — the in-progress
+// WORKING steps only. The terminal outcomes (sign-off / corrections) are NOT
+// here: those go through the Approve-sample dialog (the single sign-off path),
+// not a silent dropdown set. Labels render via `admin.styles.samplingSteps.*`.
 const SAMPLING_STATUS_OPTIONS: SamplingStatus[] = [
   'in_progress_pattern_dev',
   'in_progress_fabric_sourcing',
   'in_progress_cutting',
   'ready_for_inspection',
-  'approved_for_production',
-  'corrections_needed',
 ];
 
 /**
@@ -173,6 +175,10 @@ export default function StylesInFlightTable({
   const [approvalBusy, setApprovalBusy] = useState(false);
   const [parkTarget, setParkTarget] = useState<DashboardStyleRow | null>(null);
   const [parkBusy, setParkBusy] = useState(false);
+  // Sample sign-off (Approval #2) — opens the shared verdict dialog.
+  const [sampleApproveTarget, setSampleApproveTarget] =
+    useState<DashboardStyleRow | null>(null);
+  const [sampleApproveBusy, setSampleApproveBusy] = useState(false);
 
   // Go-live — opens the SHARED multi-channel dialog (same one the workspace
   // uses), then calls the single `goLive` endpoint. The target is the whole
@@ -355,7 +361,8 @@ export default function StylesInFlightTable({
       .finally(() => setGoLiveBusy(false));
   };
 
-  // Inline sampling-status change — optimistic, persisted via PATCH /styles/:id.
+  // Inline sampling-status change (working steps only) — optimistic, persisted
+  // via PATCH /styles/:id. Quiet success toast on save; revert on error.
   const changeSamplingStatus = (
     row: DashboardStyleRow,
     next: SamplingStatus,
@@ -364,19 +371,91 @@ export default function StylesInFlightTable({
     setRows((prev) =>
       prev.map((r) => (r.id === row.id ? { ...r, samplingStatus: next } : r)),
     );
-    patchStyle(row.id, { samplingStatus: next }).catch(() => {
-      setRows((prev) =>
-        prev.map((r) =>
-          r.id === row.id ? { ...r, samplingStatus: prevStatus } : r,
-        ),
-      );
-      toast.show(
-        t('dashboard.table.toast.statusError', {
-          defaultValue: 'Could not update status.',
-        }),
-        'error',
-      );
-    });
+    patchStyle(row.id, { samplingStatus: next })
+      .then(() => {
+        toast.show(
+          t('dashboard.table.toast.statusSaved', {
+            defaultValue: 'Stage updated.',
+          }),
+          'success',
+        );
+      })
+      .catch(() => {
+        setRows((prev) =>
+          prev.map((r) =>
+            r.id === row.id ? { ...r, samplingStatus: prevStatus } : r,
+          ),
+        );
+        toast.show(
+          t('dashboard.table.toast.statusError', {
+            defaultValue: 'Could not update status.',
+          }),
+          'error',
+        );
+      });
+  };
+
+  // Sample sign-off (Approval #2) — approver-only, opens the shared verdict
+  // dialog (same as the workspace). Only in_sampling, non-china-import rows.
+  const canSampleApprove = (row: DashboardStyleRow) =>
+    row.lifecycle === 'in_sampling' &&
+    row.source !== 'china_import' &&
+    hasAnyRole(user, APPROVER_ROLES);
+
+  const confirmSampleApprove = (body: SampleApproveStyleBody) => {
+    if (!sampleApproveTarget) return;
+    const row = sampleApproveTarget;
+    setSampleApproveBusy(true);
+    sampleApproveStyle(row.id, body)
+      .then(() => {
+        setSampleApproveTarget(null);
+        toast.show(
+          t('dashboard.table.toast.sampleApproved', {
+            defaultValue: 'Sample verdict recorded.',
+          }),
+          'success',
+        );
+        afterAction();
+      })
+      .catch((e: unknown) => {
+        const m =
+          (e as { response?: { data?: { message?: string | string[] } } })
+            ?.response?.data?.message ??
+          t('dashboard.table.toast.sampleApproveError', {
+            defaultValue: 'Could not record the verdict.',
+          });
+        toast.show(Array.isArray(m) ? m.join(', ') : String(m), 'error');
+      })
+      .finally(() => setSampleApproveBusy(false));
+  };
+
+  // Start cataloguing — approver-only, sample_approved → cataloguing. Plain
+  // action (no dialog), mirroring the workspace button.
+  const canStartCataloguing = (row: DashboardStyleRow) =>
+    row.lifecycle === 'sample_approved' &&
+    row.source !== 'china_import' &&
+    hasAnyRole(user, APPROVER_ROLES);
+
+  const doStartCataloguing = (row: DashboardStyleRow) => {
+    startCataloguing(row.id)
+      .then(() => {
+        toast.show(
+          t('dashboard.table.toast.cataloguingStarted', {
+            defaultValue: 'Cataloguing started.',
+          }),
+          'success',
+        );
+        afterAction();
+      })
+      .catch((e: unknown) => {
+        const m =
+          (e as { response?: { data?: { message?: string | string[] } } })
+            ?.response?.data?.message ??
+          t('dashboard.table.toast.actionError', {
+            defaultValue: 'Could not complete the action.',
+          });
+        toast.show(Array.isArray(m) ? m.join(', ') : String(m), 'error');
+      });
   };
 
   // The Style column + Updated column are shared across every tab.
@@ -706,10 +785,13 @@ export default function StylesInFlightTable({
         renderActions={(row) => {
           const approve = canApprove(row);
           const park = canPark(row);
-          if (!approve && !park) return <RowChevron />;
-          // Show BOTH when both apply (a draft an approver can also park) —
-          // don't let Approve hide the Park action. Park then Approve to
-          // match the sampling queue's right-aligned cluster order.
+          const sampleApprove = canSampleApprove(row);
+          const startCat = canStartCataloguing(row);
+          if (!approve && !park && !sampleApprove && !startCat) {
+            return <RowChevron />;
+          }
+          // Show every applicable action (Park then the stage-advancing action
+          // then Approve#1) to match the sampling queue's right-aligned cluster.
           return (
             <>
               {park && (
@@ -718,6 +800,22 @@ export default function StylesInFlightTable({
                   onClick={() => setParkTarget(row)}
                 >
                   {t('dashboard.table.actions.park')}
+                </GhostActionButton>
+              )}
+              {startCat && (
+                <GhostActionButton onClick={() => doStartCataloguing(row)}>
+                  {t('dashboard.table.actions.startCataloguing', {
+                    defaultValue: 'Start cataloguing',
+                  })}
+                </GhostActionButton>
+              )}
+              {sampleApprove && (
+                <GhostActionButton
+                  onClick={() => setSampleApproveTarget(row)}
+                >
+                  {t('dashboard.table.actions.approveSample', {
+                    defaultValue: 'Approve sample',
+                  })}
                 </GhostActionButton>
               )}
               {approve && (
@@ -794,6 +892,17 @@ export default function StylesInFlightTable({
         }
         onClose={() => (goLiveBusy ? undefined : setGoLiveTarget(null))}
         onConfirm={confirmGoLive}
+      />
+
+      {/* Approve sample (Approval #2) — the SAME verdict dialog the workspace
+          uses. Records the verdict; only "approved" advances the lifecycle. */}
+      <SampleApproveDialog
+        open={sampleApproveTarget !== null}
+        busy={sampleApproveBusy}
+        onClose={() =>
+          sampleApproveBusy ? undefined : setSampleApproveTarget(null)
+        }
+        onConfirm={confirmSampleApprove}
       />
     </div>
   );
