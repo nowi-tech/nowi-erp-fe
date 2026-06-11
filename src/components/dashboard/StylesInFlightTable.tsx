@@ -3,10 +3,8 @@ import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { Check, ExternalLink, Search } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
-import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 import { Input } from '@/components/ui/input';
-import { Dialog } from '@/components/ui/dialog';
 import { useToast } from '@/components/ui/toast';
 import Approval1Dialog from '@/components/styles/Approval1Dialog';
 import ParkDialog from '@/components/styles/ParkDialog';
@@ -34,12 +32,14 @@ import {
   parkStyle,
   patchStyle,
   setEasyecomDone,
-  setMarketplaceListing,
+  goLive,
   type SamplingStatus,
+  type GoLiveChannel,
 } from '@/api/styles';
-import type { ChannelName } from '@/api/types';
+import type { StyleChannelListing } from '@/api/types';
+import GoLiveDialog from '@/components/styles/GoLiveDialog';
 import { useAuth } from '@/context/auth';
-import { hasAnyRole, PD_WRITE_ROLES } from '@/lib/userRoles';
+import { hasAnyRole, PD_WRITE_ROLES, APPROVER_ROLES } from '@/lib/userRoles';
 import { useDebounced } from '@/lib/useDebounced';
 import { formatStyleRef } from '@/lib/styleRef';
 
@@ -65,9 +65,9 @@ interface Props {
   onActionDone?: () => void;
 }
 
-// `needs_attention` and `in_production` are intentionally not visible chips;
-// their summary cards still deep-link to them and the BE still supports the
-// filter (see Home.VALID_TABS / dashboard.service).
+// `needs_attention` is intentionally not a visible chip; its summary card
+// still deep-links to it and the BE still supports the filter (see
+// Home.VALID_TABS / dashboard.service).
 const TABS: DashboardStyleTab[] = [
   'all',
   'draft',
@@ -81,18 +81,6 @@ const TABS: DashboardStyleTab[] = [
 // and in StyleWorkspace.POST_APPROVAL_PARK — admin only: re-parking a
 // committed design is an admin-gated action (the BE enforces the same).
 const POST_APPROVAL_PARK_ROLES = ['admin'] as const;
-
-// Roles allowed to Approve (Approval #1) — mirrors the BE APPROVER_ROLES
-// set in dashboard.service.ts. Home's allow-list is wide (viewers,
-// data managers, etc. all land here), so the inline Approve button must
-// be role-gated, not just lifecycle-gated, or non-approvers 403.
-const APPROVER_ROLES = [
-  'admin',
-  'sampling_lead',
-  'pattern_master_w',
-  'pattern_master_m',
-  'china_import_approver',
-] as const;
 
 // Roles allowed to Park a draft (pre-approval) — the styles write set on
 // the BE, shared via PD_WRITE_ROLES.
@@ -109,12 +97,6 @@ const SAMPLING_STATUS_OPTIONS: SamplingStatus[] = [
   'ready_for_inspection',
   'approved_for_production',
   'corrections_needed',
-];
-
-// Marketplace channels surfaced in the Cataloguing tab. Myntra only for now;
-// add 'amazon' etc. here when those go live (the BE already models them).
-const MARKETPLACE_CHANNELS: { channel: ChannelName; labelKey: string }[] = [
-  { channel: 'myntra', labelKey: 'dashboard.table.channels.myntra' },
 ];
 
 /**
@@ -192,14 +174,18 @@ export default function StylesInFlightTable({
   const [parkTarget, setParkTarget] = useState<DashboardStyleRow | null>(null);
   const [parkBusy, setParkBusy] = useState(false);
 
-  // Go-live modal — opened when taking a marketplace channel live. Captures
-  // the listing URL before committing (which advances lifecycle → live).
-  const [goLiveTarget, setGoLiveTarget] = useState<{
-    row: DashboardStyleRow;
-    channel: ChannelName;
-  } | null>(null);
-  const [goLiveUrl, setGoLiveUrl] = useState('');
+  // Go-live — opens the SHARED multi-channel dialog (same one the workspace
+  // uses), then calls the single `goLive` endpoint. The target is the whole
+  // row; the dialog picks channels + URLs.
+  const [goLiveTarget, setGoLiveTarget] = useState<DashboardStyleRow | null>(
+    null,
+  );
   const [goLiveBusy, setGoLiveBusy] = useState(false);
+  // Rows whose EasyEcom toggle is mid-flight — go-live is disabled for them so
+  // we never open the dialog against an optimistic value the BE will reject.
+  const [pendingEasyecom, setPendingEasyecom] = useState<Set<number>>(
+    new Set(),
+  );
 
   // If Home re-seeds the tab from a fresh `?tab=` deep link, follow it.
   useEffect(() => {
@@ -284,36 +270,51 @@ export default function StylesInFlightTable({
     return '';
   };
 
-  // Inline edits (sampling status, EasyEcom checkpoint, marketplace listings)
-  // are gated on the PD write set, which includes operator. Non-writers see
-  // read-only cells.
+  // Inline edits (sampling status, EasyEcom checkpoint) are gated on the PD
+  // write set, which includes operator. Non-writers see read-only cells.
   const canWriteInline = hasAnyRole(user, PARK_WRITE_ROLES);
 
-  // EasyEcom checkpoint — optimistic, no side-effects (an internal OMS step).
+  // Going live is a sign-off — approver-only, matching the workspace + the BE
+  // (which 403s a non-approver on the live transition). Writers still toggle
+  // EasyEcom + see the listing, but can't publish.
+  const canGoLive = hasAnyRole(user, APPROVER_ROLES);
+
+  // EasyEcom checkpoint — optimistic. Track the in-flight row so go-live is
+  // disabled until the server confirms (else the dialog could open against a
+  // value the BE then rejects).
   const toggleEasyecom = (row: DashboardStyleRow, next: boolean) => {
     setRows((prev) =>
       prev.map((r) => (r.id === row.id ? { ...r, easyecomDone: next } : r)),
     );
-    setEasyecomDone(row.id, next).catch(() => {
-      setRows((prev) =>
-        prev.map((r) =>
-          r.id === row.id ? { ...r, easyecomDone: !next } : r,
-        ),
-      );
-      toast.show(
-        t('dashboard.table.toast.checkpointError', {
-          defaultValue: 'Could not update checkpoint.',
+    setPendingEasyecom((prev) => new Set(prev).add(row.id));
+    setEasyecomDone(row.id, next)
+      .catch(() => {
+        setRows((prev) =>
+          prev.map((r) =>
+            r.id === row.id ? { ...r, easyecomDone: !next } : r,
+          ),
+        );
+        toast.show(
+          t('dashboard.table.toast.checkpointError', {
+            defaultValue: 'Could not update checkpoint.',
+          }),
+          'error',
+        );
+      })
+      .finally(() =>
+        setPendingEasyecom((prev) => {
+          const nextSet = new Set(prev);
+          nextSet.delete(row.id);
+          return nextSet;
         }),
-        'error',
       );
-    });
   };
 
-  // Publish a marketplace channel from the dashboard. EasyEcom is a
-  // prerequisite — block (with a toast) before opening the modal; the BE
-  // enforces this too. Taking a channel back offline is NOT done here — that
-  // lives in the Style workspace (more deliberate, captures a reason).
-  const goLiveChannel = (row: DashboardStyleRow, channel: ChannelName) => {
+  // Open the shared go-live dialog. EasyEcom is the prerequisite — block (with
+  // a toast) before opening; the BE enforces it too. Taking a channel back
+  // offline is NOT done here — that lives in the Style workspace (captures a
+  // reason). Going live itself is approver-only (see `canGoLive`).
+  const openGoLive = (row: DashboardStyleRow) => {
     if (!row.easyecomDone) {
       toast.show(
         t('dashboard.table.toast.easyecomFirst', {
@@ -323,22 +324,17 @@ export default function StylesInFlightTable({
       );
       return;
     }
-    setGoLiveUrl('');
-    setGoLiveTarget({ row, channel });
+    setGoLiveTarget(row);
   };
 
-  // Commit the go-live: publish the channel with its URL; the BE advances
-  // lifecycle → live. Refetch so the now-live row leaves the Cataloguing tab
-  // and the summary cards update.
-  const confirmGoLive = () => {
+  // Commit the go-live via the single `goLive` endpoint (multi-channel). The BE
+  // advances lifecycle → live + stamps wentLiveAt. Refetch so the now-live row
+  // leaves the Cataloguing tab and the summary cards update.
+  const confirmGoLive = (channels: GoLiveChannel[]) => {
     if (!goLiveTarget) return;
-    const { row, channel } = goLiveTarget;
+    const row = goLiveTarget;
     setGoLiveBusy(true);
-    setMarketplaceListing(row.id, {
-      channel,
-      live: true,
-      listingUrl: goLiveUrl.trim() || undefined,
-    })
+    goLive(row.id, { channels })
       .then(() => {
         setGoLiveTarget(null);
         toast.show(
@@ -586,16 +582,20 @@ export default function StylesInFlightTable({
       defaultValue: 'Marketplace',
     }),
     width: '190px',
-    cell: (row) => (
-      <div className="flex flex-wrap items-center gap-1.5">
-        {MARKETPLACE_CHANNELS.map(({ channel, labelKey }) => {
-          const label = t(labelKey, { defaultValue: channel });
-          const listing = row.liveListings.find((l) => l.channel === channel);
-          if (listing) {
-            // Live — link out to the listing (or a plain Live badge if no URL).
+    cell: (row) => {
+      // Render EVERY live channel (not just a hardcoded list) so a style live
+      // on any channel shows its listing, never a blank cell.
+      const channelLabel = (channel: string) =>
+        t(`dashboard.table.channels.${channel}` as const, {
+          defaultValue: channel,
+        });
+      return (
+        <div className="flex flex-wrap items-center gap-1.5">
+          {row.liveListings.map((listing) => {
+            const label = channelLabel(listing.channel);
             return listing.url ? (
               <a
-                key={channel}
+                key={listing.channel}
                 href={listing.url}
                 target="_blank"
                 rel="noopener noreferrer"
@@ -608,7 +608,7 @@ export default function StylesInFlightTable({
               </a>
             ) : (
               <span
-                key={channel}
+                key={listing.channel}
                 className="inline-flex items-center gap-1 rounded-full border border-emerald-200 bg-emerald-100 px-2.5 py-0.5 text-[11px] font-medium text-emerald-800"
               >
                 <Check size={12} />
@@ -618,37 +618,28 @@ export default function StylesInFlightTable({
                 })}
               </span>
             );
-          }
-          // Not live — a Go-live action (gated on EasyEcom in the handler).
-          if (!canWriteInline) {
-            return (
-              <span
-                key={channel}
-                className="text-[11px] text-[var(--color-muted-foreground)]"
-              >
-                {label}
-              </span>
-            );
-          }
-          return (
+          })}
+          {/* Go live — approver-only, opens the shared multi-channel dialog.
+              Disabled while the EasyEcom toggle for this row is in flight. */}
+          {canGoLive && (
             <button
-              key={channel}
               type="button"
+              disabled={pendingEasyecom.has(row.id)}
               onClick={(e) => {
                 e.stopPropagation();
-                goLiveChannel(row, channel);
+                openGoLive(row);
               }}
-              className="inline-flex items-center gap-1 rounded-full border border-[var(--color-border)] bg-[var(--color-surface-2)] px-2.5 py-0.5 text-[11px] font-medium text-[var(--color-muted-foreground)] hover:border-[var(--color-primary)] hover:text-[var(--color-primary)]"
+              className="inline-flex items-center gap-1 rounded-full border border-[var(--color-border)] bg-[var(--color-surface-2)] px-2.5 py-0.5 text-[11px] font-medium text-[var(--color-muted-foreground)] hover:border-[var(--color-primary)] hover:text-[var(--color-primary)] disabled:opacity-50"
             >
-              {t('dashboard.table.goLiveChannel', {
-                channel: label,
-                defaultValue: `${label} · Go live`,
-              })}
+              {t('dashboard.table.goLive.confirm', { defaultValue: 'Go live' })}
             </button>
-          );
-        })}
-      </div>
-    ),
+          )}
+          {row.liveListings.length === 0 && !canGoLive && (
+            <span className="text-[var(--color-muted-foreground)]">—</span>
+          )}
+        </div>
+      );
+    },
   };
 
   // Cataloguing tab — the go-to-market workbench (EasyEcom + Marketplace).
@@ -790,59 +781,20 @@ export default function StylesInFlightTable({
         }}
       />
 
-      {/* Go-live — opened when publishing a marketplace channel. Captures the
-          listing URL, then the BE flips the style live. */}
-      <Dialog
+      {/* Go-live — the SAME multi-channel dialog the workspace uses. Picks
+          channels + URLs, then calls the single `goLive` endpoint. */}
+      <GoLiveDialog
         open={goLiveTarget !== null}
-        onClose={() => (goLiveBusy ? undefined : setGoLiveTarget(null))}
-        title={t('dashboard.table.goLive.title', { defaultValue: 'Go live' })}
-        footer={
-          <>
-            <Button
-              variant="outline"
-              size="sm"
-              disabled={goLiveBusy}
-              onClick={() => setGoLiveTarget(null)}
-            >
-              {t('common.cancel', { defaultValue: 'Cancel' })}
-            </Button>
-            <Button size="sm" disabled={goLiveBusy} onClick={confirmGoLive}>
-              {goLiveBusy
-                ? t('dashboard.table.goLive.submitting', {
-                    defaultValue: 'Going live…',
-                  })
-                : t('dashboard.table.goLive.confirm', {
-                    defaultValue: 'Go live',
-                  })}
-            </Button>
-          </>
+        busy={goLiveBusy}
+        existing={
+          (goLiveTarget?.liveListings.map((l) => ({
+            channel: l.channel,
+            listingUrl: l.url,
+          })) ?? []) as StyleChannelListing[]
         }
-      >
-        <p className="mb-3 text-sm text-[var(--color-muted-foreground)]">
-          {goLiveTarget
-            ? t('dashboard.table.goLive.intro', {
-                ref: formatStyleRef(goLiveTarget.row),
-                channel: t(`dashboard.table.channels.${goLiveTarget.channel}`, {
-                  defaultValue: goLiveTarget.channel,
-                }),
-                defaultValue:
-                  '{{ref}} will go live on {{channel}}. Add the listing URL (optional).',
-              })
-            : ''}
-        </p>
-        <label className="mb-1 block text-xs text-[var(--color-muted-foreground)]">
-          {t('dashboard.table.goLive.urlLabel', {
-            defaultValue: 'Listing URL',
-          })}
-        </label>
-        <Input
-          type="url"
-          inputMode="url"
-          value={goLiveUrl}
-          onChange={(e) => setGoLiveUrl(e.target.value)}
-          placeholder="https://www.myntra.com/…"
-        />
-      </Dialog>
+        onClose={() => (goLiveBusy ? undefined : setGoLiveTarget(null))}
+        onConfirm={confirmGoLive}
+      />
     </div>
   );
 }
