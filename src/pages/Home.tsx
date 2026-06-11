@@ -6,6 +6,7 @@ import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
 import SummaryCards from '@/components/dashboard/SummaryCards';
 import StylesInFlightTable from '@/components/dashboard/StylesInFlightTable';
+import { DateRangePicker } from '@/components/ui/DateRangePicker';
 import { useAuth } from '@/context/auth';
 import { hasAnyRole } from '@/lib/userRoles';
 import {
@@ -166,40 +167,19 @@ export default function Home() {
         )}
       </header>
 
-      {/* Activity-window control — scopes the cards + the table below
-          (by style updatedAt). Defaults to the last 7 days. */}
-      <div className="flex flex-wrap items-end gap-3">
-        <label className="flex flex-col gap-1 text-xs text-[var(--color-muted-foreground)]">
-          {t('dashboard.dateFilter.from', { defaultValue: 'From' })}
-          <input
-            type="date"
-            value={from}
-            max={to}
-            onChange={(e) => setFrom(e.target.value)}
-            className="h-9 rounded-[var(--radius-sm)] border border-[var(--color-border)] bg-[var(--color-surface)] px-2 text-[13px] text-[var(--color-foreground)]"
-          />
-        </label>
-        <label className="flex flex-col gap-1 text-xs text-[var(--color-muted-foreground)]">
-          {t('dashboard.dateFilter.to', { defaultValue: 'To' })}
-          <input
-            type="date"
-            value={to}
-            min={from}
-            max={isoDaysAgo(0)}
-            onChange={(e) => setTo(e.target.value)}
-            className="h-9 rounded-[var(--radius-sm)] border border-[var(--color-border)] bg-[var(--color-surface)] px-2 text-[13px] text-[var(--color-foreground)]"
-          />
-        </label>
-        <button
-          type="button"
-          onClick={() => {
-            setFrom(isoDaysAgo(DEFAULT_RANGE_DAYS - 1));
-            setTo(isoDaysAgo(0));
+      {/* Activity-window control — one polished range picker scoping the
+          cards + the table below (by style updatedAt). Default = last 7
+          days. Emits LOCAL YYYY-MM-DD bounds (see DateRangePicker). */}
+      <div className="flex flex-wrap items-center gap-3">
+        <DateRangePicker
+          from={from}
+          to={to}
+          maxDate={isoDaysAgo(0)}
+          onApply={(nextFrom, nextTo) => {
+            setFrom(nextFrom);
+            setTo(nextTo);
           }}
-          className="h-9 rounded-[var(--radius-sm)] border border-[var(--color-border)] px-3 text-[13px] text-[var(--color-muted-foreground)] hover:text-[var(--color-primary)] hover:border-[var(--color-primary)] transition-colors"
-        >
-          {t('dashboard.dateFilter.reset', { defaultValue: 'Last 7 days' })}
-        </button>
+        />
       </div>
 
       {/* Four role-aware summary cards — all counts from real card data. */}
