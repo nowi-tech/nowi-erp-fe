@@ -33,7 +33,6 @@ const VALID_TABS: DashboardStyleTab[] = [
   'draft',
   'sampling',
   'cataloguing',
-  'in_production',
   'live',
   'needs_attention',
 ];
@@ -44,11 +43,17 @@ function tabFromParam(value: string | null): DashboardStyleTab {
     : 'all';
 }
 
-/** YYYY-MM-DD for a date `n` days before today (0 = today). Local date. */
+/** YYYY-MM-DD for a date `n` days before today (0 = today), in the user's
+ *  LOCAL zone. `toISOString()` would format in UTC and, for IST users in the
+ *  early-morning hours, return yesterday — making "today" unselectable and
+ *  shifting the default window a day back. Build the string from local parts. */
 function isoDaysAgo(n: number): string {
   const d = new Date();
   d.setDate(d.getDate() - n);
-  return d.toISOString().slice(0, 10);
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${y}-${m}-${day}`;
 }
 const DEFAULT_RANGE_DAYS = 7;
 
