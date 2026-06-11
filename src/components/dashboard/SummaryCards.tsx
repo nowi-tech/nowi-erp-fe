@@ -68,16 +68,16 @@ export default function SummaryCards({ cards }: Props) {
       to: '/styles?tab=in_sampling',
     },
     {
-      key: 'inProduction',
-      label: t('dashboard.cards.inProduction', {
-        defaultValue: 'In production',
+      key: 'inCataloguing',
+      label: t('dashboard.cards.inCataloguing', {
+        defaultValue: 'In cataloguing',
       }),
-      count: cards.inProduction,
-      // In-production = PD styles in in_pd/qc, which live in the Home feed —
-      // NOT /admin/locator (that's the legacy-floor per-lot WIP page, gated
-      // to admin/viewer/data_manager). Home's in_production tab matches this
-      // count exactly and is reachable by every office role.
-      to: '/?tab=in_production',
+      count: cards.inCataloguing,
+      // In-cataloguing = PD styles in the `cataloguing` (go-to-market) phase,
+      // which live in the Home feed. Home's cataloguing tab filters to the
+      // exact same lifecycle, so this count and that tab stay in lockstep and
+      // it's reachable by every office role.
+      to: '/?tab=cataloguing',
     },
     {
       key: 'live',

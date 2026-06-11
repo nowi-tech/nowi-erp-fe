@@ -30,8 +30,9 @@ import {
 // lands on the right tab. Anything unrecognised falls back to 'all'.
 const VALID_TABS: DashboardStyleTab[] = [
   'all',
+  'draft',
   'sampling',
-  'cataloguing_done',
+  'cataloguing',
   'in_production',
   'live',
   'needs_attention',
@@ -130,10 +131,10 @@ export default function Home() {
                 })}
                 {' · '}
                 <b className="font-medium text-[var(--color-foreground-2)]">
-                  {cards.inProduction}
+                  {cards.inCataloguing}
                 </b>{' '}
-                {t('dashboard.narrative.inProduction', {
-                  defaultValue: 'in production',
+                {t('dashboard.narrative.inCataloguing', {
+                  defaultValue: 'in cataloguing',
                 })}
                 {' · '}
                 <b className="font-medium text-[var(--color-foreground-2)]">
