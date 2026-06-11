@@ -333,14 +333,6 @@ export async function startCataloguing(styleId: number): Promise<Style> {
   return res.data;
 }
 
-/** cataloguing: cataloguingStatus pending → done. */
-export async function markCataloguingDone(styleId: number): Promise<Style> {
-  const res = await apiClient.post<Style>(
-    `/api/styles/${styleId}/actions/cataloguing-done`,
-  );
-  return res.data;
-}
-
 /** Toggle the EasyEcom catalog checkpoint (internal OMS step, no side-effects). */
 export async function setEasyecomDone(
   styleId: number,
