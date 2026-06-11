@@ -602,7 +602,7 @@
         "ready_for_inspection": "QC",
         "handed_over_for_inspection": "Handed over",
         "corrections_needed": "Corrections",
-        "approved_for_production": "Approved"
+        "ready_for_production": "Ready for prod"
       },
       "audit": {
         "created": "Created",

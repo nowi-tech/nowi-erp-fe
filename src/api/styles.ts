@@ -39,7 +39,7 @@ export type SamplingStatus =
   | 'in_progress_cutting'
   | 'ready_for_inspection'
   | 'corrections_needed'
-  | 'approved_for_production';
+  | 'ready_for_production';
 
 export type SampleApprovalStatus =
   | 'approved_for_production'

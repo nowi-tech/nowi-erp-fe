@@ -78,7 +78,7 @@ const SAMPLING_STATUS_FILTER_OPTIONS: SamplingStatus[] = [
   'in_progress_fabric_sourcing',
   'in_progress_cutting',
   'ready_for_inspection',
-  'approved_for_production',
+  'ready_for_production',
   'corrections_needed',
 ];
 
