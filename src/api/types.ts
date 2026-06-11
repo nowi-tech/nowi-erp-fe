@@ -433,8 +433,14 @@ export interface Style {
   // New PD intake fields
   source: StyleSource;
   lifecycle: StyleLifecycle;
-  /** Sub-state while `lifecycle === 'cataloguing'`; null otherwise. */
+  /** Sub-state while `lifecycle === 'cataloguing'`; null otherwise. Mirrors
+   *  `easyecomDone` — the EasyEcom checkpoint is the single cataloguing gate. */
   cataloguingStatus: CataloguingStatus | null;
+  /** EasyEcom catalog checkpoint — the single "cataloguing complete" gate and
+   *  the prerequisite for going live. */
+  easyecomDone: boolean;
+  /** When the style first went live (stable; not derived from listing edits). */
+  wentLiveAt: string | null;
   workingName: string | null;
   /** Free-text rationale for why this style is being developed. Captured at intake. */
   developmentReason: string | null;

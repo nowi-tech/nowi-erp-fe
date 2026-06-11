@@ -18,7 +18,6 @@ export type DashboardStyleTab =
   | 'draft'
   | 'sampling'
   | 'cataloguing'
-  | 'in_production'
   | 'live'
   | 'needs_attention';
 
