@@ -38,6 +38,13 @@ export interface QueueColumn<R> {
   cell: (row: R) => ReactNode;
   /** Right-align (used for AGE / numeric columns). */
   align?: 'left' | 'right';
+  /**
+   * Fixed column width (any CSS width — `'120px'`, `'36%'`). When ANY column
+   * sets this the table switches to `table-fixed` layout, so columns honour
+   * these widths instead of stretching to their content — that's what stops
+   * a long cell from forcing horizontal scroll. Text cells should `truncate`.
+   */
+  width?: string;
   /** Extra cell classes — e.g. responsive hiding `hidden lg:table-cell`. */
   className?: string;
   /** Extra header classes (mirrors `className` for responsive hiding). */
@@ -60,6 +67,9 @@ interface StyleQueueTableProps<R> {
    * cell still reserves space so columns stay aligned.
    */
   renderActions?: (row: R) => ReactNode;
+  /** Fixed width for the trailing actions column (CSS width). Only applies
+   *  when the table is in fixed layout (any column declares a `width`). */
+  actionsWidth?: string;
   /** Subtle row highlight — e.g. un-reviewed inbox submissions. */
   rowAccent?: (row: R) => boolean;
   /** Explanatory note rendered under the table (Stitch footer copy). */
@@ -77,21 +87,32 @@ export function StyleQueueTable<R>({
   errorLabel = "Couldn't load.",
   onRowClick,
   renderActions,
+  actionsWidth,
   rowAccent,
   footerNote,
 }: StyleQueueTableProps<R>) {
   // +1 for the trailing actions column when present.
   const colSpan = columns.length + (renderActions ? 1 : 0);
 
+  // Any declared column width ⇒ fixed layout, so widths are honoured and a
+  // long cell truncates instead of stretching the table into a scroll.
+  const isFixed = columns.some((c) => c.width) || !!actionsWidth;
+
   return (
     <div className="space-y-3">
       <div className="overflow-x-auto rounded-[var(--radius-md)] border border-[var(--color-border)] bg-[var(--color-surface)] shadow-sm">
-        <table className="w-full border-collapse text-left text-[13px] whitespace-nowrap">
+        <table
+          className={cn(
+            'w-full border-collapse text-left text-[13px]',
+            isFixed ? 'table-fixed' : 'whitespace-nowrap',
+          )}
+        >
           <thead className="sticky top-0 z-10 border-b border-[var(--color-border)] bg-[var(--color-surface-2)]">
             <tr>
               {columns.map((col) => (
                 <th
                   key={col.key}
+                  style={col.width ? { width: col.width } : undefined}
                   className={cn(
                     'px-4 py-2 text-[11px] font-bold uppercase tracking-[0.05em] text-[var(--color-muted-foreground)] whitespace-nowrap',
                     col.align === 'right' && 'text-right',
@@ -102,7 +123,10 @@ export function StyleQueueTable<R>({
                 </th>
               ))}
               {renderActions && (
-                <th className="px-4 py-2 text-right text-[11px] font-bold uppercase tracking-[0.05em] text-[var(--color-muted-foreground)]" />
+                <th
+                  style={actionsWidth ? { width: actionsWidth } : undefined}
+                  className="px-4 py-2 text-right text-[11px] font-bold uppercase tracking-[0.05em] text-[var(--color-muted-foreground)]"
+                />
               )}
             </tr>
           </thead>
@@ -143,10 +167,10 @@ export function StyleQueueTable<R>({
                     ))}
                     {renderActions && (
                       <td className="px-4 py-2 text-right">
-                        {/* Hover-reveal on desktop; always visible on touch
-                            (no hover) and on keyboard focus, so the actions
-                            are reachable everywhere. */}
-                        <div className="flex items-center justify-end gap-2 opacity-100 transition-opacity sm:opacity-0 sm:group-hover:opacity-100 sm:group-focus-within:opacity-100">
+                        {/* Always visible — the Approve / Park cluster is a
+                            primary affordance, not a hover-reveal, so it's
+                            reachable without hunting (and on touch). */}
+                        <div className="flex items-center justify-end gap-2">
                           {renderActions(row)}
                         </div>
                       </td>
