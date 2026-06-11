@@ -43,6 +43,7 @@ import {
   startCataloguing,
   markCataloguingDone,
   goLive,
+  setMarketplaceListing,
   type SamplingStatus,
   type SampleApprovalStatus,
   type SampleApproveStyleBody,
@@ -83,11 +84,7 @@ const COLOUR_WRITE = PD_WRITE_ROLES;
 
 // Roles allowed to "Withdraw" (re-park) a style that has already passed
 // Approval #1. Drafts can be parked by anyone; post-approval is gated.
-const POST_APPROVAL_PARK: readonly UserRole[] = [
-  'admin',
-  'sampling_lead',
-  'pd_lead',
-];
+const POST_APPROVAL_PARK: readonly UserRole[] = ['admin'];
 
 // Gender may arrive as a code (W/M/U) or long form (women/men/unisex)
 // depending on the row — render the human label either way so the header /
@@ -285,8 +282,8 @@ export default function StyleWorkspace() {
   const canWrite = roles.some((r) => PD_WRITE_ROLES.includes(r));
 
   // Park: inline button on drafts (anyone). Post-approval it becomes a
-  // gated "Withdraw" — only admin / sampling_lead / pd_lead can pull a
-  // committed design back out of the pipeline.
+  // gated "Withdraw" — only admin can pull a committed design back out of
+  // the pipeline.
   const isDraft = style.lifecycle === 'draft';
   const canPark =
     style.lifecycle !== 'parked' &&
@@ -523,6 +520,12 @@ export default function StyleWorkspace() {
       style={style}
       cardClasses={cardClasses}
       cataloguingStatus={style.cataloguingStatus}
+      canManage={canWrite}
+      onTakeOffline={(channel, reason) =>
+        doAction('take-offline', () =>
+          setMarketplaceListing(style.id, { channel, live: false, reason }),
+        )
+      }
     />
   ) : null;
 
@@ -1112,10 +1115,14 @@ function ChannelsCard({
   style,
   cardClasses,
   cataloguingStatus,
+  canManage,
+  onTakeOffline,
 }: {
   style: Style;
   cardClasses: string;
   cataloguingStatus: Style['cataloguingStatus'];
+  canManage: boolean;
+  onTakeOffline: (channel: ChannelName, reason: string) => void;
 }) {
   const { t } = useTranslation();
   const listings = (style.channelListings ?? []).filter(
@@ -1123,6 +1130,12 @@ function ChannelsCard({
   );
   const stateBadge = (s: StyleChannelListing['state']) =>
     s === 'live' ? 'success' : s === 'draft' ? 'warning' : 'outline';
+  // Take-offline target + reason (the consequential un-publish lives here in
+  // the workspace, not on the dashboard).
+  const [offlineChannel, setOfflineChannel] = useState<ChannelName | null>(
+    null,
+  );
+  const [offlineReason, setOfflineReason] = useState('');
   return (
     <section className={cardClasses}>
       <CardHeader
@@ -1179,30 +1192,98 @@ function ChannelsCard({
                     })}
                   </Badge>
                 </div>
-                {l.listingUrl ? (
-                  <a
-                    href={l.listingUrl}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="inline-flex items-center gap-1 text-xs text-[var(--color-primary)] hover:underline shrink-0"
-                  >
-                    {t('admin.styles.workspace.viewListing', {
-                      defaultValue: 'View listing',
-                    })}
-                    <ExternalLink size={12} aria-hidden />
-                  </a>
-                ) : (
-                  <span className="text-xs text-[var(--color-muted-foreground)] shrink-0">
-                    {t('admin.styles.workspace.noListingUrl', {
-                      defaultValue: 'No URL',
-                    })}
-                  </span>
-                )}
+                <div className="flex items-center gap-3 shrink-0">
+                  {l.listingUrl ? (
+                    <a
+                      href={l.listingUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="inline-flex items-center gap-1 text-xs text-[var(--color-primary)] hover:underline"
+                    >
+                      {t('admin.styles.workspace.viewListing', {
+                        defaultValue: 'View listing',
+                      })}
+                      <ExternalLink size={12} aria-hidden />
+                    </a>
+                  ) : (
+                    <span className="text-xs text-[var(--color-muted-foreground)]">
+                      {t('admin.styles.workspace.noListingUrl', {
+                        defaultValue: 'No URL',
+                      })}
+                    </span>
+                  )}
+                  {/* Take-offline — only for live channels, write-gated. */}
+                  {canManage && l.state === 'live' && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setOfflineReason('');
+                        setOfflineChannel(l.channel);
+                      }}
+                      className="text-xs text-[var(--color-destructive)] hover:underline"
+                    >
+                      {t('admin.styles.workspace.takeOffline', {
+                        defaultValue: 'Take offline',
+                      })}
+                    </button>
+                  )}
+                </div>
               </li>
             ))}
           </ul>
         )}
       </div>
+
+      {/* Take-offline reason dialog. */}
+      <Dialog
+        open={offlineChannel !== null}
+        onClose={() => setOfflineChannel(null)}
+        title={t('admin.styles.workspace.takeOfflineTitle', {
+          defaultValue: 'Take offline',
+        })}
+        footer={
+          <>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setOfflineChannel(null)}
+            >
+              {t('common.cancel', { defaultValue: 'Cancel' })}
+            </Button>
+            <Button
+              size="sm"
+              variant="destructive"
+              disabled={!offlineReason.trim()}
+              onClick={() => {
+                if (offlineChannel) {
+                  onTakeOffline(offlineChannel, offlineReason.trim());
+                }
+                setOfflineChannel(null);
+              }}
+            >
+              {t('admin.styles.workspace.takeOffline', {
+                defaultValue: 'Take offline',
+              })}
+            </Button>
+          </>
+        }
+      >
+        <p className="mb-3 text-sm text-[var(--color-muted-foreground)]">
+          {t('admin.styles.workspace.takeOfflineIntro', {
+            defaultValue:
+              'This removes the live listing. If no other channel is live the style returns to cataloguing.',
+          })}
+        </p>
+        <label className="mb-1 block text-xs text-[var(--color-muted-foreground)]">
+          {t('admin.styles.workspace.takeOfflineReason', {
+            defaultValue: 'Reason (required)',
+          })}
+        </label>
+        <Textarea
+          value={offlineReason}
+          onChange={(e) => setOfflineReason(e.target.value)}
+        />
+      </Dialog>
     </section>
   );
 }
