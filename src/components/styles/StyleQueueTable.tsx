@@ -479,6 +479,37 @@ export function ApproveButton({ onClick }: { onClick: () => void }) {
   );
 }
 
+/**
+ * Filled-primary row action — the row's "next step" (Approve sample, Mark
+ * EasyEcom done, Go live, …). Same weight as {@link ApproveButton} but with a
+ * caller-supplied label (and optional icon), so the primary action reads as
+ * the action regardless of which lifecycle stage the row is in. Park / Revive
+ * stay on the muted {@link GhostActionButton}.
+ */
+export function PrimaryActionButton({
+  onClick,
+  children,
+  icon,
+}: {
+  onClick: () => void;
+  children: ReactNode;
+  icon?: ReactNode;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={(e) => {
+        e.stopPropagation();
+        onClick();
+      }}
+      className="inline-flex items-center gap-1 rounded bg-[var(--color-primary)] px-2 py-1 text-[12px] font-medium text-[var(--color-primary-foreground)] transition-colors hover:bg-[var(--color-primary-hover)]"
+    >
+      {icon}
+      {children}
+    </button>
+  );
+}
+
 export function GhostActionButton({
   onClick,
   icon,

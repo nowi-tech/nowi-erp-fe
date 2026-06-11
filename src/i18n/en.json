@@ -1231,13 +1231,29 @@
       },
       "actions": {
         "approve": "Approve",
-        "park": "Park"
+        "park": "Park",
+        "approveSample": "Approve sample",
+        "startCataloguing": "Start cataloguing",
+        "markEasyecom": "Mark EasyEcom done",
+        "goLive": "Go live",
+        "addChannel": "Add channel"
       },
       "toast": {
         "approved": "Approved.",
         "approveError": "Could not approve.",
         "parked": "Parked.",
-        "parkError": "Could not park."
+        "parkError": "Could not park.",
+        "statusSaved": "Stage updated.",
+        "statusError": "Could not update status.",
+        "checkpointError": "Could not update checkpoint.",
+        "easyecomDone": "EasyEcom marked done.",
+        "easyecomFirst": "Mark EasyEcom done before going live.",
+        "sampleApproved": "Sample verdict recorded.",
+        "sampleApproveError": "Could not record the verdict.",
+        "cataloguingStarted": "Cataloguing started.",
+        "wentLive": "Marked live.",
+        "goLiveError": "Could not go live.",
+        "actionError": "Could not complete the action."
       },
       "productionStatus": {
         "sample_handover": "Sample handover",

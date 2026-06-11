@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
-import { Check, ExternalLink, Search } from 'lucide-react';
+import { Check, ExternalLink, Rocket, Search } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { cn } from '@/lib/utils';
 import { Input } from '@/components/ui/input';
@@ -19,6 +19,7 @@ import {
   compactAge,
   ApproveButton,
   GhostActionButton,
+  PrimaryActionButton,
   RowChevron,
   type QueueColumn,
 } from '@/components/styles/StyleQueueTable';
@@ -80,14 +81,9 @@ const TABS: DashboardStyleTab[] = [
   'live',
 ];
 
-// Roles allowed to Park a style once it's past `draft` (Approval #1 has
-// minted the Style #). Mirrors the post-approval park guard in the spec
-// and in StyleWorkspace.POST_APPROVAL_PARK — admin only: re-parking a
-// committed design is an admin-gated action (the BE enforces the same).
-const POST_APPROVAL_PARK_ROLES = ['admin'] as const;
-
-// Roles allowed to Park a draft (pre-approval) — the styles write set on
-// the BE, shared via PD_WRITE_ROLES.
+// Roles allowed to Park during sampling (draft / in_sampling) — the styles
+// write set on the BE, shared via PD_WRITE_ROLES. Park is unavailable once a
+// sample is signed off, so there's no separate post-approval park gate.
 const PARK_WRITE_ROLES = PD_WRITE_ROLES;
 
 // Sampling-status options for the inline Stage editor — the in-progress
@@ -187,11 +183,6 @@ export default function StylesInFlightTable({
     null,
   );
   const [goLiveBusy, setGoLiveBusy] = useState(false);
-  // Rows whose EasyEcom toggle is mid-flight — go-live is disabled for them so
-  // we never open the dialog against an optimistic value the BE will reject.
-  const [pendingEasyecom, setPendingEasyecom] = useState<Set<number>>(
-    new Set(),
-  );
 
   // If Home re-seeds the tab from a fresh `?tab=` deep link, follow it.
   useEffect(() => {
@@ -245,19 +236,12 @@ export default function StylesInFlightTable({
   const canApprove = (row: DashboardStyleRow) =>
     row.lifecycle === 'draft' && hasAnyRole(user, APPROVER_ROLES);
 
-  // Park is open while in `draft` (write roles only); post-approval
-  // (anything else) only admins + sampling leads may park inline.
-  const canPark = (row: DashboardStyleRow) => {
-    if (
-      row.lifecycle === 'parked' ||
-      row.lifecycle === 'archived' ||
-      row.lifecycle === 'dispatched'
-    ) {
-      return false;
-    }
-    if (row.lifecycle === 'draft') return hasAnyRole(user, PARK_WRITE_ROLES);
-    return hasAnyRole(user, POST_APPROVAL_PARK_ROLES);
-  };
+  // Park is only allowed DURING sampling (draft / in_sampling) — once a sample
+  // is signed off the style is committed to the go-to-market path and can't be
+  // parked (no parking a live style, which would strand its channel listings).
+  const canPark = (row: DashboardStyleRow) =>
+    (row.lifecycle === 'draft' || row.lifecycle === 'in_sampling') &&
+    hasAnyRole(user, PARK_WRITE_ROLES);
 
   const stageLabel = (row: DashboardStyleRow): string => {
     if (row.lifecycle === 'in_sampling' && row.samplingStatus) {
@@ -281,23 +265,42 @@ export default function StylesInFlightTable({
   const canWriteInline = hasAnyRole(user, PARK_WRITE_ROLES);
 
   // Going live is a sign-off — approver-only, matching the workspace + the BE
-  // (which 403s a non-approver on the live transition). Writers still toggle
+  // (which 403s a non-approver on the live transition). Writers still mark
   // EasyEcom + see the listing, but can't publish.
-  const canGoLive = hasAnyRole(user, APPROVER_ROLES);
+  const isApprover = hasAnyRole(user, APPROVER_ROLES);
 
-  // EasyEcom checkpoint — optimistic. Track the in-flight row so go-live is
-  // disabled until the server confirms (else the dialog could open against a
-  // value the BE then rejects).
-  const toggleEasyecom = (row: DashboardStyleRow, next: boolean) => {
+  // The cataloguing row has ONE progressive action button, surfaced in the
+  // shared row-actions slot (same place as Approve-sample), enforcing order:
+  //   EasyEcom pending → "Mark EasyEcom done" (writer/operator)
+  //   EasyEcom done    → "Go live" (approver)
+  // On a live row, the action becomes "Add channel" (go live on more).
+  const canMarkEasyecom = (row: DashboardStyleRow) =>
+    row.lifecycle === 'cataloguing' && !row.easyecomDone && canWriteInline;
+  const canGoLiveRow = (row: DashboardStyleRow) =>
+    row.lifecycle === 'cataloguing' && row.easyecomDone && isApprover;
+  const canAddChannel = (row: DashboardStyleRow) =>
+    row.lifecycle === 'live' && isApprover;
+
+  // Mark the EasyEcom checkpoint done — the first step of the progressive
+  // cataloguing action (writer/operator). Optimistic; on success the row's
+  // button flips to "Go live" (for approvers), revert on error.
+  const markEasyecomDone = (row: DashboardStyleRow) => {
     setRows((prev) =>
-      prev.map((r) => (r.id === row.id ? { ...r, easyecomDone: next } : r)),
+      prev.map((r) => (r.id === row.id ? { ...r, easyecomDone: true } : r)),
     );
-    setPendingEasyecom((prev) => new Set(prev).add(row.id));
-    setEasyecomDone(row.id, next)
+    setEasyecomDone(row.id, true)
+      .then(() => {
+        toast.show(
+          t('dashboard.table.toast.easyecomDone', {
+            defaultValue: 'EasyEcom marked done.',
+          }),
+          'success',
+        );
+      })
       .catch(() => {
         setRows((prev) =>
           prev.map((r) =>
-            r.id === row.id ? { ...r, easyecomDone: !next } : r,
+            r.id === row.id ? { ...r, easyecomDone: false } : r,
           ),
         );
         toast.show(
@@ -306,20 +309,14 @@ export default function StylesInFlightTable({
           }),
           'error',
         );
-      })
-      .finally(() =>
-        setPendingEasyecom((prev) => {
-          const nextSet = new Set(prev);
-          nextSet.delete(row.id);
-          return nextSet;
-        }),
-      );
+      });
   };
 
   // Open the shared go-live dialog. EasyEcom is the prerequisite — block (with
   // a toast) before opening; the BE enforces it too. Taking a channel back
   // offline is NOT done here — that lives in the Style workspace (captures a
-  // reason). Going live itself is approver-only (see `canGoLive`).
+  // reason). Going live itself is approver-only. The button only shows once
+  // EasyEcom is done, but keep the guard as a safety net against a stale row.
   const openGoLive = (row: DashboardStyleRow) => {
     if (!row.easyecomDone) {
       toast.show(
@@ -634,8 +631,10 @@ export default function StylesInFlightTable({
     dateColumn,
   ];
 
-  // EasyEcom — an internal Done/Pending checkpoint. Cataloguing-only: on the
-  // Live tab it's redundant (a live style has necessarily passed it).
+  // EasyEcom — a read-only Done/Pending STATUS (scannable down the column).
+  // It's no longer toggled here: the progressive row action ("Mark EasyEcom
+  // done" → "Go live") owns the transition, so the column is pure status.
+  // Cataloguing-only: on the Live tab it's redundant (a live style passed it).
   const easyecomColumn: QueueColumn<DashboardStyleRow> = {
     key: 'easyecom',
     header: t('dashboard.table.columns.easyecom', { defaultValue: 'EasyEcom' }),
@@ -645,16 +644,16 @@ export default function StylesInFlightTable({
         on={row.easyecomDone}
         onLabel={t('dashboard.table.done', { defaultValue: 'Done' })}
         offLabel={t('dashboard.table.pending', { defaultValue: 'Pending' })}
-        canEdit={canWriteInline}
-        onToggle={(next) => toggleEasyecom(row, next)}
+        canEdit={false}
+        onToggle={() => {}}
       />
     ),
   };
 
-  // Marketplace — per-channel status. A LIVE channel shows a "View now" link
-  // to its public listing (read-only; taking it offline lives in the Style
-  // workspace). A not-live channel shows a "Go live" action (EasyEcom-gated)
-  // that opens the go-live modal.
+  // Marketplace — pure per-channel STATUS. Each LIVE channel shows a "View now"
+  // link to its public listing (or a plain Live badge if no URL). The go-live
+  // ACTION is not here — it's the progressive row-action button. Taking a
+  // channel offline lives in the Style workspace (captures a reason).
   const marketplaceColumn: QueueColumn<DashboardStyleRow> = {
     key: 'marketplace',
     header: t('dashboard.table.columns.marketplace', {
@@ -668,6 +667,9 @@ export default function StylesInFlightTable({
         t(`dashboard.table.channels.${channel}` as const, {
           defaultValue: channel,
         });
+      if (row.liveListings.length === 0) {
+        return <span className="text-[var(--color-muted-foreground)]">—</span>;
+      }
       return (
         <div className="flex flex-wrap items-center gap-1.5">
           {row.liveListings.map((listing) => {
@@ -698,24 +700,6 @@ export default function StylesInFlightTable({
               </span>
             );
           })}
-          {/* Go live — approver-only, opens the shared multi-channel dialog.
-              Disabled while the EasyEcom toggle for this row is in flight. */}
-          {canGoLive && (
-            <button
-              type="button"
-              disabled={pendingEasyecom.has(row.id)}
-              onClick={(e) => {
-                e.stopPropagation();
-                openGoLive(row);
-              }}
-              className="inline-flex items-center gap-1 rounded-full border border-[var(--color-border)] bg-[var(--color-surface-2)] px-2.5 py-0.5 text-[11px] font-medium text-[var(--color-muted-foreground)] hover:border-[var(--color-primary)] hover:text-[var(--color-primary)] disabled:opacity-50"
-            >
-              {t('dashboard.table.goLive.confirm', { defaultValue: 'Go live' })}
-            </button>
-          )}
-          {row.liveListings.length === 0 && !canGoLive && (
-            <span className="text-[var(--color-muted-foreground)]">—</span>
-          )}
         </div>
       );
     },
@@ -787,11 +771,22 @@ export default function StylesInFlightTable({
           const park = canPark(row);
           const sampleApprove = canSampleApprove(row);
           const startCat = canStartCataloguing(row);
-          if (!approve && !park && !sampleApprove && !startCat) {
+          const markEasyecom = canMarkEasyecom(row);
+          const goLiveRow = canGoLiveRow(row);
+          const addChannel = canAddChannel(row);
+          if (
+            !approve &&
+            !park &&
+            !sampleApprove &&
+            !startCat &&
+            !markEasyecom &&
+            !goLiveRow &&
+            !addChannel
+          ) {
             return <RowChevron />;
           }
-          // Show every applicable action (Park then the stage-advancing action
-          // then Approve#1) to match the sampling queue's right-aligned cluster.
+          // One action per row, always in this same right-aligned slot — the
+          // "next step" for that row's lifecycle stage (Park rides alongside).
           return (
             <>
               {park && (
@@ -803,20 +798,50 @@ export default function StylesInFlightTable({
                 </GhostActionButton>
               )}
               {startCat && (
-                <GhostActionButton onClick={() => doStartCataloguing(row)}>
+                <PrimaryActionButton onClick={() => doStartCataloguing(row)}>
                   {t('dashboard.table.actions.startCataloguing', {
                     defaultValue: 'Start cataloguing',
                   })}
-                </GhostActionButton>
+                </PrimaryActionButton>
               )}
               {sampleApprove && (
-                <GhostActionButton
+                <PrimaryActionButton
                   onClick={() => setSampleApproveTarget(row)}
                 >
                   {t('dashboard.table.actions.approveSample', {
                     defaultValue: 'Approve sample',
                   })}
-                </GhostActionButton>
+                </PrimaryActionButton>
+              )}
+              {/* Progressive cataloguing action: EasyEcom → Go live. */}
+              {markEasyecom && (
+                <PrimaryActionButton
+                  onClick={() => markEasyecomDone(row)}
+                >
+                  {t('dashboard.table.actions.markEasyecom', {
+                    defaultValue: 'Mark EasyEcom done',
+                  })}
+                </PrimaryActionButton>
+              )}
+              {goLiveRow && (
+                <PrimaryActionButton
+                  icon={<Rocket size={13} />}
+                  onClick={() => openGoLive(row)}
+                >
+                  {t('dashboard.table.actions.goLive', {
+                    defaultValue: 'Go live',
+                  })}
+                </PrimaryActionButton>
+              )}
+              {addChannel && (
+                <PrimaryActionButton
+                  icon={<Rocket size={13} />}
+                  onClick={() => openGoLive(row)}
+                >
+                  {t('dashboard.table.actions.addChannel', {
+                    defaultValue: 'Add channel',
+                  })}
+                </PrimaryActionButton>
               )}
               {approve && (
                 <ApproveButton onClick={() => setApprovalTarget(row)} />
