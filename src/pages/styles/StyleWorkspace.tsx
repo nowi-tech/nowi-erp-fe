@@ -15,7 +15,6 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Dialog } from '@/components/ui/dialog';
 import { ConfirmDialog } from '@/components/ui/confirm-dialog';
-import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { useToast } from '@/components/ui/toast';
 import SamplingPipelineStepper from '@/components/styles/SamplingPipelineStepper';
@@ -41,13 +40,12 @@ import {
   listFabrics,
   colourGroup,
   startCataloguing,
-  markCataloguingDone,
   goLive,
   setMarketplaceListing,
+  setEasyecomDone,
   type SamplingStatus,
   type SampleApprovalStatus,
   type SampleApproveStyleBody,
-  type GoLiveChannel,
 } from '@/api/styles';
 import type {
   ChannelName,
@@ -59,9 +57,10 @@ import type {
   UserRole,
 } from '@/api/types';
 import { useAuth } from '@/context/auth';
-import { userAllRoles, PD_WRITE_ROLES } from '@/lib/userRoles';
+import { userAllRoles, PD_WRITE_ROLES, APPROVER_ROLES } from '@/lib/userRoles';
 import { cn } from '@/lib/utils';
 import { formatStyleRef } from '@/lib/styleRef';
+import GoLiveDialog from '@/components/styles/GoLiveDialog';
 
 // Add-Colour is only meaningful once the family has an approved sample to
 // inherit (a colour sibling skips sampling). `StyleLifecycle` is
@@ -301,20 +300,23 @@ export default function StyleWorkspace() {
   const canStartProduction =
     canWrite && !isChinaImport && style.lifecycle === 'sample_approved';
 
-  // ── Go-to-market lifecycle actions (writers only, never china_import) ──
+  // ── Go-to-market lifecycle actions ──
+  // These advance the lifecycle and are APPROVE-gated on the BE — gate the
+  // buttons to approver roles too (matching the dashboard) so a writer/operator
+  // never sees a control that 403s. EasyEcom (the cataloguing gate) + take-
+  // offline stay open to all writers; only the lifecycle advances are gated.
+  const canApproveGoToMarket =
+    roles.some((r) => APPROVER_ROLES.includes(r)) && !isChinaImport;
   // sample_approved → cataloguing (status=pending)
   const canStartCataloguing =
-    canWrite && !isChinaImport && style.lifecycle === 'sample_approved';
-  // cataloguing + pending → done
-  const canMarkCataloguingDone =
-    canWrite &&
-    style.lifecycle === 'cataloguing' &&
-    style.cataloguingStatus === 'pending';
-  // cataloguing + done → live (opens channel-pick dialog)
+    canApproveGoToMarket && style.lifecycle === 'sample_approved';
+  // cataloguing + EasyEcom done → live (opens the shared go-live dialog).
+  // EasyEcom is the single "cataloguing complete" gate — there's no separate
+  // "Mark cataloguing done" step.
   const canGoLive =
-    canWrite &&
+    canApproveGoToMarket &&
     style.lifecycle === 'cataloguing' &&
-    style.cataloguingStatus === 'done';
+    style.easyecomDone;
 
   // Layout selector. The sampling layout (stepper band + 7/5 grid) covers
   // draft / in_sampling; the production layout (colour strip + 2-up grid)
@@ -521,6 +523,10 @@ export default function StyleWorkspace() {
       cardClasses={cardClasses}
       cataloguingStatus={style.cataloguingStatus}
       canManage={canWrite}
+      easyecomDone={style.easyecomDone}
+      onSetEasyecom={(done) =>
+        doAction('easyecom-checkpoint', () => setEasyecomDone(style.id, done))
+      }
       onTakeOffline={(channel, reason) =>
         doAction('take-offline', () =>
           setMarketplaceListing(style.id, { channel, live: false, reason }),
@@ -666,24 +672,9 @@ export default function StyleWorkspace() {
               })}
             </Button>
           )}
-          {/* Mark cataloguing done — cataloguing + pending → done. */}
-          {canMarkCataloguingDone && (
-            <Button
-              variant="outline"
-              size="sm"
-              disabled={busy !== null}
-              onClick={() =>
-                void doAction('cataloguing-done', () =>
-                  markCataloguingDone(style.id),
-                )
-              }
-            >
-              {t('admin.styles.workspace.markCataloguingDone', {
-                defaultValue: 'Mark cataloguing done',
-              })}
-            </Button>
-          )}
-          {/* Go live — cataloguing + done → live. Opens the channel dialog. */}
+          {/* Go live — cataloguing + EasyEcom done → live. Opens the shared
+              multi-channel dialog. (Cataloguing completion is the EasyEcom
+              toggle in the Channels card, not a separate button.) */}
           {canGoLive && (
             <Button
               size="sm"
@@ -976,136 +967,6 @@ export default function StyleWorkspace() {
   );
 }
 
-// Channels the go-live dialog can publish to. `nowi_shopify` first since
-// it's the owned storefront; the marketplaces follow.
-const GO_LIVE_CHANNELS: ChannelName[] = [
-  'nowi_shopify',
-  'myntra',
-  'nykaa',
-  'amazon',
-  'other',
-];
-
-/**
- * Go-live dialog. Pick one or more channels and (optionally) paste the
- * public listing URL for each, then flip the style to `live`. At least one
- * channel must be selected. URLs are optional per channel.
- */
-function GoLiveDialog({
-  open,
-  busy,
-  existing,
-  onClose,
-  onConfirm,
-}: {
-  open: boolean;
-  busy: boolean;
-  existing: StyleChannelListing[];
-  onClose: () => void;
-  onConfirm: (channels: GoLiveChannel[]) => void;
-}) {
-  const { t } = useTranslation();
-  const [selected, setSelected] = useState<Set<ChannelName>>(new Set());
-  const [urls, setUrls] = useState<Record<string, string>>({});
-
-  useEffect(() => {
-    if (open) {
-      // Pre-seed from any existing listing URLs so re-opening is non-destructive.
-      const seedUrls: Record<string, string> = {};
-      for (const l of existing) {
-        if (l.listingUrl) seedUrls[l.channel] = l.listingUrl;
-      }
-      setUrls(seedUrls);
-      setSelected(new Set());
-    }
-  }, [open, existing]);
-
-  const toggle = (c: ChannelName) =>
-    setSelected((prev) => {
-      const next = new Set(prev);
-      if (next.has(c)) next.delete(c);
-      else next.add(c);
-      return next;
-    });
-
-  const canSubmit = selected.size > 0 && !busy;
-
-  return (
-    <Dialog
-      open={open}
-      onClose={onClose}
-      title={t('admin.styles.goLive.dialogTitle', {
-        defaultValue: 'Go live',
-      })}
-      footer={
-        <>
-          <Button variant="outline" size="sm" disabled={busy} onClick={onClose}>
-            {t('common.cancel', { defaultValue: 'Cancel' })}
-          </Button>
-          <Button
-            size="sm"
-            disabled={!canSubmit}
-            onClick={() =>
-              onConfirm(
-                [...selected].map((channel) => {
-                  const url = urls[channel]?.trim();
-                  return url ? { channel, listingUrl: url } : { channel };
-                }),
-              )
-            }
-          >
-            <Rocket size={14} />
-            <span className="ml-1">
-              {t('admin.styles.goLive.confirm', { defaultValue: 'Go live' })}
-            </span>
-          </Button>
-        </>
-      }
-    >
-      <p className="text-sm text-[var(--color-muted-foreground)] mb-4">
-        {t('admin.styles.goLive.dialogIntro', {
-          defaultValue:
-            'Select the channels this style is going live on and paste each public listing URL (optional). Selecting at least one channel is required.',
-        })}
-      </p>
-      <div className="space-y-2">
-        {GO_LIVE_CHANNELS.map((c) => {
-          const checked = selected.has(c);
-          return (
-            <div
-              key={c}
-              className="rounded-[var(--radius-sm)] border border-[var(--color-border)] p-3"
-            >
-              <label className="flex items-center gap-2 text-sm font-medium cursor-pointer">
-                <input
-                  type="checkbox"
-                  checked={checked}
-                  onChange={() => toggle(c)}
-                  className="h-4 w-4 accent-[var(--color-primary)]"
-                />
-                {t(`admin.styles.channel.${c}` as const, { defaultValue: c })}
-              </label>
-              {checked && (
-                <Input
-                  type="url"
-                  className="mt-2 h-9 text-sm"
-                  placeholder={t('admin.styles.goLive.urlPlaceholder', {
-                    defaultValue: 'https://… (optional)',
-                  })}
-                  value={urls[c] ?? ''}
-                  onChange={(e) =>
-                    setUrls((prev) => ({ ...prev, [c]: e.target.value }))
-                  }
-                />
-              )}
-            </div>
-          );
-        })}
-      </div>
-    </Dialog>
-  );
-}
-
 /**
  * Channels / live-listings card. Surfaced in the go-to-market lifecycle
  * (cataloguing / live). Renders each StyleChannelListing with its state pill
@@ -1116,12 +977,16 @@ function ChannelsCard({
   cardClasses,
   cataloguingStatus,
   canManage,
+  easyecomDone,
+  onSetEasyecom,
   onTakeOffline,
 }: {
   style: Style;
   cardClasses: string;
   cataloguingStatus: Style['cataloguingStatus'];
   canManage: boolean;
+  easyecomDone: boolean;
+  onSetEasyecom: (done: boolean) => void;
   onTakeOffline: (channel: ChannelName, reason: string) => void;
 }) {
   const { t } = useTranslation();
@@ -1166,6 +1031,59 @@ function ChannelsCard({
         }
       />
       <div className="p-5">
+        {/* EasyEcom checkpoint — the single "cataloguing complete" gate.
+            Ticking it is the prerequisite for "Go live" (no separate
+            "Cataloguing done" step). Editable by writers/operators. */}
+        {style.lifecycle === 'cataloguing' && (
+          <div className="mb-4 flex items-center justify-between gap-3 rounded-[var(--radius-sm)] border border-[var(--color-border)] px-3 py-2">
+            <div className="min-w-0">
+              <p className="text-sm font-medium">
+                {t('admin.styles.workspace.easyecomTitle', {
+                  defaultValue: 'EasyEcom catalog',
+                })}
+              </p>
+              <p className="text-xs text-[var(--color-muted-foreground)]">
+                {t('admin.styles.workspace.easyecomHint', {
+                  defaultValue: 'Required before going live.',
+                })}
+              </p>
+            </div>
+            {canManage ? (
+              <button
+                type="button"
+                aria-pressed={easyecomDone}
+                onClick={() => onSetEasyecom(!easyecomDone)}
+                className={cn(
+                  'inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-[11px] font-medium transition-colors hover:opacity-80',
+                  easyecomDone
+                    ? 'bg-emerald-100 text-emerald-800 border border-emerald-200'
+                    : 'bg-[var(--color-surface-2)] text-[var(--color-muted-foreground)] border border-[var(--color-border)]',
+                )}
+              >
+                {easyecomDone
+                  ? t('admin.styles.workspace.easyecomDone', {
+                      defaultValue: 'Done',
+                    })
+                  : t('admin.styles.workspace.easyecomPending', {
+                      defaultValue: 'Pending',
+                    })}
+              </button>
+            ) : (
+              <Badge
+                variant={easyecomDone ? 'success' : 'warning'}
+                className="text-[10px]"
+              >
+                {easyecomDone
+                  ? t('admin.styles.workspace.easyecomDone', {
+                      defaultValue: 'Done',
+                    })
+                  : t('admin.styles.workspace.easyecomPending', {
+                      defaultValue: 'Pending',
+                    })}
+              </Badge>
+            )}
+          </div>
+        )}
         {listings.length === 0 ? (
           <p className="text-sm text-[var(--color-muted-foreground)]">
             {t('admin.styles.workspace.channelsNone', {
