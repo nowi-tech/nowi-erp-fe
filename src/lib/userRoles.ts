@@ -56,6 +56,24 @@ export const PD_WRITE_ROLES: readonly UserRole[] = (
   Object.keys(IS_PD_WRITER) as UserRole[]
 ).filter((role) => IS_PD_WRITER[role]);
 
+/**
+ * The approver / sign-off set — mirrors the BE `APPROVE_ROLES`
+ * (`nowi-erp-api/src/modules/auth/roles.constants.ts`). Leads + masters who
+ * may make the approval + go-to-market lifecycle calls (Approval #1/#2,
+ * start-cataloguing, cataloguing-done, go-live). Use this to gate those
+ * buttons so a writer/operator never sees a control the BE will 403.
+ *
+ * Deliberately NARROWER than {@link PD_WRITE_ROLES}: `sampling_editor` and
+ * `operator` author data but never sign off.
+ */
+export const APPROVER_ROLES: readonly UserRole[] = [
+  'admin',
+  'sampling_lead',
+  'pattern_master_w',
+  'pattern_master_m',
+  'china_import_approver',
+];
+
 type RoleSource = Pick<User, 'role'> & {
   roleAssignments?: Array<{ role: UserRole }>;
 };
