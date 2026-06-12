@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { useTranslation } from 'react-i18next';
 import { DayPicker, type DateRange } from 'react-day-picker';
-import { CalendarDays } from 'lucide-react';
+import { CalendarDays, ChevronDown } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 
@@ -132,6 +132,9 @@ interface Props {
   onApply: (from: string, to: string) => void;
   /** Upper bound for selectable days (LOCAL `YYYY-MM-DD`). Defaults to today. */
   maxDate?: string;
+  /** Optional muted prefix shown before the range on the trigger (e.g.
+   *  "Updated") so it reads as a labelled FILTER, not a bare date. */
+  label?: string;
   className?: string;
 }
 
@@ -140,6 +143,7 @@ export function DateRangePicker({
   to,
   onApply,
   maxDate,
+  label,
   className,
 }: Props) {
   const { t } = useTranslation();
@@ -257,13 +261,27 @@ export function DateRangePicker({
         onClick={() => (open ? close() : openPopover())}
         aria-haspopup="dialog"
         aria-expanded={open}
-        className="flex h-9 items-center gap-2 rounded-[var(--radius-sm)] border border-[var(--color-border)] bg-[var(--color-surface)] px-3 text-[13px] text-[var(--color-foreground)] hover:border-[var(--color-primary)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-ring)] transition-colors"
+        className={cn(
+          'flex h-9 items-center gap-2 rounded-[var(--radius-sm)] border bg-[var(--color-surface)] px-3 text-[13px] text-[var(--color-foreground)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-ring)] transition-colors',
+          open
+            ? 'border-[var(--color-primary)] ring-1 ring-[var(--color-primary)]'
+            : 'border-[var(--color-border)] hover:border-[var(--color-primary)]',
+        )}
       >
         <CalendarDays
           size={15}
           className="text-[var(--color-muted-foreground)]"
         />
+        {label && (
+          <span className="font-medium text-[var(--color-muted-foreground)]">
+            {label}:
+          </span>
+        )}
         <span className="tabular-nums">{triggerLabel}</span>
+        <ChevronDown
+          size={14}
+          className="text-[var(--color-muted-foreground)]"
+        />
       </button>
 
       {open &&

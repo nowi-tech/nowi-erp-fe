@@ -74,6 +74,9 @@ interface StyleQueueTableProps<R> {
   rowAccent?: (row: R) => boolean;
   /** Explanatory note rendered under the table (Stitch footer copy). */
   footerNote?: ReactNode;
+  /** Drop the table's own card chrome (border / rounding / shadow) — used when
+   *  the table is nested inside an outer panel that already provides them. */
+  bare?: boolean;
 }
 
 export function StyleQueueTable<R>({
@@ -90,6 +93,7 @@ export function StyleQueueTable<R>({
   actionsWidth,
   rowAccent,
   footerNote,
+  bare = false,
 }: StyleQueueTableProps<R>) {
   // +1 for the trailing actions column when present.
   const colSpan = columns.length + (renderActions ? 1 : 0);
@@ -100,7 +104,14 @@ export function StyleQueueTable<R>({
 
   return (
     <div className="space-y-3">
-      <div className="overflow-x-auto rounded-[var(--radius-md)] border border-[var(--color-border)] bg-[var(--color-surface)] shadow-sm">
+      <div
+        className={cn(
+          'overflow-x-auto',
+          // Own card chrome unless nested in an outer panel (bare).
+          !bare &&
+            'rounded-[var(--radius-md)] border border-[var(--color-border)] bg-[var(--color-surface)] shadow-sm',
+        )}
+      >
         <table
           className={cn(
             'w-full border-collapse text-left text-[13px]',

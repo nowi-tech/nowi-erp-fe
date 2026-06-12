@@ -1,6 +1,7 @@
 import { useTranslation } from 'react-i18next';
 import { Link } from 'react-router-dom';
 import { ArrowRight } from 'lucide-react';
+import { cn } from '@/lib/utils';
 import type { DashboardCards } from '@/api/dashboard';
 
 /**
@@ -32,9 +33,12 @@ interface SummaryCard {
 
 interface Props {
   cards: DashboardCards;
+  /** When true, render the cards as borderless cells (divided by lines) so
+   *  they read as part of an outer panel rather than standalone cards. */
+  embedded?: boolean;
 }
 
-export default function SummaryCards({ cards }: Props) {
+export default function SummaryCards({ cards, embedded = false }: Props) {
   const { t } = useTranslation();
 
   const firstCard: SummaryCard = cards.isApprover
@@ -90,7 +94,14 @@ export default function SummaryCards({ cards }: Props) {
   ];
 
   return (
-    <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
+    <div
+      className={cn(
+        embedded
+          ? // Borderless cells separated by dividers — reads as one panel.
+            'grid grid-cols-2 divide-x divide-y divide-[var(--color-border)] sm:divide-y-0 lg:grid-cols-4'
+          : 'grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4',
+      )}
+    >
       {items.map((item) => (
         // Whole card is the click target (not just the "View →" cue).
         // Stitch "Precision Industrial" chrome — matches StyleQueueTable's
@@ -98,7 +109,12 @@ export default function SummaryCards({ cards }: Props) {
         <Link
           key={item.key}
           to={item.to}
-          className="group flex flex-col rounded-[var(--radius-md)] border border-[var(--color-border)] bg-[var(--color-surface)] p-5 shadow-sm transition-colors hover:border-[var(--color-border-strong)] hover:bg-[var(--color-surface-2)]/40 focus:outline-none focus-visible:border-[var(--color-primary)]"
+          className={cn(
+            'group flex flex-col transition-colors focus:outline-none',
+            embedded
+              ? 'p-5 hover:bg-[var(--color-surface-2)]/40'
+              : 'rounded-[var(--radius-md)] border border-[var(--color-border)] bg-[var(--color-surface)] p-5 shadow-sm hover:border-[var(--color-border-strong)] hover:bg-[var(--color-surface-2)]/40 focus-visible:border-[var(--color-primary)]',
+          )}
         >
           {/* Label — Stitch label-caps, muted, never coloured. */}
           <span className="text-[11px] font-bold uppercase tracking-[0.05em] text-[var(--color-muted-foreground)]">
