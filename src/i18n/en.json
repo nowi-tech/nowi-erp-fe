@@ -103,7 +103,8 @@
     "china_import_approver": "China Import",
     "data_admin": "Data admin",
     "pd_lead": "Production lead",
-    "operator": "Operator"
+    "operator": "Operator",
+    "cataloguer": "Cataloguer"
   },
   "floor": {
     "title": "Floor",

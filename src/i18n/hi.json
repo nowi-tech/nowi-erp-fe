@@ -94,7 +94,8 @@
     "finishing_master": "Finishing",
     "data_manager": "Data",
     "viewer": "Viewer",
-    "operator": "Operator"
+    "operator": "Operator",
+    "cataloguer": "Cataloguer"
   },
   "floor": {
     "title": "Floor",

@@ -16,7 +16,10 @@ export type UserRole =
   | 'data_admin'
   | 'pd_lead'
   // Cross-cutting data-entry role: creates/edits everywhere, approves nothing.
-  | 'operator';
+  | 'operator'
+  // Narrow go-to-market role: create a design + do cataloguing (EasyEcom +
+  // marketplace take-offline). No editing, approving, or going live.
+  | 'cataloguer';
 
 export interface User {
   id: string;

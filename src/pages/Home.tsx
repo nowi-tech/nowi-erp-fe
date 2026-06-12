@@ -72,6 +72,7 @@ export default function Home() {
     'pattern_master_w',
     'pattern_master_m',
     'operator',
+    'cataloguer',
   ]);
 
   const [cards, setCards] = useState<DashboardCards | null>(null);

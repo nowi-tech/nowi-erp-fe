@@ -37,6 +37,9 @@ const IS_PD_WRITER: Record<UserRole, boolean> = {
   data_admin: true,
   pd_lead: true,
   operator: true,
+  // `cataloguer` is NOT a general PD writer — it only creates designs + does
+  // cataloguing, gated via CATALOGUER_WRITE_ROLES below, not this set.
+  cataloguer: false,
   viewer: false,
   floor_manager: false,
   stitching_master: false,
@@ -72,6 +75,19 @@ export const APPROVER_ROLES: readonly UserRole[] = [
   'pattern_master_w',
   'pattern_master_m',
   'china_import_approver',
+];
+
+/**
+ * Roles allowed to CREATE a design + do the cataloguing step (EasyEcom
+ * checkpoint, marketplace take-offline) — every PD editor plus the narrow
+ * `cataloguer`. Mirrors the BE `CATALOGUER_WRITE_ROLES`. Use this for the
+ * add-design CTA + the cataloguing write-gates so `cataloguer` sees exactly
+ * those controls and nothing else (it's absent from {@link PD_WRITE_ROLES}).
+ * Going live stays approver-only ({@link APPROVER_ROLES}).
+ */
+export const CATALOGUER_WRITE_ROLES: readonly UserRole[] = [
+  ...PD_WRITE_ROLES,
+  'cataloguer',
 ];
 
 type RoleSource = Pick<User, 'role'> & {

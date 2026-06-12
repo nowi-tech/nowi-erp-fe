@@ -54,7 +54,12 @@ import type {
   StyleLifecycle,
 } from '@/api/types';
 import { useAuth } from '@/context/auth';
-import { userAllRoles, PD_WRITE_ROLES, APPROVER_ROLES } from '@/lib/userRoles';
+import {
+  userAllRoles,
+  PD_WRITE_ROLES,
+  APPROVER_ROLES,
+  CATALOGUER_WRITE_ROLES,
+} from '@/lib/userRoles';
 import { cn } from '@/lib/utils';
 import { formatStyleRef } from '@/lib/styleRef';
 import GoLiveDialog from '@/components/styles/GoLiveDialog';
@@ -278,6 +283,13 @@ export default function StyleWorkspace() {
   // (core-specs pencil / BOM / pattern-CAD upload) and the Edit surface so
   // a read-only viewer never sees a control that 403s on save.
   const canWrite = roles.some((r) => PD_WRITE_ROLES.includes(r));
+
+  // Cataloguing writes (EasyEcom checkpoint + marketplace take-offline) also
+  // admit the narrow `cataloguer`. A superset of canWrite for the Channels
+  // card only — cataloguer can't edit the rest of the design.
+  const canCataloguingWrite = roles.some((r) =>
+    CATALOGUER_WRITE_ROLES.includes(r),
+  );
 
   // Park is only allowed DURING sampling (draft / in_sampling) — once a sample
   // is signed off the style is committed to the go-to-market path and can't be
@@ -514,7 +526,7 @@ export default function StyleWorkspace() {
       style={style}
       cardClasses={cardClasses}
       cataloguingStatus={style.cataloguingStatus}
-      canManage={canWrite}
+      canManage={canCataloguingWrite}
       easyecomDone={style.easyecomDone}
       onSetEasyecom={(done) =>
         doAction('easyecom-checkpoint', () => setEasyecomDone(style.id, done))

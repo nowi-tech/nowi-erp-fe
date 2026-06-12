@@ -94,6 +94,8 @@ const OFFICE_HOME_ROLES: UserRole[] = [
   // Operator has no dedicated floor home — land them on the office Home and
   // let the sidebar expose every data-entry destination.
   'operator',
+  // Cataloguer lands on the office Home to find its cataloguing queue.
+  'cataloguer',
 ];
 
 /**

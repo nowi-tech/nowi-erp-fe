@@ -44,7 +44,12 @@ import type { StyleChannelListing } from '@/api/types';
 import GoLiveDialog from '@/components/styles/GoLiveDialog';
 import SampleApproveDialog from '@/components/styles/SampleApproveDialog';
 import { useAuth } from '@/context/auth';
-import { hasAnyRole, PD_WRITE_ROLES, APPROVER_ROLES } from '@/lib/userRoles';
+import {
+  hasAnyRole,
+  PD_WRITE_ROLES,
+  APPROVER_ROLES,
+  CATALOGUER_WRITE_ROLES,
+} from '@/lib/userRoles';
 import { useDebounced } from '@/lib/useDebounced';
 import { formatStyleRef } from '@/lib/styleRef';
 
@@ -260,13 +265,17 @@ export default function StylesInFlightTable({
     return '';
   };
 
-  // Inline edits (sampling status, EasyEcom checkpoint) are gated on the PD
-  // write set, which includes operator. Non-writers see read-only cells.
+  // Inline sampling-status edits are gated on the PD write set (incl. operator).
+  // Non-writers see read-only cells.
   const canWriteInline = hasAnyRole(user, PARK_WRITE_ROLES);
 
+  // The cataloguing write (Mark EasyEcom done) admits the narrow `cataloguer`
+  // too — its whole remit. A superset of PD writers; NOT the sampling dropdown.
+  const canCataloguingWrite = hasAnyRole(user, CATALOGUER_WRITE_ROLES);
+
   // Going live is a sign-off — approver-only, matching the workspace + the BE
-  // (which 403s a non-approver on the live transition). Writers still mark
-  // EasyEcom + see the listing, but can't publish.
+  // (which 403s a non-approver on the live transition). Cataloguers/writers
+  // mark EasyEcom + see the listing, but can't publish.
   const isApprover = hasAnyRole(user, APPROVER_ROLES);
 
   // The cataloguing row has ONE progressive action button, surfaced in the
@@ -275,7 +284,9 @@ export default function StylesInFlightTable({
   //   EasyEcom done    → "Go live" (approver)
   // On a live row, the action becomes "Add channel" (go live on more).
   const canMarkEasyecom = (row: DashboardStyleRow) =>
-    row.lifecycle === 'cataloguing' && !row.easyecomDone && canWriteInline;
+    row.lifecycle === 'cataloguing' &&
+    !row.easyecomDone &&
+    canCataloguingWrite;
   const canGoLiveRow = (row: DashboardStyleRow) =>
     row.lifecycle === 'cataloguing' && row.easyecomDone && isApprover;
   const canAddChannel = (row: DashboardStyleRow) =>
