@@ -6,7 +6,7 @@ import {
   type ClipboardEvent,
   type KeyboardEvent,
 } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { useAuth } from '@/context/auth';
 import { requestOtp, verifyOtp } from '@/api/auth';
@@ -145,10 +145,18 @@ function getApiStatus(err: unknown): number | undefined {
   return undefined;
 }
 
+// Only honor an in-app `next` path — never an absolute/protocol-relative URL,
+// which would turn /login into an open redirect (e.g. a phishing hop).
+function safeNext(raw: string | null): string {
+  return raw && raw.startsWith('/') && !raw.startsWith('//') ? raw : '/';
+}
+
 export default function Login() {
   const { t } = useTranslation();
   const { login, isAuthenticated } = useAuth();
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const nextPath = safeNext(searchParams.get('next'));
 
   const [step, setStep] = useState<Step>('mobile');
   const [mobile, setMobile] = useState('');
@@ -158,8 +166,8 @@ export default function Login() {
   const [cooldown, setCooldown] = useState(0);
 
   useEffect(() => {
-    if (isAuthenticated) navigate('/', { replace: true });
-  }, [isAuthenticated, navigate]);
+    if (isAuthenticated) navigate(nextPath, { replace: true });
+  }, [isAuthenticated, navigate, nextPath]);
 
   useEffect(() => {
     if (cooldown <= 0) return;
@@ -229,7 +237,7 @@ async function handleSendOtp(e: FormEvent) {
     try {
       const { token, user } = await verifyOtp(toE164(mobile), code);
       login(token, user);
-      navigate('/', { replace: true });
+      navigate(nextPath, { replace: true });
     } catch (err) {
       const status = getApiStatus(err);
       if (status === 401) setError(t('auth.errors.wrongOtp'));
