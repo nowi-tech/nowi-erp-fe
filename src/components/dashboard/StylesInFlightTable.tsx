@@ -75,10 +75,12 @@ interface Props {
   onActionDone?: () => void;
 }
 
-// `needs_attention` is intentionally not a visible chip; its summary card
-// still deep-links to it and the BE still supports the filter (see
-// Home.VALID_TABS / dashboard.service).
+// `needs_attention` is the FIRST chip — it's the approver's queue (drafts
+// awaiting Approval #1 + in-sampling awaiting Approval #2), the exact set the
+// "Pending approvals" summary card counts, so the card lands on a highlighted
+// tab instead of a chip-less filter.
 const TABS: DashboardStyleTab[] = [
+  'needs_attention',
   'all',
   'draft',
   'sampling',

@@ -56,7 +56,9 @@ export default function SummaryCards({ cards }: Props) {
           defaultValue: 'My sampling work',
         }),
         count: cards.mySamplingWork,
-        to: '/styles?tab=in_sampling',
+        // Land on the Home dashboard's sampling tab (every card stays on the
+        // dashboard now; "View more" → full registry comes in a later pass).
+        to: '/?tab=sampling',
       };
 
   const items: SummaryCard[] = [
@@ -65,7 +67,7 @@ export default function SummaryCards({ cards }: Props) {
       key: 'inSampling',
       label: t('dashboard.cards.inSampling', { defaultValue: 'In sampling' }),
       count: cards.inSampling,
-      to: '/styles?tab=in_sampling',
+      to: '/?tab=sampling',
     },
     {
       key: 'inCataloguing',
