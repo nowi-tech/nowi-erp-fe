@@ -30,6 +30,23 @@ export async function logout(): Promise<void> {
 }
 
 /**
+ * Mint a one-time SSO code for the cross-app handoff to SkuCast. The ERP
+ * is the identity provider: the logged-in SPA mints a code and redirects
+ * the browser to SkuCast, whose backend redeems it server-to-server. The
+ * code is single-use and expires in ~60s — the ERP session token itself
+ * never leaves the ERP origin.
+ */
+export async function mintSkucastSsoCode(): Promise<{
+  code: string;
+  expiresInSeconds: number;
+}> {
+  const res = await apiClient.post<{ code: string; expiresInSeconds: number }>(
+    '/api/auth/sso/skucast',
+  );
+  return res.data;
+}
+
+/**
  * Request a fresh step-up OTP via WhatsApp. Required before high-risk
  * admin actions (`@RequireStepup()` on the BE — user delete, role
  * change, settings update, force-resolve stuck, etc.). The caller must
