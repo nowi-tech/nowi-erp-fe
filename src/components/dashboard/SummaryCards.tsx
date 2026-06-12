@@ -105,15 +105,16 @@ export default function SummaryCards({ cards, embedded = false }: Props) {
       {items.map((item) => (
         // Whole card is the click target (not just the "View →" cue).
         // Stitch "Precision Industrial" chrome — matches StyleQueueTable's
-        // card (rounded-md + border + surface + soft shadow, label-caps).
+        // card (rounded + border + surface + soft shadow, label-caps). In
+        // standalone mode the card lifts on hover so it reads as tactile.
         <Link
           key={item.key}
           to={item.to}
           className={cn(
-            'group flex flex-col transition-colors focus:outline-none',
+            'group flex flex-col focus:outline-none',
             embedded
-              ? 'p-5 hover:bg-[var(--color-surface-2)]/40'
-              : 'rounded-[var(--radius-md)] border border-[var(--color-border)] bg-[var(--color-surface)] p-5 shadow-sm hover:border-[var(--color-border-strong)] hover:bg-[var(--color-surface-2)]/40 focus-visible:border-[var(--color-primary)]',
+              ? 'p-5 transition-colors hover:bg-[var(--color-surface-2)]/40'
+              : 'rounded-[var(--radius-lg)] border border-[var(--color-border)] bg-[var(--color-surface)] p-5 shadow-sm transition-all duration-150 hover:-translate-y-0.5 hover:border-[var(--color-border-strong)] hover:shadow-md focus-visible:border-[var(--color-primary)] focus-visible:ring-2 focus-visible:ring-[var(--color-primary)]/20',
           )}
         >
           {/* Label — Stitch label-caps, muted, never coloured. */}
@@ -122,15 +123,28 @@ export default function SummaryCards({ cards, embedded = false }: Props) {
           </span>
 
           {/* Big tabular-numerals count — display style, plain foreground. */}
-          <span className="mt-3 text-[32px] font-bold leading-tight tabular-nums text-[var(--color-foreground)]">
+          <span className="mt-3 text-[40px] font-bold leading-none tabular-nums text-[var(--color-foreground)]">
             {item.count}
           </span>
 
-          {/* The ONLY coloured element: the indigo "View →" cue. The whole
-              card navigates; this stays as the visual affordance. */}
-          <span className="mt-3 inline-flex items-center gap-1 text-[13px] text-[var(--color-primary)] group-hover:underline">
+          {/* Footer divider + the ONLY coloured element: the indigo "View →"
+              cue. mt-auto pins it to the card's base so a row of cards keeps a
+              flush footer regardless of label wrap. The arrow nudges on hover. */}
+          <span
+            className={cn(
+              'mt-auto flex items-center gap-1 text-[13px] font-medium text-[var(--color-primary)]',
+              embedded
+                ? 'mt-3'
+                : 'border-t border-[var(--color-border)]/60 pt-3',
+            )}
+          >
             {t('dashboard.cards.view', { defaultValue: 'View' })}
-            <ArrowRight size={13} strokeWidth={2.25} aria-hidden />
+            <ArrowRight
+              size={13}
+              strokeWidth={2.25}
+              aria-hidden
+              className="transition-transform duration-150 group-hover:translate-x-0.5"
+            />
           </span>
         </Link>
       ))}

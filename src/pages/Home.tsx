@@ -193,12 +193,8 @@ export default function Home() {
         </div>
       </header>
 
-      {/* KPI panel — the 4 metrics as borderless, divided cells in one card. */}
-      {cards && (
-        <section className="overflow-hidden rounded-[var(--radius-md)] border border-[var(--color-border)] bg-[var(--color-surface)] shadow-sm">
-          <SummaryCards cards={cards} embedded />
-        </section>
-      )}
+      {/* KPI cards — 4 distinct, elevated metric cards (not one panel). */}
+      {cards && <SummaryCards cards={cards} />}
 
       {/* Styles in flight — the single content surface. Its own activity-window
           filter lives INSIDE the table card (passed via onDateApply). */}
