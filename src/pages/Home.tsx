@@ -108,9 +108,10 @@ export default function Home() {
   }, [loadCards]);
 
   return (
-    <div className="space-y-6">
-      {/* Header — serif title + real-data narrative + Submit design */}
-      <header className="flex items-start justify-between gap-3 flex-wrap">
+    <div className="space-y-6 pb-10">
+      {/* Page header — title + narrative (left), Stats filter + Submit (right).
+          The title is page identity, not boxed in the panel. */}
+      <header className="flex flex-wrap items-start justify-between gap-3">
         <div className="min-w-0">
           <h1 className="font-serif text-3xl font-semibold tracking-tight">
             {t('dashboard.title', { defaultValue: 'Dashboard' })}
@@ -122,9 +123,7 @@ export default function Home() {
               <span className="tabular-nums">
                 {/* First segment is role-aware, mirroring SummaryCards'
                     first card: approvers see their pending-approvals
-                    queue; everyone else sees their own sampling queue.
-                    Avoids surfacing an approvals count to non-approvers
-                    (who never see it anywhere else). */}
+                    queue; everyone else sees their own sampling queue. */}
                 <b className="font-medium text-[var(--color-foreground-2)]">
                   {cards.isApprover
                     ? cards.pendingApprovals
@@ -164,60 +163,54 @@ export default function Home() {
             )}
           </p>
         </div>
-        {canSubmit && (
-          <Button asChild>
-            <Link to="/styles/new">
-              <Plus size={16} />
-              <span className="ml-1">
-                {t('dashboard.submitDesign', { defaultValue: 'Submit design' })}
-              </span>
-            </Link>
-          </Button>
-        )}
+
+        <div className="flex shrink-0 items-center gap-2">
+          {/* Stats date filter — scopes the KPI metrics in the panel below. */}
+          <DateRangePicker
+            from={cardsFrom}
+            to={cardsTo}
+            maxDate={isoDaysAgo(0)}
+            label={t('dashboard.dateFilter.statsLabel', {
+              defaultValue: 'Stats',
+            })}
+            onApply={(nextFrom, nextTo) => {
+              setCardsFrom(nextFrom);
+              setCardsTo(nextTo);
+            }}
+          />
+          {canSubmit && (
+            <Button asChild>
+              <Link to="/styles/new">
+                <Plus size={16} />
+                <span className="ml-1">
+                  {t('dashboard.submitDesign', {
+                    defaultValue: 'Submit design',
+                  })}
+                </span>
+              </Link>
+            </Button>
+          )}
+        </div>
       </header>
 
-      {/* ── Stats period — scopes the summary cards (date-responsive metrics:
-          went-live / entered-cataloguing / sampling activity in this window). */}
-      <div className="flex flex-wrap items-center gap-2">
-        <span className="text-[11px] font-bold uppercase tracking-[0.05em] text-[var(--color-muted-foreground)]">
-          {t('dashboard.dateFilter.statsLabel', { defaultValue: 'Stats' })}
-        </span>
-        <DateRangePicker
-          from={cardsFrom}
-          to={cardsTo}
-          maxDate={isoDaysAgo(0)}
-          onApply={(nextFrom, nextTo) => {
-            setCardsFrom(nextFrom);
-            setCardsTo(nextTo);
-          }}
-        />
-      </div>
+      {/* KPI panel — the 4 metrics as borderless, divided cells in one card. */}
+      {cards && (
+        <section className="overflow-hidden rounded-[var(--radius-md)] border border-[var(--color-border)] bg-[var(--color-surface)] shadow-sm">
+          <SummaryCards cards={cards} embedded />
+        </section>
+      )}
 
-      {/* Four role-aware summary cards — all counts from real card data. */}
-      {cards && <SummaryCards cards={cards} />}
-
-      {/* ── List period — scopes the in-flight worklist below (by updatedAt;
-          the cataloguing/live tabs stay current-state regardless). */}
-      <div className="flex flex-wrap items-center gap-2 pt-1">
-        <span className="text-[11px] font-bold uppercase tracking-[0.05em] text-[var(--color-muted-foreground)]">
-          {t('dashboard.dateFilter.listLabel', { defaultValue: 'List' })}
-        </span>
-        <DateRangePicker
-          from={tableFrom}
-          to={tableTo}
-          maxDate={isoDaysAgo(0)}
-          onApply={(nextFrom, nextTo) => {
-            setTableFrom(nextFrom);
-            setTableTo(nextTo);
-          }}
-        />
-      </div>
-
-      {/* Styles in flight — the single content surface. */}
+      {/* Styles in flight — the single content surface. Its own activity-window
+          filter lives INSIDE the table card (passed via onDateApply). */}
       <StylesInFlightTable
         initialTab={initialTab}
         from={tableFrom}
         to={tableTo}
+        maxDate={isoDaysAgo(0)}
+        onDateApply={(nextFrom, nextTo) => {
+          setTableFrom(nextFrom);
+          setTableTo(nextTo);
+        }}
         onActionDone={loadCards}
       />
     </div>
