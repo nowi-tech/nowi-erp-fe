@@ -222,6 +222,10 @@ function HoverThumbnail({ src, alt }: { src: string | null; alt: string }) {
         <img
           src={src}
           alt={alt}
+          width={80}
+          height={80}
+          loading="lazy"
+          decoding="async"
           onError={() => setBroken(true)}
           className="h-20 w-20 shrink-0 cursor-zoom-in rounded-[var(--radius-sm)] border border-[var(--color-border)] object-cover transition-transform"
         />

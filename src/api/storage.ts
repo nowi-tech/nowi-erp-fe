@@ -1,4 +1,5 @@
 import { apiClient } from './apiClient';
+import { compressImage } from '@/lib/imageCompression';
 import type { ReadUrlsResponse, UploadUrlResponse } from './types';
 
 /**
@@ -109,7 +110,11 @@ export async function uploadPhoto(
   entityId: string | number,
   file: File,
 ): Promise<{ objectPath: string; noop: boolean }> {
-  const contentType = resolvePhotoContentType(file);
+  // Shrink large phone photos in the browser before the PUT (≤1600px JPEG).
+  // Best-effort: returns the original untouched if it can't help or fails, so
+  // the content-type is re-resolved from whatever we actually upload.
+  const upload = await compressImage(file);
+  const contentType = resolvePhotoContentType(upload);
   const res = await requestUploadUrl({
     entityType,
     entityId: String(entityId),
@@ -121,7 +126,7 @@ export async function uploadPhoto(
     const put = await fetch(res.uploadUrl, {
       method: 'PUT',
       headers: { 'Content-Type': contentType },
-      body: file,
+      body: upload,
     });
     if (!put.ok) {
       // Include status in the thrown error so callers can surface a
