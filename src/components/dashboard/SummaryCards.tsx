@@ -1,6 +1,7 @@
 import { useTranslation } from 'react-i18next';
 import { Link } from 'react-router-dom';
 import { ArrowRight } from 'lucide-react';
+import { cn } from '@/lib/utils';
 import type { DashboardCards } from '@/api/dashboard';
 
 /**
@@ -32,9 +33,12 @@ interface SummaryCard {
 
 interface Props {
   cards: DashboardCards;
+  /** When true, render the cards as borderless cells (divided by lines) so
+   *  they read as part of an outer panel rather than standalone cards. */
+  embedded?: boolean;
 }
 
-export default function SummaryCards({ cards }: Props) {
+export default function SummaryCards({ cards, embedded = false }: Props) {
   const { t } = useTranslation();
 
   const firstCard: SummaryCard = cards.isApprover
@@ -56,7 +60,9 @@ export default function SummaryCards({ cards }: Props) {
           defaultValue: 'My sampling work',
         }),
         count: cards.mySamplingWork,
-        to: '/styles?tab=in_sampling',
+        // Land on the Home dashboard's sampling tab (every card stays on the
+        // dashboard now; "View more" → full registry comes in a later pass).
+        to: '/?tab=sampling',
       };
 
   const items: SummaryCard[] = [
@@ -65,19 +71,19 @@ export default function SummaryCards({ cards }: Props) {
       key: 'inSampling',
       label: t('dashboard.cards.inSampling', { defaultValue: 'In sampling' }),
       count: cards.inSampling,
-      to: '/styles?tab=in_sampling',
+      to: '/?tab=sampling',
     },
     {
-      key: 'inProduction',
-      label: t('dashboard.cards.inProduction', {
-        defaultValue: 'In production',
+      key: 'inCataloguing',
+      label: t('dashboard.cards.inCataloguing', {
+        defaultValue: 'In cataloguing',
       }),
-      count: cards.inProduction,
-      // In-production = PD styles in in_pd/qc, which live in the Home feed —
-      // NOT /admin/locator (that's the legacy-floor per-lot WIP page, gated
-      // to admin/viewer/data_manager). Home's in_production tab matches this
-      // count exactly and is reachable by every office role.
-      to: '/?tab=in_production',
+      count: cards.inCataloguing,
+      // In-cataloguing = PD styles in the `cataloguing` (go-to-market) phase,
+      // which live in the Home feed. Home's cataloguing tab filters to the
+      // exact same lifecycle, so this count and that tab stay in lockstep and
+      // it's reachable by every office role.
+      to: '/?tab=cataloguing',
     },
     {
       key: 'live',
@@ -88,7 +94,14 @@ export default function SummaryCards({ cards }: Props) {
   ];
 
   return (
-    <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
+    <div
+      className={cn(
+        embedded
+          ? // Borderless cells separated by dividers — reads as one panel.
+            'grid grid-cols-2 divide-x divide-y divide-[var(--color-border)] sm:divide-y-0 lg:grid-cols-4'
+          : 'grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4',
+      )}
+    >
       {items.map((item) => (
         // Whole card is the click target (not just the "View →" cue).
         // Stitch "Precision Industrial" chrome — matches StyleQueueTable's
@@ -96,7 +109,12 @@ export default function SummaryCards({ cards }: Props) {
         <Link
           key={item.key}
           to={item.to}
-          className="group flex flex-col rounded-[var(--radius-md)] border border-[var(--color-border)] bg-[var(--color-surface)] p-5 shadow-sm transition-colors hover:border-[var(--color-border-strong)] hover:bg-[var(--color-surface-2)]/40 focus:outline-none focus-visible:border-[var(--color-primary)]"
+          className={cn(
+            'group flex flex-col transition-colors focus:outline-none',
+            embedded
+              ? 'p-5 hover:bg-[var(--color-surface-2)]/40'
+              : 'rounded-[var(--radius-md)] border border-[var(--color-border)] bg-[var(--color-surface)] p-5 shadow-sm hover:border-[var(--color-border-strong)] hover:bg-[var(--color-surface-2)]/40 focus-visible:border-[var(--color-primary)]',
+          )}
         >
           {/* Label — Stitch label-caps, muted, never coloured. */}
           <span className="text-[11px] font-bold uppercase tracking-[0.05em] text-[var(--color-muted-foreground)]">

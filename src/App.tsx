@@ -13,7 +13,7 @@ import { markChunkLoadSucceeded } from './lib/chunk-reload';
 import Login from './pages/Login';
 import Dashboard from './pages/Dashboard';
 import { useAuth } from './context/auth';
-import { hasAnyRole, PD_WRITE_ROLES } from './lib/userRoles';
+import { hasAnyRole, CATALOGUER_WRITE_ROLES } from './lib/userRoles';
 import type { UserRole } from './api/types';
 
 const AdminShell = lazy(() => import('./components/layout/AdminShell'));
@@ -94,6 +94,8 @@ const OFFICE_HOME_ROLES: UserRole[] = [
   // Operator has no dedicated floor home — land them on the office Home and
   // let the sidebar expose every data-entry destination.
   'operator',
+  // Cataloguer lands on the office Home to find its cataloguing queue.
+  'cataloguer',
 ];
 
 /**
@@ -440,6 +442,9 @@ function App() {
                     'data_admin',
                     'pd_lead',
                     'operator',
+                    // Go-to-market role: reaches the registry, the workspace
+                    // (EasyEcom checkpoint + channels), and the intake form.
+                    'cataloguer',
                   ]}
                 >
                   <S>
@@ -461,11 +466,12 @@ function App() {
                 element={
                   // Intake creates a Style (write). The /styles parent now
                   // admits read-only office roles for the registry
-                  // drill-down, so re-gate the create form to the PD write
-                  // set (shared PD_WRITE_ROLES, mirrors the BE styles WRITE)
-                  // — otherwise a read-only role could open the form by URL
+                  // drill-down, so re-gate the create form to the design-create
+                  // set (CATALOGUER_WRITE_ROLES = PD writers + cataloguer,
+                  // mirrors the BE styles CREATE and the Home "+ Submit design"
+                  // CTA) — otherwise a read-only role could open the form by URL
                   // and only hit the 403 on submit.
-                  <ProtectedRoute allowedRoles={[...PD_WRITE_ROLES]}>
+                  <ProtectedRoute allowedRoles={[...CATALOGUER_WRITE_ROLES]}>
                     <S>
                       <NewIntake />
                     </S>

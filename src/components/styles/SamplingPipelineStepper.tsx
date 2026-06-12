@@ -22,7 +22,7 @@ const STEPS: SamplingStatus[] = [
   'in_progress_fabric_sourcing',
   'in_progress_cutting',
   'ready_for_inspection',
-  'approved_for_production',
+  'ready_for_production',
 ];
 
 interface Props {
@@ -60,7 +60,7 @@ export default function SamplingPipelineStepper({
   // shared `samplingSteps.approved_for_production` label — "Approved" — is
   // kept untouched for the registry/table surfaces).
   const stepLabel = (step: SamplingStatus) =>
-    step === 'approved_for_production'
+    step === 'ready_for_production'
       ? t('admin.styles.workspace.sampleSignOff', {
           defaultValue: 'Sample sign-off',
         })
@@ -89,7 +89,7 @@ export default function SamplingPipelineStepper({
   // patching the value directly.
   const onNode = (step: SamplingStatus) => {
     if (!clickable) return;
-    if (step === 'approved_for_production') {
+    if (step === 'ready_for_production') {
       onApproveClick?.();
       return;
     }

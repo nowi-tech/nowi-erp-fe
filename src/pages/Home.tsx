@@ -6,6 +6,7 @@ import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
 import SummaryCards from '@/components/dashboard/SummaryCards';
 import StylesInFlightTable from '@/components/dashboard/StylesInFlightTable';
+import { DateRangePicker } from '@/components/ui/DateRangePicker';
 import { useAuth } from '@/context/auth';
 import { hasAnyRole } from '@/lib/userRoles';
 import {
@@ -30,8 +31,9 @@ import {
 // lands on the right tab. Anything unrecognised falls back to 'all'.
 const VALID_TABS: DashboardStyleTab[] = [
   'all',
+  'draft',
   'sampling',
-  'in_production',
+  'cataloguing',
   'live',
   'needs_attention',
 ];
@@ -41,6 +43,20 @@ function tabFromParam(value: string | null): DashboardStyleTab {
     ? (value as DashboardStyleTab)
     : 'all';
 }
+
+/** YYYY-MM-DD for a date `n` days before today (0 = today), in the user's
+ *  LOCAL zone. `toISOString()` would format in UTC and, for IST users in the
+ *  early-morning hours, return yesterday — making "today" unselectable and
+ *  shifting the default window a day back. Build the string from local parts. */
+function isoDaysAgo(n: number): string {
+  const d = new Date();
+  d.setDate(d.getDate() - n);
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${y}-${m}-${day}`;
+}
+const DEFAULT_RANGE_DAYS = 7;
 
 export default function Home() {
   const { t } = useTranslation();
@@ -56,29 +72,46 @@ export default function Home() {
     'pattern_master_w',
     'pattern_master_m',
     'operator',
+    'cataloguer',
   ]);
 
   const [cards, setCards] = useState<DashboardCards | null>(null);
   const [cardsError, setCardsError] = useState(false);
 
+  // TWO independent date windows on the one screen:
+  //  • cards window → the summary "Stats" (date-responsive metrics: went-live
+  //    in window, entered-cataloguing in window, sampling activity in window).
+  //  • table window → the "List" worklist below (the in-flight feed).
+  // Both default to the last 7 days; the user can diverge them (e.g. 30-day
+  // stats while working a 7-day list). See SummaryCards / StylesInFlightTable.
+  const [cardsFrom, setCardsFrom] = useState<string>(() =>
+    isoDaysAgo(DEFAULT_RANGE_DAYS - 1),
+  );
+  const [cardsTo, setCardsTo] = useState<string>(() => isoDaysAgo(0));
+  const [tableFrom, setTableFrom] = useState<string>(() =>
+    isoDaysAgo(DEFAULT_RANGE_DAYS - 1),
+  );
+  const [tableTo, setTableTo] = useState<string>(() => isoDaysAgo(0));
+
   const loadCards = useCallback(async () => {
     setCardsError(false);
     try {
-      const res = await getDashboardCards();
+      const res = await getDashboardCards({ from: cardsFrom, to: cardsTo });
       setCards(res);
     } catch {
       setCardsError(true);
     }
-  }, []);
+  }, [cardsFrom, cardsTo]);
 
   useEffect(() => {
     void loadCards();
   }, [loadCards]);
 
   return (
-    <div className="space-y-6">
-      {/* Header — serif title + real-data narrative + Submit design */}
-      <header className="flex items-start justify-between gap-3 flex-wrap">
+    <div className="space-y-6 pb-10">
+      {/* Page header — title + narrative (left), Stats filter + Submit (right).
+          The title is page identity, not boxed in the panel. */}
+      <header className="flex flex-wrap items-start justify-between gap-3">
         <div className="min-w-0">
           <h1 className="font-serif text-3xl font-semibold tracking-tight">
             {t('dashboard.title', { defaultValue: 'Dashboard' })}
@@ -90,9 +123,7 @@ export default function Home() {
               <span className="tabular-nums">
                 {/* First segment is role-aware, mirroring SummaryCards'
                     first card: approvers see their pending-approvals
-                    queue; everyone else sees their own sampling queue.
-                    Avoids surfacing an approvals count to non-approvers
-                    (who never see it anywhere else). */}
+                    queue; everyone else sees their own sampling queue. */}
                 <b className="font-medium text-[var(--color-foreground-2)]">
                   {cards.isApprover
                     ? cards.pendingApprovals
@@ -114,10 +145,10 @@ export default function Home() {
                 })}
                 {' · '}
                 <b className="font-medium text-[var(--color-foreground-2)]">
-                  {cards.inProduction}
+                  {cards.inCataloguing}
                 </b>{' '}
-                {t('dashboard.narrative.inProduction', {
-                  defaultValue: 'in production',
+                {t('dashboard.narrative.inCataloguing', {
+                  defaultValue: 'in cataloguing',
                 })}
                 {' · '}
                 <b className="font-medium text-[var(--color-foreground-2)]">
@@ -132,23 +163,56 @@ export default function Home() {
             )}
           </p>
         </div>
-        {canSubmit && (
-          <Button asChild>
-            <Link to="/styles/new">
-              <Plus size={16} />
-              <span className="ml-1">
-                {t('dashboard.submitDesign', { defaultValue: 'Submit design' })}
-              </span>
-            </Link>
-          </Button>
-        )}
+
+        <div className="flex shrink-0 items-center gap-2">
+          {/* Stats date filter — scopes the KPI metrics in the panel below. */}
+          <DateRangePicker
+            from={cardsFrom}
+            to={cardsTo}
+            maxDate={isoDaysAgo(0)}
+            label={t('dashboard.dateFilter.statsLabel', {
+              defaultValue: 'Stats',
+            })}
+            onApply={(nextFrom, nextTo) => {
+              setCardsFrom(nextFrom);
+              setCardsTo(nextTo);
+            }}
+          />
+          {canSubmit && (
+            <Button asChild>
+              <Link to="/styles/new">
+                <Plus size={16} />
+                <span className="ml-1">
+                  {t('dashboard.submitDesign', {
+                    defaultValue: 'Submit design',
+                  })}
+                </span>
+              </Link>
+            </Button>
+          )}
+        </div>
       </header>
 
-      {/* Four role-aware summary cards — all counts from real card data. */}
-      {cards && <SummaryCards cards={cards} />}
+      {/* KPI panel — the 4 metrics as borderless, divided cells in one card. */}
+      {cards && (
+        <section className="overflow-hidden rounded-[var(--radius-md)] border border-[var(--color-border)] bg-[var(--color-surface)] shadow-sm">
+          <SummaryCards cards={cards} embedded />
+        </section>
+      )}
 
-      {/* Styles in flight — the single content surface. */}
-      <StylesInFlightTable initialTab={initialTab} onActionDone={loadCards} />
+      {/* Styles in flight — the single content surface. Its own activity-window
+          filter lives INSIDE the table card (passed via onDateApply). */}
+      <StylesInFlightTable
+        initialTab={initialTab}
+        from={tableFrom}
+        to={tableTo}
+        maxDate={isoDaysAgo(0)}
+        onDateApply={(nextFrom, nextTo) => {
+          setTableFrom(nextFrom);
+          setTableTo(nextTo);
+        }}
+        onActionDone={loadCards}
+      />
     </div>
   );
 }

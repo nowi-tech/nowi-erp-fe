@@ -2,7 +2,6 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { Plus, Search } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
-import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Select } from '@/components/ui/select';
 import { useToast } from '@/components/ui/toast';
@@ -16,6 +15,7 @@ import {
   AgeCell,
   ApproveButton,
   GhostActionButton,
+  PrimaryActionButton,
   RowChevron,
   Thumbnail,
   type QueueColumn,
@@ -23,6 +23,8 @@ import {
 import { useSignedUrls } from '@/hooks/useSignedUrls';
 import Approval1Dialog from '@/components/styles/Approval1Dialog';
 import ParkDialog from '@/components/styles/ParkDialog';
+import SampleApproveDialog from '@/components/styles/SampleApproveDialog';
+import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 import { useAuth } from '@/context/auth';
 import { hasAnyRole, PD_WRITE_ROLES } from '@/lib/userRoles';
 import {
@@ -30,14 +32,28 @@ import {
   listStyles,
   parkStyle,
   reviveStyle,
+  sampleApproveStyle,
+  startCataloguing,
   type ListStylesParams,
   type SamplingStatus,
+  type SampleApproveStyleBody,
   type StyleTab,
 } from '@/api/styles';
 import { listReviewers } from '@/api/users';
 import type { Reviewer, Style, UserRole } from '@/api/types';
 
-const TABS: StyleTab[] = ['inbox', 'in_sampling', 'parked', 'in_pd', 'all'];
+const TABS: StyleTab[] = [
+  'inbox',
+  'in_sampling',
+  'parked',
+  // Go-to-market buckets — mirror the dashboard so the registry surfaces the
+  // full lifecycle (everything in cataloguing + live), not just up to production.
+  // (`in_pd` dropped — production lifecycles aren't reachable yet, so that tab
+  // was always empty.)
+  'cataloguing',
+  'live',
+  'all',
+];
 
 // Row-action role gates — mirror the legacy StylesTable `RowActions`
 // (and the BE guards) so the queue never shows a button that 403s.
@@ -64,7 +80,7 @@ const SAMPLING_STATUS_FILTER_OPTIONS: SamplingStatus[] = [
   'in_progress_fabric_sourcing',
   'in_progress_cutting',
   'ready_for_inspection',
-  'approved_for_production',
+  'ready_for_production',
   'corrections_needed',
 ];
 
@@ -114,6 +130,14 @@ export default function StylesRegistry() {
   const [approvalBusy, setApprovalBusy] = useState(false);
   const [parkTarget, setParkTarget] = useState<Style | null>(null);
   const [parkBusy, setParkBusy] = useState(false);
+  // Sample sign-off (Approval #2) — opens the shared verdict dialog.
+  const [sampleApproveTarget, setSampleApproveTarget] = useState<Style | null>(
+    null,
+  );
+  const [sampleApproveBusy, setSampleApproveBusy] = useState(false);
+  // Revive now confirms first (it resets sampling state + re-enters Approval #1).
+  const [reviveTarget, setReviveTarget] = useState<Style | null>(null);
+  const [reviveBusy, setReviveBusy] = useState(false);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -177,14 +201,24 @@ export default function StylesRegistry() {
   // before the Style # is minted. Park / Revive remain one-click.
   const onRowApprove = useCallback((s: Style) => setApprovalTarget(s), []);
   const onRowPark = useCallback((s: Style) => setParkTarget(s), []);
-  const onRowRevive = useCallback(
+  // Revive opens a confirmation first — it resets sampling state and re-enters
+  // Approval #1, so it shouldn't be a silent one-click.
+  const onRowRevive = useCallback((s: Style) => setReviveTarget(s), []);
+  const onRowSampleApprove = useCallback(
+    (s: Style) => setSampleApproveTarget(s),
+    [],
+  );
+  const onRowStartCataloguing = useCallback(
     async (s: Style) => {
       try {
-        await reviveStyle(s.id);
-        toast.show('Revived.', 'success');
+        await startCataloguing(s.id);
+        toast.show('Cataloguing started.', 'success');
         void load();
-      } catch {
-        toast.show('Could not revive.', 'error');
+      } catch (e: unknown) {
+        const m =
+          (e as { response?: { data?: { message?: string | string[] } } })
+            ?.response?.data?.message ?? 'Could not start cataloguing.';
+        toast.show(Array.isArray(m) ? m.join(', ') : String(m), 'error');
       }
     },
     [load, toast],
@@ -309,10 +343,31 @@ export default function StylesRegistry() {
         row.lifecycle === 'draft' && hasAnyRole(user, APPROVER_ROLES);
       const canRevive =
         row.lifecycle === 'parked' && hasAnyRole(user, WRITE_ROLES);
+      // Park only during sampling (draft / in_sampling) — no park once a
+      // sample is signed off (matches the dashboard + the BE guard).
       const canPark =
-        row.lifecycle === 'draft' && hasAnyRole(user, WRITE_ROLES);
+        (row.lifecycle === 'draft' || row.lifecycle === 'in_sampling') &&
+        hasAnyRole(user, WRITE_ROLES);
+      // Approval #2 + start-cataloguing — approver-only lifecycle advances,
+      // matching the dashboard + the BE guards.
+      const canSampleApprove =
+        row.lifecycle === 'in_sampling' &&
+        row.source !== 'china_import' &&
+        hasAnyRole(user, APPROVER_ROLES);
+      const canStartCataloguing =
+        row.lifecycle === 'sample_approved' &&
+        row.source !== 'china_import' &&
+        hasAnyRole(user, APPROVER_ROLES);
 
-      if (!canApprove && !canRevive && !canPark) return <RowChevron />;
+      if (
+        !canApprove &&
+        !canRevive &&
+        !canPark &&
+        !canSampleApprove &&
+        !canStartCataloguing
+      ) {
+        return <RowChevron />;
+      }
 
       return (
         <>
@@ -328,13 +383,35 @@ export default function StylesRegistry() {
               {t('admin.styles.table.rowActions.park', { defaultValue: 'Park' })}
             </GhostActionButton>
           )}
+          {canStartCataloguing && (
+            <PrimaryActionButton onClick={() => onRowStartCataloguing(row)}>
+              {t('admin.styles.table.rowActions.startCataloguing', {
+                defaultValue: 'Start cataloguing',
+              })}
+            </PrimaryActionButton>
+          )}
+          {canSampleApprove && (
+            <PrimaryActionButton onClick={() => onRowSampleApprove(row)}>
+              {t('admin.styles.table.rowActions.approveSample', {
+                defaultValue: 'Approve sample',
+              })}
+            </PrimaryActionButton>
+          )}
           {canApprove && <ApproveButton onClick={() => onRowApprove(row)} />}
         </>
       );
     },
-    // onRowRevive closes over `load` (changes with tab/search/filter), so
-    // include the handlers — the action cluster must never call a stale `load`.
-    [user, t, onRowApprove, onRowPark, onRowRevive],
+    // Handlers close over `load` (changes with tab/search/filter), so include
+    // them — the action cluster must never call a stale `load`.
+    [
+      user,
+      t,
+      onRowApprove,
+      onRowPark,
+      onRowRevive,
+      onRowSampleApprove,
+      onRowStartCataloguing,
+    ],
   );
 
   const tabDefs = useMemo(
@@ -359,10 +436,15 @@ export default function StylesRegistry() {
             {t('admin.styles.subtitle')}
           </p>
         </div>
-        <Button onClick={openCreateDesign}>
+        {/* Text link rather than a filled button — a quieter affordance. */}
+        <button
+          type="button"
+          onClick={openCreateDesign}
+          className="inline-flex items-center gap-1 text-sm font-medium text-[var(--color-primary)] hover:underline"
+        >
           <Plus size={16} />
-          <span className="ml-1">{t('admin.styles.newDesign')}</span>
-        </Button>
+          {t('admin.styles.newDesign')}
+        </button>
       </div>
 
       {/* Tabs + filter bar + flat queue table */}
@@ -476,6 +558,63 @@ export default function StylesRegistry() {
             setApprovalBusy(false);
           }
         }}
+      />
+
+      {/* Approve sample (Approval #2) — the shared verdict dialog (same as the
+          dashboard + workspace). */}
+      <SampleApproveDialog
+        open={sampleApproveTarget !== null}
+        busy={sampleApproveBusy}
+        onClose={() =>
+          sampleApproveBusy ? undefined : setSampleApproveTarget(null)
+        }
+        onConfirm={async (body: SampleApproveStyleBody) => {
+          if (!sampleApproveTarget) return;
+          setSampleApproveBusy(true);
+          try {
+            await sampleApproveStyle(sampleApproveTarget.id, body);
+            toast.show('Sample verdict recorded.', 'success');
+            setSampleApproveTarget(null);
+            void load();
+          } catch (e: unknown) {
+            const m =
+              (e as { response?: { data?: { message?: string | string[] } } })
+                ?.response?.data?.message ?? 'Could not record the verdict.';
+            toast.show(Array.isArray(m) ? m.join(', ') : String(m), 'error');
+          } finally {
+            setSampleApproveBusy(false);
+          }
+        }}
+      />
+
+      {/* Revive confirmation — reviving resets sampling state + re-enters
+          Approval #1, so confirm before acting. */}
+      <ConfirmDialog
+        open={reviveTarget !== null}
+        title={t('admin.styles.revive.title', { defaultValue: 'Revive style?' })}
+        message={t('admin.styles.revive.body', {
+          defaultValue:
+            'This resets sampling state and sends the style back to Approval #1.',
+        })}
+        confirmLabel={t('admin.styles.table.rowActions.revive', {
+          defaultValue: 'Revive',
+        })}
+        cancelLabel={t('common.cancel', { defaultValue: 'Cancel' })}
+        onConfirm={async () => {
+          if (!reviveTarget || reviveBusy) return;
+          setReviveBusy(true);
+          try {
+            await reviveStyle(reviveTarget.id);
+            toast.show('Revived.', 'success');
+            setReviveTarget(null);
+            void load();
+          } catch {
+            toast.show('Could not revive.', 'error');
+          } finally {
+            setReviveBusy(false);
+          }
+        }}
+        onCancel={() => (reviveBusy ? undefined : setReviveTarget(null))}
       />
     </div>
   );

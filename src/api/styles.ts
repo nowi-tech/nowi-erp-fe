@@ -39,7 +39,7 @@ export type SamplingStatus =
   | 'in_progress_cutting'
   | 'ready_for_inspection'
   | 'corrections_needed'
-  | 'approved_for_production';
+  | 'ready_for_production';
 
 export type SampleApprovalStatus =
   | 'approved_for_production'
@@ -64,7 +64,9 @@ export type StyleTab =
   | 'sample_approved'
   | 'all'
   | 'china_import'
-  | 'in_pd';
+  | 'in_pd'
+  | 'cataloguing'
+  | 'live';
 
 export interface ListStylesParams {
   source?: StyleSource;
@@ -331,10 +333,35 @@ export async function startCataloguing(styleId: number): Promise<Style> {
   return res.data;
 }
 
-/** cataloguing: cataloguingStatus pending → done. */
-export async function markCataloguingDone(styleId: number): Promise<Style> {
+/** Toggle the EasyEcom catalog checkpoint (internal OMS step, no side-effects). */
+export async function setEasyecomDone(
+  styleId: number,
+  done: boolean,
+): Promise<Style> {
   const res = await apiClient.post<Style>(
-    `/api/styles/${styleId}/actions/cataloguing-done`,
+    `/api/styles/${styleId}/actions/easyecom-checkpoint`,
+    { done },
+  );
+  return res.data;
+}
+
+/**
+ * Set a marketplace channel live/not-live (Myntra now). Going live optionally
+ * carries the public listing URL and advances the style's lifecycle → live.
+ */
+export async function setMarketplaceListing(
+  styleId: number,
+  body: {
+    channel: ChannelName;
+    live: boolean;
+    listingUrl?: string;
+    /** Reason for taking the channel offline (when live=false). */
+    reason?: string;
+  },
+): Promise<Style> {
+  const res = await apiClient.post<Style>(
+    `/api/styles/${styleId}/actions/marketplace-listing`,
+    body,
   );
   return res.data;
 }

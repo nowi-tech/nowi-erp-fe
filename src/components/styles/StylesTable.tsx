@@ -32,7 +32,7 @@ const SAMPLING_STATUS_OPTIONS = [
   'in_progress_cutting',
   'ready_for_inspection',
   'corrections_needed',
-  'approved_for_production',
+  'ready_for_production',
 ] as const;
 
 const SAMPLE_APPROVAL_OPTIONS = [

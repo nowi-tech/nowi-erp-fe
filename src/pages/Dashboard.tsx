@@ -23,6 +23,8 @@ const ROLE_HOMES: Record<UserRole, string> = {
   // Operator is an office-home role (see OFFICE_HOME_ROLES in App.tsx), so
   // HomeRoute renders Home directly and this map is only a fallback.
   operator: '/',
+  // Cataloguer is an office-home role too — lands on the unified Home.
+  cataloguer: '/',
 };
 
 export default function Dashboard() {

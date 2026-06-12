@@ -15,10 +15,17 @@ import type {
 /** Tab buckets for the Home "Styles in flight" table. */
 export type DashboardStyleTab =
   | 'all'
+  | 'draft'
   | 'sampling'
-  | 'in_production'
+  | 'cataloguing'
   | 'live'
   | 'needs_attention';
+
+/** Inclusive activity window (YYYY-MM-DD), by style updatedAt. */
+export interface DashboardDateRange {
+  from?: string;
+  to?: string;
+}
 
 /** One row of the per-style Home feed. PD styles have no lots, so progress
  * is the coarse lifecycle + manual sampling/production status — never X/Y. */
@@ -39,6 +46,18 @@ export interface DashboardStyleRow {
   productionStatus: string | null;
   factory: { id: number; name: string } | null;
   colourVariantCount: number;
+  /** EasyEcom catalog checkpoint (Done/Pending pill on the Cataloguing tab).
+   *  `live` is derived (any channel listing live). */
+  easyecomDone: boolean;
+  live: boolean;
+  /** Live marketplace listings (state=live) — channel + public URL, for the
+   *  "View now" links. */
+  liveListings: { channel: string; url: string | null }[];
+  /** Milestone dates for the context-aware date column (per tab). */
+  createdAt: string;
+  approvedAt: string | null;
+  sampleApprovedAt: string | null;
+  wentLiveAt: string | null;
   updatedAt: string;
 }
 
@@ -53,7 +72,7 @@ export interface DashboardCards {
   pendingApprovals: number;
   mySamplingWork: number;
   inSampling: number;
-  inProduction: number;
+  inCataloguing: number;
   live: number;
 }
 
@@ -62,6 +81,8 @@ export interface DashboardStylesParams {
   search?: string;
   skip?: number;
   take?: number;
+  from?: string;
+  to?: string;
 }
 
 async function getOne<T>(path: string, params?: Record<string, unknown>): Promise<T> {
@@ -97,8 +118,13 @@ export async function getDashboardStyles(
   return res.data;
 }
 
-/** Role-aware counts for the 4 Home summary cards. */
-export async function getDashboardCards(): Promise<DashboardCards> {
-  const res = await apiClient.get<DashboardCards>('/api/dashboard/cards');
+/** Role-aware counts for the 4 Home summary cards, scoped to an optional
+ *  activity window (by style updatedAt) so the date control narrows them. */
+export async function getDashboardCards(
+  range: DashboardDateRange = {},
+): Promise<DashboardCards> {
+  const res = await apiClient.get<DashboardCards>('/api/dashboard/cards', {
+    params: range,
+  });
   return res.data;
 }

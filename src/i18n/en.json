@@ -110,7 +110,8 @@
     "china_import_approver": "China Import",
     "data_admin": "Data admin",
     "pd_lead": "Production lead",
-    "operator": "Operator"
+    "operator": "Operator",
+    "cataloguer": "Cataloguer"
   },
   "floor": {
     "title": "Floor",
@@ -362,13 +363,6 @@
         "readyForQc": "{{n}} ready for QC",
         "readyToDispatch": "{{n}} ready to dispatch"
       },
-      "kpi": {
-        "developed": "Styles developed",
-        "approved": "Approved",
-        "inProduction": "In production",
-        "live": "Live",
-        "virtualLive": "Virtual-live"
-      },
       "widgets": {
         "samplingFunnel": "▸ Sampling funnel",
         "byCollection": "By collection",
@@ -376,10 +370,12 @@
         "note": "Full dashboard archived — these widgets live here now"
       },
       "tabs": {
-        "inbox": "My inbox",
+        "inbox": "Draft",
         "in_sampling": "In sampling",
         "parked": "Parked",
         "in_pd": "In PD",
+        "cataloguing": "Cataloguing",
+        "live": "Live",
         "all": "All"
       },
       "filters": {
@@ -556,9 +552,12 @@
         "sampleApprove": "Approve sample",
         "startProduction": "Start production",
         "startCataloguing": "Start cataloguing",
-        "markCataloguingDone": "Mark cataloguing done",
         "goLive": "Go live",
         "liveStage": "Live",
+        "easyecomTitle": "EasyEcom catalog",
+        "easyecomHint": "Required before going live.",
+        "easyecomDone": "Done",
+        "easyecomPending": "Pending",
         "channelsTitle": "Channels",
         "channelsNone": "No channels are live yet. Use \"Go live\" to open listings.",
         "viewListing": "View listing",
@@ -611,7 +610,7 @@
         "ready_for_inspection": "QC",
         "handed_over_for_inspection": "Handed over",
         "corrections_needed": "Corrections",
-        "approved_for_production": "Approved"
+        "ready_for_production": "Ready for prod"
       },
       "audit": {
         "created": "Created",
@@ -625,6 +624,7 @@
         "sample_approved": "Sample approved",
         "cataloguing_started": "Cataloguing started",
         "cataloguing_done": "Cataloguing done",
+        "easyecom_checkpoint_updated": "EasyEcom checkpoint updated",
         "went_live": "Went live",
         "channel_state_changed": "Channel updated",
         "inspection_added": "Inspection added",
@@ -1202,7 +1202,7 @@
       "pendingApprovals": "pending approvals",
       "inYourQueue": "in your queue",
       "inSampling": "in sampling",
-      "inProduction": "in production",
+      "inCataloguing": "in cataloguing",
       "live": "live",
       "error": "Couldn't load the summary."
     },
@@ -1210,7 +1210,7 @@
       "pendingApprovals": "Pending approvals",
       "mySamplingWork": "My sampling work",
       "inSampling": "In sampling",
-      "inProduction": "In production",
+      "inCataloguing": "In cataloguing",
       "live": "Live",
       "view": "View"
     },
@@ -1223,8 +1223,9 @@
       "colourCount_other": "{{count}} colours",
       "tabs": {
         "all": "All",
+        "draft": "Draft",
         "sampling": "Sampling",
-        "in_production": "In production",
+        "cataloguing": "Cataloguing",
         "live": "Live",
         "needs_attention": "Needs attention"
       },
@@ -1236,15 +1237,42 @@
         "actions": "Actions",
         "colour": "Colour"
       },
+      "showing": "Showing {{from}}–{{to}} of {{total}}",
+      "prevPage": "Previous page",
+      "nextPage": "Next page",
       "actions": {
         "approve": "Approve",
-        "park": "Park"
+        "park": "Park",
+        "approveSample": "Approve sample",
+        "startCataloguing": "Start cataloguing",
+        "markEasyecom": "Mark EasyEcom done",
+        "goLive": "Go live",
+        "addChannel": "Add channel",
+        "channel": "Channel"
+      },
+      "channels": {
+        "myntra": "Myntra",
+        "nykaa": "Nykaa",
+        "amazon": "Amazon",
+        "nowi_shopify": "NOWI Shopify",
+        "other": "Other"
       },
       "toast": {
         "approved": "Approved.",
         "approveError": "Could not approve.",
         "parked": "Parked.",
-        "parkError": "Could not park."
+        "parkError": "Could not park.",
+        "statusSaved": "Stage updated.",
+        "statusError": "Could not update status.",
+        "checkpointError": "Could not update checkpoint.",
+        "easyecomDone": "EasyEcom marked done.",
+        "easyecomFirst": "Mark EasyEcom done before going live.",
+        "sampleApproved": "Sample verdict recorded.",
+        "sampleApproveError": "Could not record the verdict.",
+        "cataloguingStarted": "Cataloguing started.",
+        "wentLive": "Marked live.",
+        "goLiveError": "Could not go live.",
+        "actionError": "Could not complete the action."
       },
       "productionStatus": {
         "sample_handover": "Sample handover",

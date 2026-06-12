@@ -101,7 +101,8 @@
     "finishing_master": "Finishing",
     "data_manager": "Data",
     "viewer": "Viewer",
-    "operator": "Operator"
+    "operator": "Operator",
+    "cataloguer": "Cataloguer"
   },
   "floor": {
     "title": "Floor",
@@ -725,7 +726,7 @@
         "ready_for_inspection": "क्यूसी",
         "handed_over_for_inspection": "निरीक्षण के लिए दिया",
         "corrections_needed": "सुधार चाहिए",
-        "approved_for_production": "अनुमोदित"
+        "ready_for_production": "उत्पादन हेतु तैयार"
       },
       "sampleApproval": {
         "approved_for_production": "अनुमोदित",
@@ -867,7 +868,7 @@
       "pendingApprovals": "लंबित स्वीकृतियाँ",
       "inYourQueue": "आपकी कतार में",
       "inSampling": "सैंपलिंग में",
-      "inProduction": "उत्पादन में",
+      "inCataloguing": "कैटलॉगिंग में",
       "live": "लाइव",
       "error": "सारांश लोड नहीं हो सका।"
     },
@@ -875,7 +876,7 @@
       "pendingApprovals": "लंबित स्वीकृतियाँ",
       "mySamplingWork": "मेरा सैंपलिंग कार्य",
       "inSampling": "सैंपलिंग में",
-      "inProduction": "उत्पादन में",
+      "inCataloguing": "कैटलॉगिंग में",
       "live": "लाइव",
       "view": "देखें"
     },
@@ -889,7 +890,7 @@
       "tabs": {
         "all": "सभी",
         "sampling": "सैंपलिंग",
-        "in_production": "उत्पादन में",
+        "cataloguing": "कैटलॉगिंग",
         "live": "लाइव",
         "needs_attention": "ध्यान चाहिए"
       },

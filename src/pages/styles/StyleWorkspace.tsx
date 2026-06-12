@@ -15,7 +15,6 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Dialog } from '@/components/ui/dialog';
 import { ConfirmDialog } from '@/components/ui/confirm-dialog';
-import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { useToast } from '@/components/ui/toast';
 import SamplingPipelineStepper from '@/components/styles/SamplingPipelineStepper';
@@ -41,12 +40,10 @@ import {
   listFabrics,
   colourGroup,
   startCataloguing,
-  markCataloguingDone,
   goLive,
+  setMarketplaceListing,
+  setEasyecomDone,
   type SamplingStatus,
-  type SampleApprovalStatus,
-  type SampleApproveStyleBody,
-  type GoLiveChannel,
 } from '@/api/styles';
 import type {
   ChannelName,
@@ -55,12 +52,18 @@ import type {
   StyleAuditLog,
   StyleChannelListing,
   StyleLifecycle,
-  UserRole,
 } from '@/api/types';
 import { useAuth } from '@/context/auth';
-import { userAllRoles, PD_WRITE_ROLES } from '@/lib/userRoles';
+import {
+  userAllRoles,
+  PD_WRITE_ROLES,
+  APPROVER_ROLES,
+  CATALOGUER_WRITE_ROLES,
+} from '@/lib/userRoles';
 import { cn } from '@/lib/utils';
 import { formatStyleRef } from '@/lib/styleRef';
+import GoLiveDialog from '@/components/styles/GoLiveDialog';
+import SampleApproveDialog from '@/components/styles/SampleApproveDialog';
 
 // Add-Colour is only meaningful once the family has an approved sample to
 // inherit (a colour sibling skips sampling). `StyleLifecycle` is
@@ -80,14 +83,6 @@ const POST_SAMPLING = new Set<StyleLifecycle>([
 // Roles allowed to WRITE a new colour (spawn a sibling submission) —
 // mirrors the BE variants write set via the shared PD_WRITE_ROLES.
 const COLOUR_WRITE = PD_WRITE_ROLES;
-
-// Roles allowed to "Withdraw" (re-park) a style that has already passed
-// Approval #1. Drafts can be parked by anyone; post-approval is gated.
-const POST_APPROVAL_PARK: readonly UserRole[] = [
-  'admin',
-  'sampling_lead',
-  'pd_lead',
-];
 
 // Gender may arrive as a code (W/M/U) or long form (women/men/unisex)
 // depending on the row — render the human label either way so the header /
@@ -176,7 +171,7 @@ export default function StyleWorkspace() {
   // Two-step Withdraw: confirm pulling a committed (post-Approval-#1)
   // design out of the pipeline, then open ParkDialog to capture the
   // reason. Drafts skip this and open ParkDialog directly.
-  const [withdrawConfirmOpen, setWithdrawConfirmOpen] = useState(false);
+  const [reviveConfirmOpen, setReviveConfirmOpen] = useState(false);
   // Colour family (siblings sharing this style's familyCode). Sourced from
   // the BE colour-group resolver, NOT parent.colourVariants — so opening
   // Add-Colour from a SIBLING (not the root) still sees the whole family.
@@ -267,7 +262,12 @@ export default function StyleWorkspace() {
   // no Approval #2, no inspections. Sampling-only UI is hidden for it.
   const isChinaImport = style.source === 'china_import';
   const canApproveIntake = style.lifecycle === 'draft';
-  const canSampleApprove = !isChinaImport && style.lifecycle === 'in_sampling';
+  // Sample sign-off (Approval #2) is approver-only — the BE endpoint is
+  // APPROVE-gated, so don't show the button to writers/operators who'd 403.
+  const canSampleApprove =
+    !isChinaImport &&
+    style.lifecycle === 'in_sampling' &&
+    roles.some((r) => APPROVER_ROLES.includes(r));
 
   // Add-Colour: only once the family has an approved sample to inherit
   // (POST_SAMPLING), never for china_import, and only for colour-WRITE
@@ -284,40 +284,43 @@ export default function StyleWorkspace() {
   // a read-only viewer never sees a control that 403s on save.
   const canWrite = roles.some((r) => PD_WRITE_ROLES.includes(r));
 
-  // Park: inline button on drafts (anyone). Post-approval it becomes a
-  // gated "Withdraw" — only admin / sampling_lead / pd_lead can pull a
-  // committed design back out of the pipeline.
-  const isDraft = style.lifecycle === 'draft';
+  // Cataloguing writes (EasyEcom checkpoint + marketplace take-offline) also
+  // admit the narrow `cataloguer`. A superset of canWrite for the Channels
+  // card only — cataloguer can't edit the rest of the design.
+  const canCataloguingWrite = roles.some((r) =>
+    CATALOGUER_WRITE_ROLES.includes(r),
+  );
+
+  // Park is only allowed DURING sampling (draft / in_sampling) — once a sample
+  // is signed off the style is committed to the go-to-market path and can't be
+  // parked (which also means a live style can never be parked, stranding its
+  // channel listings). No post-approval "Withdraw".
   const canPark =
-    style.lifecycle !== 'parked' &&
-    style.lifecycle !== 'archived' &&
-    (isDraft || roles.some((r) => POST_APPROVAL_PARK.includes(r)));
-  const isWithdraw = canPark && !isDraft;
+    (style.lifecycle === 'draft' || style.lifecycle === 'in_sampling') &&
+    canWrite;
   const canRevive = style.lifecycle === 'parked';
   const sourceLabel = t(`admin.styles.source.${style.source}`);
 
   // "Approve sample" is the primary action while a style is in sampling.
   const canSampleApproveAction = canSampleApprove;
-  // "Start production" advances an approved sample into PD. Until the BE
-  // exposes that transition we re-home it onto the existing Edit surface so
-  // the button is never a dead end (no new endpoint introduced here).
-  const canStartProduction =
-    canWrite && !isChinaImport && style.lifecycle === 'sample_approved';
 
-  // ── Go-to-market lifecycle actions (writers only, never china_import) ──
+  // ── Go-to-market lifecycle actions ──
+  // These advance the lifecycle and are APPROVE-gated on the BE — gate the
+  // buttons to approver roles too (matching the dashboard) so a writer/operator
+  // never sees a control that 403s. EasyEcom (the cataloguing gate) + take-
+  // offline stay open to all writers; only the lifecycle advances are gated.
+  const canApproveGoToMarket =
+    roles.some((r) => APPROVER_ROLES.includes(r)) && !isChinaImport;
   // sample_approved → cataloguing (status=pending)
   const canStartCataloguing =
-    canWrite && !isChinaImport && style.lifecycle === 'sample_approved';
-  // cataloguing + pending → done
-  const canMarkCataloguingDone =
-    canWrite &&
-    style.lifecycle === 'cataloguing' &&
-    style.cataloguingStatus === 'pending';
-  // cataloguing + done → live (opens channel-pick dialog)
+    canApproveGoToMarket && style.lifecycle === 'sample_approved';
+  // cataloguing + EasyEcom done → live (opens the shared go-live dialog).
+  // EasyEcom is the single "cataloguing complete" gate — there's no separate
+  // "Mark cataloguing done" step.
   const canGoLive =
-    canWrite &&
+    canApproveGoToMarket &&
     style.lifecycle === 'cataloguing' &&
-    style.cataloguingStatus === 'done';
+    style.easyecomDone;
 
   // Layout selector. The sampling layout (stepper band + 7/5 grid) covers
   // draft / in_sampling; the production layout (colour strip + 2-up grid)
@@ -523,6 +526,16 @@ export default function StyleWorkspace() {
       style={style}
       cardClasses={cardClasses}
       cataloguingStatus={style.cataloguingStatus}
+      canManage={canCataloguingWrite}
+      easyecomDone={style.easyecomDone}
+      onSetEasyecom={(done) =>
+        doAction('easyecom-checkpoint', () => setEasyecomDone(style.id, done))
+      }
+      onTakeOffline={(channel, reason) =>
+        doAction('take-offline', () =>
+          setMarketplaceListing(style.id, { channel, live: false, reason }),
+        )
+      }
     />
   ) : null;
 
@@ -584,17 +597,11 @@ export default function StyleWorkspace() {
               variant="outline"
               size="sm"
               disabled={busy !== null}
-              onClick={() =>
-                isWithdraw ? setWithdrawConfirmOpen(true) : setParkOpen(true)
-              }
+              onClick={() => setParkOpen(true)}
             >
-              {isWithdraw
-                ? t('admin.styles.workspace.withdraw', {
-                    defaultValue: 'Withdraw',
-                  })
-                : t('admin.styles.workspace.parkAction', {
-                    defaultValue: 'Park',
-                  })}
+              {t('admin.styles.workspace.parkAction', {
+                defaultValue: 'Park',
+              })}
             </Button>
           )}
           {canRevive && (
@@ -602,50 +609,14 @@ export default function StyleWorkspace() {
               variant="outline"
               size="sm"
               disabled={busy !== null}
-              onClick={() =>
-                void doAction('revive', () => reviveStyle(style.id))
-              }
+              onClick={() => setReviveConfirmOpen(true)}
             >
               {t('admin.styles.workspace.revive')}
             </Button>
           )}
-          {/* Send back for corrections — sampling action bar only. Patches
-              samplingStatus = corrections_needed (same wiring the stepper
-              previously carried). */}
-          {canSampleApprove && (
-            <Button
-              variant="outline"
-              size="sm"
-              disabled={busy !== null}
-              onClick={() =>
-                void doAction('send-back', () =>
-                  patchStyle(style.id, {
-                    samplingStatus: 'corrections_needed',
-                  }),
-                )
-              }
-            >
-              {t('admin.styles.workspace.sendBack', {
-                defaultValue: 'Send back for corrections',
-              })}
-            </Button>
-          )}
-          {/* Start production — sample_approved+ only. Re-homed onto the
-              Edit surface (no new BE transition introduced here). */}
-          {canStartProduction && (
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => {
-                void ensureMasterData();
-                setEditOpen(true);
-              }}
-            >
-              {t('admin.styles.workspace.startProduction', {
-                defaultValue: 'Start production',
-              })}
-            </Button>
-          )}
+          {/* Send-back for corrections is no longer a separate button — it's
+              the "corrections" verdict inside the Approve-sample dialog, so
+              there's one sign-off path (the popup). */}
           {/* Start cataloguing — sample_approved → cataloguing (pending). */}
           {canStartCataloguing && (
             <Button
@@ -663,24 +634,9 @@ export default function StyleWorkspace() {
               })}
             </Button>
           )}
-          {/* Mark cataloguing done — cataloguing + pending → done. */}
-          {canMarkCataloguingDone && (
-            <Button
-              variant="outline"
-              size="sm"
-              disabled={busy !== null}
-              onClick={() =>
-                void doAction('cataloguing-done', () =>
-                  markCataloguingDone(style.id),
-                )
-              }
-            >
-              {t('admin.styles.workspace.markCataloguingDone', {
-                defaultValue: 'Mark cataloguing done',
-              })}
-            </Button>
-          )}
-          {/* Go live — cataloguing + done → live. Opens the channel dialog. */}
+          {/* Go live — cataloguing + EasyEcom done → live. Opens the shared
+              multi-channel dialog. (Cataloguing completion is the EasyEcom
+              toggle in the Channels card, not a separate button.) */}
           {canGoLive && (
             <Button
               size="sm"
@@ -894,25 +850,23 @@ export default function StyleWorkspace() {
         }}
       />
 
-      {/* Withdraw confirmation — only for post-approval styles. */}
+      {/* Revive confirmation — reviving resets sampling state + re-enters
+          Approval #1, so confirm before acting. */}
       <ConfirmDialog
-        open={withdrawConfirmOpen}
-        destructive
-        title={t('admin.styles.workspace.withdrawConfirmTitle', {
-          defaultValue: 'Withdraw this style?',
-        })}
-        message={t('admin.styles.workspace.withdrawConfirmBody', {
+        open={reviveConfirmOpen}
+        title={t('admin.styles.revive.title', { defaultValue: 'Revive style?' })}
+        message={t('admin.styles.revive.body', {
           defaultValue:
-            'This style has already passed Approval #1. Withdrawing pulls a committed design out of the pipeline and parks it. You can revive it later. Continue?',
+            'This resets sampling state and sends the style back to Approval #1.',
         })}
-        confirmLabel={t('admin.styles.workspace.withdraw', {
-          defaultValue: 'Withdraw',
+        confirmLabel={t('admin.styles.workspace.revive', {
+          defaultValue: 'Revive',
         })}
         cancelLabel={t('common.cancel', { defaultValue: 'Cancel' })}
-        onCancel={() => setWithdrawConfirmOpen(false)}
+        onCancel={() => setReviveConfirmOpen(false)}
         onConfirm={() => {
-          setWithdrawConfirmOpen(false);
-          setParkOpen(true);
+          setReviveConfirmOpen(false);
+          void doAction('revive', () => reviveStyle(style.id));
         }}
       />
 
@@ -920,7 +874,7 @@ export default function StyleWorkspace() {
       <ParkDialog
         open={parkOpen}
         busy={busy !== null}
-        approved={isWithdraw}
+        approved={false}
         styleLabel={
           style.styleId ??
           (style.draftNo != null ? `D-${style.draftNo}` : style.workingName) ??
@@ -973,136 +927,6 @@ export default function StyleWorkspace() {
   );
 }
 
-// Channels the go-live dialog can publish to. `nowi_shopify` first since
-// it's the owned storefront; the marketplaces follow.
-const GO_LIVE_CHANNELS: ChannelName[] = [
-  'nowi_shopify',
-  'myntra',
-  'nykaa',
-  'amazon',
-  'other',
-];
-
-/**
- * Go-live dialog. Pick one or more channels and (optionally) paste the
- * public listing URL for each, then flip the style to `live`. At least one
- * channel must be selected. URLs are optional per channel.
- */
-function GoLiveDialog({
-  open,
-  busy,
-  existing,
-  onClose,
-  onConfirm,
-}: {
-  open: boolean;
-  busy: boolean;
-  existing: StyleChannelListing[];
-  onClose: () => void;
-  onConfirm: (channels: GoLiveChannel[]) => void;
-}) {
-  const { t } = useTranslation();
-  const [selected, setSelected] = useState<Set<ChannelName>>(new Set());
-  const [urls, setUrls] = useState<Record<string, string>>({});
-
-  useEffect(() => {
-    if (open) {
-      // Pre-seed from any existing listing URLs so re-opening is non-destructive.
-      const seedUrls: Record<string, string> = {};
-      for (const l of existing) {
-        if (l.listingUrl) seedUrls[l.channel] = l.listingUrl;
-      }
-      setUrls(seedUrls);
-      setSelected(new Set());
-    }
-  }, [open, existing]);
-
-  const toggle = (c: ChannelName) =>
-    setSelected((prev) => {
-      const next = new Set(prev);
-      if (next.has(c)) next.delete(c);
-      else next.add(c);
-      return next;
-    });
-
-  const canSubmit = selected.size > 0 && !busy;
-
-  return (
-    <Dialog
-      open={open}
-      onClose={onClose}
-      title={t('admin.styles.goLive.dialogTitle', {
-        defaultValue: 'Go live',
-      })}
-      footer={
-        <>
-          <Button variant="outline" size="sm" disabled={busy} onClick={onClose}>
-            {t('common.cancel', { defaultValue: 'Cancel' })}
-          </Button>
-          <Button
-            size="sm"
-            disabled={!canSubmit}
-            onClick={() =>
-              onConfirm(
-                [...selected].map((channel) => {
-                  const url = urls[channel]?.trim();
-                  return url ? { channel, listingUrl: url } : { channel };
-                }),
-              )
-            }
-          >
-            <Rocket size={14} />
-            <span className="ml-1">
-              {t('admin.styles.goLive.confirm', { defaultValue: 'Go live' })}
-            </span>
-          </Button>
-        </>
-      }
-    >
-      <p className="text-sm text-[var(--color-muted-foreground)] mb-4">
-        {t('admin.styles.goLive.dialogIntro', {
-          defaultValue:
-            'Select the channels this style is going live on and paste each public listing URL (optional). Selecting at least one channel is required.',
-        })}
-      </p>
-      <div className="space-y-2">
-        {GO_LIVE_CHANNELS.map((c) => {
-          const checked = selected.has(c);
-          return (
-            <div
-              key={c}
-              className="rounded-[var(--radius-sm)] border border-[var(--color-border)] p-3"
-            >
-              <label className="flex items-center gap-2 text-sm font-medium cursor-pointer">
-                <input
-                  type="checkbox"
-                  checked={checked}
-                  onChange={() => toggle(c)}
-                  className="h-4 w-4 accent-[var(--color-primary)]"
-                />
-                {t(`admin.styles.channel.${c}` as const, { defaultValue: c })}
-              </label>
-              {checked && (
-                <Input
-                  type="url"
-                  className="mt-2 h-9 text-sm"
-                  placeholder={t('admin.styles.goLive.urlPlaceholder', {
-                    defaultValue: 'https://… (optional)',
-                  })}
-                  value={urls[c] ?? ''}
-                  onChange={(e) =>
-                    setUrls((prev) => ({ ...prev, [c]: e.target.value }))
-                  }
-                />
-              )}
-            </div>
-          );
-        })}
-      </div>
-    </Dialog>
-  );
-}
-
 /**
  * Channels / live-listings card. Surfaced in the go-to-market lifecycle
  * (cataloguing / live). Renders each StyleChannelListing with its state pill
@@ -1112,10 +936,18 @@ function ChannelsCard({
   style,
   cardClasses,
   cataloguingStatus,
+  canManage,
+  easyecomDone,
+  onSetEasyecom,
+  onTakeOffline,
 }: {
   style: Style;
   cardClasses: string;
   cataloguingStatus: Style['cataloguingStatus'];
+  canManage: boolean;
+  easyecomDone: boolean;
+  onSetEasyecom: (done: boolean) => void;
+  onTakeOffline: (channel: ChannelName, reason: string) => void;
 }) {
   const { t } = useTranslation();
   const listings = (style.channelListings ?? []).filter(
@@ -1123,6 +955,12 @@ function ChannelsCard({
   );
   const stateBadge = (s: StyleChannelListing['state']) =>
     s === 'live' ? 'success' : s === 'draft' ? 'warning' : 'outline';
+  // Take-offline target + reason (the consequential un-publish lives here in
+  // the workspace, not on the dashboard).
+  const [offlineChannel, setOfflineChannel] = useState<ChannelName | null>(
+    null,
+  );
+  const [offlineReason, setOfflineReason] = useState('');
   return (
     <section className={cardClasses}>
       <CardHeader
@@ -1153,6 +991,59 @@ function ChannelsCard({
         }
       />
       <div className="p-5">
+        {/* EasyEcom checkpoint — the single "cataloguing complete" gate.
+            Ticking it is the prerequisite for "Go live" (no separate
+            "Cataloguing done" step). Editable by writers/operators. */}
+        {style.lifecycle === 'cataloguing' && (
+          <div className="mb-4 flex items-center justify-between gap-3 rounded-[var(--radius-sm)] border border-[var(--color-border)] px-3 py-2">
+            <div className="min-w-0">
+              <p className="text-sm font-medium">
+                {t('admin.styles.workspace.easyecomTitle', {
+                  defaultValue: 'EasyEcom catalog',
+                })}
+              </p>
+              <p className="text-xs text-[var(--color-muted-foreground)]">
+                {t('admin.styles.workspace.easyecomHint', {
+                  defaultValue: 'Required before going live.',
+                })}
+              </p>
+            </div>
+            {canManage ? (
+              <button
+                type="button"
+                aria-pressed={easyecomDone}
+                onClick={() => onSetEasyecom(!easyecomDone)}
+                className={cn(
+                  'inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-[11px] font-medium transition-colors hover:opacity-80',
+                  easyecomDone
+                    ? 'bg-emerald-100 text-emerald-800 border border-emerald-200'
+                    : 'bg-[var(--color-surface-2)] text-[var(--color-muted-foreground)] border border-[var(--color-border)]',
+                )}
+              >
+                {easyecomDone
+                  ? t('admin.styles.workspace.easyecomDone', {
+                      defaultValue: 'Done',
+                    })
+                  : t('admin.styles.workspace.easyecomPending', {
+                      defaultValue: 'Pending',
+                    })}
+              </button>
+            ) : (
+              <Badge
+                variant={easyecomDone ? 'success' : 'warning'}
+                className="text-[10px]"
+              >
+                {easyecomDone
+                  ? t('admin.styles.workspace.easyecomDone', {
+                      defaultValue: 'Done',
+                    })
+                  : t('admin.styles.workspace.easyecomPending', {
+                      defaultValue: 'Pending',
+                    })}
+              </Badge>
+            )}
+          </div>
+        )}
         {listings.length === 0 ? (
           <p className="text-sm text-[var(--color-muted-foreground)]">
             {t('admin.styles.workspace.channelsNone', {
@@ -1179,137 +1070,99 @@ function ChannelsCard({
                     })}
                   </Badge>
                 </div>
-                {l.listingUrl ? (
-                  <a
-                    href={l.listingUrl}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="inline-flex items-center gap-1 text-xs text-[var(--color-primary)] hover:underline shrink-0"
-                  >
-                    {t('admin.styles.workspace.viewListing', {
-                      defaultValue: 'View listing',
-                    })}
-                    <ExternalLink size={12} aria-hidden />
-                  </a>
-                ) : (
-                  <span className="text-xs text-[var(--color-muted-foreground)] shrink-0">
-                    {t('admin.styles.workspace.noListingUrl', {
-                      defaultValue: 'No URL',
-                    })}
-                  </span>
-                )}
+                <div className="flex items-center gap-3 shrink-0">
+                  {l.listingUrl ? (
+                    <a
+                      href={l.listingUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="inline-flex items-center gap-1 text-xs text-[var(--color-primary)] hover:underline"
+                    >
+                      {t('admin.styles.workspace.viewListing', {
+                        defaultValue: 'View listing',
+                      })}
+                      <ExternalLink size={12} aria-hidden />
+                    </a>
+                  ) : (
+                    <span className="text-xs text-[var(--color-muted-foreground)]">
+                      {t('admin.styles.workspace.noListingUrl', {
+                        defaultValue: 'No URL',
+                      })}
+                    </span>
+                  )}
+                  {/* Take-offline — only for live channels, write-gated. */}
+                  {canManage && l.state === 'live' && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setOfflineReason('');
+                        setOfflineChannel(l.channel);
+                      }}
+                      className="text-xs text-[var(--color-destructive)] hover:underline"
+                    >
+                      {t('admin.styles.workspace.takeOffline', {
+                        defaultValue: 'Take offline',
+                      })}
+                    </button>
+                  )}
+                </div>
               </li>
             ))}
           </ul>
         )}
       </div>
-    </section>
-  );
-}
 
-const SAMPLE_APPROVAL_OPTIONS: SampleApprovalStatus[] = [
-  'approved_for_production',
-  'under_review_corrections',
-  'pattern_correction_approved',
-];
-
-function SampleApproveDialog({
-  open,
-  busy,
-  onClose,
-  onConfirm,
-}: {
-  open: boolean;
-  busy: boolean;
-  onClose: () => void;
-  onConfirm: (body: SampleApproveStyleBody) => void;
-}) {
-  const { t } = useTranslation();
-  const [verdict, setVerdict] = useState<SampleApprovalStatus>(
-    'approved_for_production',
-  );
-  const [note, setNote] = useState('');
-
-  useEffect(() => {
-    if (open) {
-      setVerdict('approved_for_production');
-      setNote('');
-    }
-  }, [open]);
-
-  return (
-    <Dialog
-      open={open}
-      onClose={onClose}
-      title={t('admin.styles.approval2.dialogTitle', {
-        defaultValue: 'Approve sample',
-      })}
-      footer={
-        <>
-          <Button variant="outline" size="sm" disabled={busy} onClick={onClose}>
-            {t('admin.styles.approval2.cancel', { defaultValue: 'Cancel' })}
-          </Button>
-          <Button
-            size="sm"
-            disabled={busy}
-            onClick={() =>
-              onConfirm({
-                sampleApproval: verdict,
-                note: note.trim() || undefined,
-              })
-            }
-          >
-            <CheckCircle2 size={14} />
-            <span className="ml-1">
-              {t('admin.styles.approval2.confirm', {
-                defaultValue: 'Sign off',
-              })}
-            </span>
-          </Button>
-        </>
-      }
-    >
-      <p className="text-sm text-[var(--color-muted-foreground)] mb-4">
-        {t('admin.styles.approval2.dialogIntro', {
-          defaultValue:
-            'Record the sample verdict. Only "Approved for production" advances the lifecycle — other verdicts log the state and keep the style in sampling for rework.',
+      {/* Take-offline reason dialog. */}
+      <Dialog
+        open={offlineChannel !== null}
+        onClose={() => setOfflineChannel(null)}
+        title={t('admin.styles.workspace.takeOfflineTitle', {
+          defaultValue: 'Take offline',
         })}
-      </p>
-      <div className="space-y-3">
-        <div>
-          <label className="block text-xs text-[var(--color-muted-foreground)] mb-1">
-            {t('admin.styles.approval2.verdict', {
-              defaultValue: 'Sample verdict',
-            })}
-          </label>
-          <select
-            value={verdict}
-            onChange={(e) => setVerdict(e.target.value as SampleApprovalStatus)}
-            className="flex h-10 w-full rounded-[var(--radius-sm)] border border-[var(--color-border)] bg-white px-2.5 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-ring)]"
-          >
-            {SAMPLE_APPROVAL_OPTIONS.map((v) => (
-              <option key={v} value={v}>
-                {t(`admin.styles.sampleApproval.${v}` as const, {
-                  defaultValue: v,
-                })}
-              </option>
-            ))}
-          </select>
-        </div>
-        <div>
-          <label className="block text-xs text-[var(--color-muted-foreground)] mb-1">
-            {t('admin.styles.approval2.note', { defaultValue: 'Note' })}
-          </label>
-          <Textarea
-            value={note}
-            onChange={(e) => setNote(e.target.value)}
-            placeholder={t('admin.styles.approval2.notePlaceholder', {
-              defaultValue: 'Optional context — defects, corrections, …',
-            })}
-          />
-        </div>
-      </div>
-    </Dialog>
+        footer={
+          <>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setOfflineChannel(null)}
+            >
+              {t('common.cancel', { defaultValue: 'Cancel' })}
+            </Button>
+            <Button
+              size="sm"
+              variant="destructive"
+              disabled={!offlineReason.trim()}
+              onClick={() => {
+                if (offlineChannel) {
+                  onTakeOffline(offlineChannel, offlineReason.trim());
+                }
+                setOfflineChannel(null);
+              }}
+            >
+              {t('admin.styles.workspace.takeOffline', {
+                defaultValue: 'Take offline',
+              })}
+            </Button>
+          </>
+        }
+      >
+        <p className="mb-3 text-sm text-[var(--color-muted-foreground)]">
+          {t('admin.styles.workspace.takeOfflineIntro', {
+            defaultValue:
+              'This removes the live listing. If no other channel is live the style returns to cataloguing.',
+          })}
+        </p>
+        <label className="mb-1 block text-xs text-[var(--color-muted-foreground)]">
+          {t('admin.styles.workspace.takeOfflineReason', {
+            defaultValue: 'Reason (required)',
+          })}
+        </label>
+        <Textarea
+          value={offlineReason}
+          onChange={(e) => setOfflineReason(e.target.value)}
+        />
+      </Dialog>
+    </section>
   );
 }
 
