@@ -314,8 +314,11 @@ export function DateRangePicker({
                   onSelect={setDraft}
                   defaultMonth={defaultMonth}
                   disabled={{ after: maxDay }}
-                  showOutsideDays
                   classNames={{
+                    // `relative` so the absolutely-positioned nav arrows below
+                    // scope to the calendar area — not the whole popover (which
+                    // put the left arrow on top of the presets sidebar).
+                    root: 'relative',
                     months: 'flex flex-col gap-4 sm:flex-row',
                     month: 'space-y-2',
                     month_caption:
