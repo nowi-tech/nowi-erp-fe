@@ -2,6 +2,7 @@ import { useTranslation } from 'react-i18next';
 import { Link } from 'react-router-dom';
 import { ArrowRight } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { Skeleton } from '@/components/ui/skeleton';
 import type { DashboardCards } from '@/api/dashboard';
 
 /**
@@ -36,6 +37,32 @@ interface Props {
   /** When true, render the cards as borderless cells (divided by lines) so
    *  they read as part of an outer panel rather than standalone cards. */
   embedded?: boolean;
+}
+
+/** The grid wrapper, shared by the live cards and the loading skeleton so both
+ *  lay out identically (4-up on desktop) and the row doesn't jump on load. */
+const GRID_CLASS = 'grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4';
+
+/**
+ * Loading placeholder for the four KPI cards — same chrome (rounded card +
+ * border + shadow) and same grid as the real cards, so when the data lands the
+ * cards swap in place rather than popping into existence.
+ */
+export function SummaryCardsSkeleton() {
+  return (
+    <div className={GRID_CLASS} aria-hidden>
+      {Array.from({ length: 4 }).map((_, i) => (
+        <div
+          key={i}
+          className="flex flex-col rounded-[var(--radius-lg)] border border-[var(--color-border)] bg-[var(--color-surface)] p-5 shadow-sm"
+        >
+          <Skeleton className="h-3 w-24" />
+          <Skeleton className="mt-3 h-9 w-16" />
+          <Skeleton className="mt-auto h-4 w-12 border-t border-transparent pt-3" />
+        </div>
+      ))}
+    </div>
+  );
 }
 
 export default function SummaryCards({ cards, embedded = false }: Props) {
@@ -99,7 +126,7 @@ export default function SummaryCards({ cards, embedded = false }: Props) {
         embedded
           ? // Borderless cells separated by dividers — reads as one panel.
             'grid grid-cols-2 divide-x divide-y divide-[var(--color-border)] sm:divide-y-0 lg:grid-cols-4'
-          : 'grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4',
+          : GRID_CLASS,
       )}
     >
       {items.map((item) => (

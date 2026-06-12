@@ -4,7 +4,9 @@ import { Link, useSearchParams } from 'react-router-dom';
 import { Plus } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
-import SummaryCards from '@/components/dashboard/SummaryCards';
+import SummaryCards, {
+  SummaryCardsSkeleton,
+} from '@/components/dashboard/SummaryCards';
 import StylesInFlightTable from '@/components/dashboard/StylesInFlightTable';
 import { DateRangePicker } from '@/components/ui/DateRangePicker';
 import { useAuth } from '@/context/auth';
@@ -193,8 +195,13 @@ export default function Home() {
         </div>
       </header>
 
-      {/* KPI cards — 4 distinct, elevated metric cards (not one panel). */}
-      {cards && <SummaryCards cards={cards} />}
+      {/* KPI cards — 4 distinct, elevated metric cards (not one panel). While
+          loading, show same-shaped skeletons so the row doesn't pop in. */}
+      {cards ? (
+        <SummaryCards cards={cards} />
+      ) : !cardsError ? (
+        <SummaryCardsSkeleton />
+      ) : null}
 
       {/* Styles in flight — the single content surface. Its own activity-window
           filter lives INSIDE the table card (passed via onDateApply). */}

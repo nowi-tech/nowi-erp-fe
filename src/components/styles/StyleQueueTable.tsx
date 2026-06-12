@@ -2,6 +2,7 @@ import { useState, type ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Check, ChevronRight, ImageOff, Pause, Play } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
+import { Skeleton } from '@/components/ui/skeleton';
 import type { Style, StyleLifecycle } from '@/api/types';
 import { formatStyleRef } from '@/lib/styleRef';
 import { cn } from '@/lib/utils';
@@ -142,7 +143,21 @@ export function StyleQueueTable<R>({
             </tr>
           </thead>
           <tbody>
-            {loading && <StateRow colSpan={colSpan}>{loadingLabel}</StateRow>}
+            {loading && (
+              <>
+                {/* Shimmer rows mirror the real column layout so the table
+                    doesn't reflow when data lands. The shimmer is aria-hidden,
+                    so announce the load to assistive tech with an sr-only row. */}
+                <tr className="sr-only">
+                  <td colSpan={colSpan}>{loadingLabel}</td>
+                </tr>
+                <SkeletonRows
+                  rowCount={6}
+                  columns={columns}
+                  hasActions={!!renderActions}
+                />
+              </>
+            )}
             {!loading && error && (
               <StateRow colSpan={colSpan}>{errorLabel}</StateRow>
             )}
@@ -198,6 +213,52 @@ export function StyleQueueTable<R>({
         </p>
       )}
     </div>
+  );
+}
+
+/**
+ * Loading placeholder rows. One shimmer bar per column, aligned and right-/
+ * left-justified to match the real cells, so the table holds its shape while
+ * data loads instead of collapsing to a single centred "Loading…" line.
+ */
+function SkeletonRows<R>({
+  rowCount,
+  columns,
+  hasActions,
+}: {
+  rowCount: number;
+  columns: QueueColumn<R>[];
+  hasActions: boolean;
+}) {
+  return (
+    <>
+      {Array.from({ length: rowCount }).map((_, i) => (
+        <tr key={i} className="border-b border-[var(--color-border)]">
+          {columns.map((col) => (
+            <td
+              key={col.key}
+              className={cn(
+                'px-4 py-3',
+                col.align === 'right' && 'text-right',
+                col.className,
+              )}
+            >
+              <Skeleton
+                className={cn(
+                  'h-4',
+                  col.align === 'right' ? 'ml-auto w-10' : 'w-3/4',
+                )}
+              />
+            </td>
+          ))}
+          {hasActions && (
+            <td className="px-4 py-3 text-right">
+              <Skeleton className="ml-auto h-7 w-16" />
+            </td>
+          )}
+        </tr>
+      ))}
+    </>
   );
 }
 
