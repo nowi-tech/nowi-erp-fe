@@ -1,4 +1,11 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import {
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+} from 'react';
 import { createPortal } from 'react-dom';
 import { useTranslation } from 'react-i18next';
 import { DayPicker, type DateRange } from 'react-day-picker';
@@ -215,12 +222,32 @@ export function DateRangePicker({
     return () => window.removeEventListener('keydown', onEsc);
   }, [open, close]);
 
-  // Position the portalled popover under the trigger; track scroll/resize.
-  useEffect(() => {
+  // Position the portalled popover under the trigger, then CLAMP it into the
+  // viewport so the wide dual-month panel can't run off the right edge (or the
+  // bottom). useLayoutEffect + the ungated portal below means popRef is mounted
+  // and measurable on the first pass, so we clamp before paint (no flash). We
+  // re-run on scroll/resize to keep it anchored.
+  useLayoutEffect(() => {
     if (!open) return;
     const place = () => {
       const r = rootRef.current?.getBoundingClientRect();
-      if (r) setRect({ top: r.bottom + 6, left: r.left });
+      if (!r) return;
+      const M = 8; // viewport margin
+      const w = popRef.current?.offsetWidth ?? 0;
+      const h = popRef.current?.offsetHeight ?? 0;
+      // Anchor the left edge to the trigger, then pull it back in if the panel
+      // would overflow the right edge; never let it cross the left margin.
+      let left = r.left;
+      if (w) left = Math.min(left, window.innerWidth - w - M);
+      left = Math.max(M, left);
+      // Open below the trigger; if that overflows the bottom, flip above when
+      // it fits, else pin to the bottom margin.
+      let top = r.bottom + 6;
+      if (h && top + h > window.innerHeight - M) {
+        const above = r.top - 6 - h;
+        top = above >= M ? above : Math.max(M, window.innerHeight - h - M);
+      }
+      setRect({ top, left });
     };
     place();
     window.addEventListener('scroll', place, true);
@@ -285,7 +312,6 @@ export function DateRangePicker({
       </button>
 
       {open &&
-        rect &&
         createPortal(
           <div
             ref={popRef}
@@ -293,7 +319,15 @@ export function DateRangePicker({
             aria-label={t('dashboard.dateFilter.ariaLabel', {
               defaultValue: 'Select date range',
             })}
-            style={{ position: 'fixed', top: rect.top, left: rect.left }}
+            // Mounted as soon as it's open (so the clamp effect can measure it),
+            // but kept invisible until `rect` is computed to avoid a one-frame
+            // flash at the unclamped top-left.
+            style={{
+              position: 'fixed',
+              top: rect?.top ?? 0,
+              left: rect?.left ?? 0,
+              visibility: rect ? 'visible' : 'hidden',
+            }}
             className="z-50 flex flex-col rounded-[var(--radius-lg)] border border-[var(--color-border)] bg-[var(--color-surface)] shadow-[var(--shadow-pop)]"
           >
             <div className="flex flex-col sm:flex-row">
