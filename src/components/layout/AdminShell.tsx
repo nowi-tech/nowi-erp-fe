@@ -69,6 +69,7 @@ const OFFICE_ROLES: UserRole[] = [
   'china_import_approver',
   'pd_lead',
   'operator',
+  'cataloguer',
 ];
 
 const PD_ROLES: UserRole[] = [
@@ -88,7 +89,9 @@ const NAV_SECTIONS: NavSection[] = [
       // Unified office Home — every office role lands here.
       { to: '/', end: true, icon: <LayoutDashboard size={18} />, labelKey: 'admin.nav.dashboard', roles: OFFICE_ROLES },
       // Sampling registry (the old Styles page) — the "View more" drill-down.
-      { to: '/styles', end: true, icon: <Shirt size={18} />, labelKey: 'admin.nav.styles', roles: PD_ROLES },
+      // `cataloguer` is added inline (not via PD_ROLES) so it doesn't also
+      // surface the /fabric-library link below, which it can't access.
+      { to: '/styles', end: true, icon: <Shirt size={18} />, labelKey: 'admin.nav.styles', roles: [...PD_ROLES, 'cataloguer'] },
       // Production = the renamed Locator. Dispatch lives inside it as a tab.
       { to: '/admin/locator', icon: <Search size={18} />, labelKey: 'admin.nav.production', roles: ['admin', 'viewer', 'data_manager', 'operator'] },
     ],
