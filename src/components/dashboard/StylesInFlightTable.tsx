@@ -1,10 +1,21 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
-import { Check, ExternalLink, Rocket, Search } from 'lucide-react';
+import {
+  Check,
+  ChevronLeft,
+  ChevronRight,
+  ExternalLink,
+  ImageOff,
+  Link2,
+  Rocket,
+  Search,
+} from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { cn } from '@/lib/utils';
 import { Input } from '@/components/ui/input';
+import { DateRangePicker } from '@/components/ui/DateRangePicker';
 import { useToast } from '@/components/ui/toast';
 import Approval1Dialog from '@/components/styles/Approval1Dialog';
 import ParkDialog from '@/components/styles/ParkDialog';
@@ -12,10 +23,7 @@ import {
   StyleQueueTable,
   QueueTabs,
   StyleRefLink,
-  Thumbnail,
-  LifecycleBadge,
   ColourCell,
-  AgeCell,
   compactAge,
   ApproveButton,
   GhostActionButton,
@@ -68,6 +76,12 @@ interface Props {
   /** Activity window (YYYY-MM-DD) from the shared dashboard date control. */
   from?: string;
   to?: string;
+  /** Commit a new activity window — wires the in-card date filter back to the
+   *  Home's `tableFrom`/`tableTo` state. When given, the filter renders inside
+   *  the table card; omit to hide it. */
+  onDateApply?: (from: string, to: string) => void;
+  /** Upper bound for the in-card date filter (YYYY-MM-DD). */
+  maxDate?: string;
   /**
    * Called after a successful inline approve/park (in addition to the
    * table's own refetch) so the Home can refresh its summary cards.
@@ -87,6 +101,10 @@ const TABS: DashboardStyleTab[] = [
   'cataloguing',
   'live',
 ];
+
+// Rows per page in the in-flight feed. 50 keeps the smaller tabs on a single
+// page while still paginating the larger "All" list (BE caps `take` at 200).
+const PAGE_SIZE = 50;
 
 // Roles allowed to Park during sampling (draft / in_sampling) — the styles
 // write set on the BE, shared via PD_WRITE_ROLES. Park is unavailable once a
@@ -152,10 +170,175 @@ function StatusPill({
   );
 }
 
+// Per-channel brand chip: a small coloured square with the channel's initial
+// (Myntra red, Amazon amber, …). Keeps the marketplace cell scannable.
+const CHANNEL_BRAND: Record<string, { bg: string; fg: string; ch: string }> = {
+  myntra: { bg: '#ef4444', fg: '#ffffff', ch: 'M' },
+  nykaa: { bg: '#e91e8c', fg: '#ffffff', ch: 'N' },
+  amazon: { bg: '#ff9900', fg: '#1a1a1a', ch: 'A' },
+  nowi_shopify: { bg: '#22c55e', fg: '#ffffff', ch: 'S' },
+  other: { bg: '#64748b', fg: '#ffffff', ch: '•' },
+};
+
+/**
+ * Row thumbnail (80px) that pops a large preview on hover. The preview is
+ * portalled to <body> so the table's `overflow-x-auto` can't clip it, and
+ * positioned to the right of the cell (flipping left near the viewport edge).
+ */
+function HoverThumbnail({ src, alt }: { src: string | null; alt: string }) {
+  const [broken, setBroken] = useState(false);
+  const [hover, setHover] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+  const [pos, setPos] = useState<{ top: number; left: number } | null>(null);
+
+  const show = () => {
+    const r = ref.current?.getBoundingClientRect();
+    if (!r) return;
+    const SIZE = 240;
+    const M = 8; // viewport margin
+    // Prefer the right of the cell; flip to the left if it would overflow.
+    const left =
+      r.right + 12 + SIZE < window.innerWidth
+        ? r.right + 12
+        : r.left - 12 - SIZE;
+    // Center on the row, then clamp so the preview never runs off the top or
+    // bottom of the viewport (fixes the last-rows-clipped case).
+    const rawTop = r.top + r.height / 2 - SIZE / 2;
+    const top = Math.max(M, Math.min(rawTop, window.innerHeight - SIZE - M));
+    setPos({ top, left });
+    setHover(true);
+  };
+  const hide = () => setHover(false);
+
+  const hasImg = !!src && !broken;
+  return (
+    <div
+      ref={ref}
+      onMouseEnter={hasImg ? show : undefined}
+      onMouseLeave={hide}
+      className="inline-block"
+    >
+      {hasImg ? (
+        <img
+          src={src}
+          alt={alt}
+          onError={() => setBroken(true)}
+          className="h-20 w-20 shrink-0 cursor-zoom-in rounded-[var(--radius-sm)] border border-[var(--color-border)] object-cover transition-transform"
+        />
+      ) : (
+        <span
+          aria-hidden
+          className="flex h-20 w-20 shrink-0 items-center justify-center rounded-[var(--radius-sm)] border border-[var(--color-border)] bg-[var(--color-surface-2)] text-[var(--color-muted-foreground)]"
+        >
+          <ImageOff size={26} />
+        </span>
+      )}
+      {hover &&
+        hasImg &&
+        pos &&
+        createPortal(
+          <div
+            style={{ position: 'fixed', top: pos.top, left: pos.left }}
+            className="z-[60] overflow-hidden rounded-[var(--radius-md)] border border-[var(--color-border)] bg-[var(--color-surface)] shadow-[var(--shadow-pop)]"
+          >
+            <img src={src} alt={alt} className="h-60 w-60 object-cover" />
+          </div>,
+          document.body,
+        )}
+    </div>
+  );
+}
+
+function ChannelLogo({ channel }: { channel: string }) {
+  const b = CHANNEL_BRAND[channel] ?? CHANNEL_BRAND.other;
+  return (
+    <span
+      aria-hidden
+      className="flex h-5 w-5 shrink-0 items-center justify-center rounded text-[11px] font-bold"
+      style={{ background: b.bg, color: b.fg }}
+    >
+      {b.ch}
+    </span>
+  );
+}
+
+/**
+ * Status pill with a leading dot — e.g. "• LIVE". `tone` maps to the app's
+ * semantic tokens so it reads consistently with the rest of the UI.
+ */
+function DotStatusPill({
+  label,
+  tone,
+}: {
+  label: string;
+  tone: 'live' | 'pending' | 'neutral';
+}) {
+  // Bordered pill (matches the Style-Tracking mock): a subtle tone-tinted
+  // border + pale fill + a brighter accent dot than the label text.
+  const cfg: Record<typeof tone, { box: string; dot: string }> = {
+    live: {
+      box: 'border-[var(--color-success)]/30 bg-[var(--color-success-bg)] text-[var(--status-ready-ink)]',
+      dot: 'bg-[var(--color-success)]',
+    },
+    pending: {
+      box: 'border-[var(--color-warning)]/40 bg-[var(--color-warning-bg)] text-[var(--status-rework-ink)]',
+      dot: 'bg-[var(--color-warning)]',
+    },
+    neutral: {
+      box: 'border-[var(--color-border)] bg-[var(--color-surface-2)] text-[var(--color-muted-foreground)]',
+      dot: 'bg-[var(--color-muted-foreground)]',
+    },
+  };
+  const c = cfg[tone];
+  return (
+    <span
+      className={cn(
+        'inline-flex items-center gap-1.5 rounded-full border px-2.5 py-0.5 text-[11px] font-semibold',
+        c.box,
+      )}
+    >
+      <span aria-hidden className={cn('h-1.5 w-1.5 rounded-full', c.dot)} />
+      {label}
+    </span>
+  );
+}
+
+/**
+ * Two-line metric cell — a bold primary line ("2d live") + a muted "Upd: Xd
+ * ago" subline. Used by the go-to-market tabs where the row's age-in-state is
+ * the at-a-glance signal.
+ */
+function MetricCell({
+  primaryIso,
+  primarySuffix,
+  updatedIso,
+}: {
+  primaryIso: string | null;
+  primarySuffix: string;
+  updatedIso: string;
+}) {
+  const { t } = useTranslation();
+  return (
+    <div className="flex flex-col leading-tight">
+      <span className="font-bold text-[var(--color-foreground)] tabular-nums">
+        {primaryIso ? `${compactAge(primaryIso)} ${primarySuffix}` : '—'}
+      </span>
+      <span className="text-[11px] text-[var(--color-muted-foreground)]">
+        {t('dashboard.table.updatedAgo', {
+          age: compactAge(updatedIso),
+          defaultValue: `Upd: ${compactAge(updatedIso)}`,
+        })}
+      </span>
+    </div>
+  );
+}
+
 export default function StylesInFlightTable({
   initialTab = 'all',
   from,
   to,
+  onDateApply,
+  maxDate,
   onActionDone,
 }: Props) {
   const { t } = useTranslation();
@@ -171,6 +354,10 @@ export default function StylesInFlightTable({
   const [rows, setRows] = useState<DashboardStyleRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);
+  // Pagination — page through the feed `PAGE_SIZE` at a time. `total` drives
+  // the "Showing X–Y of Z" label + the prev/next enabled state.
+  const [skip, setSkip] = useState(0);
+  const [total, setTotal] = useState(0);
 
   // Inline action targets — opening either dialog stashes the row.
   const [approvalTarget, setApprovalTarget] =
@@ -205,20 +392,29 @@ export default function StylesInFlightTable({
         search: debouncedSearch.trim() || undefined,
         from,
         to,
-        take: 100,
+        skip,
+        take: PAGE_SIZE,
       });
       setRows(res.rows);
+      setTotal(res.page.total);
     } catch {
       setRows([]);
+      setTotal(0);
       setError(true);
     } finally {
       setLoading(false);
     }
-  }, [tab, debouncedSearch, from, to]);
+  }, [tab, debouncedSearch, from, to, skip]);
 
   useEffect(() => {
     void load();
   }, [load]);
+
+  // Reset to the first page whenever the result SET changes (tab / search /
+  // date window) — otherwise a stale `skip` could land past the last page.
+  useEffect(() => {
+    setSkip(0);
+  }, [tab, debouncedSearch, from, to]);
 
   // Refetch the table AND let the Home refresh its cards.
   const afterAction = () => {
@@ -286,9 +482,7 @@ export default function StylesInFlightTable({
   //   EasyEcom done    → "Go live" (approver)
   // On a live row, the action becomes "Add channel" (go live on more).
   const canMarkEasyecom = (row: DashboardStyleRow) =>
-    row.lifecycle === 'cataloguing' &&
-    !row.easyecomDone &&
-    canCataloguingWrite;
+    row.lifecycle === 'cataloguing' && !row.easyecomDone && canCataloguingWrite;
   const canGoLiveRow = (row: DashboardStyleRow) =>
     row.lifecycle === 'cataloguing' && row.easyecomDone && isApprover;
   const canAddChannel = (row: DashboardStyleRow) =>
@@ -468,180 +662,213 @@ export default function StylesInFlightTable({
       });
   };
 
-  // The Style column + Updated column are shared across every tab.
-  const styleColumn: QueueColumn<DashboardStyleRow> = {
-    key: 'style',
-    header: t('dashboard.table.columns.style', { defaultValue: 'Style' }),
-    // Flexible widest column — absorbs the table's slack but truncates so a
-    // long working name never forces the table into a horizontal scroll.
-    width: '38%',
+  // ── Shared grammar: IMG · Style/Name · [context] · Status · Metrics ──
+  // A thumbnail in its own narrow column (split out of the Style cell).
+  const imgColumn: QueueColumn<DashboardStyleRow> = {
+    key: 'img',
+    header: t('dashboard.table.columns.img', { defaultValue: 'Img' }),
+    // 80px image + the cell's horizontal padding needs ~116px of column.
+    width: '116px',
+    cell: (row) => (
+      <HoverThumbnail
+        src={row.thumbnail}
+        alt={row.workingName ?? formatStyleRef(row)}
+      />
+    ),
+  };
+
+  // Style # / draft link + working name (no thumbnail — IMG owns that now).
+  const styleNameColumn: QueueColumn<DashboardStyleRow> = {
+    key: 'styleName',
+    header: t('dashboard.table.columns.styleName', {
+      defaultValue: 'Style ID / Name',
+    }),
+    width: '280px',
+    cell: (row) => (
+      // Cap the name block at a fixed width so a long working name truncates
+      // instead of stretching the column on wide screens.
+      <div className="flex max-w-[248px] min-w-0 flex-col">
+        <StyleRefLink style={row} onClick={() => openStyle(row)} />
+        {row.workingName && (
+          <span className="truncate text-[var(--color-foreground)]">
+            {row.workingName}
+          </span>
+        )}
+      </div>
+    ),
+  };
+
+  // Status pill — the row's at-a-glance state. Live → "• LIVE"; cataloguing →
+  // EasyEcom Done/Pending; otherwise the lifecycle.
+  // One consistent dot-pill for the row's state across every tab. Live +
+  // sample_approved read green; cataloguing reflects the EasyEcom gate;
+  // everything else is neutral with its lifecycle label.
+  const statusColumn: QueueColumn<DashboardStyleRow> = {
+    key: 'status',
+    header: t('dashboard.table.columns.status', { defaultValue: 'Status' }),
+    width: '116px',
     cell: (row) => {
-        // Colour has its own column now; the subline only surfaces the
-        // colour-family fan-out count when there are variants.
-        const subLine =
-          row.colourVariantCount > 0
-            ? t('dashboard.table.colourCount', {
-                count: row.colourVariantCount,
-              })
-            : '';
+      if (row.lifecycle === 'live') {
         return (
-          <div className="flex items-center gap-2.5">
-            <Thumbnail
-              src={row.thumbnail}
-              alt={row.workingName ?? formatStyleRef(row)}
-            />
-            {/* min-w-0 lets the flex child shrink below its content so the
-                working-name span can truncate instead of overflowing. */}
-            <div className="flex min-w-0 flex-col">
-              <StyleRefLink style={row} onClick={() => openStyle(row)} />
-              {row.workingName && (
-                <span className="truncate text-[var(--color-foreground)]">
-                  {row.workingName}
-                </span>
-              )}
-              {subLine && (
-                <span className="truncate text-xs text-[var(--color-muted-foreground)]">
-                  {subLine}
-                </span>
-              )}
-            </div>
-          </div>
+          <DotStatusPill
+            label={t('dashboard.table.statusLive', { defaultValue: 'LIVE' })}
+            tone="live"
+          />
         );
+      }
+      if (row.lifecycle === 'cataloguing') {
+        return (
+          <DotStatusPill
+            label={
+              row.easyecomDone
+                ? t('dashboard.table.done', { defaultValue: 'Done' })
+                : t('dashboard.table.pending', { defaultValue: 'Pending' })
+            }
+            tone={row.easyecomDone ? 'live' : 'pending'}
+          />
+        );
+      }
+      const tone = row.lifecycle === 'sample_approved' ? 'live' : 'neutral';
+      return (
+        <DotStatusPill
+          label={t(`admin.styles.lifecycle.${row.lifecycle}` as const, {
+            defaultValue: row.lifecycle.replace(/_/g, ' '),
+          })}
+          tone={tone}
+        />
+      );
     },
   };
 
-  // Context-aware date column — its meaning follows the active tab so each
-  // view surfaces the milestone that matters (Draft → submitted, Sampling →
-  // in-sampling since, Cataloguing → sampling completed, Live → went live).
-  // `updatedAt` rides along as a small subline (except on the All tab where it
-  // IS the primary). Falls back to updatedAt when the milestone is null.
-  const milestone: {
-    headerKey: string;
-    headerDefault: string;
-    pick: (r: DashboardStyleRow) => string | null;
-  } =
-    tab === 'draft'
-      ? {
-          headerKey: 'dashboard.table.columns.submitted',
-          headerDefault: 'Submitted',
-          pick: (r) => r.createdAt,
-        }
-      : tab === 'sampling'
-        ? {
-            headerKey: 'dashboard.table.columns.inSampling',
-            headerDefault: 'In sampling',
-            pick: (r) => r.approvedAt,
-          }
-        : tab === 'cataloguing'
-          ? {
-              headerKey: 'dashboard.table.columns.sampleDone',
-              headerDefault: 'Sampling done',
-              pick: (r) => r.sampleApprovedAt,
-            }
-          : tab === 'live'
-            ? {
-                headerKey: 'dashboard.table.columns.wentLive',
-                headerDefault: 'Went live',
-                pick: (r) => r.wentLiveAt,
-              }
-            : {
-                headerKey: 'dashboard.table.columns.updated',
-                headerDefault: 'Updated',
-                pick: (r) => r.updatedAt,
-              };
-  const showUpdatedSubline = tab !== 'all';
-
-  const dateColumn: QueueColumn<DashboardStyleRow> = {
-    key: 'date',
-    header: t(milestone.headerKey, { defaultValue: milestone.headerDefault }),
-    width: showUpdatedSubline ? '104px' : '76px',
+  // Metrics cell — "time in current state" (bold) + "Upd: Xd". The primary
+  // milestone + suffix follow the ROW's lifecycle (so it's right on the mixed
+  // All tab too), not the active tab.
+  const metricInfo = (
+    row: DashboardStyleRow,
+  ): { iso: string | null; suffix: string } => {
+    switch (row.lifecycle) {
+      case 'live':
+        return {
+          iso: row.wentLiveAt,
+          suffix: t('dashboard.table.metricSuffix.live', {
+            defaultValue: 'live',
+          }),
+        };
+      case 'cataloguing':
+        return {
+          iso: row.sampleApprovedAt,
+          suffix: t('dashboard.table.metricSuffix.cataloguing', {
+            defaultValue: 'in cat.',
+          }),
+        };
+      case 'in_sampling':
+        return {
+          iso: row.approvedAt,
+          suffix: t('dashboard.table.metricSuffix.sampling', {
+            defaultValue: 'sampling',
+          }),
+        };
+      case 'sample_approved':
+        return {
+          iso: row.sampleApprovedAt,
+          suffix: t('dashboard.table.metricSuffix.ready', {
+            defaultValue: 'ready',
+          }),
+        };
+      case 'draft':
+        return {
+          iso: row.createdAt,
+          suffix: t('dashboard.table.metricSuffix.draft', {
+            defaultValue: 'old',
+          }),
+        };
+      default:
+        return { iso: row.updatedAt, suffix: '' };
+    }
+  };
+  const metricsColumn: QueueColumn<DashboardStyleRow> = {
+    key: 'metrics',
+    header: t('dashboard.table.columns.metrics', { defaultValue: 'Metrics' }),
+    width: '116px',
     align: 'right',
     cell: (row) => {
-      const iso = milestone.pick(row) ?? row.updatedAt;
+      const m = metricInfo(row);
       return (
-        <div className="flex flex-col items-end leading-tight">
-          <AgeCell iso={iso} />
-          {showUpdatedSubline && (
-            <span className="text-[10px] text-[var(--color-muted-foreground)]">
-              {t('dashboard.table.updatedAgo', {
-                age: compactAge(row.updatedAt),
-                defaultValue: `upd ${compactAge(row.updatedAt)}`,
-              })}
-            </span>
-          )}
+        <div className="flex justify-end">
+          <MetricCell
+            primaryIso={m.iso}
+            primarySuffix={m.suffix}
+            updatedIso={row.updatedAt}
+          />
         </div>
       );
     },
   };
 
-  // Default columns (every tab except Cataloguing).
-  const defaultColumns: QueueColumn<DashboardStyleRow>[] = [
-    styleColumn,
-    {
-      key: 'lifecycle',
-      header: t('dashboard.table.columns.lifecycle', {
-        defaultValue: 'Lifecycle',
-      }),
-      width: '120px',
-      cell: (row) => <LifecycleBadge lifecycle={row.lifecycle} />,
-    },
-    {
-      key: 'stage',
-      header: t('dashboard.table.columns.stage', { defaultValue: 'Stage' }),
-      width: '180px',
-      className: 'hidden md:table-cell',
-      headerClassName: 'hidden md:table-cell',
-      cell: (row) => {
-        // While in sampling, the Stage is an inline-editable sampling status
-        // for PD writers — change it right here, no detail-page round-trip.
-        if (row.lifecycle === 'in_sampling' && canWriteInline) {
-          return (
-            <select
-              value={row.samplingStatus ?? ''}
-              onClick={(e) => e.stopPropagation()}
-              onChange={(e) => {
-                e.stopPropagation();
-                changeSamplingStatus(row, e.target.value as SamplingStatus);
-              }}
-              className="h-8 w-full rounded-md border border-[var(--color-input)] bg-[var(--color-surface)] px-2 text-[12px] text-[var(--color-foreground)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-ring)]"
-            >
-              {/* A row with no status yet shows a placeholder option. */}
-              {!row.samplingStatus && (
-                <option value="" disabled>
-                  {t('dashboard.table.setStatus', {
-                    defaultValue: 'Set status…',
-                  })}
-                </option>
-              )}
-              {SAMPLING_STATUS_OPTIONS.map((s) => (
-                <option key={s} value={s}>
-                  {t(`admin.styles.samplingSteps.${s}` as const, {
-                    defaultValue: s.replace(/_/g, ' '),
-                  })}
-                </option>
-              ))}
-            </select>
-          );
-        }
-        const stage = stageLabel(row);
-        return stage ? (
-          <Badge variant="stitch" className="text-[10px]">
-            {stage}
-          </Badge>
-        ) : (
-          <span className="text-[var(--color-muted-foreground)]">—</span>
+  // Stage column — for the Sampling tab. The inline-editable sampling-status
+  // dropdown for in_sampling rows (PD writers); a read-only stage badge else.
+  const stageColumn: QueueColumn<DashboardStyleRow> = {
+    key: 'stage',
+    header: t('dashboard.table.columns.stage', { defaultValue: 'Stage' }),
+    width: '190px',
+    cell: (row) => {
+      if (row.lifecycle === 'in_sampling' && canWriteInline) {
+        return (
+          <select
+            value={row.samplingStatus ?? ''}
+            onClick={(e) => e.stopPropagation()}
+            onChange={(e) => {
+              e.stopPropagation();
+              changeSamplingStatus(row, e.target.value as SamplingStatus);
+            }}
+            className="h-8 w-full rounded-md border border-[var(--color-input)] bg-[var(--color-surface)] px-2 text-[12px] text-[var(--color-foreground)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-ring)]"
+          >
+            {!row.samplingStatus && (
+              <option value="" disabled>
+                {t('dashboard.table.setStatus', {
+                  defaultValue: 'Set status…',
+                })}
+              </option>
+            )}
+            {SAMPLING_STATUS_OPTIONS.map((s) => (
+              <option key={s} value={s}>
+                {t(`admin.styles.samplingSteps.${s}` as const, {
+                  defaultValue: s.replace(/_/g, ' '),
+                })}
+              </option>
+            ))}
+          </select>
         );
-      },
+      }
+      const stage = stageLabel(row);
+      return stage ? (
+        <Badge variant="stitch" className="text-[10px]">
+          {stage}
+        </Badge>
+      ) : (
+        <span className="text-[var(--color-muted-foreground)]">—</span>
+      );
     },
-    {
-      key: 'colour',
-      header: t('dashboard.table.columns.colour', { defaultValue: 'Colour' }),
-      width: '140px',
-      className: 'hidden sm:table-cell',
-      headerClassName: 'hidden sm:table-cell',
-      cell: (row) => <ColourCell name={row.primaryColour} />,
-    },
-    dateColumn,
+  };
+
+  // Colour swatch + name — context column for the draft / all views.
+  const colourColumn: QueueColumn<DashboardStyleRow> = {
+    key: 'colour',
+    header: t('dashboard.table.columns.colour', { defaultValue: 'Colour' }),
+    width: '150px',
+    className: 'hidden sm:table-cell',
+    headerClassName: 'hidden sm:table-cell',
+    cell: (row) => <ColourCell name={row.primaryColour} />,
+  };
+
+  // Default grammar (All · Needs attention · Draft): IMG · Style/Name ·
+  // Colour · Status · Metrics — same shared cells as every other tab.
+  const defaultColumns: QueueColumn<DashboardStyleRow>[] = [
+    imgColumn,
+    styleNameColumn,
+    colourColumn,
+    statusColumn,
+    metricsColumn,
   ];
 
   // EasyEcom — a read-only Done/Pending STATUS (scannable down the column).
@@ -674,8 +901,8 @@ export default function StylesInFlightTable({
     }),
     width: '190px',
     cell: (row) => {
-      // Render EVERY live channel (not just a hardcoded list) so a style live
-      // on any channel shows its listing, never a blank cell.
+      // Each live channel as a brand chip (logo + name), with an external-link
+      // icon when a public listing URL exists.
       const channelLabel = (channel: string) =>
         t(`dashboard.table.channels.${channel}` as const, {
           defaultValue: channel,
@@ -684,9 +911,24 @@ export default function StylesInFlightTable({
         return <span className="text-[var(--color-muted-foreground)]">—</span>;
       }
       return (
-        <div className="flex flex-wrap items-center gap-1.5">
+        <div className="flex flex-wrap items-center gap-2">
           {row.liveListings.map((listing) => {
             const label = channelLabel(listing.channel);
+            const inner = (
+              <>
+                <ChannelLogo channel={listing.channel} />
+                <span className="font-medium text-[var(--color-foreground)]">
+                  {label}
+                </span>
+                {listing.url && (
+                  <ExternalLink
+                    size={13}
+                    className="text-[var(--color-primary)]"
+                    aria-hidden
+                  />
+                )}
+              </>
+            );
             return listing.url ? (
               <a
                 key={listing.channel}
@@ -694,22 +936,19 @@ export default function StylesInFlightTable({
                 target="_blank"
                 rel="noopener noreferrer"
                 onClick={(e) => e.stopPropagation()}
-                className="inline-flex items-center gap-1 rounded-full border border-emerald-200 bg-emerald-100 px-2.5 py-0.5 text-[11px] font-medium text-emerald-800 hover:bg-emerald-200"
+                className="inline-flex items-center gap-1.5 text-[13px] hover:opacity-80"
+                title={t('dashboard.table.viewNow', {
+                  defaultValue: 'View now',
+                })}
               >
-                {label}
-                <ExternalLink size={11} aria-hidden />
-                {t('dashboard.table.viewNow', { defaultValue: 'View now' })}
+                {inner}
               </a>
             ) : (
               <span
                 key={listing.channel}
-                className="inline-flex items-center gap-1 rounded-full border border-emerald-200 bg-emerald-100 px-2.5 py-0.5 text-[11px] font-medium text-emerald-800"
+                className="inline-flex items-center gap-1.5 text-[13px]"
               >
-                <Check size={12} />
-                {t('dashboard.table.channelLive', {
-                  channel: label,
-                  defaultValue: `${label} · Live`,
-                })}
+                {inner}
               </span>
             );
           })}
@@ -718,20 +957,32 @@ export default function StylesInFlightTable({
     },
   };
 
-  // Cataloguing tab — the go-to-market workbench (EasyEcom + Marketplace).
-  const cataloguingColumns: QueueColumn<DashboardStyleRow>[] = [
-    styleColumn,
-    easyecomColumn,
-    marketplaceColumn,
-    dateColumn,
+  // Sampling tab — IMG · Style/Name · Stage (inline editor) · Metrics.
+  // The Stage IS the status here, so no separate status pill.
+  const samplingColumns: QueueColumn<DashboardStyleRow>[] = [
+    imgColumn,
+    styleNameColumn,
+    stageColumn,
+    metricsColumn,
   ];
 
-  // Live tab — "what's selling, where". Marketplace only; EasyEcom is omitted
-  // (always done for a live style, so it'd be a redundant column).
-  const liveColumns: QueueColumn<DashboardStyleRow>[] = [
-    styleColumn,
+  // Cataloguing tab — IMG · Style/Name · EasyEcom · Marketplace · Metrics.
+  // EasyEcom is the status pill for this stage.
+  const cataloguingColumns: QueueColumn<DashboardStyleRow>[] = [
+    imgColumn,
+    styleNameColumn,
+    easyecomColumn,
     marketplaceColumn,
-    dateColumn,
+    metricsColumn,
+  ];
+
+  // Live tab — IMG · Style/Name · Marketplace · Status · Metrics.
+  const liveColumns: QueueColumn<DashboardStyleRow>[] = [
+    imgColumn,
+    styleNameColumn,
+    marketplaceColumn,
+    statusColumn,
+    metricsColumn,
   ];
 
   const columns =
@@ -739,130 +990,226 @@ export default function StylesInFlightTable({
       ? cataloguingColumns
       : tab === 'live'
         ? liveColumns
-        : defaultColumns;
+        : tab === 'sampling'
+          ? samplingColumns
+          : defaultColumns;
+
+  // "Showing X–Y of Z" + prev/next — rendered both above and below the table
+  // (the bottom copy saves a scroll-back-up after working a full page).
+  const pager =
+    total > 0 ? (
+      <div className="flex items-center gap-3">
+        <span className="text-[12px] tabular-nums text-[var(--color-muted-foreground)]">
+          {t('dashboard.table.showing', {
+            from: skip + 1,
+            to: Math.min(skip + PAGE_SIZE, total),
+            total,
+            defaultValue: `Showing ${skip + 1}–${Math.min(
+              skip + PAGE_SIZE,
+              total,
+            )} of ${total}`,
+          })}
+        </span>
+        <div className="flex items-center gap-1">
+          <button
+            type="button"
+            aria-label={t('dashboard.table.prevPage', {
+              defaultValue: 'Previous page',
+            })}
+            disabled={skip === 0}
+            onClick={() => setSkip((s) => Math.max(0, s - PAGE_SIZE))}
+            className="inline-flex h-8 w-8 items-center justify-center rounded-[var(--radius-sm)] border border-[var(--color-border)] text-[var(--color-foreground)] transition-colors hover:bg-[var(--color-surface-2)] disabled:pointer-events-none disabled:opacity-40"
+          >
+            <ChevronLeft size={16} />
+          </button>
+          <button
+            type="button"
+            aria-label={t('dashboard.table.nextPage', {
+              defaultValue: 'Next page',
+            })}
+            disabled={skip + PAGE_SIZE >= total}
+            onClick={() => setSkip((s) => s + PAGE_SIZE)}
+            className="inline-flex h-8 w-8 items-center justify-center rounded-[var(--radius-sm)] border border-[var(--color-border)] text-[var(--color-foreground)] transition-colors hover:bg-[var(--color-surface-2)] disabled:pointer-events-none disabled:opacity-40"
+          >
+            <ChevronRight size={16} />
+          </button>
+        </div>
+      </div>
+    ) : null;
 
   return (
     <div className="space-y-3">
-      {/* Tabs */}
-      <QueueTabs
-        tabs={TABS.map((tk) => ({
-          key: tk,
-          label: t(`dashboard.table.tabs.${tk}` as const),
-        }))}
-        active={tab}
-        onSelect={selectTab}
-      />
+      {/* One unified panel: tabs · search/pagination · table all share a
+          single bordered card (the "Style tracking" treatment). */}
+      <section className="overflow-hidden rounded-[var(--radius-md)] border border-[var(--color-border)] bg-[var(--color-surface)] shadow-sm">
+        {/* Tabs row — the QueueTabs' own bottom border is the divider. */}
+        <div className="px-4 pt-3">
+          <QueueTabs
+            tabs={TABS.map((tk) => ({
+              key: tk,
+              label: t(`dashboard.table.tabs.${tk}` as const),
+            }))}
+            active={tab}
+            onSelect={selectTab}
+          />
+        </div>
 
-      {/* Search */}
-      <div className="relative max-w-sm">
-        <Search
-          size={15}
-          className="absolute left-3 top-1/2 -translate-y-1/2 text-[var(--color-muted-foreground)]"
-        />
-        <Input
-          className="h-9 text-[13px] pl-9"
-          placeholder={t('dashboard.table.searchPlaceholder')}
-          value={searchText}
-          onChange={(e) => setSearchText(e.target.value)}
-        />
-      </div>
+        {/* Search · date filter · pagination row. */}
+        <div className="flex flex-wrap items-center justify-between gap-3 border-b border-[var(--color-border)] px-4 py-3">
+          <div className="flex flex-1 flex-wrap items-center gap-2">
+            <div className="relative w-full max-w-xs">
+              <Search
+                size={15}
+                className="absolute left-3 top-1/2 -translate-y-1/2 text-[var(--color-muted-foreground)]"
+              />
+              <Input
+                className="h-9 text-[13px] pl-9"
+                placeholder={t('dashboard.table.searchPlaceholder')}
+                value={searchText}
+                onChange={(e) => setSearchText(e.target.value)}
+              />
+            </div>
+            {/* In-card activity-window filter (the old "List" picker). */}
+            {onDateApply && from && to && (
+              <DateRangePicker
+                from={from}
+                to={to}
+                maxDate={maxDate}
+                label={t('dashboard.dateFilter.activity', {
+                  defaultValue: 'Updated',
+                })}
+                onApply={onDateApply}
+              />
+            )}
+          </div>
 
-      <StyleQueueTable<DashboardStyleRow>
-        columns={columns}
-        rows={rows}
-        getRowKey={(row) => row.id}
-        loading={loading}
-        error={error}
-        loadingLabel={t('dashboard.table.loading')}
-        emptyLabel={t('dashboard.table.empty')}
-        errorLabel={t('dashboard.table.error')}
-        onRowClick={openStyle}
-        actionsWidth="170px"
-        rowAccent={(row) => row.lifecycle === 'draft'}
-        renderActions={(row) => {
-          const approve = canApprove(row);
-          const park = canPark(row);
-          const sampleApprove = canSampleApprove(row);
-          const startCat = canStartCataloguing(row);
-          const markEasyecom = canMarkEasyecom(row);
-          const goLiveRow = canGoLiveRow(row);
-          const addChannel = canAddChannel(row);
-          if (
-            !approve &&
-            !park &&
-            !sampleApprove &&
-            !startCat &&
-            !markEasyecom &&
-            !goLiveRow &&
-            !addChannel
-          ) {
-            return <RowChevron />;
-          }
-          // One action per row, always in this same right-aligned slot — the
-          // "next step" for that row's lifecycle stage (Park rides alongside).
-          return (
-            <>
-              {park && (
-                <GhostActionButton
-                  icon="park"
-                  onClick={() => setParkTarget(row)}
-                >
-                  {t('dashboard.table.actions.park')}
-                </GhostActionButton>
-              )}
-              {startCat && (
-                <PrimaryActionButton onClick={() => doStartCataloguing(row)}>
-                  {t('dashboard.table.actions.startCataloguing', {
-                    defaultValue: 'Start cataloguing',
-                  })}
-                </PrimaryActionButton>
-              )}
-              {sampleApprove && (
-                <PrimaryActionButton
-                  onClick={() => setSampleApproveTarget(row)}
-                >
-                  {t('dashboard.table.actions.approveSample', {
-                    defaultValue: 'Approve sample',
-                  })}
-                </PrimaryActionButton>
-              )}
-              {/* Progressive cataloguing action: EasyEcom → Go live. */}
-              {markEasyecom && (
-                <PrimaryActionButton
-                  onClick={() => markEasyecomDone(row)}
-                >
-                  {t('dashboard.table.actions.markEasyecom', {
-                    defaultValue: 'Mark EasyEcom done',
-                  })}
-                </PrimaryActionButton>
-              )}
-              {goLiveRow && (
-                <PrimaryActionButton
-                  icon={<Rocket size={13} />}
-                  onClick={() => openGoLive(row)}
-                >
-                  {t('dashboard.table.actions.goLive', {
-                    defaultValue: 'Go live',
-                  })}
-                </PrimaryActionButton>
-              )}
-              {addChannel && (
-                <PrimaryActionButton
-                  icon={<Rocket size={13} />}
-                  onClick={() => openGoLive(row)}
-                >
-                  {t('dashboard.table.actions.addChannel', {
-                    defaultValue: 'Add channel',
-                  })}
-                </PrimaryActionButton>
-              )}
-              {approve && (
-                <ApproveButton onClick={() => setApprovalTarget(row)} />
-              )}
-            </>
-          );
-        }}
-      />
+          {/* "Showing X–Y of Z" + prev/next (mirrored at the table bottom). */}
+          {pager}
+        </div>
+
+        <StyleQueueTable<DashboardStyleRow>
+          bare
+          columns={columns}
+          rows={rows}
+          getRowKey={(row) => row.id}
+          loading={loading}
+          error={error}
+          loadingLabel={t('dashboard.table.loading')}
+          emptyLabel={t('dashboard.table.empty')}
+          errorLabel={t('dashboard.table.error')}
+          onRowClick={openStyle}
+          actionsWidth="170px"
+          rowAccent={(row) => row.lifecycle === 'draft'}
+          renderActions={(row) => {
+            const approve = canApprove(row);
+            const park = canPark(row);
+            const sampleApprove = canSampleApprove(row);
+            const startCat = canStartCataloguing(row);
+            const markEasyecom = canMarkEasyecom(row);
+            const goLiveRow = canGoLiveRow(row);
+            const addChannel = canAddChannel(row);
+            // Live rows get a "Channel" affordance (manage channels in the
+            // workspace) for everyone — the explicit action the mockup shows.
+            const channel = row.lifecycle === 'live';
+            if (
+              !approve &&
+              !park &&
+              !sampleApprove &&
+              !startCat &&
+              !markEasyecom &&
+              !goLiveRow &&
+              !addChannel &&
+              !channel
+            ) {
+              return <RowChevron />;
+            }
+            // One action per row, always in this same right-aligned slot — the
+            // "next step" for that row's lifecycle stage (Park rides alongside).
+            return (
+              <>
+                {park && (
+                  <GhostActionButton
+                    icon="park"
+                    onClick={() => setParkTarget(row)}
+                  >
+                    {t('dashboard.table.actions.park')}
+                  </GhostActionButton>
+                )}
+                {startCat && (
+                  <PrimaryActionButton onClick={() => doStartCataloguing(row)}>
+                    {t('dashboard.table.actions.startCataloguing', {
+                      defaultValue: 'Start cataloguing',
+                    })}
+                  </PrimaryActionButton>
+                )}
+                {sampleApprove && (
+                  <PrimaryActionButton
+                    onClick={() => setSampleApproveTarget(row)}
+                  >
+                    {t('dashboard.table.actions.approveSample', {
+                      defaultValue: 'Approve sample',
+                    })}
+                  </PrimaryActionButton>
+                )}
+                {/* Progressive cataloguing action: EasyEcom → Go live. */}
+                {markEasyecom && (
+                  <PrimaryActionButton onClick={() => markEasyecomDone(row)}>
+                    {t('dashboard.table.actions.markEasyecom', {
+                      defaultValue: 'Mark EasyEcom done',
+                    })}
+                  </PrimaryActionButton>
+                )}
+                {goLiveRow && (
+                  <PrimaryActionButton
+                    icon={<Rocket size={13} />}
+                    onClick={() => openGoLive(row)}
+                  >
+                    {t('dashboard.table.actions.goLive', {
+                      defaultValue: 'Go live',
+                    })}
+                  </PrimaryActionButton>
+                )}
+                {addChannel && (
+                  <PrimaryActionButton
+                    icon={<Rocket size={13} />}
+                    onClick={() => openGoLive(row)}
+                  >
+                    {t('dashboard.table.actions.addChannel', {
+                      defaultValue: 'Add channel',
+                    })}
+                  </PrimaryActionButton>
+                )}
+                {channel && !addChannel && (
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      openStyle(row);
+                    }}
+                    className="inline-flex items-center gap-1.5 rounded-[var(--radius-sm)] border border-[var(--color-border)] px-2.5 py-1 text-[12px] font-medium text-[var(--color-primary)] transition-colors hover:border-[var(--color-primary)] hover:bg-[var(--color-primary-soft)]"
+                  >
+                    <Link2 size={13} aria-hidden />
+                    {t('dashboard.table.actions.channel', {
+                      defaultValue: 'Channel',
+                    })}
+                  </button>
+                )}
+                {approve && (
+                  <ApproveButton onClick={() => setApprovalTarget(row)} />
+                )}
+              </>
+            );
+          }}
+        />
+
+        {/* Bottom pager — mirrors the top control so you can page without
+            scrolling back up after working a full page. */}
+        {pager && (
+          <div className="flex justify-end border-t border-[var(--color-border)] px-4 py-3">
+            {pager}
+          </div>
+        )}
+      </section>
 
       {/* Approval #1 — reuses the same dialog as the Sampling registry. */}
       <Approval1Dialog
