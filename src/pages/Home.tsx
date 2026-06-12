@@ -78,22 +78,30 @@ export default function Home() {
   const [cards, setCards] = useState<DashboardCards | null>(null);
   const [cardsError, setCardsError] = useState(false);
 
-  // Shared activity window (by style updatedAt). Default = last 7 days; one
-  // control scopes both the summary cards and the styles table below.
-  const [from, setFrom] = useState<string>(() =>
+  // TWO independent date windows on the one screen:
+  //  • cards window → the summary "Stats" (date-responsive metrics: went-live
+  //    in window, entered-cataloguing in window, sampling activity in window).
+  //  • table window → the "List" worklist below (the in-flight feed).
+  // Both default to the last 7 days; the user can diverge them (e.g. 30-day
+  // stats while working a 7-day list). See SummaryCards / StylesInFlightTable.
+  const [cardsFrom, setCardsFrom] = useState<string>(() =>
     isoDaysAgo(DEFAULT_RANGE_DAYS - 1),
   );
-  const [to, setTo] = useState<string>(() => isoDaysAgo(0));
+  const [cardsTo, setCardsTo] = useState<string>(() => isoDaysAgo(0));
+  const [tableFrom, setTableFrom] = useState<string>(() =>
+    isoDaysAgo(DEFAULT_RANGE_DAYS - 1),
+  );
+  const [tableTo, setTableTo] = useState<string>(() => isoDaysAgo(0));
 
   const loadCards = useCallback(async () => {
     setCardsError(false);
     try {
-      const res = await getDashboardCards({ from, to });
+      const res = await getDashboardCards({ from: cardsFrom, to: cardsTo });
       setCards(res);
     } catch {
       setCardsError(true);
     }
-  }, [from, to]);
+  }, [cardsFrom, cardsTo]);
 
   useEffect(() => {
     void loadCards();
@@ -168,17 +176,19 @@ export default function Home() {
         )}
       </header>
 
-      {/* Activity-window control — one polished range picker scoping the
-          cards + the table below (by style updatedAt). Default = last 7
-          days. Emits LOCAL YYYY-MM-DD bounds (see DateRangePicker). */}
-      <div className="flex flex-wrap items-center gap-3">
+      {/* ── Stats period — scopes the summary cards (date-responsive metrics:
+          went-live / entered-cataloguing / sampling activity in this window). */}
+      <div className="flex flex-wrap items-center gap-2">
+        <span className="text-[11px] font-bold uppercase tracking-[0.05em] text-[var(--color-muted-foreground)]">
+          {t('dashboard.dateFilter.statsLabel', { defaultValue: 'Stats' })}
+        </span>
         <DateRangePicker
-          from={from}
-          to={to}
+          from={cardsFrom}
+          to={cardsTo}
           maxDate={isoDaysAgo(0)}
           onApply={(nextFrom, nextTo) => {
-            setFrom(nextFrom);
-            setTo(nextTo);
+            setCardsFrom(nextFrom);
+            setCardsTo(nextTo);
           }}
         />
       </div>
@@ -186,11 +196,28 @@ export default function Home() {
       {/* Four role-aware summary cards — all counts from real card data. */}
       {cards && <SummaryCards cards={cards} />}
 
+      {/* ── List period — scopes the in-flight worklist below (by updatedAt;
+          the cataloguing/live tabs stay current-state regardless). */}
+      <div className="flex flex-wrap items-center gap-2 pt-1">
+        <span className="text-[11px] font-bold uppercase tracking-[0.05em] text-[var(--color-muted-foreground)]">
+          {t('dashboard.dateFilter.listLabel', { defaultValue: 'List' })}
+        </span>
+        <DateRangePicker
+          from={tableFrom}
+          to={tableTo}
+          maxDate={isoDaysAgo(0)}
+          onApply={(nextFrom, nextTo) => {
+            setTableFrom(nextFrom);
+            setTableTo(nextTo);
+          }}
+        />
+      </div>
+
       {/* Styles in flight — the single content surface. */}
       <StylesInFlightTable
         initialTab={initialTab}
-        from={from}
-        to={to}
+        from={tableFrom}
+        to={tableTo}
         onActionDone={loadCards}
       />
     </div>
