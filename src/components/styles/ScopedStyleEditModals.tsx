@@ -9,6 +9,7 @@ import { useToast } from '@/components/ui/toast';
 
 import GenderSelect from '@/components/styles/intake/GenderSelect';
 import CategoryPicker from '@/components/styles/intake/CategoryPicker';
+import CollectionPicker from '@/components/styles/intake/CollectionPicker';
 import FabricPicker from '@/components/styles/intake/FabricPicker';
 import ColourPicker from '@/components/styles/intake/ColourPicker';
 import PatternCadInput from '@/components/shared/PatternCadInput';
@@ -20,8 +21,10 @@ import {
 
 import { listFabrics, patchStyle } from '@/api/styles';
 import { listCategories } from '@/api/categories';
+import { listCollections } from '@/api/collections';
 import type {
   CategoryWithStyleCode,
+  Collection,
   Fabric,
   Gender,
   Style,
@@ -76,6 +79,7 @@ interface CoreSpecsState {
   gender: Gender;
   categoryId: number | null;
   categoryCode: FineCategoryCode | string | null;
+  collectionId: number | null;
   fabricId: number | null;
   primaryColour: string;
   /** Days, kept as a string so an empty input distinguishes from `0`. */
@@ -91,6 +95,7 @@ function buildCoreSpecsState(style: Style): CoreSpecsState {
     categoryCode:
       (style.categoryCode as FineCategoryCode | null) ??
       GENDER_CATEGORIES[gender][0],
+    collectionId: style.collectionId ?? null,
     fabricId: style.fabricId ?? null,
     primaryColour: style.primaryColour ?? '',
     samplingTimeline:
@@ -123,6 +128,7 @@ export function CoreSpecsEditModal({
   );
   const [fabrics, setFabrics] = useState<Fabric[]>(fabricsProp ?? []);
   const [categories, setCategories] = useState<CategoryWithStyleCode[]>([]);
+  const [collections, setCollections] = useState<Collection[]>([]);
   const [saving, setSaving] = useState(false);
   const [err, setErr] = useState<string | null>(null);
 
@@ -148,7 +154,12 @@ export function CoreSpecsEditModal({
         .then(setCategories)
         .catch(() => setCategories([]));
     }
-  }, [open, fabrics.length, categories.length]);
+    if (collections.length === 0) {
+      void listCollections()
+        .then(setCollections)
+        .catch(() => setCollections([]));
+    }
+  }, [open, fabrics.length, categories.length, collections.length]);
 
   // Gender is a free attribute — switching it never disturbs the chosen
   // category. The same Category row maps to a gender-appropriate
@@ -177,6 +188,10 @@ export function CoreSpecsEditModal({
         gender: form.gender,
         category: articleCategory,
         categoryId: form.categoryId ?? undefined,
+        // Send only when set — a legacy style with no collection stays
+        // unchanged (the BE patch rejects an explicit null since collection
+        // is required) rather than blocking a core-specs save.
+        collectionId: form.collectionId ?? undefined,
         fabricId: form.fabricId,
         primaryColour: form.primaryColour.trim() || null,
         samplingTimeline: form.samplingTimeline.trim() || null,
@@ -265,6 +280,17 @@ export function CoreSpecsEditModal({
               setForm((f) => ({ ...f, categoryId, categoryCode: code }))
             }
             onCategoryCreated={(c) => setCategories([...categories, c])}
+          />
+        </div>
+        <div>
+          <Label>{t('admin.styles.intake.collection')}</Label>
+          <CollectionPicker
+            collections={collections}
+            value={form.collectionId}
+            onChange={(collectionId) =>
+              setForm((f) => ({ ...f, collectionId }))
+            }
+            onCollectionCreated={(c) => setCollections([...collections, c])}
           />
         </div>
         <div>
