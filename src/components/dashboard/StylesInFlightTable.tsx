@@ -491,9 +491,10 @@ export default function StylesInFlightTable({
     (row.lifecycle === 'cataloguing' || row.lifecycle === 'live') &&
     canCataloguingWrite;
 
-  // Mark the EasyEcom checkpoint done — the first step of the progressive
-  // cataloguing action (writer/operator). Optimistic; on success the row's
-  // button flips to "Go live" (for approvers), revert on error.
+  // Mark the EasyEcom checkpoint done — the go-live trigger (cataloguer/
+  // operator). The BE auto-promotes the listed channels to live, so the row
+  // leaves the Cataloguing tab on the next load. Optimistic; revert on error
+  // (e.g. the BE 400 when no channel is listed yet).
   const markEasyecomDone = (row: DashboardStyleRow) => {
     setRows((prev) =>
       prev.map((r) => (r.id === row.id ? { ...r, easyecomDone: true } : r)),
@@ -873,8 +874,8 @@ export default function StylesInFlightTable({
   ];
 
   // EasyEcom — a read-only Done/Pending STATUS (scannable down the column).
-  // It's no longer toggled here: the progressive row action ("Mark EasyEcom
-  // done" → "Go live") owns the transition, so the column is pure status.
+  // It's no longer toggled here: the row actions ("Add listings" then "Mark
+  // EasyEcom done", which auto-lives) own the transition, so this is pure status.
   // Cataloguing-only: on the Live tab it's redundant (a live style passed it).
   const easyecomColumn: QueueColumn<DashboardStyleRow> = {
     key: 'easyecom',

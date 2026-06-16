@@ -62,9 +62,10 @@ export const PD_WRITE_ROLES: readonly UserRole[] = (
 /**
  * The approver / sign-off set — mirrors the BE `APPROVE_ROLES`
  * (`nowi-erp-api/src/modules/auth/roles.constants.ts`). Leads + masters who
- * may make the approval + go-to-market lifecycle calls (Approval #1/#2,
- * start-cataloguing, cataloguing-done, go-live). Use this to gate those
+ * may sign off (Approval #1/#2, start-cataloguing). Use this to gate those
  * buttons so a writer/operator never sees a control the BE will 403.
+ * (Going live is NOT here — it moved to the cataloguing write set; see
+ * {@link CATALOGUER_WRITE_ROLES}.)
  *
  * Deliberately NARROWER than {@link PD_WRITE_ROLES}: `sampling_editor` and
  * `operator` author data but never sign off.
@@ -80,7 +81,8 @@ export const APPROVER_ROLES: readonly UserRole[] = [
 /**
  * Admin-only gate. Used where admin gets a strictly wider capability than the
  * rest of the approver set — e.g. parking a style at any lifecycle stage
- * (non-admin approvers can park only before intake). Use with `hasAnyRole`.
+ * (non-admin approvers can park only during sampling — draft/in_sampling).
+ * Use with `hasAnyRole`.
  */
 export const ADMIN_ROLES: readonly UserRole[] = ['admin'];
 
@@ -90,7 +92,8 @@ export const ADMIN_ROLES: readonly UserRole[] = ['admin'];
  * `cataloguer`. Mirrors the BE `CATALOGUER_WRITE_ROLES`. Use this for the
  * add-design CTA + the cataloguing write-gates so `cataloguer` sees exactly
  * those controls and nothing else (it's absent from {@link PD_WRITE_ROLES}).
- * Going live stays approver-only ({@link APPROVER_ROLES}).
+ * Going live is cataloguer work too: listing a channel + marking EasyEcom done
+ * (which auto-promotes listings to live) are both gated on THIS set.
  */
 export const CATALOGUER_WRITE_ROLES: readonly UserRole[] = [
   ...PD_WRITE_ROLES,

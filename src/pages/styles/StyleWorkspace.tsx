@@ -1009,9 +1009,10 @@ function ChannelsCard({
         }
       />
       <div className="p-5">
-        {/* EasyEcom checkpoint — the single "cataloguing complete" gate.
-            Ticking it is the prerequisite for "Go live" (no separate
-            "Cataloguing done" step). Editable by writers/operators. */}
+        {/* EasyEcom checkpoint — the go-live trigger. Ticking it auto-promotes
+            the prepared (listed) channels to live; it's disabled until at least
+            one channel is listed with a link (see easyecomBlocked).
+            Editable by cataloguers/operators. */}
         {style.lifecycle === 'cataloguing' && (
           <div className="mb-4 flex items-center justify-between gap-3 rounded-[var(--radius-sm)] border border-[var(--color-border)] px-3 py-2">
             <div className="min-w-0">
