@@ -170,6 +170,23 @@ export interface CategoryWithStyleCode {
   isActive: boolean;
 }
 
+/** Collection master — seasonal/thematic grouping a design is tagged with. */
+export interface Collection {
+  id: number;
+  name: string;
+  code: string | null;
+  isActive: boolean;
+  isTestData: boolean;
+  createdAt: string;
+}
+
+/** Lightweight collection shape embedded on a Style (listInclude). */
+export interface CollectionLite {
+  id: number;
+  name: string;
+  code: string | null;
+}
+
 // The canonical `Style` entity now lives in the Product Development
 // section below — it extends the legacy floor-intake fields (id,
 // styleId, categoryCode, category) with all PD intake / sampling /
@@ -432,6 +449,9 @@ export interface Style {
   categoryCode: string;
   sequenceNo?: number;
   category?: CategoryWithStyleCode;
+  /** Seasonal/thematic grouping (FK + relation). Required at submission. */
+  collectionId: number | null;
+  collection?: CollectionLite | null;
 
   // New PD intake fields
   source: StyleSource;

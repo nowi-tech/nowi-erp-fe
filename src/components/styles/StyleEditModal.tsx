@@ -11,8 +11,10 @@ import StyleIntakeForm, {
 
 import { listFabrics, patchStyle } from '@/api/styles';
 import { listCategories } from '@/api/categories';
+import { listCollections } from '@/api/collections';
 import type {
   CategoryWithStyleCode,
+  Collection,
   Fabric,
   Style,
 } from '@/api/types';
@@ -51,6 +53,7 @@ export default function StyleEditModal({
   const [err, setErr] = useState<string | null>(null);
   const [fabrics, setFabrics] = useState<Fabric[]>([]);
   const [categories, setCategories] = useState<CategoryWithStyleCode[]>([]);
+  const [collections, setCollections] = useState<Collection[]>([]);
 
   // Lazy-load master data the first time the modal opens.
   useEffect(() => {
@@ -65,7 +68,12 @@ export default function StyleEditModal({
         .then(setCategories)
         .catch(() => setCategories([]));
     }
-  }, [open, fabrics.length, categories.length]);
+    if (collections.length === 0) {
+      void listCollections()
+        .then(setCollections)
+        .catch(() => setCollections([]));
+    }
+  }, [open, fabrics.length, categories.length, collections.length]);
 
   // Reset transient state on every open so the previous attempt's
   // error doesn't bleed into the new session.
@@ -160,8 +168,10 @@ export default function StyleEditModal({
         style={style}
         fabrics={fabrics}
         categories={categories}
+        collections={collections}
         onFabricsChanged={setFabrics}
         onCategoriesChanged={setCategories}
+        onCollectionsChanged={setCollections}
         onValidityChange={setValid}
         onSaved={() => {
           /* navigate / refresh handled by `onSaved` prop on this modal */

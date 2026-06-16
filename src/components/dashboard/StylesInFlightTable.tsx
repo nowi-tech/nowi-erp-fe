@@ -863,11 +863,32 @@ export default function StylesInFlightTable({
     cell: (row) => <ColourCell name={row.primaryColour} />,
   };
 
+  // Collection — the seasonal/thematic grouping. Shared across tabs; hidden
+  // on narrower screens so it never crowds the curated mobile layout.
+  const collectionColumn: QueueColumn<DashboardStyleRow> = {
+    key: 'collection',
+    header: t('dashboard.table.columns.collection', {
+      defaultValue: 'Collection',
+    }),
+    width: '150px',
+    className: 'hidden lg:table-cell',
+    headerClassName: 'hidden lg:table-cell',
+    cell: (row) => (
+      <span
+        className="block truncate text-[var(--color-muted-foreground)]"
+        title={row.collection?.name ?? undefined}
+      >
+        {row.collection?.name ?? '—'}
+      </span>
+    ),
+  };
+
   // Default grammar (All · Needs attention · Draft): IMG · Style/Name ·
-  // Colour · Status · Metrics — same shared cells as every other tab.
+  // Collection · Colour · Status · Metrics — same shared cells as every other tab.
   const defaultColumns: QueueColumn<DashboardStyleRow>[] = [
     imgColumn,
     styleNameColumn,
+    collectionColumn,
     colourColumn,
     statusColumn,
     metricsColumn,
@@ -964,6 +985,7 @@ export default function StylesInFlightTable({
   const samplingColumns: QueueColumn<DashboardStyleRow>[] = [
     imgColumn,
     styleNameColumn,
+    collectionColumn,
     stageColumn,
     metricsColumn,
   ];
@@ -973,6 +995,7 @@ export default function StylesInFlightTable({
   const cataloguingColumns: QueueColumn<DashboardStyleRow>[] = [
     imgColumn,
     styleNameColumn,
+    collectionColumn,
     easyecomColumn,
     marketplaceColumn,
     metricsColumn,
@@ -982,6 +1005,7 @@ export default function StylesInFlightTable({
   const liveColumns: QueueColumn<DashboardStyleRow>[] = [
     imgColumn,
     styleNameColumn,
+    collectionColumn,
     marketplaceColumn,
     statusColumn,
     metricsColumn,

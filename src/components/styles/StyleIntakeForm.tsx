@@ -18,6 +18,7 @@ import PatternCadInput from '@/components/shared/PatternCadInput';
 import IntakeCard from '@/components/styles/intake/IntakeCard';
 import GenderSelect from '@/components/styles/intake/GenderSelect';
 import CategoryPicker from '@/components/styles/intake/CategoryPicker';
+import CollectionPicker from '@/components/styles/intake/CollectionPicker';
 import FabricPicker from '@/components/styles/intake/FabricPicker';
 import ColourPicker from '@/components/styles/intake/ColourPicker';
 import ReferenceImageGrid from '@/components/styles/intake/ReferenceImageGrid';
@@ -36,6 +37,7 @@ import { cn } from '@/lib/utils';
 
 import type {
   CategoryWithStyleCode,
+  Collection,
   Fabric,
   Gender,
   Style,
@@ -104,8 +106,10 @@ export interface StyleIntakeFormProps {
    *  page and the modal without double-loading. */
   fabrics: Fabric[];
   categories: CategoryWithStyleCode[];
+  collections: Collection[];
   onFabricsChanged: (next: Fabric[]) => void;
   onCategoriesChanged: (next: CategoryWithStyleCode[]) => void;
+  onCollectionsChanged: (next: Collection[]) => void;
   /** Notified when the form becomes valid / invalid, so the parent
    *  can enable/disable its submit button without polling. */
   onValidityChange?: (valid: boolean) => void;
@@ -133,6 +137,7 @@ type FormState = {
   gender: Gender;
   categoryId: number | null;
   categoryCode: FineCategoryCode | string | null;
+  collectionId: number | null;
   primaryColour: string;
   referenceLink: string;
   referenceImages: string[];
@@ -224,6 +229,7 @@ function buildInitialForm(style: Style | null | undefined): FormState {
       gender: 'women',
       categoryId: null,
       categoryCode: defaultCategoryCode('women'),
+      collectionId: null,
       primaryColour: '',
       referenceLink: '',
       referenceImages: [],
@@ -251,6 +257,7 @@ function buildInitialForm(style: Style | null | undefined): FormState {
     categoryCode:
       (style.categoryCode as FineCategoryCode | null) ??
       defaultCategoryCode(toFormGender(style.gender)),
+    collectionId: style.collectionId ?? null,
     primaryColour: style.primaryColour ?? '',
     referenceLink: style.referenceLink ?? '',
     referenceImages: style.referenceImages ?? [],
@@ -428,8 +435,10 @@ const StyleIntakeForm = forwardRef<StyleIntakeFormHandle, StyleIntakeFormProps>(
       style,
       fabrics,
       categories,
+      collections,
       onFabricsChanged,
       onCategoriesChanged,
+      onCollectionsChanged,
       onValidityChange,
       onGenderChange: notifyGenderChange,
       onForkModeChange: notifyForkModeChange,
@@ -643,8 +652,15 @@ const StyleIntakeForm = forwardRef<StyleIntakeFormHandle, StyleIntakeFormProps>(
         ? forkTarget?.style != null && form.primaryColour.trim().length > 0
         : forkTarget != null;
     const needsForkTarget = showFork && forkMode !== 'new';
+    // Collection is required at submission on every path EXCEPT the colour
+    // fork — a colour variant inherits its parent's collection server-side
+    // (spawnColourVariant), so the picker isn't shown there.
+    const collectionRequired = !(showFork && forkMode === 'colour');
+    const collectionOk = !collectionRequired || form.collectionId != null;
     const isValid =
-      form.workingName.trim().length > 0 && (!needsForkTarget || forkTargetOk);
+      form.workingName.trim().length > 0 &&
+      collectionOk &&
+      (!needsForkTarget || forkTargetOk);
 
     // Notify the parent on every validity flip so it can enable / disable
     // its submit button without subscribing to form state changes.
@@ -662,6 +678,7 @@ const StyleIntakeForm = forwardRef<StyleIntakeFormHandle, StyleIntakeFormProps>(
         category: articleCategory,
         articleCategory,
         categoryId: form.categoryId ?? undefined,
+        collectionId: form.collectionId ?? undefined,
         workingName: form.workingName.trim() || null,
         gender: form.gender,
         primaryColour: form.primaryColour.trim() || null,
@@ -985,6 +1002,21 @@ const StyleIntakeForm = forwardRef<StyleIntakeFormHandle, StyleIntakeFormProps>(
                 )}
                 {aiMissed.category && <MissedHint />}
               </div>
+              {collectionRequired && (
+                <div>
+                  <Label>{t('admin.styles.intake.collection')} *</Label>
+                  <CollectionPicker
+                    collections={collections}
+                    value={form.collectionId}
+                    onChange={(collectionId) =>
+                      setForm((f) => ({ ...f, collectionId }))
+                    }
+                    onCollectionCreated={(c) =>
+                      onCollectionsChanged([...collections, c])
+                    }
+                  />
+                </div>
+              )}
               <div>
                 <Label>
                   {t('admin.styles.intake.primaryColour')}

@@ -367,7 +367,7 @@ export default function StylesTable({
 
   // compact = expand + style# + name + type + colour + updated + chevron
   // full    = expand + style# + name + type + stage + approval + web + updated + chevron
-  const COL_COUNT = isCompact ? 7 : 9;
+  const COL_COUNT = isCompact ? 8 : 10;
 
   return (
     <div className="space-y-2">
@@ -405,6 +405,11 @@ export default function StylesTable({
               </th>
               <th className="text-left font-medium px-3 py-2 hidden sm:table-cell">
                 {t('admin.styles.table.type.label', { defaultValue: 'Type' })}
+              </th>
+              <th className="text-left font-medium px-3 py-2 hidden lg:table-cell">
+                {t('admin.styles.table.collection', {
+                  defaultValue: 'Collection',
+                })}
               </th>
               {isCompact ? (
                 <th className="text-left font-medium px-3 py-2 hidden sm:table-cell">
@@ -574,6 +579,14 @@ export default function StylesTable({
                       </td>
                       <td className="px-3 py-2 hidden sm:table-cell">
                         <StyleTypePill style={s} />
+                      </td>
+                      <td className="px-3 py-2 hidden lg:table-cell text-[var(--color-muted-foreground)]">
+                        <span
+                          className="block truncate max-w-[140px]"
+                          title={s.collection?.name ?? undefined}
+                        >
+                          {s.collection?.name ?? '—'}
+                        </span>
                       </td>
                       {isCompact ? (
                         <td className="px-3 py-2 hidden sm:table-cell text-[var(--color-muted-foreground)]">

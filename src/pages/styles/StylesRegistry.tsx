@@ -40,7 +40,8 @@ import {
   type StyleTab,
 } from '@/api/styles';
 import { listReviewers } from '@/api/users';
-import type { Reviewer, Style, UserRole } from '@/api/types';
+import { listCollections } from '@/api/collections';
+import type { Collection, Reviewer, Style, UserRole } from '@/api/types';
 
 const TABS: StyleTab[] = [
   'inbox',
@@ -124,6 +125,8 @@ export default function StylesRegistry() {
 
   const [searchText, setSearchText] = useState('');
   const [samplingStatus, setSamplingStatus] = useState<string>('');
+  const [collections, setCollections] = useState<Collection[]>([]);
+  const [collectionId, setCollectionId] = useState<string>('');
   // Selected row for the Approval #1 modal — clicking the inline ✓
   // opens the dialog with the row's gender + suggested pattern master.
   const [approvalTarget, setApprovalTarget] = useState<Style | null>(null);
@@ -147,6 +150,7 @@ export default function StylesRegistry() {
         search: searchText.trim() || undefined,
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         samplingStatus: (samplingStatus || undefined) as any,
+        collectionId: collectionId ? Number(collectionId) : undefined,
         take: 200,
       };
       const res = await listStyles(params);
@@ -156,7 +160,7 @@ export default function StylesRegistry() {
     } finally {
       setLoading(false);
     }
-  }, [tab, searchText, samplingStatus]);
+  }, [tab, searchText, samplingStatus, collectionId]);
 
   useEffect(() => {
     const t = setTimeout(() => void load(), 200);
@@ -173,6 +177,21 @@ export default function StylesRegistry() {
       })
       .catch(() => {
         if (!cancelled) setReviewerPanel([]);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  // Collections for the filter dropdown — loaded once.
+  useEffect(() => {
+    let cancelled = false;
+    listCollections()
+      .then((cols) => {
+        if (!cancelled) setCollections(cols);
+      })
+      .catch(() => {
+        if (!cancelled) setCollections([]);
       });
     return () => {
       cancelled = true;
@@ -292,6 +311,22 @@ export default function StylesRegistry() {
           const c = row.category?.name ?? row.categoryCode ?? null;
           const parts = [g, c].filter(Boolean);
           return parts.length > 0 ? parts.join(' · ') : '—';
+        },
+      },
+      {
+        key: 'collection',
+        header: t('admin.styles.table.collection', {
+          defaultValue: 'Collection',
+        }),
+        className: 'hidden lg:table-cell',
+        headerClassName: 'hidden lg:table-cell',
+        cell: (row) => {
+          const name = row.collection?.name ?? '—';
+          return (
+            <span className="block truncate max-w-[140px]" title={name}>
+              {name}
+            </span>
+          );
         },
       },
       {
@@ -475,6 +510,22 @@ export default function StylesRegistry() {
                 {t(`admin.styles.samplingSteps.${s}` as const, {
                   defaultValue: s,
                 })}
+              </option>
+            ))}
+          </Select>
+          <Select
+            className="h-9 text-[13px] w-auto"
+            value={collectionId}
+            onChange={(e) => setCollectionId(e.target.value)}
+          >
+            <option value="">
+              {t('admin.styles.filters.collection', {
+                defaultValue: 'All collections',
+              })}
+            </option>
+            {collections.map((c) => (
+              <option key={c.id} value={String(c.id)}>
+                {c.name}
               </option>
             ))}
           </Select>

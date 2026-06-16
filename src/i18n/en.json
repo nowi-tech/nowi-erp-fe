@@ -380,13 +380,14 @@
       },
       "filters": {
         "search": "Search style #, name, fabric…",
-        "collection": "Collection",
+        "collection": "All collections",
         "samplingStatus": "Sampling status",
         "all": "All"
       },
       "table": {
         "styleNo": "Style #",
         "workingName": "Working name / Article type",
+        "collection": "Collection",
         "colour": "Colour",
         "stage": "Stage",
         "fit": "Model / Live fit",
@@ -473,11 +474,17 @@
         "article": "Article",
         "articleSubtitle": "What you're designing.",
         "addNewCategory": "Add new category",
+        "addNewCollection": "Add new collection",
         "addFabric": "Add fabric",
         "categoryPh": "Choose a category",
+        "collectionPh": "Choose a collection",
         "fabricPh": "Choose a fabric",
         "newCategoryTitle": "New category",
         "newCategoryHelp": "Adds a row to the Category master so the Style ID generator can use it.",
+        "newCollectionTitle": "New collection",
+        "newCollectionHelp": "Adds a row to the Collection master (e.g. a seasonal drop).",
+        "collectionName": "Name *",
+        "collectionCode": "Code (optional)",
         "categoryCode": "Code *",
         "categoryName": "Name *",
         "categoryStyleCode": "Style code",
@@ -1237,7 +1244,8 @@
         "stage": "Stage",
         "updated": "Updated",
         "actions": "Actions",
-        "colour": "Colour"
+        "colour": "Colour",
+        "collection": "Collection"
       },
       "showing": "Showing {{from}}–{{to}} of {{total}}",
       "prevPage": "Previous page",

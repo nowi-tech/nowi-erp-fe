@@ -16,6 +16,7 @@ import { Button } from '@/components/ui/button';
 import { Dialog } from '@/components/ui/dialog';
 import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 import { Textarea } from '@/components/ui/textarea';
+import { Skeleton } from '@/components/ui/skeleton';
 import { useToast } from '@/components/ui/toast';
 import SamplingPipelineStepper from '@/components/styles/SamplingPipelineStepper';
 import StyleImagePanel from '@/components/styles/StyleImagePanel';
@@ -121,6 +122,75 @@ const AUDIT_FIELD_LABELS: Record<string, string> = {
   basedOnStyleId: 'Based on',
   reason: 'Reason',
 };
+
+// Shared card chrome, hoisted to module scope so the loading skeleton can
+// reuse the exact surface/border/radius of the real cards below (the
+// component-local `cardClasses` is identical, declared after the early
+// return where this skeleton renders).
+const WORKSPACE_CARD =
+  'bg-[var(--color-surface)] border border-[var(--color-border)] rounded-[var(--radius-md)] shadow-sm overflow-hidden flex flex-col';
+
+/**
+ * Shimmer placeholder shown while the style loads. Mirrors the real
+ * workspace skeleton 1:1 — back link, big style-code heading + status
+ * pills, subtitle, an action button row, the stepper band, and the
+ * two-column card grid — so the layout doesn't jump when data arrives.
+ */
+function WorkspaceSkeleton() {
+  return (
+    <div className="space-y-5" role="status" aria-label="Loading style">
+      {/* Header: back link · code + pills · subtitle · action buttons. */}
+      <header className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
+        <div className="min-w-0 space-y-2.5">
+          <Skeleton className="h-4 w-14" />
+          <div className="flex flex-wrap items-center gap-3">
+            <Skeleton className="h-9 w-52" />
+            <Skeleton className="h-6 w-20 rounded-full" />
+            <Skeleton className="h-6 w-24 rounded-full" />
+          </div>
+          <Skeleton className="h-4 w-64" />
+        </div>
+        <div className="flex flex-wrap items-center gap-2 md:justify-end shrink-0">
+          <Skeleton className="h-8 w-20 rounded-[var(--radius-md)]" />
+          <Skeleton className="h-8 w-28 rounded-[var(--radius-md)]" />
+        </div>
+      </header>
+
+      {/* Context band — the sampling stepper card. */}
+      <section className={cn(WORKSPACE_CARD, 'gap-4 p-4')}>
+        <div className="flex items-center justify-between">
+          <Skeleton className="h-4 w-40" />
+          <Skeleton className="h-4 w-56" />
+        </div>
+        <div className="flex items-center gap-3">
+          {Array.from({ length: 4 }).map((_, i) => (
+            <div key={i} className="flex flex-1 items-center gap-3">
+              <Skeleton className="h-8 w-8 shrink-0 rounded-full" />
+              <Skeleton className="h-3 flex-1" />
+            </div>
+          ))}
+        </div>
+      </section>
+
+      {/* Two-column grid: image panel (left) · spec cards (right). */}
+      <div className="grid gap-5 lg:grid-cols-[320px_1fr]">
+        <section className={WORKSPACE_CARD}>
+          <Skeleton className="aspect-[4/5] w-full rounded-none" />
+        </section>
+        <div className="space-y-5">
+          {Array.from({ length: 2 }).map((_, i) => (
+            <section key={i} className={cn(WORKSPACE_CARD, 'gap-3 p-4')}>
+              <Skeleton className="h-4 w-32" />
+              <Skeleton className="h-3 w-full" />
+              <Skeleton className="h-3 w-5/6" />
+              <Skeleton className="h-3 w-2/3" />
+            </section>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
 
 /**
  * Per-style deep page.
@@ -238,11 +308,7 @@ export default function StyleWorkspace() {
   };
 
   if (loading) {
-    return (
-      <div className="text-sm text-[var(--color-muted-foreground)]">
-        Loading…
-      </div>
-    );
+    return <WorkspaceSkeleton />;
   }
 
   if (!style) {
@@ -368,8 +434,7 @@ export default function StyleWorkspace() {
   // Section card chrome — Stitch's "surface card with header strip" look,
   // rendered in the app's tokens (surface / border / radius), not the
   // Stitch navy literals.
-  const cardClasses =
-    'bg-[var(--color-surface)] border border-[var(--color-border)] rounded-[var(--radius-md)] shadow-sm overflow-hidden flex flex-col';
+  const cardClasses = WORKSPACE_CARD;
 
   // Shared cards — identical in both layouts, only the column wrapper and
   // a couple of header affordances differ.
@@ -414,6 +479,7 @@ export default function StyleWorkspace() {
             label="Category"
             value={style.category?.name ?? style.categoryCode ?? '—'}
           />
+          <SpecRow label="Collection" value={style.collection?.name ?? '—'} />
           <SpecRow
             label="Fabric"
             value={

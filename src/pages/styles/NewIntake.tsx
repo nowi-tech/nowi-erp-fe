@@ -15,8 +15,10 @@ import { fineCategoryLabel } from '@/components/styles/intake/categoryOptions';
 
 import { createStyle, listFabrics } from '@/api/styles';
 import { listCategories } from '@/api/categories';
+import { listCollections } from '@/api/collections';
 import type {
   CategoryWithStyleCode,
+  Collection,
   Fabric,
   StyleSource,
 } from '@/api/types';
@@ -43,6 +45,7 @@ export default function NewIntake() {
   const [source, setSource] = useState<StyleSource>(initialSource);
   const [fabrics, setFabrics] = useState<Fabric[]>([]);
   const [categories, setCategories] = useState<CategoryWithStyleCode[]>([]);
+  const [collections, setCollections] = useState<Collection[]>([]);
   const [busy, setBusy] = useState<null | 'draft' | 'submit'>(null);
   const [err, setErr] = useState<string | null>(null);
   const [valid, setValid] = useState(false);
@@ -61,9 +64,11 @@ export default function NewIntake() {
     void Promise.all([
       listFabrics().catch(() => [] as Fabric[]),
       listCategories().catch(() => [] as CategoryWithStyleCode[]),
-    ]).then(([fb, cats]) => {
+      listCollections().catch(() => [] as Collection[]),
+    ]).then(([fb, cats, cols]) => {
       setFabrics(fb);
       setCategories(cats);
+      setCollections(cols);
     });
   }, []);
 
@@ -154,8 +159,10 @@ export default function NewIntake() {
           source={source}
           fabrics={fabrics}
           categories={categories}
+          collections={collections}
           onFabricsChanged={setFabrics}
           onCategoriesChanged={setCategories}
+          onCollectionsChanged={setCollections}
           onValidityChange={(next) => {
             setValid(next);
             // Mirror the just-categorized code for the footer chip.

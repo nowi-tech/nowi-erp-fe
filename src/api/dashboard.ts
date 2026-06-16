@@ -45,6 +45,8 @@ export interface DashboardStyleRow {
   /** Raw enum value (coarse) — meaningful while in_pd. */
   productionStatus: string | null;
   factory: { id: number; name: string } | null;
+  /** Seasonal/thematic grouping the design is tagged with. */
+  collection: { id: number; name: string } | null;
   colourVariantCount: number;
   /** EasyEcom catalog checkpoint (Done/Pending pill on the Cataloguing tab).
    *  `live` is derived (any channel listing live). */
