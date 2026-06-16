@@ -30,7 +30,7 @@ import {
  */
 
 // Mirror the table's tab buckets so a `?tab=` deep link (e.g. the Live card)
-// lands on the right tab. Anything unrecognised falls back to 'all'.
+// lands on the right tab. Anything unrecognised falls back to 'needs_attention'.
 const VALID_TABS: DashboardStyleTab[] = [
   'all',
   'draft',
@@ -43,7 +43,9 @@ const VALID_TABS: DashboardStyleTab[] = [
 function tabFromParam(value: string | null): DashboardStyleTab {
   return VALID_TABS.includes(value as DashboardStyleTab)
     ? (value as DashboardStyleTab)
-    : 'all';
+    : // No (or unknown) ?tab= → land on the approver/triage queue (the first
+      // tab in the table), not the full unfiltered list.
+      'needs_attention';
 }
 
 /** YYYY-MM-DD for a date `n` days before today (0 = today), in the user's

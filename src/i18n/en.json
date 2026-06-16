@@ -552,14 +552,16 @@
         "sampleApprove": "Approve sample",
         "startProduction": "Start production",
         "startCataloguing": "Start cataloguing",
-        "goLive": "Go live",
+        "addListings": "Add listings",
+        "back": "Back",
         "liveStage": "Live",
         "easyecomTitle": "EasyEcom catalog",
-        "easyecomHint": "Required before going live.",
+        "easyecomHint": "Marking this done takes the listed channels live.",
+        "easyecomHintBlocked": "Add at least one marketplace listing (with its link) first — then this takes the style live.",
         "easyecomDone": "Done",
         "easyecomPending": "Pending",
         "channelsTitle": "Channels",
-        "channelsNone": "No channels are live yet. Use \"Go live\" to open listings.",
+        "channelsNone": "No listings yet. Use \"Add listings\" to add a channel + its link.",
         "viewListing": "View listing",
         "noListingUrl": "No URL",
         "addColour": "Add colour",
@@ -650,10 +652,10 @@
         "qty": "Qty"
       },
       "goLive": {
-        "dialogTitle": "Go live",
-        "dialogIntro": "Select the channels this style is going live on and paste each public listing URL (optional). Selecting at least one channel is required.",
-        "urlPlaceholder": "https://… (optional)",
-        "confirm": "Go live"
+        "dialogTitle": "Add marketplace listings",
+        "dialogIntro": "Select each channel this style is listed on and paste its public listing URL. Listings go live automatically once EasyEcom is marked done.",
+        "urlPlaceholder": "https://… (listing link, required)",
+        "confirm": "Save listings"
       },
       "verdict": {
         "pending": "Pending",
@@ -1241,11 +1243,12 @@
       "prevPage": "Previous page",
       "nextPage": "Next page",
       "actions": {
-        "approve": "Approve",
+        "approve": "Approve intake",
         "park": "Park",
         "approveSample": "Approve sample",
         "startCataloguing": "Start cataloguing",
         "markEasyecom": "Mark EasyEcom done",
+        "addListings": "Add listings",
         "goLive": "Go live",
         "addChannel": "Add channel",
         "channel": "Channel"
@@ -1270,6 +1273,8 @@
         "sampleApproved": "Sample verdict recorded.",
         "sampleApproveError": "Could not record the verdict.",
         "cataloguingStarted": "Cataloguing started.",
+        "listingsSaved": "Listings saved.",
+        "listingsError": "Could not save listings.",
         "wentLive": "Marked live.",
         "goLiveError": "Could not go live.",
         "actionError": "Could not complete the action."

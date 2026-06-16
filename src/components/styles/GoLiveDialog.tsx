@@ -1,15 +1,15 @@
 import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Rocket } from 'lucide-react';
+import { Link2 } from 'lucide-react';
 import { Dialog } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import type { ChannelName, StyleChannelListing } from '@/api/types';
 import type { GoLiveChannel } from '@/api/styles';
 
-// Channels the go-live dialog can publish to. `nowi_shopify` first since it's
-// the owned storefront; the marketplaces follow. Sourced from the BE
-// ChannelName enum — add new channels here when they go live.
+// Channels a style can be listed on. `nowi_shopify` first since it's the owned
+// storefront; the marketplaces follow. Sourced from the BE ChannelName enum —
+// add new channels here when they come online.
 export const GO_LIVE_CHANNELS: ChannelName[] = [
   'nowi_shopify',
   'myntra',
@@ -19,11 +19,12 @@ export const GO_LIVE_CHANNELS: ChannelName[] = [
 ];
 
 /**
- * Shared go-live dialog — the single go-live control used by BOTH the Style
- * workspace and the dashboard Cataloguing tab (so the two can't diverge).
- * Pick one or more channels and (optionally) paste the public listing URL for
- * each, then flip the style to `live` via the `goLive` endpoint. At least one
- * channel must be selected; URLs are optional per channel.
+ * "Add marketplace listings" dialog — the shared channel+link picker used by
+ * the Style workspace (so listings can't diverge). Pick one or more channels
+ * and paste each public listing URL; the channels are recorded as prepared
+ * listings. They go LIVE automatically once the EasyEcom checkpoint is marked
+ * done — this dialog no longer flips the style live itself. A URL is REQUIRED
+ * for every selected channel (a live listing must carry its link).
  */
 export default function GoLiveDialog({
   open,
@@ -44,13 +45,18 @@ export default function GoLiveDialog({
 
   useEffect(() => {
     if (open) {
-      // Pre-seed from any existing listing URLs so re-opening is non-destructive.
+      // Pre-seed URLs from existing listings, and pre-select any channel that
+      // already has one, so re-opening edits rather than starts from scratch.
       const seedUrls: Record<string, string> = {};
+      const seedSelected = new Set<ChannelName>();
       for (const l of existing) {
-        if (l.listingUrl) seedUrls[l.channel] = l.listingUrl;
+        if (l.listingUrl) {
+          seedUrls[l.channel] = l.listingUrl;
+          seedSelected.add(l.channel);
+        }
       }
       setUrls(seedUrls);
-      setSelected(new Set());
+      setSelected(seedSelected);
     }
   }, [open, existing]);
 
@@ -62,14 +68,16 @@ export default function GoLiveDialog({
       return next;
     });
 
-  const canSubmit = selected.size > 0 && !busy;
+  // A listing needs its link — every selected channel must have a non-empty URL.
+  const allSelectedHaveUrl = [...selected].every((c) => urls[c]?.trim());
+  const canSubmit = selected.size > 0 && allSelectedHaveUrl && !busy;
 
   return (
     <Dialog
       open={open}
       onClose={onClose}
       title={t('admin.styles.goLive.dialogTitle', {
-        defaultValue: 'Go live',
+        defaultValue: 'Add marketplace listings',
       })}
       footer={
         <>
@@ -81,16 +89,16 @@ export default function GoLiveDialog({
             disabled={!canSubmit}
             onClick={() =>
               onConfirm(
-                [...selected].map((channel) => {
-                  const url = urls[channel]?.trim();
-                  return url ? { channel, listingUrl: url } : { channel };
-                }),
+                [...selected].map((channel) => ({
+                  channel,
+                  listingUrl: urls[channel]!.trim(),
+                })),
               )
             }
           >
-            <Rocket size={14} />
+            <Link2 size={14} />
             <span className="ml-1">
-              {t('admin.styles.goLive.confirm', { defaultValue: 'Go live' })}
+              {t('admin.styles.goLive.confirm', { defaultValue: 'Save listings' })}
             </span>
           </Button>
         </>
@@ -99,12 +107,13 @@ export default function GoLiveDialog({
       <p className="text-sm text-[var(--color-muted-foreground)] mb-4">
         {t('admin.styles.goLive.dialogIntro', {
           defaultValue:
-            'Select the channels this style is going live on and paste each public listing URL (optional). Selecting at least one channel is required.',
+            'Select each channel this style is listed on and paste its public listing URL. Listings go live automatically once EasyEcom is marked done.',
         })}
       </p>
       <div className="space-y-2">
         {GO_LIVE_CHANNELS.map((c) => {
           const checked = selected.has(c);
+          const missingUrl = checked && !urls[c]?.trim();
           return (
             <div
               key={c}
@@ -124,12 +133,13 @@ export default function GoLiveDialog({
                   type="url"
                   className="mt-2 h-9 text-sm"
                   placeholder={t('admin.styles.goLive.urlPlaceholder', {
-                    defaultValue: 'https://… (optional)',
+                    defaultValue: 'https://… (listing link, required)',
                   })}
                   value={urls[c] ?? ''}
                   onChange={(e) =>
                     setUrls((prev) => ({ ...prev, [c]: e.target.value }))
                   }
+                  aria-invalid={missingUrl}
                 />
               )}
             </div>

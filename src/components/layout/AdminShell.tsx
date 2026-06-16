@@ -410,9 +410,15 @@ function PageContext() {
           </span>
         </>
       ) : (
-        <span className="font-medium text-[var(--color-foreground)] truncate">
-          {t('common.appName')}
-        </span>
+        // No page context (e.g. the dashboard) — show the NOWI logo as the
+        // header brand, linking home, instead of the plain "NOWI ERP" text.
+        <Link
+          to="/"
+          aria-label={t('common.appName')}
+          className="rounded-[var(--radius-sm)] hover:opacity-80"
+        >
+          <Logo size="sm" />
+        </Link>
       )}
     </nav>
   );

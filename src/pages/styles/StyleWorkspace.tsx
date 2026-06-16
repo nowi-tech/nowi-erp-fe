@@ -1,15 +1,15 @@
 import { useCallback, useEffect, useState } from 'react';
-import { useNavigate, useParams } from 'react-router-dom';
+import { useLocation, useNavigate, useParams } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import {
-  ChevronRight,
+  ArrowLeft,
   Clock,
   Pencil,
   Plus,
   Upload,
   CheckCircle2,
   ExternalLink,
-  Rocket,
+  Link2,
 } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -40,7 +40,6 @@ import {
   listFabrics,
   colourGroup,
   startCataloguing,
-  goLive,
   setMarketplaceListing,
   setEasyecomDone,
   type SamplingStatus,
@@ -145,6 +144,11 @@ const AUDIT_FIELD_LABELS: Record<string, string> = {
 export default function StyleWorkspace() {
   const { t } = useTranslation();
   const navigate = useNavigate();
+  const location = useLocation();
+  // Where the user came from (the exact dashboard tab / registry), stashed in
+  // router state on navigate-in. Falls back to the dashboard for deep links
+  // and hard refreshes (which drop history state).
+  const backTo = (location.state as { from?: string } | null)?.from ?? '/';
   const toast = useToast();
   const { user } = useAuth();
   const roles = userAllRoles(user);
@@ -165,9 +169,9 @@ export default function StyleWorkspace() {
   // uploads CAD files (patternCadPaths) — not the full StyleEditModal.
   const [patternCadEditOpen, setPatternCadEditOpen] = useState(false);
   const [parkOpen, setParkOpen] = useState(false);
-  // Go-live: opens a small dialog to pick channel(s) + paste a listing URL
-  // before flipping the lifecycle to `live`.
-  const [goLiveOpen, setGoLiveOpen] = useState(false);
+  // "Add listings": opens a dialog to pick channel(s) + paste each listing URL.
+  // Listings are prepared (draft); EasyEcom-done is what flips them live.
+  const [listingsOpen, setListingsOpen] = useState(false);
   // Two-step Withdraw: confirm pulling a committed (post-Approval-#1)
   // design out of the pipeline, then open ParkDialog to capture the
   // reason. Drafts skip this and open ParkDialog directly.
@@ -291,13 +295,18 @@ export default function StyleWorkspace() {
     CATALOGUER_WRITE_ROLES.includes(r),
   );
 
-  // Park is only allowed DURING sampling (draft / in_sampling) — once a sample
-  // is signed off the style is committed to the go-to-market path and can't be
-  // parked (which also means a live style can never be parked, stranding its
-  // channel listings). No post-approval "Withdraw".
+  // Park gate (mirrors the BE): an admin may park at ANY stage (a live style is
+  // pulled off the market); a non-admin sampling approver (e.g. sampling_lead)
+  // may park during the sampling phase (draft or in_sampling). Parking a
+  // parked/archived style is a no-op.
+  const isAdmin = roles.includes('admin');
+  const isApprover = roles.some((r) => APPROVER_ROLES.includes(r));
+  const inSamplingPhase =
+    style.lifecycle === 'draft' || style.lifecycle === 'in_sampling';
   const canPark =
-    (style.lifecycle === 'draft' || style.lifecycle === 'in_sampling') &&
-    canWrite;
+    style.lifecycle !== 'parked' &&
+    style.lifecycle !== 'archived' &&
+    (isAdmin || (inSamplingPhase && isApprover));
   const canRevive = style.lifecycle === 'parked';
   const sourceLabel = t(`admin.styles.source.${style.source}`);
 
@@ -314,13 +323,11 @@ export default function StyleWorkspace() {
   // sample_approved → cataloguing (status=pending)
   const canStartCataloguing =
     canApproveGoToMarket && style.lifecycle === 'sample_approved';
-  // cataloguing + EasyEcom done → live (opens the shared go-live dialog).
-  // EasyEcom is the single "cataloguing complete" gate — there's no separate
-  // "Mark cataloguing done" step.
-  const canGoLive =
-    canApproveGoToMarket &&
-    style.lifecycle === 'cataloguing' &&
-    style.easyecomDone;
+  // "Add listings" — prepare marketplace channels + links while cataloguing.
+  // Cataloguer/operator-editable (not approver-gated): finishing cataloguing
+  // (EasyEcom done) is what takes the style live, and that's cataloguer work.
+  const canAddListings =
+    canCataloguingWrite && style.lifecycle === 'cataloguing';
 
   // Layout selector. The sampling layout (stepper band + 7/5 grid) covers
   // draft / in_sampling; the production layout (colour strip + 2-up grid)
@@ -533,7 +540,7 @@ export default function StyleWorkspace() {
       }
       onTakeOffline={(channel, reason) =>
         doAction('take-offline', () =>
-          setMarketplaceListing(style.id, { channel, live: false, reason }),
+          setMarketplaceListing(style.id, { channel, listed: false, reason }),
         )
       }
     />
@@ -545,22 +552,14 @@ export default function StyleWorkspace() {
           Action bar (lifecycle-conditional) sits top-right. */}
       <header className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
         <div className="min-w-0">
-          <nav
-            aria-label="Breadcrumb"
-            className="flex items-center gap-1.5 text-xs text-[var(--color-muted-foreground)] mb-2"
+          <button
+            type="button"
+            onClick={() => navigate(backTo)}
+            className="mb-2 inline-flex items-center gap-1 text-xs text-[var(--color-muted-foreground)] transition-colors hover:text-[var(--color-primary)]"
           >
-            <button
-              type="button"
-              onClick={() => navigate('/styles')}
-              className="hover:text-[var(--color-primary)] transition-colors"
-            >
-              {t('admin.styles.title')}
-            </button>
-            <ChevronRight size={13} aria-hidden className="shrink-0" />
-            <span className="text-[var(--color-foreground)] truncate max-w-[240px]">
-              {formatStyleRef(style, style.workingName ?? '—')}
-            </span>
-          </nav>
+            <ArrowLeft size={14} aria-hidden className="shrink-0" />
+            {t('admin.styles.workspace.back', { defaultValue: 'Back' })}
+          </button>
           <div className="flex items-center gap-3 flex-wrap">
             <h1 className="font-mono text-3xl font-semibold text-[var(--color-primary)] tracking-tight m-0">
               {formatStyleRef(style, `(${t('admin.styles.draft')})`)}
@@ -634,19 +633,20 @@ export default function StyleWorkspace() {
               })}
             </Button>
           )}
-          {/* Go live — cataloguing + EasyEcom done → live. Opens the shared
-              multi-channel dialog. (Cataloguing completion is the EasyEcom
-              toggle in the Channels card, not a separate button.) */}
-          {canGoLive && (
+          {/* Add listings — pick channels + paste each link while cataloguing.
+              Listings are prepared; marking EasyEcom done (Channels card) takes
+              them live. No separate "Go live" button. */}
+          {canAddListings && (
             <Button
+              variant="outline"
               size="sm"
               disabled={busy !== null}
-              onClick={() => setGoLiveOpen(true)}
+              onClick={() => setListingsOpen(true)}
             >
-              <Rocket size={16} />
+              <Link2 size={16} />
               <span className="ml-1">
-                {t('admin.styles.workspace.goLive', {
-                  defaultValue: 'Go live',
+                {t('admin.styles.workspace.addListings', {
+                  defaultValue: 'Add listings',
                 })}
               </span>
             </Button>
@@ -912,15 +912,27 @@ export default function StyleWorkspace() {
         }}
       />
 
-      {/* Go-live channel picker — cataloguing + done → live */}
+      {/* Add-listings picker — records each channel + link as a prepared
+          listing. Going live happens when EasyEcom is marked done. */}
       <GoLiveDialog
-        open={goLiveOpen}
+        open={listingsOpen}
         busy={busy !== null}
         existing={style.channelListings ?? []}
-        onClose={() => setGoLiveOpen(false)}
+        onClose={() => setListingsOpen(false)}
         onConfirm={(channels) => {
-          setGoLiveOpen(false);
-          void doAction('go-live', () => goLive(style.id, { channels }));
+          setListingsOpen(false);
+          void doAction('list-channels', async () => {
+            // Prepare each channel in turn; the last result refreshes state.
+            let updated = style;
+            for (const ch of channels) {
+              updated = await setMarketplaceListing(style.id, {
+                channel: ch.channel,
+                listed: true,
+                listingUrl: ch.listingUrl,
+              });
+            }
+            return updated;
+          });
         }}
       />
     </div>
@@ -953,6 +965,12 @@ function ChannelsCard({
   const listings = (style.channelListings ?? []).filter(
     (l) => l.state !== 'off',
   );
+  // EasyEcom-done is order-gated: at least one channel must be listed (prepared,
+  // with a link) first. Mirror the BE guard so the toggle is disabled until then.
+  const hasPreparedListing = listings.some(
+    (l) => l.state === 'draft' && !!l.listingUrl,
+  );
+  const easyecomBlocked = !easyecomDone && !hasPreparedListing;
   const stateBadge = (s: StyleChannelListing['state']) =>
     s === 'live' ? 'success' : s === 'draft' ? 'warning' : 'outline';
   // Take-offline target + reason (the consequential un-publish lives here in
@@ -991,9 +1009,10 @@ function ChannelsCard({
         }
       />
       <div className="p-5">
-        {/* EasyEcom checkpoint — the single "cataloguing complete" gate.
-            Ticking it is the prerequisite for "Go live" (no separate
-            "Cataloguing done" step). Editable by writers/operators. */}
+        {/* EasyEcom checkpoint — the go-live trigger. Ticking it auto-promotes
+            the prepared (listed) channels to live; it's disabled until at least
+            one channel is listed with a link (see easyecomBlocked).
+            Editable by cataloguers/operators. */}
         {style.lifecycle === 'cataloguing' && (
           <div className="mb-4 flex items-center justify-between gap-3 rounded-[var(--radius-sm)] border border-[var(--color-border)] px-3 py-2">
             <div className="min-w-0">
@@ -1003,18 +1022,33 @@ function ChannelsCard({
                 })}
               </p>
               <p className="text-xs text-[var(--color-muted-foreground)]">
-                {t('admin.styles.workspace.easyecomHint', {
-                  defaultValue: 'Required before going live.',
-                })}
+                {easyecomBlocked
+                  ? t('admin.styles.workspace.easyecomHintBlocked', {
+                      defaultValue:
+                        'Add at least one marketplace listing (with its link) first — then this takes the style live.',
+                    })
+                  : t('admin.styles.workspace.easyecomHint', {
+                      defaultValue:
+                        'Marking this done takes the listed channels live.',
+                    })}
               </p>
             </div>
             {canManage ? (
               <button
                 type="button"
                 aria-pressed={easyecomDone}
+                disabled={easyecomBlocked}
+                title={
+                  easyecomBlocked
+                    ? t('admin.styles.workspace.easyecomHintBlocked', {
+                        defaultValue:
+                          'Add at least one marketplace listing (with its link) first.',
+                      })
+                    : undefined
+                }
                 onClick={() => onSetEasyecom(!easyecomDone)}
                 className={cn(
-                  'inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-[11px] font-medium transition-colors hover:opacity-80',
+                  'inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-[11px] font-medium transition-colors hover:opacity-80 disabled:cursor-not-allowed disabled:opacity-50',
                   easyecomDone
                     ? 'bg-emerald-100 text-emerald-800 border border-emerald-200'
                     : 'bg-[var(--color-surface-2)] text-[var(--color-muted-foreground)] border border-[var(--color-border)]',
@@ -1048,7 +1082,7 @@ function ChannelsCard({
           <p className="text-sm text-[var(--color-muted-foreground)]">
             {t('admin.styles.workspace.channelsNone', {
               defaultValue:
-                'No channels are live yet. Use "Go live" to open listings.',
+                'No listings yet. Use "Add listings" to add a channel + its link.',
             })}
           </p>
         ) : (
