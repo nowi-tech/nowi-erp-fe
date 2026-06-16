@@ -1,6 +1,6 @@
 import { useState, type ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Check, ChevronRight, ImageOff, Pause, Play } from 'lucide-react';
+import { Check, ChevronRight, ImageOff, Link2, Pause, Play } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
 import type { Style, StyleLifecycle } from '@/api/types';
@@ -588,7 +588,7 @@ export function GhostActionButton({
   children,
 }: {
   onClick: () => void;
-  icon?: 'park' | 'revive';
+  icon?: 'park' | 'revive' | 'link';
   children: ReactNode;
 }) {
   return (
@@ -602,6 +602,7 @@ export function GhostActionButton({
     >
       {icon === 'park' && <Pause size={13} />}
       {icon === 'revive' && <Play size={13} />}
+      {icon === 'link' && <Link2 size={13} />}
       {children}
     </button>
   );

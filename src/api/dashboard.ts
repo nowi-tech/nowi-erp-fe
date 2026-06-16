@@ -53,6 +53,9 @@ export interface DashboardStyleRow {
   /** Live marketplace listings (state=live) — channel + public URL, for the
    *  "View now" links. */
   liveListings: { channel: string; url: string | null }[];
+  /** Prepared listings (state=draft) — channel + link, awaiting EasyEcom-done.
+   *  Lets the "Add listings" dialog pre-seed a half-prepared cataloguing row. */
+  preparedListings: { channel: string; url: string | null }[];
   /** Milestone dates for the context-aware date column (per tab). */
   createdAt: string;
   approvedAt: string | null;

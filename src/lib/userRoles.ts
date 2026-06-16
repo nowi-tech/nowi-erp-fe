@@ -78,6 +78,13 @@ export const APPROVER_ROLES: readonly UserRole[] = [
 ];
 
 /**
+ * Admin-only gate. Used where admin gets a strictly wider capability than the
+ * rest of the approver set — e.g. parking a style at any lifecycle stage
+ * (non-admin approvers can park only before intake). Use with `hasAnyRole`.
+ */
+export const ADMIN_ROLES: readonly UserRole[] = ['admin'];
+
+/**
  * Roles allowed to CREATE a design + do the cataloguing step (EasyEcom
  * checkpoint, marketplace take-offline) — every PD editor plus the narrow
  * `cataloguer`. Mirrors the BE `CATALOGUER_WRITE_ROLES`. Use this for the

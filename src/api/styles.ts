@@ -346,16 +346,18 @@ export async function setEasyecomDone(
 }
 
 /**
- * Set a marketplace channel live/not-live (Myntra now). Going live optionally
- * carries the public listing URL and advances the style's lifecycle → live.
+ * List a marketplace channel (`listed: true`, with its public `listingUrl`) or
+ * take it offline (`listed: false`). A listed channel is prepared while the
+ * style is cataloguing and goes live automatically once EasyEcom is marked
+ * done. `listingUrl` is required when listing.
  */
 export async function setMarketplaceListing(
   styleId: number,
   body: {
     channel: ChannelName;
-    live: boolean;
+    listed: boolean;
     listingUrl?: string;
-    /** Reason for taking the channel offline (when live=false). */
+    /** Reason for taking the channel offline (when listed=false). */
     reason?: string;
   },
 ): Promise<Style> {
@@ -366,22 +368,10 @@ export async function setMarketplaceListing(
   return res.data;
 }
 
-/** Channel selection payload for goLive. */
+/** A channel + its public listing URL — used by the "Add listings" dialog. */
 export interface GoLiveChannel {
   channel: ChannelName;
   listingUrl?: string;
-}
-
-/** cataloguing + done → live, opening the selected channel listings. */
-export async function goLive(
-  styleId: number,
-  body: { channels: GoLiveChannel[] },
-): Promise<Style> {
-  const res = await apiClient.post<Style>(
-    `/api/styles/${styleId}/actions/go-live`,
-    body,
-  );
-  return res.data;
 }
 
 // ─── Variants ─────────────────────────────────────────────────────────

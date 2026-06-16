@@ -9,7 +9,6 @@ import {
   ExternalLink,
   ImageOff,
   Link2,
-  Rocket,
   Search,
 } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
@@ -41,7 +40,7 @@ import {
   parkStyle,
   patchStyle,
   setEasyecomDone,
-  goLive,
+  setMarketplaceListing,
   sampleApproveStyle,
   startCataloguing,
   type SamplingStatus,
@@ -56,6 +55,7 @@ import {
   hasAnyRole,
   PD_WRITE_ROLES,
   APPROVER_ROLES,
+  ADMIN_ROLES,
   CATALOGUER_WRITE_ROLES,
 } from '@/lib/userRoles';
 import { useDebounced } from '@/lib/useDebounced';
@@ -106,10 +106,9 @@ const TABS: DashboardStyleTab[] = [
 // page while still paginating the larger "All" list (BE caps `take` at 200).
 const PAGE_SIZE = 50;
 
-// Roles allowed to Park during sampling (draft / in_sampling) — the styles
-// write set on the BE, shared via PD_WRITE_ROLES. Park is unavailable once a
-// sample is signed off, so there's no separate post-approval park gate.
-const PARK_WRITE_ROLES = PD_WRITE_ROLES;
+// Roles allowed to inline-edit the sampling Stage — the styles write set on
+// the BE (PD_WRITE_ROLES, incl. operator). Park has its own gate (see canPark).
+const INLINE_WRITE_ROLES = PD_WRITE_ROLES;
 
 // Sampling-status options for the inline Stage editor — the in-progress
 // WORKING steps only. The terminal outcomes (sign-off / corrections) are NOT
@@ -374,13 +373,11 @@ export default function StylesInFlightTable({
     useState<DashboardStyleRow | null>(null);
   const [sampleApproveBusy, setSampleApproveBusy] = useState(false);
 
-  // Go-live — opens the SHARED multi-channel dialog (same one the workspace
-  // uses), then calls the single `goLive` endpoint. The target is the whole
-  // row; the dialog picks channels + URLs.
-  const [goLiveTarget, setGoLiveTarget] = useState<DashboardStyleRow | null>(
-    null,
-  );
-  const [goLiveBusy, setGoLiveBusy] = useState(false);
+  // Add-listings — opens the SHARED channel+link dialog (same one the workspace
+  // uses) and records each pick as a prepared listing. Going live happens when
+  // EasyEcom is marked done, not here.
+  const [listTarget, setListTarget] = useState<DashboardStyleRow | null>(null);
+  const [listBusy, setListBusy] = useState(false);
 
   // If Home re-seeds the tab from a fresh `?tab=` deep link, follow it.
   useEffect(() => {
@@ -426,9 +423,13 @@ export default function StylesInFlightTable({
     onActionDone?.();
   };
 
-  // The Style detail route — matches StylesRegistry.tsx's row link.
+  // The Style detail route — matches StylesRegistry.tsx's row link. Stash the
+  // active tab as `from` so the workspace back button returns here, to this
+  // exact bucket, rather than the dashboard default.
   const openStyle = (row: DashboardStyleRow) =>
-    navigate(`/styles/${row.styleId ?? row.id}`);
+    navigate(`/styles/${row.styleId ?? row.id}`, {
+      state: { from: `/?tab=${tab}` },
+    });
 
   // Mirror the active tab into ?tab= so a refresh or shared link reopens
   // the selected bucket (not the stale deep-linked one) — matches the
@@ -443,12 +444,16 @@ export default function StylesInFlightTable({
   const canApprove = (row: DashboardStyleRow) =>
     row.lifecycle === 'draft' && hasAnyRole(user, APPROVER_ROLES);
 
-  // Park is only allowed DURING sampling (draft / in_sampling) — once a sample
-  // is signed off the style is committed to the go-to-market path and can't be
-  // parked (no parking a live style, which would strand its channel listings).
+  // Park gate (mirrors the BE): an admin may park at ANY stage (a live style is
+  // pulled off the market); a non-admin approver (e.g. sampling_lead) may park
+  // during the sampling phase (draft or in_sampling). Parked/archived rows
+  // can't be parked again.
   const canPark = (row: DashboardStyleRow) =>
-    (row.lifecycle === 'draft' || row.lifecycle === 'in_sampling') &&
-    hasAnyRole(user, PARK_WRITE_ROLES);
+    row.lifecycle !== 'parked' &&
+    row.lifecycle !== 'archived' &&
+    (hasAnyRole(user, ADMIN_ROLES) ||
+      ((row.lifecycle === 'draft' || row.lifecycle === 'in_sampling') &&
+        hasAnyRole(user, APPROVER_ROLES)));
 
   const stageLabel = (row: DashboardStyleRow): string => {
     if (row.lifecycle === 'in_sampling' && row.samplingStatus) {
@@ -469,28 +474,22 @@ export default function StylesInFlightTable({
 
   // Inline sampling-status edits are gated on the PD write set (incl. operator).
   // Non-writers see read-only cells.
-  const canWriteInline = hasAnyRole(user, PARK_WRITE_ROLES);
+  const canWriteInline = hasAnyRole(user, INLINE_WRITE_ROLES);
 
   // The cataloguing write (Mark EasyEcom done) admits the narrow `cataloguer`
   // too — its whole remit. A superset of PD writers; NOT the sampling dropdown.
   const canCataloguingWrite = hasAnyRole(user, CATALOGUER_WRITE_ROLES);
 
-  // Going live is a sign-off — approver-only, matching the workspace + the BE
-  // (which 403s a non-approver on the live transition). Cataloguers/writers
-  // mark EasyEcom + see the listing, but can't publish.
-  const isApprover = hasAnyRole(user, APPROVER_ROLES);
-
-  // The cataloguing row has ONE progressive action button, surfaced in the
-  // shared row-actions slot (same place as Approve-sample), enforcing order:
-  //   EasyEcom pending → "Mark EasyEcom done" (writer/operator)
-  //   EasyEcom done    → "Go live" (approver)
-  // On a live row, the action becomes "Add channel" (go live on more).
+  // Cataloguing → live is now cataloguer/operator work: add listings (channel
+  // + link), then mark EasyEcom done — the latter auto-promotes the prepared
+  // listings to live. Both are CATALOGUER_WRITE; no approver gate on going live.
+  //   • "Add listings"   — list channels + links (cataloguing or live row)
+  //   • "Mark EasyEcom done" — the go-live trigger (requires a listed channel)
   const canMarkEasyecom = (row: DashboardStyleRow) =>
     row.lifecycle === 'cataloguing' && !row.easyecomDone && canCataloguingWrite;
-  const canGoLiveRow = (row: DashboardStyleRow) =>
-    row.lifecycle === 'cataloguing' && row.easyecomDone && isApprover;
-  const canAddChannel = (row: DashboardStyleRow) =>
-    row.lifecycle === 'live' && isApprover;
+  const canAddListings = (row: DashboardStyleRow) =>
+    (row.lifecycle === 'cataloguing' || row.lifecycle === 'live') &&
+    canCataloguingWrite;
 
   // Mark the EasyEcom checkpoint done — the first step of the progressive
   // cataloguing action (writer/operator). Optimistic; on success the row's
@@ -523,36 +522,34 @@ export default function StylesInFlightTable({
       });
   };
 
-  // Open the shared go-live dialog. EasyEcom is the prerequisite — block (with
-  // a toast) before opening; the BE enforces it too. Taking a channel back
-  // offline is NOT done here — that lives in the Style workspace (captures a
-  // reason). Going live itself is approver-only. The button only shows once
-  // EasyEcom is done, but keep the guard as a safety net against a stale row.
-  const openGoLive = (row: DashboardStyleRow) => {
-    if (!row.easyecomDone) {
-      toast.show(
-        t('dashboard.table.toast.easyecomFirst', {
-          defaultValue: 'Mark EasyEcom done before going live.',
-        }),
-        'error',
-      );
-      return;
-    }
-    setGoLiveTarget(row);
-  };
+  // Open the shared channel+link dialog to add listings (no precondition —
+  // listing is independent of EasyEcom; the BE enforces order at the EasyEcom
+  // step). Taking a channel offline lives in the Style workspace (captures a
+  // reason).
+  const openListings = (row: DashboardStyleRow) => setListTarget(row);
 
-  // Commit the go-live via the single `goLive` endpoint (multi-channel). The BE
-  // advances lifecycle → live + stamps wentLiveAt. Refetch so the now-live row
-  // leaves the Cataloguing tab and the summary cards update.
-  const confirmGoLive = (channels: GoLiveChannel[]) => {
-    if (!goLiveTarget) return;
-    const row = goLiveTarget;
-    setGoLiveBusy(true);
-    goLive(row.id, { channels })
+  // Record each pick as a prepared listing (channel + link). Promotion to live
+  // happens when EasyEcom is marked done; on a style that's already live the BE
+  // lists the new channel live straight away. Refetch so the rows + cards sync.
+  const confirmListings = (channels: GoLiveChannel[]) => {
+    if (!listTarget) return;
+    const row = listTarget;
+    setListBusy(true);
+    Promise.all(
+      channels.map((ch) =>
+        setMarketplaceListing(row.id, {
+          channel: ch.channel,
+          listed: true,
+          listingUrl: ch.listingUrl,
+        }),
+      ),
+    )
       .then(() => {
-        setGoLiveTarget(null);
+        setListTarget(null);
         toast.show(
-          t('dashboard.table.toast.wentLive', { defaultValue: 'Marked live.' }),
+          t('dashboard.table.toast.listingsSaved', {
+            defaultValue: 'Listings saved.',
+          }),
           'success',
         );
         afterAction();
@@ -561,12 +558,12 @@ export default function StylesInFlightTable({
         const m =
           (e as { response?: { data?: { message?: string | string[] } } })
             ?.response?.data?.message ??
-          t('dashboard.table.toast.goLiveError', {
-            defaultValue: 'Could not go live.',
+          t('dashboard.table.toast.listingsError', {
+            defaultValue: 'Could not save listings.',
           });
         toast.show(Array.isArray(m) ? m.join(', ') : String(m), 'error');
       })
-      .finally(() => setGoLiveBusy(false));
+      .finally(() => setListBusy(false));
   };
 
   // Inline sampling-status change (working steps only) — optimistic, persisted
@@ -1102,7 +1099,7 @@ export default function StylesInFlightTable({
           emptyLabel={t('dashboard.table.empty')}
           errorLabel={t('dashboard.table.error')}
           onRowClick={openStyle}
-          actionsWidth="170px"
+          actionsWidth="240px"
           rowAccent={(row) => row.lifecycle === 'draft'}
           renderActions={(row) => {
             const approve = canApprove(row);
@@ -1110,10 +1107,9 @@ export default function StylesInFlightTable({
             const sampleApprove = canSampleApprove(row);
             const startCat = canStartCataloguing(row);
             const markEasyecom = canMarkEasyecom(row);
-            const goLiveRow = canGoLiveRow(row);
-            const addChannel = canAddChannel(row);
+            const addListings = canAddListings(row);
             // Live rows get a "Channel" affordance (manage channels in the
-            // workspace) for everyone — the explicit action the mockup shows.
+            // workspace) for those who can't add listings inline.
             const channel = row.lifecycle === 'live';
             if (
               !approve &&
@@ -1121,8 +1117,7 @@ export default function StylesInFlightTable({
               !sampleApprove &&
               !startCat &&
               !markEasyecom &&
-              !goLiveRow &&
-              !addChannel &&
+              !addListings &&
               !channel
             ) {
               return <RowChevron />;
@@ -1155,7 +1150,18 @@ export default function StylesInFlightTable({
                     })}
                   </PrimaryActionButton>
                 )}
-                {/* Progressive cataloguing action: EasyEcom → Go live. */}
+                {/* Cataloguing → live: list channels first, then EasyEcom-done
+                    auto-promotes them live. */}
+                {addListings && (
+                  <GhostActionButton
+                    icon="link"
+                    onClick={() => openListings(row)}
+                  >
+                    {t('dashboard.table.actions.addListings', {
+                      defaultValue: 'Add listings',
+                    })}
+                  </GhostActionButton>
+                )}
                 {markEasyecom && (
                   <PrimaryActionButton onClick={() => markEasyecomDone(row)}>
                     {t('dashboard.table.actions.markEasyecom', {
@@ -1163,27 +1169,7 @@ export default function StylesInFlightTable({
                     })}
                   </PrimaryActionButton>
                 )}
-                {goLiveRow && (
-                  <PrimaryActionButton
-                    icon={<Rocket size={13} />}
-                    onClick={() => openGoLive(row)}
-                  >
-                    {t('dashboard.table.actions.goLive', {
-                      defaultValue: 'Go live',
-                    })}
-                  </PrimaryActionButton>
-                )}
-                {addChannel && (
-                  <PrimaryActionButton
-                    icon={<Rocket size={13} />}
-                    onClick={() => openGoLive(row)}
-                  >
-                    {t('dashboard.table.actions.addChannel', {
-                      defaultValue: 'Add channel',
-                    })}
-                  </PrimaryActionButton>
-                )}
-                {channel && !addChannel && (
+                {channel && !addListings && (
                   <button
                     type="button"
                     onClick={(e) => {
@@ -1268,19 +1254,23 @@ export default function StylesInFlightTable({
         }}
       />
 
-      {/* Go-live — the SAME multi-channel dialog the workspace uses. Picks
-          channels + URLs, then calls the single `goLive` endpoint. */}
+      {/* Add listings — the SAME channel+link dialog the workspace uses. Picks
+          channels + URLs and records them as prepared listings (auto-live on
+          EasyEcom done). */}
       <GoLiveDialog
-        open={goLiveTarget !== null}
-        busy={goLiveBusy}
+        open={listTarget !== null}
+        busy={listBusy}
         existing={
-          (goLiveTarget?.liveListings.map((l) => ({
+          ([
+            ...(listTarget?.liveListings ?? []),
+            ...(listTarget?.preparedListings ?? []),
+          ].map((l) => ({
             channel: l.channel,
             listingUrl: l.url,
           })) ?? []) as StyleChannelListing[]
         }
-        onClose={() => (goLiveBusy ? undefined : setGoLiveTarget(null))}
-        onConfirm={confirmGoLive}
+        onClose={() => (listBusy ? undefined : setListTarget(null))}
+        onConfirm={confirmListings}
       />
 
       {/* Approve sample (Approval #2) — the SAME verdict dialog the workspace
