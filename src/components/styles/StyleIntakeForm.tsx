@@ -16,7 +16,7 @@ import { Combobox, type ComboboxOption } from '@/components/ui/combobox';
 
 import PatternCadInput from '@/components/shared/PatternCadInput';
 import IntakeCard from '@/components/styles/intake/IntakeCard';
-import GenderSegment from '@/components/styles/intake/GenderSegment';
+import GenderSelect from '@/components/styles/intake/GenderSelect';
 import CategoryPicker from '@/components/styles/intake/CategoryPicker';
 import FabricPicker from '@/components/styles/intake/FabricPicker';
 import ColourPicker from '@/components/styles/intake/ColourPicker';
@@ -556,8 +556,6 @@ const StyleIntakeForm = forwardRef<StyleIntakeFormHandle, StyleIntakeFormProps>(
       }
     };
 
-    // Gender → category cascade. Switching gender resets category if
-    // the current one isn't valid for the new gender bucket.
     // Human summary of what a link read produced, for the inline hint.
     const summarizeExtract = (
       r: LinkExtractResult,
@@ -582,22 +580,11 @@ const StyleIntakeForm = forwardRef<StyleIntakeFormHandle, StyleIntakeFormProps>(
     const onGenderChange = (next: Gender) => {
       genderTouched.current = true;
       clearAiBadge('gender');
-      setForm((f) => {
-        const allowed = GENDER_CATEGORIES[next];
-        const currentCode = (f.categoryCode ?? '').toString().toUpperCase();
-        const stillValid = (allowed as readonly string[]).includes(currentCode);
-        if (stillValid) return { ...f, gender: next };
-        const code = allowed[0];
-        const hit = categories.find(
-          (c) => (c.code ?? '').toUpperCase() === code,
-        );
-        return {
-          ...f,
-          gender: next,
-          categoryCode: code,
-          categoryId: hit?.id ?? null,
-        };
-      });
+      // Gender is a free attribute — switching it keeps the current
+      // category (the same Category row derives a gender-appropriate
+      // articleCategory at save via `deriveArticleCategory`). It no
+      // longer cascades into / resets the category.
+      setForm((f) => ({ ...f, gender: next }));
       notifyGenderChange?.(next);
     };
 
@@ -955,7 +942,7 @@ const StyleIntakeForm = forwardRef<StyleIntakeFormHandle, StyleIntakeFormProps>(
                 {extracting && !genderTouched.current ? (
                   FIELD_SKELETON
                 ) : (
-                  <GenderSegment
+                  <GenderSelect
                     value={form.gender}
                     onChange={onGenderChange}
                     labels={{

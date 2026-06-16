@@ -7,7 +7,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { useToast } from '@/components/ui/toast';
 
-import GenderSegment from '@/components/styles/intake/GenderSegment';
+import GenderSelect from '@/components/styles/intake/GenderSelect';
 import CategoryPicker from '@/components/styles/intake/CategoryPicker';
 import FabricPicker from '@/components/styles/intake/FabricPicker';
 import ColourPicker from '@/components/styles/intake/ColourPicker';
@@ -35,7 +35,7 @@ import type {
  * `<StyleEditModal>` (every intake field), these two small dialogs edit
  * ONLY the fields that belong to their card, then persist through the
  * same `patchStyle(id, …)` client. They reuse the shared intake field
- * components (GenderSegment / CategoryPicker / FabricPicker /
+ * components (GenderSelect / CategoryPicker / FabricPicker /
  * ColourPicker) so the controls stay identical to the full form.
  */
 
@@ -150,19 +150,13 @@ export function CoreSpecsEditModal({
     }
   }, [open, fabrics.length, categories.length]);
 
-  // Gender → category cascade: drop the category when it isn't valid for
-  // the new gender bucket (same rule the full intake form uses).
-  const onGenderChange = (next: Gender) => {
-    setForm((f) => {
-      const allowed = GENDER_CATEGORIES[next];
-      const currentCode = (f.categoryCode ?? '').toString().toUpperCase();
-      const stillValid = (allowed as readonly string[]).includes(currentCode);
-      if (stillValid) return { ...f, gender: next };
-      const code = allowed[0];
-      const hit = categories.find((c) => (c.code ?? '').toUpperCase() === code);
-      return { ...f, gender: next, categoryCode: code, categoryId: hit?.id ?? null };
-    });
-  };
+  // Gender is a free attribute — switching it never disturbs the chosen
+  // category. The same Category row maps to a gender-appropriate
+  // `articleCategory` at save time via `deriveArticleCategory`, so there's
+  // no reason to reset (which used to surprise users by snapping back to
+  // the default "Jacket" or silently keeping the previous selection).
+  const onGenderChange = (next: Gender) =>
+    setForm((f) => ({ ...f, gender: next }));
 
   const valid = form.workingName.trim().length > 0;
 
@@ -250,7 +244,7 @@ export function CoreSpecsEditModal({
         </div>
         <div>
           <Label>{t('admin.styles.intake.gender')}</Label>
-          <GenderSegment
+          <GenderSelect
             value={form.gender}
             onChange={onGenderChange}
             labels={{
