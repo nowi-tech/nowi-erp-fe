@@ -262,6 +262,28 @@ export function DateRangePicker({
     setDraft({ from: p.from, to: p.to });
   }, []);
 
+  // Google-style range selection — deterministic two-click cycle, so a click
+  // can always start a fresh range (change the start date), which react-day-
+  // picker's default range mode doesn't reliably allow:
+  //   • a start is set but no end yet  → this click sets the END
+  //     (clicking before the start swaps them so the range stays valid);
+  //   • no selection OR a complete range → this click starts a NEW range at
+  //     the clicked day and clears the end. The next click sets the end.
+  // We ignore rdp's proposed `range` and drive the draft ourselves.
+  const handleRangeSelect = useCallback(
+    (_range: DateRange | undefined, clickedDay: Date) => {
+      setDraft((prev) => {
+        if (prev?.from && !prev?.to) {
+          return clickedDay.getTime() >= prev.from.getTime()
+            ? { from: prev.from, to: clickedDay }
+            : { from: clickedDay, to: prev.from };
+        }
+        return { from: clickedDay, to: undefined };
+      });
+    },
+    [],
+  );
+
   const apply = useCallback(() => {
     if (!draft?.from) {
       close();
@@ -363,7 +385,7 @@ export function DateRangePicker({
                   mode="range"
                   numberOfMonths={2}
                   selected={draft}
-                  onSelect={setDraft}
+                  onSelect={handleRangeSelect}
                   defaultMonth={defaultMonth}
                   disabled={{ after: maxDay }}
                   classNames={{
@@ -392,12 +414,19 @@ export function DateRangePicker({
                       '[&_button]:font-semibold [&_button]:text-[var(--color-primary)]',
                     outside:
                       '[&_button]:text-[var(--color-muted-foreground-2)]',
+                    // A range with only `from` picked (no `to` yet) gets ONLY
+                    // the `selected` modifier — rdp sets range_start/_end just
+                    // once BOTH ends exist — so without this the first click
+                    // showed no fill. Interior days are also `selected`, so
+                    // range_middle below re-overrides them (with `!`).
+                    selected:
+                      '[&_button]:bg-[var(--color-primary)] [&_button]:text-[var(--color-primary-foreground)] [&_button:hover]:bg-[var(--color-primary)]',
                     range_start:
                       'rounded-l-[var(--radius-sm)] [&_button]:bg-[var(--color-primary)] [&_button]:text-[var(--color-primary-foreground)] [&_button:hover]:bg-[var(--color-primary)]',
                     range_end:
                       'rounded-r-[var(--radius-sm)] [&_button]:bg-[var(--color-primary)] [&_button]:text-[var(--color-primary-foreground)] [&_button:hover]:bg-[var(--color-primary)]',
                     range_middle:
-                      'bg-[var(--color-primary-soft)] [&_button]:rounded-none [&_button]:bg-transparent [&_button]:text-[var(--color-primary)] [&_button:hover]:bg-[var(--color-primary-soft)]',
+                      'bg-[var(--color-primary-soft)] [&_button]:rounded-none [&_button]:bg-transparent! [&_button]:text-[var(--color-primary)]! [&_button:hover]:bg-[var(--color-primary-soft)]!',
                     disabled:
                       '[&_button]:pointer-events-none [&_button]:opacity-30',
                   }}
