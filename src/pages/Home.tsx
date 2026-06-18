@@ -75,20 +75,15 @@ export default function Home() {
   const [cards, setCards] = useState<DashboardCards | null>(null);
   const [cardsError, setCardsError] = useState(false);
 
-  // TWO independent date windows on the one screen:
-  //  • cards window → the summary "Stats" (date-responsive metrics: went-live
-  //    in window, entered-cataloguing in window, sampling activity in window).
-  //  • table window → the "List" worklist below (the in-flight feed).
-  // Both default to the last 7 days; the user can diverge them (e.g. 30-day
-  // stats while working a 7-day list). See SummaryCards / StylesInFlightTable.
+  // ONE shared date window for the whole dashboard — both the summary cards
+  // (date-responsive metrics) AND the in-flight list below read it. The top
+  // header picker and the in-card list picker are both bound to this single
+  // state, so changing either re-scopes both surfaces (the list refetch shows
+  // its own loading shimmer). Defaults to the last 7 days.
   const [cardsFrom, setCardsFrom] = useState<string>(() =>
     isoDaysAgo(DEFAULT_RANGE_DAYS - 1),
   );
   const [cardsTo, setCardsTo] = useState<string>(() => isoDaysAgo(0));
-  const [tableFrom, setTableFrom] = useState<string>(() =>
-    isoDaysAgo(DEFAULT_RANGE_DAYS - 1),
-  );
-  const [tableTo, setTableTo] = useState<string>(() => isoDaysAgo(0));
 
   const loadCards = useCallback(async () => {
     setCardsError(false);
@@ -162,13 +157,15 @@ export default function Home() {
         </div>
 
         <div className="flex shrink-0 items-center gap-2">
-          {/* Stats date filter — scopes the KPI metrics in the panel below. */}
+          {/* Page-wide date filter — scopes BOTH the summary cards and the
+              in-flight list below (shared window; mirrors the list's in-card
+              picker). */}
           <DateRangePicker
             from={cardsFrom}
             to={cardsTo}
             maxDate={isoDaysAgo(0)}
-            label={t('dashboard.dateFilter.statsLabel', {
-              defaultValue: 'Stats',
+            label={t('dashboard.dateFilter.label', {
+              defaultValue: 'Showing',
             })}
             onApply={(nextFrom, nextTo) => {
               setCardsFrom(nextFrom);
@@ -200,15 +197,13 @@ export default function Home() {
 
       {/* Styles in flight — the single content surface. Its own activity-window
           filter lives INSIDE the table card (passed via onDateApply). */}
+      {/* The date filter lives ONCE, in the header (drives both cards + list).
+          No in-card picker here — omitting onDateApply hides it; the table is
+          still scoped by the shared from/to window. */}
       <StylesInFlightTable
         initialTab={initialTab}
-        from={tableFrom}
-        to={tableTo}
-        maxDate={isoDaysAgo(0)}
-        onDateApply={(nextFrom, nextTo) => {
-          setTableFrom(nextFrom);
-          setTableTo(nextTo);
-        }}
+        from={cardsFrom}
+        to={cardsTo}
         onActionDone={loadCards}
       />
     </div>
