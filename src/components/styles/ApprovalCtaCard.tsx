@@ -8,7 +8,7 @@ import { hasAnyRole } from '@/lib/userRoles';
 import type { UserRole } from '@/api/types';
 
 /**
- * Roles permitted to perform Approval #1 — mirrors the `@Roles(...WRITE)`
+ * Roles permitted to perform Approval #1 — mirrors the `@Roles(...APPROVE)`
  * gating on `POST /styles/:id/actions/approve` in the backend
  * (styles-actions.controller.ts).
  */

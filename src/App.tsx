@@ -346,7 +346,7 @@ function App() {
               }
             />
             {/* Legacy alias — floor manager owns receive now. Admin
-                + floor_manager keep access; stitching_master is blocked. */}
+                + floor_manager + production_lead keep access; stitching_master is blocked. */}
             <Route
               path="/stitching/receive"
               element={

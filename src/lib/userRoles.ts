@@ -58,7 +58,7 @@ export const PD_WRITE_ROLES: readonly UserRole[] = (
 
 /**
  * The approver / sign-off set — mirrors the BE `APPROVE_ROLES`
- * (`nowi-erp-api/src/modules/auth/roles.constants.ts`). Leads + masters who
+ * (`nowi-erp-api/src/modules/auth/roles.constants.ts`). Admin + the sampling lead, who
  * may sign off (Approval #1/#2, start-cataloguing). Use this to gate those
  * buttons so a writer never sees a control the BE will 403.
  * (Going live is NOT here — it moved to the cataloguing write set; see
