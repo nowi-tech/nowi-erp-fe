@@ -123,6 +123,10 @@ const safeHref = (raw: string): string | null => {
   }
 };
 
+// ₹ with Indian-grouping, no decimals when whole (₹1,200 / ₹1,200.50).
+const formatInr = (value: number): string =>
+  `₹${value.toLocaleString('en-IN', { maximumFractionDigits: 2 })}`;
+
 // Snapshot field → English label, for describing WHAT an audit entry
 // changed (mirrors StylesService.diffSnapshot on the BE). Admin-facing
 // only → English-only by design (no Hindi).
@@ -131,6 +135,7 @@ const AUDIT_FIELD_LABELS: Record<string, string> = {
   fabricId: 'Fabric',
   sampleFabricRequired: 'Sample fabric',
   primaryColour: 'Primary colour',
+  costPrice: 'Cost price',
   referenceLink: 'Reference link',
   referenceImage: 'Reference image',
   referenceImageUrl: 'Reference image',
@@ -522,7 +527,6 @@ export default function StyleWorkspace() {
                 {style.primaryColour ?? '—'}
               </span>
             }
-            last={isProductionLayout && !style.referenceLink}
           />
           {/* Sampling layout carries the sample-fabric requirement; the
               production layout drops it (mock has neither sampling row). */}
@@ -536,12 +540,11 @@ export default function StyleWorkspace() {
                     ? 'm'
                     : (style.fabric?.unitOfMeasure ?? 'm')
                 }`}
-                last={!style.referenceLink}
               />
             )}
           {/* The source product URL captured at intake (drives reference-image
               auto-fetch). Surfaced here as a clickable link — the detail view
-              previously never rendered it. */}
+              previously never rendered it. Editable via the core-specs pencil. */}
           {style.referenceLink && (
             <SpecRow
               label="Reference link"
@@ -563,9 +566,21 @@ export default function StyleWorkspace() {
                   <span className="break-all">{style.referenceLink}</span>
                 );
               })()}
-              last
             />
           )}
+          {/* Cost price — always shown (em-dash when unset, editable via the
+              core-specs pencil). Final row. */}
+          <SpecRow
+            label="Cost price"
+            value={
+              style.costPrice != null ? (
+                formatInr(style.costPrice)
+              ) : (
+                <span className="text-[var(--color-muted-foreground)]">—</span>
+              )
+            }
+            last
+          />
         </dl>
       </div>
       {/* Production layout footers the card with the sample sign-off
@@ -1021,6 +1036,7 @@ export default function StyleWorkspace() {
       <SampleApproveDialog
         open={sampleApproveOpen}
         busy={busy !== null}
+        costPrice={style.costPrice}
         onClose={() => setSampleApproveOpen(false)}
         onConfirm={(body) => {
           setSampleApproveOpen(false);
@@ -1036,6 +1052,7 @@ export default function StyleWorkspace() {
         open={listingsOpen}
         busy={busy !== null}
         existing={style.channelListings ?? []}
+        costPrice={style.costPrice}
         onClose={() => setListingsOpen(false)}
         onConfirm={(channels) => {
           setListingsOpen(false);
@@ -1047,6 +1064,7 @@ export default function StyleWorkspace() {
                 channel: ch.channel,
                 listed: true,
                 listingUrl: ch.listingUrl,
+                mrp: ch.mrp,
               });
             }
             return updated;

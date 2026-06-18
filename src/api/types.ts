@@ -407,6 +407,8 @@ export interface StyleChannelListing {
   state: ChannelState;
   /** Public marketplace listing URL — clickable once the channel is live. */
   listingUrl: string | null;
+  /** Per-channel MRP (selling price on this marketplace). */
+  mrp?: number | null;
   virtualInventoryQty: number | null;
   notes: string | null;
   updatedBy: number | null;
@@ -533,6 +535,10 @@ export interface Style {
   sampleApproval: string | null;
   sampleApprovedBy: number | null;
   sampleApprovedAt: string | null;
+
+  /** Per-style manufacturing cost (captured at sample sign-off; editable for
+   *  backfill). Per-channel MRP lives on `channelListings[].mrp`. */
+  costPrice?: number | null;
 
   // Production (v2)
   productionStatus: string | null;

@@ -84,6 +84,10 @@ interface CoreSpecsState {
   primaryColour: string;
   /** Days, kept as a string so an empty input distinguishes from `0`. */
   samplingTimeline: string;
+  /** Source product URL captured at intake. */
+  referenceLink: string;
+  /** Per-style cost price, kept as a string so empty ≠ 0. */
+  costPrice: string;
 }
 
 function buildCoreSpecsState(style: Style): CoreSpecsState {
@@ -102,6 +106,8 @@ function buildCoreSpecsState(style: Style): CoreSpecsState {
       style.samplingTimeline && /^\d+$/.test(style.samplingTimeline.trim())
         ? style.samplingTimeline.trim()
         : '',
+    referenceLink: style.referenceLink ?? '',
+    costPrice: style.costPrice != null ? String(style.costPrice) : '',
   };
 }
 
@@ -195,6 +201,8 @@ export function CoreSpecsEditModal({
         fabricId: form.fabricId,
         primaryColour: form.primaryColour.trim() || null,
         samplingTimeline: form.samplingTimeline.trim() || null,
+        referenceLink: form.referenceLink.trim() || null,
+        costPrice: form.costPrice.trim() ? Number(form.costPrice) : null,
       } as Parameters<typeof patchStyle>[1]);
       toast.show(t('admin.styles.drawer.updatedToast', { defaultValue: 'Saved.' }), 'success');
       onSaved(saved);
@@ -343,6 +351,47 @@ export function CoreSpecsEditModal({
             >
               {Number(form.samplingTimeline) === 1 ? 'day' : 'days'}
             </span>
+          </div>
+        </div>
+        <div>
+          <Label>
+            {t('admin.styles.intake.referenceLink', {
+              defaultValue: 'Reference link',
+            })}
+          </Label>
+          <Input
+            type="url"
+            value={form.referenceLink}
+            onChange={(e) =>
+              setForm((f) => ({ ...f, referenceLink: e.target.value }))
+            }
+            placeholder="https://…"
+          />
+        </div>
+        <div>
+          <Label>
+            {t('admin.styles.workspace.costPrice', {
+              defaultValue: 'Cost price (₹)',
+            })}
+          </Label>
+          <div className="relative">
+            <span className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-sm text-[var(--color-muted-foreground)]">
+              ₹
+            </span>
+            <Input
+              type="number"
+              min="0"
+              step="0.01"
+              inputMode="decimal"
+              className="pl-6"
+              value={form.costPrice}
+              onChange={(e) =>
+                setForm((f) => ({ ...f, costPrice: e.target.value }))
+              }
+              placeholder={t('admin.styles.workspace.costPricePh', {
+                defaultValue: 'e.g. 450',
+              })}
+            />
           </div>
         </div>
       </div>
