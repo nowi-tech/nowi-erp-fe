@@ -20,6 +20,8 @@ const ROLE_HOMES: Record<UserRole, string> = {
   production_lead: '/',
   // Cataloguer is an office-home role too — lands on the unified Home.
   cataloguer: '/',
+  // Fabric desk lands on the dashboard (office Home).
+  fabric_manager: '/',
 };
 
 export default function Dashboard() {

@@ -91,6 +91,8 @@ const OFFICE_HOME_ROLES: UserRole[] = [
   'production_lead',
   // Cataloguer lands on the office Home to find its cataloguing queue.
   'cataloguer',
+  // Fabric desk lands on the office Home (its chosen home).
+  'fabric_manager',
 ];
 
 /**
@@ -529,6 +531,7 @@ function App() {
                     'sampling_lead',
                     'viewer',
                     'production_lead',
+                    'fabric_manager',
                   ]}
                 >
                   <S>

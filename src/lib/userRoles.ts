@@ -38,6 +38,9 @@ const IS_PD_WRITER: Record<UserRole, boolean> = {
   // `design_submitter` only files an intake (DESIGN_SUBMIT_ROLES below), not
   // general PD edits.
   design_submitter: false,
+  // `fabric_manager` writes ONLY the fabric domain (FABRIC_WRITE_ROLES below),
+  // never general PD data.
+  fabric_manager: false,
   viewer: false,
   floor_manager: false,
   stitching_master: false,
@@ -101,6 +104,19 @@ export const CATALOGUER_WRITE_ROLES: readonly UserRole[] = [
 export const DESIGN_SUBMIT_ROLES: readonly UserRole[] = [
   ...CATALOGUER_WRITE_ROLES,
   'design_submitter',
+];
+
+/**
+ * Roles allowed to WRITE the fabric domain (fabric master, stock ledger,
+ * supplier challans) — every PD editor plus the dedicated `fabric_manager`
+ * desk. Mirrors the BE `FABRIC_WRITE_ROLES`. Use this for the fabric-library
+ * write-gates so `fabric_manager` sees those controls but not general PD edit
+ * (it's absent from {@link PD_WRITE_ROLES}). `fabric_manager` additionally owns
+ * fabric delete (gated server-side); admin/production_lead share that gate.
+ */
+export const FABRIC_WRITE_ROLES: readonly UserRole[] = [
+  ...PD_WRITE_ROLES,
+  'fabric_manager',
 ];
 
 type RoleSource = Pick<User, 'role'> & {

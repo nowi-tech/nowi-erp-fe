@@ -101,7 +101,8 @@
     "finishing_master": "Finishing",
     "viewer": "Viewer",
     "production_lead": "Production lead",
-    "cataloguer": "Cataloguer"
+    "cataloguer": "Cataloguer",
+    "fabric_manager": "फ़ैब्रिक मैनेजर"
   },
   "floor": {
     "title": "Floor",

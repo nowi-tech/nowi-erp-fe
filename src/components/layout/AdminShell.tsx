@@ -65,6 +65,7 @@ const OFFICE_ROLES: UserRole[] = [
   'sampling_lead',
   'production_lead',
   'cataloguer',
+  'fabric_manager',
 ];
 
 const PD_ROLES: UserRole[] = [
@@ -97,7 +98,9 @@ const NAV_SECTIONS: NavSection[] = [
       // flow for NW- prefixed imported styles). Fabric Library = the master
       // fabric catalogue used across styles.
       { to: '/china-import', icon: <Container size={18} />, labelKey: 'admin.nav.chinaImport', roles: ['admin', 'sampling_editor', 'sampling_lead', 'production_lead'] },
-      { to: '/fabric-library', icon: <Layers size={18} />, labelKey: 'admin.nav.fabricLibrary', roles: PD_ROLES },
+      // fabric_manager is added inline (not via PD_ROLES) so the fabric desk
+      // sees the fabric library without gaining the other PD_ROLES nav links.
+      { to: '/fabric-library', icon: <Layers size={18} />, labelKey: 'admin.nav.fabricLibrary', roles: [...PD_ROLES, 'fabric_manager'] },
     ],
   },
   {

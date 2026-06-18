@@ -1,8 +1,7 @@
 // Hand-written minimal types. Will be regenerated from BE OpenAPI via `pnpm gen:api`.
 
-// Mirrors the BE Prisma `UserRole` enum (10 values after the June 2026
-// consolidation). Kept in sync with `nowi-erp-api` schema.prisma + the FE
-// role sets in `lib/userRoles.ts`.
+// Mirrors the BE Prisma `UserRole` enum (11 values). Kept in sync with
+// `nowi-erp-api` schema.prisma + the FE role sets in `lib/userRoles.ts`.
 export type UserRole =
   | 'admin'
   | 'floor_manager'
@@ -19,7 +18,11 @@ export type UserRole =
   | 'production_lead'
   // Narrow go-to-market role: create a design + do cataloguing (EasyEcom +
   // marketplace take-offline). No editing, approving, or going live.
-  | 'cataloguer';
+  | 'cataloguer'
+  // Fabric desk owner: full read/write/delete over the fabric domain (fabric
+  // master, stock ledger, supplier challans); lands on the dashboard. Not a
+  // general PD editor.
+  | 'fabric_manager';
 
 export interface User {
   id: string;

@@ -106,7 +106,8 @@
     "sampling_editor": "Sampling",
     "sampling_lead": "Sampling lead",
     "production_lead": "Production lead",
-    "cataloguer": "Cataloguer"
+    "cataloguer": "Cataloguer",
+    "fabric_manager": "Fabric manager"
   },
   "floor": {
     "title": "Floor",
