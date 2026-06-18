@@ -91,9 +91,24 @@ export default function UsersPage() {
       toast.show(t('common.saved' as const, { defaultValue: 'Saved' }), 'success');
       void refresh();
     } catch (err) {
-      const e = err as { response?: { data?: { message?: string } }; message?: string };
+      const e = err as {
+        response?: { status?: number; data?: { message?: string } };
+        message?: string;
+      };
+      // The paired BE change drops @RequireStepup() on DELETE /users/:id.
+      // Until that backend ships, the endpoint still answers 403 "step-up
+      // required" — surface an actionable message for that transient
+      // not-yet-deployed state instead of the raw guard error.
+      const stepupGate =
+        e.response?.status === 403 &&
+        /step-?up/i.test(e.response?.data?.message ?? '');
       toast.show(
-        e.response?.data?.message ?? e.message ?? t('common.error'),
+        stepupGate
+          ? t('admin.users.deactivateBackendPending', {
+              defaultValue:
+                'Backend update not yet deployed — deactivation is temporarily unavailable. Try again shortly.',
+            })
+          : e.response?.data?.message ?? e.message ?? t('common.error'),
         'error',
       );
     }
