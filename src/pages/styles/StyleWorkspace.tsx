@@ -98,6 +98,16 @@ const GENDER_LABEL: Record<string, string> = {
 const genderLabel = (g: string | null | undefined) =>
   (g ? GENDER_LABEL[g] : null) ?? g ?? '—';
 
+// Friendly host for a reference URL (e.g. "myntra.com") — falls back to the
+// raw string if it isn't a parseable absolute URL.
+const linkHost = (url: string): string => {
+  try {
+    return new URL(url).hostname.replace(/^www\./, '');
+  } catch {
+    return url;
+  }
+};
+
 // Snapshot field → English label, for describing WHAT an audit entry
 // changed (mirrors StylesService.diffSnapshot on the BE). Admin-facing
 // only → English-only by design (no Hindi).
@@ -497,7 +507,7 @@ export default function StyleWorkspace() {
                 {style.primaryColour ?? '—'}
               </span>
             }
-            last={isProductionLayout}
+            last={isProductionLayout && !style.referenceLink}
           />
           {/* Sampling layout carries the sample-fabric requirement; the
               production layout drops it (mock has neither sampling row). */}
@@ -511,9 +521,29 @@ export default function StyleWorkspace() {
                     ? 'm'
                     : (style.fabric?.unitOfMeasure ?? 'm')
                 }`}
-                last
+                last={!style.referenceLink}
               />
             )}
+          {/* The source product URL captured at intake (drives reference-image
+              auto-fetch). Surfaced here as a clickable link — the detail view
+              previously never rendered it. */}
+          {style.referenceLink && (
+            <SpecRow
+              label="Reference link"
+              value={
+                <a
+                  href={style.referenceLink}
+                  target="_blank"
+                  rel="noreferrer noopener"
+                  className="inline-flex items-center gap-1.5 text-[var(--color-primary)] hover:underline break-all"
+                >
+                  <ExternalLink size={13} className="shrink-0" />
+                  {linkHost(style.referenceLink)}
+                </a>
+              }
+              last
+            />
+          )}
         </dl>
       </div>
       {/* Production layout footers the card with the sample sign-off
