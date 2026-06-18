@@ -490,8 +490,16 @@ export default function StylesInFlightTable({
   // listings to live. Both are CATALOGUER_WRITE; no approver gate on going live.
   //   • "Add listings"   — list channels + links (cataloguing or live row)
   //   • "Mark EasyEcom done" — the go-live trigger (requires a listed channel)
+  // At least one prepared/live channel exists — the BE's precondition for
+  // marking EasyEcom done (else it 400s). Mirror it so the button only appears
+  // once it'll succeed, and "Add listings" stays the primary CTA until then.
+  const hasListedChannel = (row: DashboardStyleRow) =>
+    row.preparedListings.length > 0 || row.liveListings.length > 0;
   const canMarkEasyecom = (row: DashboardStyleRow) =>
-    row.lifecycle === 'cataloguing' && !row.easyecomDone && canCataloguingWrite;
+    row.lifecycle === 'cataloguing' &&
+    !row.easyecomDone &&
+    canCataloguingWrite &&
+    hasListedChannel(row);
   const canAddListings = (row: DashboardStyleRow) =>
     (row.lifecycle === 'cataloguing' || row.lifecycle === 'live') &&
     canCataloguingWrite;
@@ -1138,6 +1146,12 @@ export default function StylesInFlightTable({
             const startCat = canStartCataloguing(row);
             const markEasyecom = canMarkEasyecom(row);
             const addListings = canAddListings(row);
+            // A cataloguing style with no channel listed yet can't mark EasyEcom
+            // done (BE 400s). "Add listings" is the real next step, so it leads
+            // as the PRIMARY button; once a channel is listed, "Mark EasyEcom
+            // done" takes over the primary slot and Add listings drops to ghost.
+            const needsListing =
+              row.lifecycle === 'cataloguing' && !hasListedChannel(row);
             // Live rows get a "Channel" affordance (manage channels in the
             // workspace) for those who can't add listings inline.
             const channel = row.lifecycle === 'live';
@@ -1181,17 +1195,28 @@ export default function StylesInFlightTable({
                   </PrimaryActionButton>
                 )}
                 {/* Cataloguing → live: list channels first, then EasyEcom-done
-                    auto-promotes them live. */}
-                {addListings && (
-                  <GhostActionButton
-                    icon="link"
-                    onClick={() => openListings(row)}
-                  >
-                    {t('dashboard.table.actions.addListings', {
-                      defaultValue: 'Add listings',
-                    })}
-                  </GhostActionButton>
-                )}
+                    auto-promotes them live. Leads as PRIMARY until a channel is
+                    listed (when Mark EasyEcom done becomes the primary). */}
+                {addListings &&
+                  (needsListing ? (
+                    <PrimaryActionButton
+                      icon={<Link2 size={13} />}
+                      onClick={() => openListings(row)}
+                    >
+                      {t('dashboard.table.actions.addListings', {
+                        defaultValue: 'Add listings',
+                      })}
+                    </PrimaryActionButton>
+                  ) : (
+                    <GhostActionButton
+                      icon="link"
+                      onClick={() => openListings(row)}
+                    >
+                      {t('dashboard.table.actions.addListings', {
+                        defaultValue: 'Add listings',
+                      })}
+                    </GhostActionButton>
+                  ))}
                 {markEasyecom && (
                   <PrimaryActionButton onClick={() => markEasyecomDone(row)}>
                     {t('dashboard.table.actions.markEasyecom', {
