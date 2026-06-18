@@ -11,7 +11,6 @@ import { Dialog } from '@/components/ui/dialog';
 import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 import { useToast } from '@/components/ui/toast';
 import { useDebounced } from '@/lib/useDebounced';
-import StepupDialog from '@/components/admin/StepupDialog';
 import {
   listUsers,
   createUser,
@@ -26,21 +25,18 @@ import type { User, UserRole } from '@/api/types';
 // roughly groups production roles, PD roles, then admin/data.
 const ROLES: UserRole[] = [
   'admin',
+  // Production / floor
+  'production_lead',
   'floor_manager',
   'stitching_master',
   'finishing_master',
-  'data_manager',
-  'data_admin',
   'viewer',
   // Product Development module
   'sampling_editor',
   'sampling_lead',
-  'pattern_master_w',
-  'pattern_master_m',
-  'china_import_approver',
-  'pd_lead',
-  // Cross-cutting data-entry role — can enter data anywhere, approve nothing.
-  'operator',
+  // Submit-only — can file a design intake, nothing else.
+  'design_submitter',
+  'cataloguer',
 ];
 
 interface ApiErrorShape {
@@ -84,16 +80,14 @@ export default function UsersPage() {
     void refresh();
   }, [refresh]);
 
-  // Step-up gate: BE's @RequireStepup() on DELETE /users/:id rejects
-  // until the session has consumed a fresh OTP within ~60s. Confirm
-  // via the in-app dialog, then pop the step-up OTP dialog.
-  const [stepupForUser, setStepupForUser] = useState<User | null>(null);
+  // Deactivate is a confirmation-only action (no OTP step-up): the BE
+  // endpoint dropped @RequireStepup(), so a single in-app confirm is the
+  // only gate. Click → ConfirmDialog → DELETE /users/:id.
   const [confirmTarget, setConfirmTarget] = useState<User | null>(null);
   const onDeactivate = (u: User) => setConfirmTarget(u);
-  const doDeactivate = async () => {
-    if (!stepupForUser) return;
+  const doDeactivate = async (u: User) => {
     try {
-      await deleteUser(stepupForUser.id);
+      await deleteUser(u.id);
       toast.show(t('common.saved' as const, { defaultValue: 'Saved' }), 'success');
       void refresh();
     } catch (err) {
@@ -102,7 +96,6 @@ export default function UsersPage() {
         e.response?.data?.message ?? e.message ?? t('common.error'),
         'error',
       );
-      throw err; // keep dialog open
     }
   };
 
@@ -264,27 +257,8 @@ export default function UsersPage() {
         />
       )}
 
-      <StepupDialog
-        open={stepupForUser != null}
-        title={t('admin.users.deactivateTitle', {
-          defaultValue: 'Confirm: Deactivate user',
-        })}
-        description={
-          stepupForUser
-            ? t('admin.users.deactivateStepupBody', {
-                defaultValue:
-                  'Deactivating "{{name}}" requires a fresh OTP for security.',
-                name: stepupForUser.name,
-              })
-            : undefined
-        }
-        onClose={() => setStepupForUser(null)}
-        onConfirmed={doDeactivate}
-      />
-
-      {/* Initial "Deactivate {name}?" confirm — once OK'd, the step-up
-          OTP dialog above takes over. Two-step on purpose: cheap cancel
-          on the typo path, OTP-gated on the actual delete. */}
+      {/* "Deactivate {name}?" confirm — the only gate on deactivation.
+          No OTP step-up: admins deactivate with a single confirmation. */}
       <ConfirmDialog
         open={confirmTarget != null}
         title={t('admin.users.deactivateTitle', {
@@ -304,7 +278,7 @@ export default function UsersPage() {
         onConfirm={() => {
           const target = confirmTarget;
           setConfirmTarget(null);
-          if (target) setStepupForUser(target);
+          if (target) void doDeactivate(target);
         }}
       />
     </div>

@@ -51,13 +51,7 @@ const WRITE_ROLES = PD_WRITE_ROLES;
 //  • Inline Park → DRAFT rows only, reusing WRITE_ROLES (post-approval
 //    "Withdraw" is a detail-page action, not a queue button).
 // BE still enforces; this is UX.
-const APPROVER_ROLES: readonly UserRole[] = [
-  'admin',
-  'sampling_lead',
-  'pattern_master_w',
-  'pattern_master_m',
-  'china_import_approver',
-] as const;
+const APPROVER_ROLES: readonly UserRole[] = ['admin', 'sampling_lead'] as const;
 
 /**
  * Distinct values + per-value row counts for a column. Used to populate

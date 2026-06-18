@@ -8,7 +8,7 @@ import type {
 /**
  * Destination warehouses are the *receiving* end of a dispatch — and on
  * EasyEcom-enabled rows, the receiving end of the GRN webhook. Only
- * admin and data_manager can create/update; viewer reads. The BE list
+ * admin / production_lead can create/update; viewer reads. The BE list
  * may return either a bare array or a `{ data: [] }` envelope (the
  * project's tolerance pattern, mirrored from `vendors.ts`).
  */

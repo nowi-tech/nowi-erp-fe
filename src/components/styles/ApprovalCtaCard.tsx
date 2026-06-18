@@ -8,18 +8,11 @@ import { hasAnyRole } from '@/lib/userRoles';
 import type { UserRole } from '@/api/types';
 
 /**
- * Roles permitted to perform Approval #1 — mirrors the `@Roles(...WRITE)`
+ * Roles permitted to perform Approval #1 — mirrors the `@Roles(...APPROVE)`
  * gating on `POST /styles/:id/actions/approve` in the backend
  * (styles-actions.controller.ts).
  */
-const APPROVAL1_ROLES: readonly UserRole[] = [
-  'admin',
-  'sampling_editor',
-  'sampling_lead',
-  'pattern_master_w',
-  'pattern_master_m',
-  'china_import_approver',
-] as const;
+const APPROVAL1_ROLES: readonly UserRole[] = ['admin', 'sampling_lead'] as const;
 
 /**
  * Dashboard call-to-action: when the signed-in user can perform Approval #1,

@@ -10,7 +10,7 @@ import SummaryCards, {
 import StylesInFlightTable from '@/components/dashboard/StylesInFlightTable';
 import { DateRangePicker } from '@/components/ui/DateRangePicker';
 import { useAuth } from '@/context/auth';
-import { hasAnyRole } from '@/lib/userRoles';
+import { hasAnyRole, DESIGN_SUBMIT_ROLES } from '@/lib/userRoles';
 import {
   getDashboardCards,
   type DashboardCards,
@@ -67,17 +67,10 @@ export default function Home() {
   const [searchParams] = useSearchParams();
   const initialTab = tabFromParam(searchParams.get('tab'));
   const { user } = useAuth();
-  // "+ Submit design" creates a Style → gate to the PD write roles so
-  // read-only office roles (viewer / data_*) don't get a 403 CTA.
-  const canSubmit = hasAnyRole(user, [
-    'admin',
-    'sampling_editor',
-    'sampling_lead',
-    'pattern_master_w',
-    'pattern_master_m',
-    'operator',
-    'cataloguer',
-  ]);
+  // "+ Submit design" creates a Style → gate to the design-create set
+  // (mirrors the BE styles CREATE) so a read-only role never sees a CTA the
+  // BE will 403.
+  const canSubmit = hasAnyRole(user, DESIGN_SUBMIT_ROLES);
 
   const [cards, setCards] = useState<DashboardCards | null>(null);
   const [cardsError, setCardsError] = useState(false);

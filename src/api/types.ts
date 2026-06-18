@@ -1,22 +1,22 @@
 // Hand-written minimal types. Will be regenerated from BE OpenAPI via `pnpm gen:api`.
 
+// Mirrors the BE Prisma `UserRole` enum (10 values after the June 2026
+// consolidation). Kept in sync with `nowi-erp-api` schema.prisma + the FE
+// role sets in `lib/userRoles.ts`.
 export type UserRole =
   | 'admin'
   | 'floor_manager'
   | 'stitching_master'
   | 'finishing_master'
-  | 'data_manager'
   | 'viewer'
+  // Submit-only: can file a design intake and nothing else.
+  | 'design_submitter'
+  // ── Product Development multi-role values ──────────────────────────
   | 'sampling_editor'
-  // ── Product Development (Phase 4-8) multi-role values ──────────────
   | 'sampling_lead'
-  | 'pattern_master_w'
-  | 'pattern_master_m'
-  | 'china_import_approver'
-  | 'data_admin'
-  | 'pd_lead'
-  // Cross-cutting data-entry role: creates/edits everywhere, approves nothing.
-  | 'operator'
+  // Production admin — full access to production/floor + ops master-data
+  // and the main dashboard; sits above floor_manager.
+  | 'production_lead'
   // Narrow go-to-market role: create a design + do cataloguing (EasyEcom +
   // marketplace take-offline). No editing, approving, or going live.
   | 'cataloguer';

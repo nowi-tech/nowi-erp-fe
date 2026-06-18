@@ -59,17 +59,11 @@ const TABS: StyleTab[] = [
 // Row-action role gates — mirror the legacy StylesTable `RowActions`
 // (and the BE guards) so the queue never shows a button that 403s.
 //  • Park / Revive reuse the styles WRITE set (shared PD_WRITE_ROLES).
-//  • Approve (Approval #1) uses the narrower APPROVE set (Option A drops
-//    sampling_editor; china_import_approver kept for parity).
+//  • Approve (Approval #1) uses the narrower APPROVE set (admin + sampling_lead;
+//    sampling_editor authors but never signs off).
 const WRITE_ROLES = PD_WRITE_ROLES;
 
-const APPROVER_ROLES: readonly UserRole[] = [
-  'admin',
-  'sampling_lead',
-  'pattern_master_w',
-  'pattern_master_m',
-  'china_import_approver',
-] as const;
+const APPROVER_ROLES: readonly UserRole[] = ['admin', 'sampling_lead'] as const;
 
 // Sampling-status filter — the 5 live stages plus the "Corrections"
 // off-ramp. Labels render via the `admin.styles.samplingSteps.*` i18n

@@ -11,7 +11,6 @@ const ROLES_WITH_SLIDES: readonly UserRole[] = [
   'floor_manager',
   'stitching_master',
   'finishing_master',
-  'data_manager',
   'viewer',
 ] as const;
 

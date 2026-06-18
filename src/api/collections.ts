@@ -18,7 +18,7 @@ export interface CreateCollectionDto {
 
 /**
  * Inline collection creation from the intake form's "+ Add new" path.
- * Open to PD editors + data_manager (MASTER_DATA_WRITE_ROLES on the BE).
+ * Open to PD editors (MASTER_DATA_WRITE_ROLES on the BE).
  */
 export async function createCollection(
   dto: CreateCollectionDto,

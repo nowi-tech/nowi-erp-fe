@@ -31,20 +31,17 @@ const IS_PD_WRITER: Record<UserRole, boolean> = {
   admin: true,
   sampling_editor: true,
   sampling_lead: true,
-  pattern_master_w: true,
-  pattern_master_m: true,
-  china_import_approver: true,
-  data_admin: true,
-  pd_lead: true,
-  operator: true,
+  production_lead: true,
   // `cataloguer` is NOT a general PD writer — it only creates designs + does
   // cataloguing, gated via CATALOGUER_WRITE_ROLES below, not this set.
   cataloguer: false,
+  // `design_submitter` only files an intake (DESIGN_SUBMIT_ROLES below), not
+  // general PD edits.
+  design_submitter: false,
   viewer: false,
   floor_manager: false,
   stitching_master: false,
   finishing_master: false,
-  data_manager: false,
 };
 
 /**
@@ -61,22 +58,16 @@ export const PD_WRITE_ROLES: readonly UserRole[] = (
 
 /**
  * The approver / sign-off set — mirrors the BE `APPROVE_ROLES`
- * (`nowi-erp-api/src/modules/auth/roles.constants.ts`). Leads + masters who
+ * (`nowi-erp-api/src/modules/auth/roles.constants.ts`). Admin + the sampling lead, who
  * may sign off (Approval #1/#2, start-cataloguing). Use this to gate those
- * buttons so a writer/operator never sees a control the BE will 403.
+ * buttons so a writer never sees a control the BE will 403.
  * (Going live is NOT here — it moved to the cataloguing write set; see
  * {@link CATALOGUER_WRITE_ROLES}.)
  *
- * Deliberately NARROWER than {@link PD_WRITE_ROLES}: `sampling_editor` and
- * `operator` author data but never sign off.
+ * Deliberately NARROWER than {@link PD_WRITE_ROLES}: `sampling_editor`
+ * authors data but never signs off.
  */
-export const APPROVER_ROLES: readonly UserRole[] = [
-  'admin',
-  'sampling_lead',
-  'pattern_master_w',
-  'pattern_master_m',
-  'china_import_approver',
-];
+export const APPROVER_ROLES: readonly UserRole[] = ['admin', 'sampling_lead'];
 
 /**
  * Admin-only gate. Used where admin gets a strictly wider capability than the
@@ -98,6 +89,18 @@ export const ADMIN_ROLES: readonly UserRole[] = ['admin'];
 export const CATALOGUER_WRITE_ROLES: readonly UserRole[] = [
   ...PD_WRITE_ROLES,
   'cataloguer',
+];
+
+/**
+ * Roles allowed to FILE a design intake (the "Submit design" CTA + the
+ * `/styles/new` route) — everyone who can create a design plus the narrow
+ * submit-only `design_submitter`. Mirrors the BE `styles.controller` CREATE
+ * set (`CATALOGUER_WRITE_ROLES` + `design_submitter`). `design_submitter` can
+ * reach ONLY this surface — never PD edit / approve / cataloguing.
+ */
+export const DESIGN_SUBMIT_ROLES: readonly UserRole[] = [
+  ...CATALOGUER_WRITE_ROLES,
+  'design_submitter',
 ];
 
 type RoleSource = Pick<User, 'role'> & {
