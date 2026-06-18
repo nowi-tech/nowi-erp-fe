@@ -108,6 +108,21 @@ const linkHost = (url: string): string => {
   }
 };
 
+// Validate the URL scheme before we ever put a user-supplied value in an
+// anchor `href` — only http(s) is clickable. Anything else (notably
+// `javascript:`) returns null so the caller renders inert text, not a live
+// link. referenceLink is captured at intake, so treat it as untrusted.
+const safeHref = (raw: string): string | null => {
+  try {
+    const u = new URL(raw);
+    return u.protocol === 'http:' || u.protocol === 'https:'
+      ? u.toString()
+      : null;
+  } catch {
+    return null;
+  }
+};
+
 // Snapshot field → English label, for describing WHAT an audit entry
 // changed (mirrors StylesService.diffSnapshot on the BE). Admin-facing
 // only → English-only by design (no Hindi).
@@ -530,17 +545,24 @@ export default function StyleWorkspace() {
           {style.referenceLink && (
             <SpecRow
               label="Reference link"
-              value={
-                <a
-                  href={style.referenceLink}
-                  target="_blank"
-                  rel="noreferrer noopener"
-                  className="inline-flex items-center gap-1.5 text-[var(--color-primary)] hover:underline break-all"
-                >
-                  <ExternalLink size={13} className="shrink-0" />
-                  {linkHost(style.referenceLink)}
-                </a>
-              }
+              value={(() => {
+                const href = safeHref(style.referenceLink);
+                // Non-http(s) schemes (e.g. javascript:) are shown as inert
+                // text — never as a clickable href.
+                return href ? (
+                  <a
+                    href={href}
+                    target="_blank"
+                    rel="noreferrer noopener"
+                    className="inline-flex items-center gap-1.5 text-[var(--color-primary)] hover:underline break-all"
+                  >
+                    <ExternalLink size={13} className="shrink-0" />
+                    {linkHost(style.referenceLink)}
+                  </a>
+                ) : (
+                  <span className="break-all">{style.referenceLink}</span>
+                );
+              })()}
               last
             />
           )}
