@@ -469,7 +469,12 @@ export default function StylesInFlightTable({
         },
       );
     }
-    return '';
+    // Past the granular working steps (e.g. sample_approved → ready for
+    // cataloguing) there's no sub-status — fall back to the lifecycle label so
+    // the Stage cell reads "Sample approved" instead of a bare "—".
+    return t(`admin.styles.lifecycle.${row.lifecycle}` as const, {
+      defaultValue: row.lifecycle.replace(/_/g, ' '),
+    });
   };
 
   // Inline sampling-status edits are gated on the PD write set.
