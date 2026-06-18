@@ -101,16 +101,11 @@
     "floor_manager": "Floor manager",
     "stitching_master": "Stitching",
     "finishing_master": "Finishing",
-    "data_manager": "Data",
     "viewer": "Viewer",
+    "design_submitter": "Design submitter",
     "sampling_editor": "Sampling",
     "sampling_lead": "Sampling lead",
-    "pattern_master_w": "Pattern master (W)",
-    "pattern_master_m": "Pattern master (M)",
-    "china_import_approver": "China Import",
-    "data_admin": "Data admin",
-    "pd_lead": "Production lead",
-    "operator": "Operator",
+    "production_lead": "Production lead",
     "cataloguer": "Cataloguer"
   },
   "floor": {

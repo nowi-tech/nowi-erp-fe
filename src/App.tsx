@@ -14,7 +14,7 @@ import Login from './pages/Login';
 import SsoSkucast from './pages/SsoSkucast';
 import Dashboard from './pages/Dashboard';
 import { useAuth } from './context/auth';
-import { hasAnyRole, CATALOGUER_WRITE_ROLES } from './lib/userRoles';
+import { hasAnyRole, hasRole, DESIGN_SUBMIT_ROLES } from './lib/userRoles';
 import type { UserRole } from './api/types';
 
 const AdminShell = lazy(() => import('./components/layout/AdminShell'));
@@ -84,17 +84,11 @@ function S({ children }: { children: ReactNode }) {
 const OFFICE_HOME_ROLES: UserRole[] = [
   'admin',
   'viewer',
-  'data_manager',
-  'data_admin',
   'sampling_editor',
   'sampling_lead',
-  'pattern_master_w',
-  'pattern_master_m',
-  'china_import_approver',
-  'pd_lead',
-  // Operator has no dedicated floor home — land them on the office Home and
-  // let the sidebar expose every data-entry destination.
-  'operator',
+  // Production admin lands on the office Home (mirrors the BE dashboard
+  // OFFICE_ROLES); floor_manager does NOT.
+  'production_lead',
   // Cataloguer lands on the office Home to find its cataloguing queue.
   'cataloguer',
 ];
@@ -109,6 +103,10 @@ function HomeRoute() {
   const { user } = useAuth();
   if (hasAnyRole(user, OFFICE_HOME_ROLES)) {
     return <Home />;
+  }
+  // Submit-only role has no dashboard — drop it straight onto the intake form.
+  if (hasRole(user, 'design_submitter')) {
+    return <Navigate to="/styles/new" replace />;
   }
   return <Dashboard />;
 }
@@ -198,7 +196,7 @@ function App() {
             <Route
               path="/admin"
               element={
-                <ProtectedRoute allowedRoles={['admin', 'viewer', 'data_manager', 'operator']}>
+                <ProtectedRoute allowedRoles={['admin', 'viewer', 'production_lead']}>
                   <S>
                     <AdminShell />
                   </S>
@@ -244,10 +242,11 @@ function App() {
               <Route
                 path="users"
                 element={
-                  // User management is admin/viewer/data_manager only — the
-                  // /admin parent now admits 'operator' for Production +
-                  // Dispatches, so re-gate to keep operator out of Users.
-                  <ProtectedRoute allowedRoles={['admin', 'viewer', 'data_manager']}>
+                  // User management is admin/viewer only (matches BE
+                  // GET /users) — the /admin parent now admits production_lead
+                  // for Production + Dispatches, so re-gate to keep it out of
+                  // Users.
+                  <ProtectedRoute allowedRoles={['admin', 'viewer']}>
                     <S>
                       <UsersPage />
                     </S>
@@ -268,7 +267,7 @@ function App() {
                   // The lot edit-request approval queue is admin-only: BE gates
                   // GET /lots/edit-requests to admin and the sidebar only shows
                   // it to admin, so match that here (the /admin parent now also
-                  // admits operator + viewer + data_manager).
+                  // admits production_lead + viewer).
                   <ProtectedRoute allowedRoles={['admin']}>
                     <S>
                       <EditRequestsPage />
@@ -278,7 +277,7 @@ function App() {
               />
               {/* TODO: build — admin Vendors, SKUs and Settings pages.
                   Routes intentionally hidden so the menu doesn't surface stubs.
-                  Master-data CRUD lives under /data for the data_manager role.
+                  Master-data CRUD lives under /data for the production_lead role.
               <Route
                 path="vendors"
                 element={<AdminPlaceholder titleKey="admin.placeholder.vendors" />}
@@ -298,7 +297,7 @@ function App() {
             <Route
               path="/floor"
               element={
-                <ProtectedRoute allowedRoles={['floor_manager', 'admin', 'operator']}>
+                <ProtectedRoute allowedRoles={['floor_manager', 'admin', 'production_lead']}>
                   <S>
                     <FloorHome />
                   </S>
@@ -308,7 +307,7 @@ function App() {
             <Route
               path="/floor/receive"
               element={
-                <ProtectedRoute allowedRoles={['floor_manager', 'admin', 'operator']}>
+                <ProtectedRoute allowedRoles={['floor_manager', 'admin', 'production_lead']}>
                   <S>
                     <ReceiveFromKotty />
                   </S>
@@ -318,7 +317,7 @@ function App() {
             <Route
               path="/floor/lot/:lotId"
               element={
-                <ProtectedRoute allowedRoles={['floor_manager', 'admin', 'operator']}>
+                <ProtectedRoute allowedRoles={['floor_manager', 'admin', 'production_lead']}>
                   <S>
                     <FloorLotDetail />
                   </S>
@@ -328,7 +327,7 @@ function App() {
             <Route
               path="/floor/lot/:lotId/edit"
               element={
-                <ProtectedRoute allowedRoles={['floor_manager', 'admin', 'operator']}>
+                <ProtectedRoute allowedRoles={['floor_manager', 'admin', 'production_lead']}>
                   <S>
                     <FloorEditLot />
                   </S>
@@ -339,7 +338,7 @@ function App() {
             <Route
               path="/stitching"
               element={
-                <ProtectedRoute allowedRoles={['stitching_master', 'admin', 'viewer', 'operator']}>
+                <ProtectedRoute allowedRoles={['stitching_master', 'admin', 'viewer', 'production_lead']}>
                   <S>
                     <StitchingHome />
                   </S>
@@ -351,7 +350,7 @@ function App() {
             <Route
               path="/stitching/receive"
               element={
-                <ProtectedRoute allowedRoles={['floor_manager', 'admin', 'operator']}>
+                <ProtectedRoute allowedRoles={['floor_manager', 'admin', 'production_lead']}>
                   <S>
                     <ReceiveFromKotty />
                   </S>
@@ -361,7 +360,7 @@ function App() {
             <Route
               path="/stitching/lot/:lotId"
               element={
-                <ProtectedRoute allowedRoles={['stitching_master', 'admin', 'operator']}>
+                <ProtectedRoute allowedRoles={['stitching_master', 'admin', 'production_lead']}>
                   <S>
                     <StitchingReceiveLot />
                   </S>
@@ -371,7 +370,7 @@ function App() {
             <Route
               path="/stitching/worked-on/:lotId"
               element={
-                <ProtectedRoute allowedRoles={['stitching_master', 'admin', 'viewer', 'operator']}>
+                <ProtectedRoute allowedRoles={['stitching_master', 'admin', 'viewer', 'production_lead']}>
                   <S>
                     <StitchingWorkedOnDetail />
                   </S>
@@ -381,7 +380,7 @@ function App() {
             <Route
               path="/finishing"
               element={
-                <ProtectedRoute allowedRoles={['finishing_master', 'admin', 'viewer', 'operator']}>
+                <ProtectedRoute allowedRoles={['finishing_master', 'admin', 'viewer', 'production_lead']}>
                   <S>
                     <FinishingHome />
                   </S>
@@ -391,7 +390,7 @@ function App() {
             <Route
               path="/finishing/lot/:lotId"
               element={
-                <ProtectedRoute allowedRoles={['finishing_master', 'admin', 'operator']}>
+                <ProtectedRoute allowedRoles={['finishing_master', 'admin', 'production_lead']}>
                   <S>
                     <FinishingReceiveLot />
                   </S>
@@ -401,7 +400,7 @@ function App() {
             <Route
               path="/finishing/worked-on/:lotId"
               element={
-                <ProtectedRoute allowedRoles={['finishing_master', 'admin', 'viewer', 'operator']}>
+                <ProtectedRoute allowedRoles={['finishing_master', 'admin', 'viewer', 'production_lead']}>
                   <S>
                     <FinishingWorkedOnDetail />
                   </S>
@@ -411,7 +410,7 @@ function App() {
             <Route
               path="/data"
               element={
-                <ProtectedRoute allowedRoles={['data_manager', 'admin', 'viewer', 'operator']}>
+                <ProtectedRoute allowedRoles={['admin', 'viewer', 'production_lead']}>
                   <S>
                     <AdminShell />
                   </S>
@@ -439,20 +438,15 @@ function App() {
                     'admin',
                     'sampling_editor',
                     'sampling_lead',
-                    'pattern_master_w',
-                    'pattern_master_m',
                     'viewer',
-                    // Office roles that reach the Sampling registry via the
-                    // Home cards (read-only; BE gates writes). Keeps the
-                    // card deep-links from bouncing back to '/'.
-                    'china_import_approver',
-                    'data_manager',
-                    'data_admin',
-                    'pd_lead',
-                    'operator',
+                    // Production admin reaches the registry from the Home cards.
+                    'production_lead',
                     // Go-to-market role: reaches the registry, the workspace
                     // (EasyEcom checkpoint + channels), and the intake form.
                     'cataloguer',
+                    // Submit-only role lands on /styles/new (this parent gates
+                    // it) and reads back its created style on /styles/:id.
+                    'design_submitter',
                   ]}
                 >
                   <S>
@@ -475,11 +469,11 @@ function App() {
                   // Intake creates a Style (write). The /styles parent now
                   // admits read-only office roles for the registry
                   // drill-down, so re-gate the create form to the design-create
-                  // set (CATALOGUER_WRITE_ROLES = PD writers + cataloguer,
-                  // mirrors the BE styles CREATE and the Home "+ Submit design"
-                  // CTA) — otherwise a read-only role could open the form by URL
-                  // and only hit the 403 on submit.
-                  <ProtectedRoute allowedRoles={[...CATALOGUER_WRITE_ROLES]}>
+                  // set (DESIGN_SUBMIT_ROLES = PD writers + cataloguer +
+                  // design_submitter, mirrors the BE styles CREATE and the Home
+                  // "+ Submit design" CTA) — otherwise a read-only role could
+                  // open the form by URL and only hit the 403 on submit.
+                  <ProtectedRoute allowedRoles={[...DESIGN_SUBMIT_ROLES]}>
                     <S>
                       <NewIntake />
                     </S>
@@ -506,10 +500,7 @@ function App() {
                     'admin',
                     'sampling_editor',
                     'sampling_lead',
-                    'pattern_master_w',
-                    'pattern_master_m',
-                    'china_import_approver',
-                    'operator',
+                    'production_lead',
                   ]}
                 >
                   <S>
@@ -536,10 +527,8 @@ function App() {
                     'admin',
                     'sampling_editor',
                     'sampling_lead',
-                    'pattern_master_w',
-                    'pattern_master_m',
                     'viewer',
-                    'operator',
+                    'production_lead',
                   ]}
                 >
                   <S>

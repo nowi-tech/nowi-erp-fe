@@ -25,21 +25,18 @@ import type { User, UserRole } from '@/api/types';
 // roughly groups production roles, PD roles, then admin/data.
 const ROLES: UserRole[] = [
   'admin',
+  // Production / floor
+  'production_lead',
   'floor_manager',
   'stitching_master',
   'finishing_master',
-  'data_manager',
-  'data_admin',
   'viewer',
   // Product Development module
   'sampling_editor',
   'sampling_lead',
-  'pattern_master_w',
-  'pattern_master_m',
-  'china_import_approver',
-  'pd_lead',
-  // Cross-cutting data-entry role — can enter data anywhere, approve nothing.
-  'operator',
+  // Submit-only — can file a design intake, nothing else.
+  'design_submitter',
+  'cataloguer',
 ];
 
 interface ApiErrorShape {

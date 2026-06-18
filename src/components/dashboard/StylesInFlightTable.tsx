@@ -107,7 +107,7 @@ const TABS: DashboardStyleTab[] = [
 const PAGE_SIZE = 50;
 
 // Roles allowed to inline-edit the sampling Stage — the styles write set on
-// the BE (PD_WRITE_ROLES, incl. operator). Park has its own gate (see canPark).
+// the BE (PD_WRITE_ROLES). Park has its own gate (see canPark).
 const INLINE_WRITE_ROLES = PD_WRITE_ROLES;
 
 // Sampling-status options for the inline Stage editor — the in-progress
@@ -472,7 +472,7 @@ export default function StylesInFlightTable({
     return '';
   };
 
-  // Inline sampling-status edits are gated on the PD write set (incl. operator).
+  // Inline sampling-status edits are gated on the PD write set.
   // Non-writers see read-only cells.
   const canWriteInline = hasAnyRole(user, INLINE_WRITE_ROLES);
 
@@ -480,7 +480,7 @@ export default function StylesInFlightTable({
   // too — its whole remit. A superset of PD writers; NOT the sampling dropdown.
   const canCataloguingWrite = hasAnyRole(user, CATALOGUER_WRITE_ROLES);
 
-  // Cataloguing → live is now cataloguer/operator work: add listings (channel
+  // Cataloguing → live is now cataloguer work: add listings (channel
   // + link), then mark EasyEcom done — the latter auto-promotes the prepared
   // listings to live. Both are CATALOGUER_WRITE; no approver gate on going live.
   //   • "Add listings"   — list channels + links (cataloguing or live row)
@@ -491,8 +491,8 @@ export default function StylesInFlightTable({
     (row.lifecycle === 'cataloguing' || row.lifecycle === 'live') &&
     canCataloguingWrite;
 
-  // Mark the EasyEcom checkpoint done — the go-live trigger (cataloguer/
-  // operator). The BE auto-promotes the listed channels to live, so the row
+  // Mark the EasyEcom checkpoint done — the go-live trigger (cataloguer).
+  // The BE auto-promotes the listed channels to live, so the row
   // leaves the Cataloguing tab on the next load. Optimistic; revert on error
   // (e.g. the BE 400 when no channel is listed yet).
   const markEasyecomDone = (row: DashboardStyleRow) => {

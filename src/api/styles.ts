@@ -255,7 +255,7 @@ export async function archiveStyle(styleId: number): Promise<void> {
   await apiClient.post(`/api/styles/${styleId}/archive`);
 }
 
-/** Hard delete — requires `data_admin` on the BE. */
+/** Hard delete — requires admin / production_lead on the BE. */
 export async function hardDeleteStyle(styleId: number): Promise<void> {
   await apiClient.delete(`/api/styles/${styleId}`);
 }
@@ -504,7 +504,7 @@ export async function listColourMaster(): Promise<Colour[]> {
   return res.data;
 }
 
-/** Create a colour-master row (admin / data_manager). Used by the fabric
+/** Create a colour-master row (PD editors). Used by the fabric
  *  editor's "+ Add colour" popup. */
 export async function createColourMaster(body: {
   name: string;

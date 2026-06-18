@@ -11,18 +11,13 @@ const ROLE_HOMES: Record<UserRole, string> = {
   floor_manager: '/floor',
   stitching_master: '/stitching',
   finishing_master: '/finishing',
-  data_manager: '/',
   viewer: '/',
+  // Submit-only role has no dashboard — lands straight on the intake form.
+  design_submitter: '/styles/new',
   sampling_editor: '/',
   sampling_lead: '/',
-  pattern_master_w: '/',
-  pattern_master_m: '/',
-  china_import_approver: '/',
-  data_admin: '/',
-  pd_lead: '/',
-  // Operator is an office-home role (see OFFICE_HOME_ROLES in App.tsx), so
-  // HomeRoute renders Home directly and this map is only a fallback.
-  operator: '/',
+  // Production admin is an office-home role (see OFFICE_HOME_ROLES in App.tsx).
+  production_lead: '/',
   // Cataloguer is an office-home role too — lands on the unified Home.
   cataloguer: '/',
 };

@@ -64,7 +64,11 @@ export default function DispatchDetail() {
   const [edit, setEdit] = useState<EditState>(INITIAL_EDIT);
   const cancelRef = useRef<HTMLButtonElement>(null);
 
-  const canEdit = hasAnyRole(user, ['admin', 'finishing_master', 'operator']);
+  const canEdit = hasAnyRole(user, [
+    'admin',
+    'finishing_master',
+    'production_lead',
+  ]);
 
   const refresh = useCallback(async () => {
     setLoading(true);

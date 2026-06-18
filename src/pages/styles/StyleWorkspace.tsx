@@ -333,7 +333,7 @@ export default function StyleWorkspace() {
   const isChinaImport = style.source === 'china_import';
   const canApproveIntake = style.lifecycle === 'draft';
   // Sample sign-off (Approval #2) is approver-only — the BE endpoint is
-  // APPROVE-gated, so don't show the button to writers/operators who'd 403.
+  // APPROVE-gated, so don't show the button to writers who would 403.
   const canSampleApprove =
     !isChinaImport &&
     style.lifecycle === 'in_sampling' &&
@@ -381,7 +381,7 @@ export default function StyleWorkspace() {
 
   // ── Go-to-market lifecycle actions ──
   // These advance the lifecycle and are APPROVE-gated on the BE — gate the
-  // buttons to approver roles too (matching the dashboard) so a writer/operator
+  // buttons to approver roles too (matching the dashboard) so a writer
   // never sees a control that 403s. EasyEcom (the cataloguing gate) + take-
   // offline stay open to all writers; only the lifecycle advances are gated.
   const canApproveGoToMarket =
@@ -390,7 +390,7 @@ export default function StyleWorkspace() {
   const canStartCataloguing =
     canApproveGoToMarket && style.lifecycle === 'sample_approved';
   // "Add listings" — prepare marketplace channels + links while cataloguing.
-  // Cataloguer/operator-editable (not approver-gated): finishing cataloguing
+  // Cataloguer-editable (not approver-gated): finishing cataloguing
   // (EasyEcom done) is what takes the style live, and that's cataloguer work.
   const canAddListings =
     canCataloguingWrite && style.lifecycle === 'cataloguing';
@@ -1078,7 +1078,7 @@ function ChannelsCard({
         {/* EasyEcom checkpoint — the go-live trigger. Ticking it auto-promotes
             the prepared (listed) channels to live; it's disabled until at least
             one channel is listed with a link (see easyecomBlocked).
-            Editable by cataloguers/operators. */}
+            Editable by cataloguers. */}
         {style.lifecycle === 'cataloguing' && (
           <div className="mb-4 flex items-center justify-between gap-3 rounded-[var(--radius-sm)] border border-[var(--color-border)] px-3 py-2">
             <div className="min-w-0">

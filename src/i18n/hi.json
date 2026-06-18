@@ -99,9 +99,8 @@
     "floor_manager": "Floor Manager",
     "stitching_master": "Stitching",
     "finishing_master": "Finishing",
-    "data_manager": "Data",
     "viewer": "Viewer",
-    "operator": "Operator",
+    "production_lead": "Production lead",
     "cataloguer": "Cataloguer"
   },
   "floor": {
