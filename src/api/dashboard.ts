@@ -51,13 +51,19 @@ export interface DashboardStyleRow {
   /** EasyEcom catalog checkpoint (Done/Pending pill on the Cataloguing tab).
    *  `live` is derived (any channel listing live). */
   easyecomDone: boolean;
+  /** Per-style manufacturing cost (captured at sign-off; null until then). */
+  costPrice: number | null;
   live: boolean;
-  /** Live marketplace listings (state=live) — channel + public URL, for the
-   *  "View now" links. */
-  liveListings: { channel: string; url: string | null }[];
-  /** Prepared listings (state=draft) — channel + link, awaiting EasyEcom-done.
+  /** Live marketplace listings (state=live) — channel + public URL + per-channel
+   *  MRP, for the "View now" links + price prefill. */
+  liveListings: { channel: string; url: string | null; mrp: number | null }[];
+  /** Prepared listings (state=draft) — channel + link + MRP, awaiting EasyEcom-done.
    *  Lets the "Add listings" dialog pre-seed a half-prepared cataloguing row. */
-  preparedListings: { channel: string; url: string | null }[];
+  preparedListings: {
+    channel: string;
+    url: string | null;
+    mrp: number | null;
+  }[];
   /** Milestone dates for the context-aware date column (per tab). */
   createdAt: string;
   approvedAt: string | null;

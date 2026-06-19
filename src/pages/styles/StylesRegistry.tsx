@@ -610,6 +610,7 @@ export default function StylesRegistry() {
       <SampleApproveDialog
         open={sampleApproveTarget !== null}
         busy={sampleApproveBusy}
+        costPrice={sampleApproveTarget?.costPrice ?? null}
         onClose={() =>
           sampleApproveBusy ? undefined : setSampleApproveTarget(null)
         }

@@ -3,6 +3,7 @@ import { useTranslation } from 'react-i18next';
 import { CheckCircle2 } from 'lucide-react';
 import { Dialog } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import type { SampleApprovalStatus, SampleApproveStyleBody } from '@/api/styles';
 
@@ -25,11 +26,14 @@ const SAMPLE_APPROVAL_OPTIONS: SampleApprovalStatus[] = [
 export default function SampleApproveDialog({
   open,
   busy,
+  costPrice,
   onClose,
   onConfirm,
 }: {
   open: boolean;
   busy: boolean;
+  /** Existing cost price (prefill for re-approval / correction). */
+  costPrice?: number | null;
   onClose: () => void;
   onConfirm: (body: SampleApproveStyleBody) => void;
 }) {
@@ -38,13 +42,22 @@ export default function SampleApproveDialog({
     'approved_for_production',
   );
   const [note, setNote] = useState('');
+  const [cost, setCost] = useState('');
 
   useEffect(() => {
     if (open) {
       setVerdict('approved_for_production');
       setNote('');
+      setCost(costPrice != null ? String(costPrice) : '');
     }
-  }, [open]);
+  }, [open, costPrice]);
+
+  // Only the advancing verdict actually approves the sample — cost is required
+  // then (an approved sample must carry its cost). Rework verdicts may omit it.
+  const advancing = verdict === 'approved_for_production';
+  const costNum = cost.trim() ? Number(cost) : NaN;
+  const costValid = Number.isFinite(costNum) && costNum > 0;
+  const costMissing = advancing && !costValid;
 
   return (
     <Dialog
@@ -60,11 +73,12 @@ export default function SampleApproveDialog({
           </Button>
           <Button
             size="sm"
-            disabled={busy}
+            disabled={busy || costMissing}
             onClick={() =>
               onConfirm({
                 sampleApproval: verdict,
                 note: note.trim() || undefined,
+                costPrice: costValid ? costNum : undefined,
               })
             }
           >
@@ -104,6 +118,41 @@ export default function SampleApproveDialog({
               </option>
             ))}
           </select>
+        </div>
+        {/* Cost price — required to approve (the advancing verdict). For a
+            rework verdict it's optional context. */}
+        <div>
+          <label className="block text-xs text-[var(--color-muted-foreground)] mb-1">
+            {t('admin.styles.approval2.costPrice', {
+              defaultValue: 'Cost price (₹)',
+            })}
+            {advancing && <span className="text-[var(--color-destructive)]"> *</span>}
+          </label>
+          <div className="relative">
+            <span className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-sm text-[var(--color-muted-foreground)]">
+              ₹
+            </span>
+            <Input
+              type="number"
+              min={0}
+              step="0.01"
+              inputMode="decimal"
+              className="h-10 pl-6 text-sm"
+              placeholder={t('admin.styles.approval2.costPlaceholder', {
+                defaultValue: 'e.g. 450',
+              })}
+              value={cost}
+              onChange={(e) => setCost(e.target.value)}
+              aria-invalid={costMissing}
+            />
+          </div>
+          {costMissing && (
+            <p className="mt-1 text-xs text-[var(--color-destructive)]">
+              {t('admin.styles.approval2.costRequired', {
+                defaultValue: 'A cost price is required to approve the sample.',
+              })}
+            </p>
+          )}
         </div>
         <div>
           <label className="block text-xs text-[var(--color-muted-foreground)] mb-1">

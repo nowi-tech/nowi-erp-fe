@@ -1,4 +1,10 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import {
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+  type MouseEvent,
+} from 'react';
 import { createPortal } from 'react-dom';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
@@ -9,6 +15,7 @@ import {
   ExternalLink,
   ImageOff,
   Link2,
+  Pencil,
   Search,
 } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
@@ -336,6 +343,129 @@ function MetricCell({
   );
 }
 
+/** ₹ with Indian-grouping, no decimals when whole (₹1,200 / ₹1,200.50). */
+function formatInr(value: number): string {
+  return `₹${value.toLocaleString('en-IN', {
+    maximumFractionDigits: 2,
+  })}`;
+}
+
+/**
+ * Summarise a style's per-channel MRPs into one cell. MRP is per channel, so a
+ * style can carry several — show a single value when they agree, a min–max
+ * range when they differ, and "—" when nothing is priced. `title` lists the
+ * per-channel breakdown on hover.
+ */
+function mrpSummary(row: DashboardStyleRow): {
+  label: string | null;
+  title?: string;
+} {
+  const priced = [...row.liveListings, ...row.preparedListings].flatMap((l) =>
+    l.mrp != null ? [{ channel: l.channel, mrp: l.mrp }] : [],
+  );
+  if (priced.length === 0) return { label: null };
+  const vals = priced.map((p) => p.mrp);
+  const min = Math.min(...vals);
+  const max = Math.max(...vals);
+  return {
+    label: min === max ? formatInr(min) : `${formatInr(min)}–${formatInr(max)}`,
+    title: priced.map((p) => `${p.channel}: ${formatInr(p.mrp)}`).join(' · '),
+  };
+}
+
+/**
+ * Inline-editable cost-price cell. Writers click to edit (Enter/blur saves,
+ * Escape cancels); an empty cell shows an "Add" affordance — this is the
+ * backfill path for styles approved before pricing existed. Non-writers see a
+ * static value or "—". All interactions stop row-click propagation so editing
+ * never navigates into the style.
+ */
+function CostCell({
+  value,
+  canEdit,
+  onSave,
+}: {
+  value: number | null;
+  canEdit: boolean;
+  onSave: (next: number) => void;
+}) {
+  const { t } = useTranslation();
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState('');
+
+  const start = (e: MouseEvent) => {
+    e.stopPropagation();
+    setDraft(value != null ? String(value) : '');
+    setEditing(true);
+  };
+  const commit = () => {
+    const n = draft.trim() ? Number(draft) : NaN;
+    setEditing(false);
+    if (Number.isFinite(n) && n >= 0 && n !== value) onSave(n);
+  };
+
+  if (editing) {
+    return (
+      <div className="relative w-24" onClick={(e) => e.stopPropagation()}>
+        <span className="pointer-events-none absolute left-2 top-1/2 -translate-y-1/2 text-[12px] text-[var(--color-muted-foreground)]">
+          ₹
+        </span>
+        <input
+          autoFocus
+          type="number"
+          min={0}
+          step="0.01"
+          inputMode="decimal"
+          value={draft}
+          onChange={(e) => setDraft(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter') {
+              e.preventDefault();
+              commit();
+            } else if (e.key === 'Escape') {
+              setEditing(false);
+            }
+          }}
+          onBlur={commit}
+          className="h-8 w-full rounded-md border border-[var(--color-input)] bg-[var(--color-surface)] pl-5 pr-2 text-[12px] tabular-nums text-[var(--color-foreground)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-ring)]"
+        />
+      </div>
+    );
+  }
+
+  if (!canEdit) {
+    return (
+      <span className="tabular-nums text-[var(--color-foreground)]">
+        {value != null ? (
+          formatInr(value)
+        ) : (
+          <span className="text-[var(--color-muted-foreground)]">—</span>
+        )}
+      </span>
+    );
+  }
+
+  return (
+    <button
+      type="button"
+      onClick={start}
+      className="inline-flex items-center gap-1 rounded-[var(--radius-sm)] px-1.5 py-0.5 text-[13px] tabular-nums transition-colors hover:bg-[var(--color-surface-2)]"
+      title={t('dashboard.table.editCost', { defaultValue: 'Edit cost price' })}
+    >
+      {value != null ? (
+        <span className="text-[var(--color-foreground)]">
+          {formatInr(value)}
+        </span>
+      ) : (
+        <span className="inline-flex items-center gap-1 text-[var(--color-primary)]">
+          <Pencil size={12} aria-hidden />
+          {t('dashboard.table.addCost', { defaultValue: 'Add' })}
+        </span>
+      )}
+    </button>
+  );
+}
+
 export default function StylesInFlightTable({
   initialTab = 'all',
   from,
@@ -555,6 +685,7 @@ export default function StylesInFlightTable({
           channel: ch.channel,
           listed: true,
           listingUrl: ch.listingUrl,
+          mrp: ch.mrp,
         }),
       ),
     )
@@ -608,6 +739,36 @@ export default function StylesInFlightTable({
         toast.show(
           t('dashboard.table.toast.statusError', {
             defaultValue: 'Could not update status.',
+          }),
+          'error',
+        );
+      });
+  };
+
+  // Inline cost-price edit (Sampling + Live Cost column) — optimistic PATCH,
+  // the same pattern as the sampling-status dropdown. Doubles as the backfill
+  // path for styles approved before pricing existed.
+  const changeCostPrice = (row: DashboardStyleRow, next: number) => {
+    const prev = row.costPrice;
+    setRows((rs) =>
+      rs.map((r) => (r.id === row.id ? { ...r, costPrice: next } : r)),
+    );
+    patchStyle(row.id, { costPrice: next })
+      .then(() => {
+        toast.show(
+          t('dashboard.table.toast.costSaved', {
+            defaultValue: 'Cost price saved.',
+          }),
+          'success',
+        );
+      })
+      .catch(() => {
+        setRows((rs) =>
+          rs.map((r) => (r.id === row.id ? { ...r, costPrice: prev } : r)),
+        );
+        toast.show(
+          t('dashboard.table.toast.costError', {
+            defaultValue: 'Could not save cost price.',
           }),
           'error',
         );
@@ -866,6 +1027,42 @@ export default function StylesInFlightTable({
     },
   };
 
+  // Cost price — inline-editable for PD writers (also the backfill path for
+  // older styles). Shown on the Sampling + Live tabs per the pricing spec.
+  const costColumn: QueueColumn<DashboardStyleRow> = {
+    key: 'cost',
+    header: t('dashboard.table.columns.cost', { defaultValue: 'Cost' }),
+    width: '120px',
+    cell: (row) => (
+      <CostCell
+        value={row.costPrice}
+        canEdit={canWriteInline}
+        onSave={(n) => changeCostPrice(row, n)}
+      />
+    ),
+  };
+
+  // MRP — read-only summary of the per-channel selling prices (edited per
+  // channel in the "Add listings" dialog, not inline). Shown on every tab.
+  const mrpColumn: QueueColumn<DashboardStyleRow> = {
+    key: 'mrp',
+    header: t('dashboard.table.columns.mrp', { defaultValue: 'MRP' }),
+    width: '110px',
+    cell: (row) => {
+      const s = mrpSummary(row);
+      return s.label ? (
+        <span
+          className="tabular-nums text-[var(--color-foreground)]"
+          title={s.title}
+        >
+          {s.label}
+        </span>
+      ) : (
+        <span className="text-[var(--color-muted-foreground)]">—</span>
+      );
+    },
+  };
+
   // Colour swatch + name — context column for the draft / all views.
   const colourColumn: QueueColumn<DashboardStyleRow> = {
     key: 'colour',
@@ -904,6 +1101,8 @@ export default function StylesInFlightTable({
     collectionColumn,
     colourColumn,
     statusColumn,
+    costColumn,
+    mrpColumn,
     metricsColumn,
   ];
 
@@ -1000,6 +1199,8 @@ export default function StylesInFlightTable({
     styleNameColumn,
     collectionColumn,
     stageColumn,
+    costColumn,
+    mrpColumn,
     metricsColumn,
   ];
 
@@ -1011,16 +1212,20 @@ export default function StylesInFlightTable({
     collectionColumn,
     easyecomColumn,
     marketplaceColumn,
+    costColumn,
+    mrpColumn,
     metricsColumn,
   ];
 
-  // Live tab — IMG · Style/Name · Marketplace · Status · Metrics.
+  // Live tab — IMG · Style/Name · Marketplace · Status · Cost · MRP · Metrics.
   const liveColumns: QueueColumn<DashboardStyleRow>[] = [
     imgColumn,
     styleNameColumn,
     collectionColumn,
     marketplaceColumn,
     statusColumn,
+    costColumn,
+    mrpColumn,
     metricsColumn,
   ];
 
@@ -1315,6 +1520,7 @@ export default function StylesInFlightTable({
       <GoLiveDialog
         open={listTarget !== null}
         busy={listBusy}
+        costPrice={listTarget?.costPrice ?? null}
         existing={
           ([
             ...(listTarget?.liveListings ?? []),
@@ -1322,6 +1528,7 @@ export default function StylesInFlightTable({
           ].map((l) => ({
             channel: l.channel,
             listingUrl: l.url,
+            mrp: l.mrp,
           })) ?? []) as StyleChannelListing[]
         }
         onClose={() => (listBusy ? undefined : setListTarget(null))}
@@ -1333,6 +1540,7 @@ export default function StylesInFlightTable({
       <SampleApproveDialog
         open={sampleApproveTarget !== null}
         busy={sampleApproveBusy}
+        costPrice={sampleApproveTarget?.costPrice ?? null}
         onClose={() =>
           sampleApproveBusy ? undefined : setSampleApproveTarget(null)
         }

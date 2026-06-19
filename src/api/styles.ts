@@ -282,6 +282,9 @@ export interface ApproveStyleBody {
 export interface SampleApproveStyleBody {
   sampleApproval?: SampleApprovalStatus;
   note?: string;
+  /** Per-style cost price. Required by the BE when the verdict advances the
+   *  lifecycle (an approved sample must carry its cost). */
+  costPrice?: number;
 }
 
 export async function approveStyle(
@@ -357,6 +360,8 @@ export async function setMarketplaceListing(
     channel: ChannelName;
     listed: boolean;
     listingUrl?: string;
+    /** Per-channel MRP (selling price). Captured alongside the listing URL. */
+    mrp?: number;
     /** Reason for taking the channel offline (when listed=false). */
     reason?: string;
   },
@@ -368,10 +373,12 @@ export async function setMarketplaceListing(
   return res.data;
 }
 
-/** A channel + its public listing URL — used by the "Add listings" dialog. */
+/** A channel + its public listing URL + MRP — used by the "Add listings" dialog. */
 export interface GoLiveChannel {
   channel: ChannelName;
   listingUrl?: string;
+  /** Per-channel MRP (selling price). */
+  mrp?: number;
 }
 
 // ─── Variants ─────────────────────────────────────────────────────────
