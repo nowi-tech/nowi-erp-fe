@@ -1241,12 +1241,27 @@
         "style": "Style",
         "lifecycle": "Lifecycle",
         "stage": "Stage",
+        "status": "Status",
         "cost": "Cost",
         "mrp": "MRP",
         "updated": "Updated",
         "actions": "Actions",
         "colour": "Colour",
         "collection": "Collection"
+      },
+      "statusLive": "LIVE",
+      "status": {
+        "listingsPending": "Listings pending",
+        "readyToPublish": "Ready to publish"
+      },
+      "statusDetail": {
+        "live": "Live on {{channels}}",
+        "readyToPublish": "{{count}} channel(s) prepared: {{channels}}. EasyEcom catalog pending.",
+        "listingsPending": "No channels prepared yet — add listings to begin.",
+        "sampleApproved": "Sample signed off — ready to start cataloguing.",
+        "draft": "Awaiting intake approval.",
+        "inSampling": "In sampling — sample in progress.",
+        "parked": "Parked — revivable."
       },
       "editCost": "Edit cost price",
       "addCost": "Add",
