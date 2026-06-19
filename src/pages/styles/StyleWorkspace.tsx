@@ -123,9 +123,26 @@ const safeHref = (raw: string): string | null => {
   }
 };
 
-// ₹ with Indian-grouping, no decimals when whole (₹1,200 / ₹1,200.50).
-const formatInr = (value: number): string =>
-  `₹${value.toLocaleString('en-IN', { maximumFractionDigits: 2 })}`;
+// ₹ with Indian-grouping, no decimals when whole (₹1,200 / ₹1,200.50). Coerces
+// because Decimal fields (costPrice, listing mrp) arrive as JSON strings from
+// the styles GET — Number() makes the grouping/precision apply correctly.
+const formatInr = (value: number | string): string =>
+  `₹${Number(value).toLocaleString('en-IN', { maximumFractionDigits: 2 })}`;
+
+// Summarise per-channel MRPs (active channels only) into one label: a single
+// value when the priced channels agree, a ₹min–₹max range when they differ,
+// null when none is priced.
+const mrpRangeLabel = (
+  listings: { mrp?: number | null; state: string }[],
+): string | null => {
+  const vals = listings
+    .filter((l) => l.state !== 'off' && l.mrp != null)
+    .map((l) => Number(l.mrp));
+  if (vals.length === 0) return null;
+  const min = Math.min(...vals);
+  const max = Math.max(...vals);
+  return min === max ? formatInr(min) : `${formatInr(min)}–${formatInr(max)}`;
+};
 
 // Snapshot field → English label, for describing WHAT an audit entry
 // changed (mirrors StylesService.diffSnapshot on the BE). Admin-facing
@@ -361,7 +378,12 @@ export default function StyleWorkspace() {
   // China Import is a simple single-approval flow — no sampling stage,
   // no Approval #2, no inspections. Sampling-only UI is hidden for it.
   const isChinaImport = style.source === 'china_import';
-  const canApproveIntake = style.lifecycle === 'draft';
+  // Approval #1 is APPROVE-gated on the BE (`@Post('approve')` → `@Roles(APPROVE)`),
+  // so gate the button to approvers too — matching the dashboard's `canApprove`.
+  // Without this a non-approver writer sees "Approve intake" and 403s on click.
+  const canApproveIntake =
+    style.lifecycle === 'draft' &&
+    roles.some((r) => APPROVER_ROLES.includes(r));
   // Sample sign-off (Approval #2) is approver-only — the BE endpoint is
   // APPROVE-gated, so don't show the button to writers who would 403.
   const canSampleApprove =
@@ -419,11 +441,13 @@ export default function StyleWorkspace() {
   // sample_approved → cataloguing (status=pending)
   const canStartCataloguing =
     canApproveGoToMarket && style.lifecycle === 'sample_approved';
-  // "Add listings" — prepare marketplace channels + links while cataloguing.
-  // Cataloguer-editable (not approver-gated): finishing cataloguing
-  // (EasyEcom done) is what takes the style live, and that's cataloguer work.
+  // "Add listings" — pick marketplace channels + links (+ MRP). Editable while
+  // cataloguing AND once live (add another channel / fix a link or price) —
+  // matches the BE (setMarketplaceListing allows cataloguing|live) and the
+  // dashboard row action. Cataloguer-editable, not approver-gated.
   const canAddListings =
-    canCataloguingWrite && style.lifecycle === 'cataloguing';
+    canCataloguingWrite &&
+    (style.lifecycle === 'cataloguing' || style.lifecycle === 'live');
 
   // Layout selector. The sampling layout (stepper band + 7/5 grid) covers
   // draft / in_sampling; the production layout (colour strip + 2-up grid)
@@ -569,7 +593,7 @@ export default function StyleWorkspace() {
             />
           )}
           {/* Cost price — always shown (em-dash when unset, editable via the
-              core-specs pencil). Final row. */}
+              core-specs pencil). */}
           <SpecRow
             label="Cost price"
             value={
@@ -579,8 +603,26 @@ export default function StyleWorkspace() {
                 <span className="text-[var(--color-muted-foreground)]">—</span>
               )
             }
-            last
           />
+          {/* MRP — per-channel selling price, summarised (range across channels).
+              Always shown for parity with Cost; "—" until a channel is priced.
+              Edit per channel via the core-specs pencil. Final row. */}
+          {(() => {
+            const label = mrpRangeLabel(style.channelListings ?? []);
+            return (
+              <SpecRow
+                label="MRP"
+                value={
+                  label ?? (
+                    <span className="text-[var(--color-muted-foreground)]">
+                      —
+                    </span>
+                  )
+                }
+                last
+              />
+            );
+          })()}
         </dl>
       </div>
       {/* Production layout footers the card with the sample sign-off
@@ -1239,6 +1281,12 @@ function ChannelsCard({
                       defaultValue: l.state,
                     })}
                   </Badge>
+                  {/* Per-channel MRP — edited via the "Add listings" dialog. */}
+                  {l.mrp != null && (
+                    <span className="text-xs tabular-nums text-[var(--color-muted-foreground)]">
+                      {formatInr(l.mrp)}
+                    </span>
+                  )}
                 </div>
                 <div className="flex items-center gap-3 shrink-0">
                   {l.listingUrl ? (
