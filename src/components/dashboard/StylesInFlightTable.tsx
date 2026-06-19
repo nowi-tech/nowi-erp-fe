@@ -4,12 +4,12 @@ import {
   useRef,
   useState,
   type MouseEvent,
+  type ReactNode,
 } from 'react';
 import { createPortal } from 'react-dom';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import {
-  Check,
   ChevronLeft,
   ChevronRight,
   ExternalLink,
@@ -127,54 +127,6 @@ const SAMPLING_STATUS_OPTIONS: SamplingStatus[] = [
   'in_progress_cutting',
   'ready_for_inspection',
 ];
-
-/**
- * A two-state status pill (e.g. EasyEcom Done/Pending). Done = filled green,
- * Pending = neutral outline. Clickable for PD writers (toggles + stops row
- * navigation); a static pill for everyone else. Reads as a status, matching
- * the marketplace badges in the adjacent column.
- */
-function StatusPill({
-  on,
-  onLabel,
-  offLabel,
-  canEdit,
-  onToggle,
-}: {
-  on: boolean;
-  onLabel: string;
-  offLabel: string;
-  canEdit: boolean;
-  onToggle: (next: boolean) => void;
-}) {
-  const base =
-    'inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-[11px] font-medium transition-colors';
-  const tone = on
-    ? 'bg-emerald-100 text-emerald-800 border border-emerald-200'
-    : 'bg-[var(--color-surface-2)] text-[var(--color-muted-foreground)] border border-[var(--color-border)]';
-  const content = (
-    <>
-      {on && <Check size={12} />}
-      {on ? onLabel : offLabel}
-    </>
-  );
-  if (!canEdit) {
-    return <span className={cn(base, tone)}>{content}</span>;
-  }
-  return (
-    <button
-      type="button"
-      aria-pressed={on}
-      onClick={(e) => {
-        e.stopPropagation();
-        onToggle(!on);
-      }}
-      className={cn(base, tone, 'hover:opacity-80')}
-    >
-      {content}
-    </button>
-  );
-}
 
 // Per-channel brand chip: a small coloured square with the channel's initial
 // (Myntra red, Amazon amber, …). Keeps the marketplace cell scannable.
@@ -310,6 +262,102 @@ function DotStatusPill({
       <span aria-hidden className={cn('h-1.5 w-1.5 rounded-full', c.dot)} />
       {label}
     </span>
+  );
+}
+
+/**
+ * The portal'd tooltip pill itself — centred above `rect`, escaping the
+ * table's `overflow-x-auto` via a <body> portal. Shared by HoverTip and
+ * TruncText so the pill look + positioning live in one place.
+ */
+function FloatingPill({
+  rect,
+  children,
+}: {
+  rect: DOMRect;
+  children: ReactNode;
+}) {
+  return createPortal(
+    <div
+      style={{
+        position: 'fixed',
+        left: rect.left + rect.width / 2,
+        top: rect.top - 8,
+        transform: 'translate(-50%, -100%)',
+      }}
+      className="pointer-events-none z-50 max-w-[280px] rounded-[var(--radius-md)] border border-[var(--color-border)] bg-[var(--color-surface)] px-2.5 py-1.5 text-[11px] leading-snug text-[var(--color-foreground)] shadow-md"
+    >
+      {children}
+    </div>,
+    document.body,
+  );
+}
+
+/**
+ * Lightweight hover tooltip — wraps a trigger and, on hover/focus, shows a
+ * styled detail pill centred above it. Zero-dependency (the house pattern,
+ * mirroring HoverThumbnail / RailTooltip). Renders nothing when `content` is
+ * empty, so callers can wrap unconditionally.
+ */
+function HoverTip({
+  content,
+  children,
+}: {
+  content: ReactNode;
+  children: ReactNode;
+}) {
+  const ref = useRef<HTMLSpanElement>(null);
+  const [rect, setRect] = useState<DOMRect | null>(null);
+  const show = () => {
+    if (ref.current) setRect(ref.current.getBoundingClientRect());
+  };
+  const hide = () => setRect(null);
+  return (
+    <>
+      <span
+        ref={ref}
+        onMouseEnter={show}
+        onMouseLeave={hide}
+        onFocus={show}
+        onBlur={hide}
+        className="inline-flex"
+      >
+        {children}
+      </span>
+      {rect && content && <FloatingPill rect={rect}>{content}</FloatingPill>}
+    </>
+  );
+}
+
+/**
+ * Truncating text that reveals its FULL value in a styled hover pill — but
+ * ONLY when the text is actually clipped (scrollWidth > clientWidth), so short
+ * values don't pop a redundant tooltip. Keeps the native `title` as a slow/a11y
+ * fallback.
+ */
+function TruncText({ text, className }: { text: string; className?: string }) {
+  const ref = useRef<HTMLSpanElement>(null);
+  const [rect, setRect] = useState<DOMRect | null>(null);
+  const show = () => {
+    const el = ref.current;
+    if (el && el.scrollWidth > el.clientWidth + 1) {
+      setRect(el.getBoundingClientRect());
+    }
+  };
+  const hide = () => setRect(null);
+  return (
+    <>
+      <span
+        ref={ref}
+        onMouseEnter={show}
+        onMouseLeave={hide}
+        title={text}
+        className={cn('block truncate', className)}
+      >
+        {text}
+      </span>
+      {rect && <FloatingPill rect={rect}>{text}</FloatingPill>}
+    </>
   );
 }
 
@@ -859,59 +907,104 @@ export default function StylesInFlightTable({
     header: t('dashboard.table.columns.styleName', {
       defaultValue: 'Style ID / Name',
     }),
-    width: '280px',
+    width: '210px',
     cell: (row) => (
       // Cap the name block at a fixed width so a long working name truncates
       // instead of stretching the column on wide screens.
-      <div className="flex max-w-[248px] min-w-0 flex-col">
+      <div className="flex max-w-[182px] min-w-0 flex-col">
         <StyleRefLink style={row} onClick={() => openStyle(row)} />
         {row.workingName && (
-          <span className="truncate text-[var(--color-foreground)]">
-            {row.workingName}
-          </span>
+          <TruncText
+            text={row.workingName}
+            className="text-[var(--color-foreground)]"
+          />
         )}
       </div>
     ),
   };
 
-  // Status pill — the row's at-a-glance state. Live → "• LIVE"; cataloguing →
-  // EasyEcom Done/Pending; otherwise the lifecycle.
-  // One consistent dot-pill for the row's state across every tab. Live +
-  // sample_approved read green; cataloguing reflects the EasyEcom gate;
-  // everything else is neutral with its lifecycle label.
+  // Status pill — one consistent at-a-glance state across EVERY non-sampling
+  // tab, expressed as a single go-to-market ladder:
+  //   Listings pending → Ready to publish (EasyEcom gate) → Live.
+  // EasyEcom is no longer its own column; it's the "Ready to publish" rung
+  // here (it's the gate between "prepared" and "live", not a marketplace).
+  // Pre-cataloguing rows (draft / sample_approved / parked …) show their
+  // lifecycle label. A hover detail-pill expands the one-word status into the
+  // full picture (which channels, what's pending).
   const statusColumn: QueueColumn<DashboardStyleRow> = {
     key: 'status',
     header: t('dashboard.table.columns.status', { defaultValue: 'Status' }),
-    width: '116px',
+    width: '136px',
     cell: (row) => {
+      const channelName = (c: string) =>
+        t(`dashboard.table.channels.${c}` as const, { defaultValue: c });
+      let label: string;
+      let tone: 'live' | 'pending' | 'neutral';
+      let detail: ReactNode = null;
+
       if (row.lifecycle === 'live') {
-        return (
-          <DotStatusPill
-            label={t('dashboard.table.statusLive', { defaultValue: 'LIVE' })}
-            tone="live"
-          />
-        );
+        label = t('dashboard.table.statusLive', { defaultValue: 'LIVE' });
+        tone = 'live';
+        const names = row.liveListings.map((l) => channelName(l.channel));
+        detail = names.length
+          ? t('dashboard.table.statusDetail.live', {
+              channels: names.join(', '),
+              defaultValue: `Live on ${names.join(', ')}`,
+            })
+          : null;
+      } else if (row.lifecycle === 'cataloguing') {
+        const prepared = [...row.preparedListings, ...row.liveListings];
+        if (prepared.length > 0) {
+          label = t('dashboard.table.status.readyToPublish', {
+            defaultValue: 'Ready to publish',
+          });
+          tone = 'pending';
+          const names = prepared.map((l) => channelName(l.channel)).join(', ');
+          detail = t('dashboard.table.statusDetail.readyToPublish', {
+            count: prepared.length,
+            channels: names,
+            defaultValue: `${prepared.length} channel(s) prepared: ${names}. EasyEcom catalog pending.`,
+          });
+        } else {
+          label = t('dashboard.table.status.listingsPending', {
+            defaultValue: 'Listings pending',
+          });
+          tone = 'neutral';
+          detail = t('dashboard.table.statusDetail.listingsPending', {
+            defaultValue: 'No channels prepared yet — add listings to begin.',
+          });
+        }
+      } else {
+        label = t(`admin.styles.lifecycle.${row.lifecycle}` as const, {
+          defaultValue: row.lifecycle.replace(/_/g, ' '),
+        });
+        tone = row.lifecycle === 'sample_approved' ? 'live' : 'neutral';
+        // Every pre-cataloguing lifecycle gets a hover detail too, so the
+        // tooltip is consistent on every row (incl. the draft + in_sampling
+        // rows that fill the Needs-attention tab). Unknown lifecycles fall
+        // back to the label itself, so HoverTip always has content.
+        const byLifecycle: Partial<Record<DashboardStyleRow['lifecycle'], string>> =
+          {
+            sample_approved: t('dashboard.table.statusDetail.sampleApproved', {
+              defaultValue: 'Sample signed off — ready to start cataloguing.',
+            }),
+            draft: t('dashboard.table.statusDetail.draft', {
+              defaultValue: 'Awaiting intake approval.',
+            }),
+            in_sampling: t('dashboard.table.statusDetail.inSampling', {
+              defaultValue: 'In sampling — sample in progress.',
+            }),
+            parked: t('dashboard.table.statusDetail.parked', {
+              defaultValue: 'Parked — revivable.',
+            }),
+          };
+        detail = byLifecycle[row.lifecycle] ?? label;
       }
-      if (row.lifecycle === 'cataloguing') {
-        return (
-          <DotStatusPill
-            label={
-              row.easyecomDone
-                ? t('dashboard.table.done', { defaultValue: 'Done' })
-                : t('dashboard.table.pending', { defaultValue: 'Pending' })
-            }
-            tone={row.easyecomDone ? 'live' : 'pending'}
-          />
-        );
-      }
-      const tone = row.lifecycle === 'sample_approved' ? 'live' : 'neutral';
+
       return (
-        <DotStatusPill
-          label={t(`admin.styles.lifecycle.${row.lifecycle}` as const, {
-            defaultValue: row.lifecycle.replace(/_/g, ' '),
-          })}
-          tone={tone}
-        />
+        <HoverTip content={detail}>
+          <DotStatusPill label={label} tone={tone} />
+        </HoverTip>
       );
     },
   };
@@ -1083,14 +1176,15 @@ export default function StylesInFlightTable({
     width: '150px',
     className: 'hidden lg:table-cell',
     headerClassName: 'hidden lg:table-cell',
-    cell: (row) => (
-      <span
-        className="block truncate text-[var(--color-muted-foreground)]"
-        title={row.collection?.name ?? undefined}
-      >
-        {row.collection?.name ?? '—'}
-      </span>
-    ),
+    cell: (row) =>
+      row.collection?.name ? (
+        <TruncText
+          text={row.collection.name}
+          className="text-[var(--color-muted-foreground)]"
+        />
+      ) : (
+        <span className="text-[var(--color-muted-foreground)]">—</span>
+      ),
   };
 
   // Default grammar (All · Needs attention · Draft): IMG · Style/Name ·
@@ -1105,25 +1199,6 @@ export default function StylesInFlightTable({
     mrpColumn,
     metricsColumn,
   ];
-
-  // EasyEcom — a read-only Done/Pending STATUS (scannable down the column).
-  // It's no longer toggled here: the row actions ("Add listings" then "Mark
-  // EasyEcom done", which auto-lives) own the transition, so this is pure status.
-  // Cataloguing-only: on the Live tab it's redundant (a live style passed it).
-  const easyecomColumn: QueueColumn<DashboardStyleRow> = {
-    key: 'easyecom',
-    header: t('dashboard.table.columns.easyecom', { defaultValue: 'EasyEcom' }),
-    width: '130px',
-    cell: (row) => (
-      <StatusPill
-        on={row.easyecomDone}
-        onLabel={t('dashboard.table.done', { defaultValue: 'Done' })}
-        offLabel={t('dashboard.table.pending', { defaultValue: 'Pending' })}
-        canEdit={false}
-        onToggle={() => {}}
-      />
-    ),
-  };
 
   // Marketplace — pure per-channel STATUS. Each LIVE channel shows a "View now"
   // link to its public listing (or a plain Live badge if no URL). The go-live
@@ -1192,38 +1267,45 @@ export default function StylesInFlightTable({
     },
   };
 
-  // Sampling tab — IMG · Style/Name · Stage (inline editor) · Metrics.
-  // The Stage IS the status here, so no separate status pill.
+  // Sampling tab — IMG · Style/Name · Collection · Colour · Stage (inline
+  // editor) · Cost · MRP · Metrics. Stage IS the status here (every row is
+  // mid-sampling, so a lifecycle pill would say the same thing on every row);
+  // the editable sub-stage is what matters, so no separate Status column.
   const samplingColumns: QueueColumn<DashboardStyleRow>[] = [
     imgColumn,
     styleNameColumn,
     collectionColumn,
+    colourColumn,
     stageColumn,
     costColumn,
     mrpColumn,
     metricsColumn,
   ];
 
-  // Cataloguing tab — IMG · Style/Name · EasyEcom · Marketplace · Metrics.
-  // EasyEcom is the status pill for this stage.
+  // Cataloguing tab — IMG · Style/Name · Collection · Colour · Status ·
+  // Marketplace · Cost · MRP · Metrics. Status is the go-live ladder (Listings
+  // pending → Ready to publish), Marketplace is the per-channel detail.
   const cataloguingColumns: QueueColumn<DashboardStyleRow>[] = [
     imgColumn,
     styleNameColumn,
     collectionColumn,
-    easyecomColumn,
+    colourColumn,
+    statusColumn,
     marketplaceColumn,
     costColumn,
     mrpColumn,
     metricsColumn,
   ];
 
-  // Live tab — IMG · Style/Name · Marketplace · Status · Cost · MRP · Metrics.
+  // Live tab — same grammar as cataloguing; Status reads "LIVE", Marketplace
+  // lists the live channels with their "View now" links.
   const liveColumns: QueueColumn<DashboardStyleRow>[] = [
     imgColumn,
     styleNameColumn,
     collectionColumn,
-    marketplaceColumn,
+    colourColumn,
     statusColumn,
+    marketplaceColumn,
     costColumn,
     mrpColumn,
     metricsColumn,
