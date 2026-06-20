@@ -1217,10 +1217,14 @@
     "cards": {
       "pendingApprovals": "Pending approvals",
       "mySamplingWork": "My sampling work",
-      "inSampling": "In sampling",
-      "inCataloguing": "In cataloguing",
+      "inSampling": "Sampling",
+      "inCataloguing": "Cataloguing",
       "live": "Live",
-      "view": "View"
+      "view": "View",
+      "breakdown": {
+        "inProgress": "In progress",
+        "readyForCataloguing": "Ready for cataloguing"
+      }
     },
     "table": {
       "searchPlaceholder": "Search styles…",

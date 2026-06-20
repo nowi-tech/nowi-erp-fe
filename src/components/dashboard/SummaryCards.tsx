@@ -30,6 +30,10 @@ interface SummaryCard {
   label: string;
   count: number;
   to: string;
+  /** Optional sub-status split shown beneath the big count (e.g. the
+   *  Sampling / Cataloguing cards break their total into the next-step
+   *  rungs). The values should partition `count`. */
+  breakdown?: { label: string; value: number }[];
 }
 
 interface Props {
@@ -96,14 +100,30 @@ export default function SummaryCards({ cards, embedded = false }: Props) {
     firstCard,
     {
       key: 'inSampling',
-      label: t('dashboard.cards.inSampling', { defaultValue: 'In sampling' }),
+      label: t('dashboard.cards.inSampling', { defaultValue: 'Sampling' }),
       count: cards.inSampling,
       to: '/?tab=sampling',
+      // Split the sampling total into still-in-progress vs signed-off and
+      // awaiting "Start cataloguing" (sample_approved).
+      breakdown: [
+        {
+          label: t('dashboard.cards.breakdown.inProgress', {
+            defaultValue: 'In progress',
+          }),
+          value: Math.max(cards.inSampling - (cards.samplingReady ?? 0), 0),
+        },
+        {
+          label: t('dashboard.cards.breakdown.readyForCataloguing', {
+            defaultValue: 'Ready for cataloguing',
+          }),
+          value: cards.samplingReady ?? 0,
+        },
+      ],
     },
     {
       key: 'inCataloguing',
       label: t('dashboard.cards.inCataloguing', {
-        defaultValue: 'In cataloguing',
+        defaultValue: 'Cataloguing',
       }),
       count: cards.inCataloguing,
       // In-cataloguing = PD styles in the `cataloguing` (go-to-market) phase,
@@ -111,6 +131,22 @@ export default function SummaryCards({ cards, embedded = false }: Props) {
       // exact same lifecycle, so this count and that tab stay in lockstep and
       // it's reachable by every office role.
       to: '/?tab=cataloguing',
+      // Split into the go-live ladder rungs (reusing the table's status
+      // labels): a channel prepared ("Ready to publish") vs none yet.
+      breakdown: [
+        {
+          label: t('dashboard.table.status.readyToPublish', {
+            defaultValue: 'Ready to publish',
+          }),
+          value: cards.cataloguingReady ?? 0,
+        },
+        {
+          label: t('dashboard.table.status.listingsPending', {
+            defaultValue: 'Listings pending',
+          }),
+          value: Math.max(cards.inCataloguing - (cards.cataloguingReady ?? 0), 0),
+        },
+      ],
     },
     {
       key: 'live',
@@ -153,6 +189,24 @@ export default function SummaryCards({ cards, embedded = false }: Props) {
           <span className="mt-3 text-[40px] font-bold leading-none tabular-nums text-[var(--color-foreground)]">
             {item.count}
           </span>
+
+          {/* Optional sub-status split (Sampling / Cataloguing cards) — muted
+              "label · value" rows beneath the count. Partitions the total. */}
+          {item.breakdown && (
+            <div className="mt-2.5 flex flex-col gap-0.5">
+              {item.breakdown.map((b) => (
+                <span
+                  key={b.label}
+                  className="flex items-center justify-between text-[12px] text-[var(--color-muted-foreground)]"
+                >
+                  <span>{b.label}</span>
+                  <span className="font-semibold tabular-nums text-[var(--color-foreground)]">
+                    {b.value}
+                  </span>
+                </span>
+              ))}
+            </div>
+          )}
 
           {/* Footer divider + the ONLY coloured element: the indigo "View →"
               cue. mt-auto pins it to the card's base so a row of cards keeps a

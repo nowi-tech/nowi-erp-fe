@@ -83,7 +83,11 @@ export interface DashboardCards {
   pendingApprovals: number;
   mySamplingWork: number;
   inSampling: number;
+  /** Subset of `inSampling` signed off + awaiting "Start cataloguing". */
+  samplingReady: number;
   inCataloguing: number;
+  /** Subset of `inCataloguing` with ≥1 channel listing prepared/live. */
+  cataloguingReady: number;
   live: number;
 }
 

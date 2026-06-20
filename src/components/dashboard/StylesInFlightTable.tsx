@@ -886,6 +886,117 @@ export default function StylesInFlightTable({
       });
   };
 
+  // Row action cluster — the "next step" for the row's lifecycle (Park rides
+  // alongside). Rendered as a COLUMN placed just before Metrics (see
+  // actionsColumn) rather than the table's trailing slot, so the buttons stay
+  // visible without horizontal-scrolling to the far right on the wider tabs.
+  const renderRowActions = (row: DashboardStyleRow): ReactNode => {
+    const approve = canApprove(row);
+    const park = canPark(row);
+    const sampleApprove = canSampleApprove(row);
+    const startCat = canStartCataloguing(row);
+    const markEasyecom = canMarkEasyecom(row);
+    const addListings = canAddListings(row);
+    // A cataloguing style with no channel listed yet can't mark EasyEcom
+    // done (BE 400s). "Add listings" is the real next step, so it leads
+    // as the PRIMARY button; once a channel is listed, "Mark EasyEcom
+    // done" takes over the primary slot and Add listings drops to ghost.
+    const needsListing =
+      row.lifecycle === 'cataloguing' && !hasListedChannel(row);
+    // Live rows get a "Channel" affordance (manage channels in the
+    // workspace) for those who can't add listings inline.
+    const channel = row.lifecycle === 'live';
+    if (
+      !approve &&
+      !park &&
+      !sampleApprove &&
+      !startCat &&
+      !markEasyecom &&
+      !addListings &&
+      !channel
+    ) {
+      return <RowChevron />;
+    }
+    return (
+      <>
+        {park && (
+          <GhostActionButton icon="park" onClick={() => setParkTarget(row)}>
+            {t('dashboard.table.actions.park')}
+          </GhostActionButton>
+        )}
+        {startCat && (
+          <PrimaryActionButton onClick={() => doStartCataloguing(row)}>
+            {t('dashboard.table.actions.startCataloguing', {
+              defaultValue: 'Start cataloguing',
+            })}
+          </PrimaryActionButton>
+        )}
+        {sampleApprove && (
+          <PrimaryActionButton onClick={() => setSampleApproveTarget(row)}>
+            {t('dashboard.table.actions.approveSample', {
+              defaultValue: 'Approve sample',
+            })}
+          </PrimaryActionButton>
+        )}
+        {/* Cataloguing → live: list channels first, then EasyEcom-done
+            auto-promotes them live. Leads as PRIMARY until a channel is
+            listed (when Mark EasyEcom done becomes the primary). */}
+        {addListings &&
+          (needsListing ? (
+            <PrimaryActionButton
+              icon={<Link2 size={13} />}
+              onClick={() => openListings(row)}
+            >
+              {t('dashboard.table.actions.addListings', {
+                defaultValue: 'Add listings',
+              })}
+            </PrimaryActionButton>
+          ) : (
+            <GhostActionButton icon="link" onClick={() => openListings(row)}>
+              {t('dashboard.table.actions.addListings', {
+                defaultValue: 'Add listings',
+              })}
+            </GhostActionButton>
+          ))}
+        {markEasyecom && (
+          <PrimaryActionButton onClick={() => markEasyecomDone(row)}>
+            {t('dashboard.table.actions.markEasyecom', {
+              defaultValue: 'Mark EasyEcom done',
+            })}
+          </PrimaryActionButton>
+        )}
+        {channel && !addListings && (
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              openStyle(row);
+            }}
+            className="inline-flex items-center gap-1.5 rounded-[var(--radius-sm)] border border-[var(--color-border)] px-2.5 py-1 text-[12px] font-medium text-[var(--color-primary)] transition-colors hover:border-[var(--color-primary)] hover:bg-[var(--color-primary-soft)]"
+          >
+            <Link2 size={13} aria-hidden />
+            {t('dashboard.table.actions.channel', {
+              defaultValue: 'Channel',
+            })}
+          </button>
+        )}
+        {approve && <ApproveButton onClick={() => setApprovalTarget(row)} />}
+      </>
+    );
+  };
+
+  const actionsColumn: QueueColumn<DashboardStyleRow> = {
+    key: 'actions',
+    header: '',
+    width: '220px',
+    align: 'right',
+    cell: (row) => (
+      <div className="flex items-center justify-end gap-2">
+        {renderRowActions(row)}
+      </div>
+    ),
+  };
+
   // ── Shared grammar: IMG · Style/Name · [context] · Status · Metrics ──
   // A thumbnail in its own narrow column (split out of the Style cell).
   const imgColumn: QueueColumn<DashboardStyleRow> = {
@@ -907,11 +1018,11 @@ export default function StylesInFlightTable({
     header: t('dashboard.table.columns.styleName', {
       defaultValue: 'Style ID / Name',
     }),
-    width: '210px',
+    width: '168px',
     cell: (row) => (
       // Cap the name block at a fixed width so a long working name truncates
       // instead of stretching the column on wide screens.
-      <div className="flex max-w-[182px] min-w-0 flex-col">
+      <div className="flex max-w-[146px] min-w-0 flex-col">
         <StyleRefLink style={row} onClick={() => openStyle(row)} />
         {row.workingName && (
           <TruncText
@@ -1197,6 +1308,7 @@ export default function StylesInFlightTable({
     statusColumn,
     costColumn,
     mrpColumn,
+    actionsColumn,
     metricsColumn,
   ];
 
@@ -1279,6 +1391,7 @@ export default function StylesInFlightTable({
     stageColumn,
     costColumn,
     mrpColumn,
+    actionsColumn,
     metricsColumn,
   ];
 
@@ -1294,6 +1407,7 @@ export default function StylesInFlightTable({
     marketplaceColumn,
     costColumn,
     mrpColumn,
+    actionsColumn,
     metricsColumn,
   ];
 
@@ -1308,6 +1422,7 @@ export default function StylesInFlightTable({
     marketplaceColumn,
     costColumn,
     mrpColumn,
+    actionsColumn,
     metricsColumn,
   ];
 
@@ -1424,114 +1539,7 @@ export default function StylesInFlightTable({
           emptyLabel={t('dashboard.table.empty')}
           errorLabel={t('dashboard.table.error')}
           onRowClick={openStyle}
-          actionsWidth="240px"
           rowAccent={(row) => row.lifecycle === 'draft'}
-          renderActions={(row) => {
-            const approve = canApprove(row);
-            const park = canPark(row);
-            const sampleApprove = canSampleApprove(row);
-            const startCat = canStartCataloguing(row);
-            const markEasyecom = canMarkEasyecom(row);
-            const addListings = canAddListings(row);
-            // A cataloguing style with no channel listed yet can't mark EasyEcom
-            // done (BE 400s). "Add listings" is the real next step, so it leads
-            // as the PRIMARY button; once a channel is listed, "Mark EasyEcom
-            // done" takes over the primary slot and Add listings drops to ghost.
-            const needsListing =
-              row.lifecycle === 'cataloguing' && !hasListedChannel(row);
-            // Live rows get a "Channel" affordance (manage channels in the
-            // workspace) for those who can't add listings inline.
-            const channel = row.lifecycle === 'live';
-            if (
-              !approve &&
-              !park &&
-              !sampleApprove &&
-              !startCat &&
-              !markEasyecom &&
-              !addListings &&
-              !channel
-            ) {
-              return <RowChevron />;
-            }
-            // One action per row, always in this same right-aligned slot — the
-            // "next step" for that row's lifecycle stage (Park rides alongside).
-            return (
-              <>
-                {park && (
-                  <GhostActionButton
-                    icon="park"
-                    onClick={() => setParkTarget(row)}
-                  >
-                    {t('dashboard.table.actions.park')}
-                  </GhostActionButton>
-                )}
-                {startCat && (
-                  <PrimaryActionButton onClick={() => doStartCataloguing(row)}>
-                    {t('dashboard.table.actions.startCataloguing', {
-                      defaultValue: 'Start cataloguing',
-                    })}
-                  </PrimaryActionButton>
-                )}
-                {sampleApprove && (
-                  <PrimaryActionButton
-                    onClick={() => setSampleApproveTarget(row)}
-                  >
-                    {t('dashboard.table.actions.approveSample', {
-                      defaultValue: 'Approve sample',
-                    })}
-                  </PrimaryActionButton>
-                )}
-                {/* Cataloguing → live: list channels first, then EasyEcom-done
-                    auto-promotes them live. Leads as PRIMARY until a channel is
-                    listed (when Mark EasyEcom done becomes the primary). */}
-                {addListings &&
-                  (needsListing ? (
-                    <PrimaryActionButton
-                      icon={<Link2 size={13} />}
-                      onClick={() => openListings(row)}
-                    >
-                      {t('dashboard.table.actions.addListings', {
-                        defaultValue: 'Add listings',
-                      })}
-                    </PrimaryActionButton>
-                  ) : (
-                    <GhostActionButton
-                      icon="link"
-                      onClick={() => openListings(row)}
-                    >
-                      {t('dashboard.table.actions.addListings', {
-                        defaultValue: 'Add listings',
-                      })}
-                    </GhostActionButton>
-                  ))}
-                {markEasyecom && (
-                  <PrimaryActionButton onClick={() => markEasyecomDone(row)}>
-                    {t('dashboard.table.actions.markEasyecom', {
-                      defaultValue: 'Mark EasyEcom done',
-                    })}
-                  </PrimaryActionButton>
-                )}
-                {channel && !addListings && (
-                  <button
-                    type="button"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      openStyle(row);
-                    }}
-                    className="inline-flex items-center gap-1.5 rounded-[var(--radius-sm)] border border-[var(--color-border)] px-2.5 py-1 text-[12px] font-medium text-[var(--color-primary)] transition-colors hover:border-[var(--color-primary)] hover:bg-[var(--color-primary-soft)]"
-                  >
-                    <Link2 size={13} aria-hidden />
-                    {t('dashboard.table.actions.channel', {
-                      defaultValue: 'Channel',
-                    })}
-                  </button>
-                )}
-                {approve && (
-                  <ApproveButton onClick={() => setApprovalTarget(row)} />
-                )}
-              </>
-            );
-          }}
         />
 
         {/* Bottom pager — mirrors the top control so you can page without
