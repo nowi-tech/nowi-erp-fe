@@ -469,6 +469,13 @@ export interface Style {
   easyecomDone: boolean;
   /** When the style first went live (stable; not derived from listing edits). */
   wentLiveAt: string | null;
+  /** Out of stock — set when a live style was taken out of stock. That demotes
+   *  it back to the EasyEcom checkpoint (lifecycle → `cataloguing`, easyecom
+   *  pending; its live listings revert to draft), so it must be re-published to
+   *  sell again. Cleared on republish / revive. */
+  outOfStock: boolean;
+  outOfStockAt: string | null;
+  outOfStockReason: string | null;
   workingName: string | null;
   /** Free-text rationale for why this style is being developed. Captured at intake. */
   developmentReason: string | null;

@@ -373,6 +373,27 @@ export async function setMarketplaceListing(
   return res.data;
 }
 
+/**
+ * Take a live style out of stock — the inverse of go-live. Demotes it back to
+ * the EasyEcom checkpoint (lifecycle → cataloguing, easyecom pending; its live
+ * listings revert to draft), so it must be re-published to sell again. One-way:
+ * the way back is the normal republish (`setEasyecomDone`). NOWI doesn't push
+ * to EasyEcom — the operator zeroes the inventory there by hand.
+ */
+export async function markOutOfStock(
+  styleId: number,
+  body: {
+    /** Reason for taking out of stock (recorded on the audit trail). */
+    reason?: string;
+  },
+): Promise<Style> {
+  const res = await apiClient.post<Style>(
+    `/api/styles/${styleId}/actions/out-of-stock`,
+    body,
+  );
+  return res.data;
+}
+
 /** A channel + its public listing URL + MRP — used by the "Add listings" dialog. */
 export interface GoLiveChannel {
   channel: ChannelName;

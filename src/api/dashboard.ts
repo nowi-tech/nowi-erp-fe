@@ -64,6 +64,10 @@ export interface DashboardStyleRow {
   /** Per-style manufacturing cost (captured at sign-off; null until then). */
   costPrice: number | null;
   live: boolean;
+  /** Out of stock — set when a style was taken out of stock (demoted to
+   *  cataloguing to be re-published). Drives the dashboard "Out of stock"
+   *  badge. */
+  outOfStock: boolean;
   /** Live marketplace listings (state=live) — channel + public URL + per-channel
    *  MRP, for the "View now" links + price prefill. */
   liveListings: { channel: string; url: string | null; mrp: number | null }[];
