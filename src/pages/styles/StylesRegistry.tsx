@@ -26,7 +26,11 @@ import ParkDialog from '@/components/styles/ParkDialog';
 import SampleApproveDialog from '@/components/styles/SampleApproveDialog';
 import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 import { useAuth } from '@/context/auth';
-import { hasAnyRole, PD_WRITE_ROLES } from '@/lib/userRoles';
+import {
+  hasAnyRole,
+  PD_WRITE_ROLES,
+  CATALOGUER_WRITE_ROLES,
+} from '@/lib/userRoles';
 import {
   approveStyle,
   listStyles,
@@ -383,10 +387,12 @@ export default function StylesRegistry() {
         row.lifecycle === 'in_sampling' &&
         row.source !== 'china_import' &&
         hasAnyRole(user, APPROVER_ROLES);
+      // Cataloguing-phase write (not an approval) — cataloguer owns pulling a
+      // signed-off sample into cataloguing; matches the BE @Roles + dashboard.
       const canStartCataloguing =
         row.lifecycle === 'sample_approved' &&
         row.source !== 'china_import' &&
-        hasAnyRole(user, APPROVER_ROLES);
+        hasAnyRole(user, CATALOGUER_WRITE_ROLES);
 
       if (
         !canApprove &&

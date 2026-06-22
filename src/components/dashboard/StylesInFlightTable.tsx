@@ -857,12 +857,13 @@ export default function StylesInFlightTable({
       .finally(() => setSampleApproveBusy(false));
   };
 
-  // Start cataloguing — approver-only, sample_approved → cataloguing. Plain
-  // action (no dialog), mirroring the workspace button.
+  // Start cataloguing — cataloguing-phase write (pulls a signed-off sample into
+  // the cataloguer's queue), so it's CATALOGUER_WRITE-gated, not approver-only.
+  // Plain action (no dialog), mirroring the workspace button + the BE @Roles.
   const canStartCataloguing = (row: DashboardStyleRow) =>
     row.lifecycle === 'sample_approved' &&
     row.source !== 'china_import' &&
-    hasAnyRole(user, APPROVER_ROLES);
+    hasAnyRole(user, CATALOGUER_WRITE_ROLES);
 
   const doStartCataloguing = (row: DashboardStyleRow) => {
     startCataloguing(row.id)
