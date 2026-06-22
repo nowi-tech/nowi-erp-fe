@@ -72,29 +72,18 @@ export function SummaryCardsSkeleton() {
 export default function SummaryCards({ cards, embedded = false }: Props) {
   const { t } = useTranslation();
 
-  const firstCard: SummaryCard = cards.isApprover
-    ? {
-        key: 'pendingApprovals',
-        label: t('dashboard.cards.pendingApprovals', {
-          defaultValue: 'Pending approvals',
-        }),
-        count: cards.pendingApprovals,
-        // Home's own "Needs attention" tab = draft + in_sampling awaiting
-        // Approval #2 — the EXACT set this count sums (the /styles inbox tab
-        // is draft-only, which would undercount). Stays on Home so every
-        // office role / approver can reach it.
-        to: '/?tab=needs_attention',
-      }
-    : {
-        key: 'mySamplingWork',
-        label: t('dashboard.cards.mySamplingWork', {
-          defaultValue: 'My sampling work',
-        }),
-        count: cards.mySamplingWork,
-        // Land on the Home dashboard's sampling tab (every card stays on the
-        // dashboard now; "View more" → full registry comes in a later pass).
-        to: '/?tab=sampling',
-      };
+  // First card = "My work": the role-aware union the BE computes from the
+  // caller's roles (approver → pending approvals; sampling author → their own
+  // in-progress sampling; cataloguer → the cataloguing queue). The count and
+  // its deep-link target are the SAME role-aware set, so the card and the
+  // `my_work` tab always agree — a cataloguer finally sees a meaningful number
+  // instead of an empty "My sampling work".
+  const firstCard: SummaryCard = {
+    key: 'myWork',
+    label: t('dashboard.cards.myWork', { defaultValue: 'My work' }),
+    count: cards.myWork,
+    to: '/?tab=my_work',
+  };
 
   const items: SummaryCard[] = [
     firstCard,

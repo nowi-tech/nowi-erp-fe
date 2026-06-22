@@ -19,7 +19,17 @@ export type DashboardStyleTab =
   | 'sampling'
   | 'cataloguing'
   | 'live'
-  | 'needs_attention';
+  | 'my_work';
+
+/** Multi-select status filter vocabulary (mirrors the BE). Each narrows the
+ *  active tab; the two cataloguing sub-states match the Status column. */
+export type DashboardStatusFilter =
+  | 'draft'
+  | 'in_sampling'
+  | 'sample_approved'
+  | 'ready_to_publish'
+  | 'listings_pending'
+  | 'live';
 
 /** Inclusive activity window (YYYY-MM-DD), by style updatedAt. */
 export interface DashboardDateRange {
@@ -79,9 +89,9 @@ export interface DashboardStylesResult {
 
 /** Role-aware counts for the 4 Home summary cards. */
 export interface DashboardCards {
-  isApprover: boolean;
-  pendingApprovals: number;
-  mySamplingWork: number;
+  /** Role-aware union — the caller's actionable queue (matches the `my_work`
+   *  tab). The first summary card. */
+  myWork: number;
   inSampling: number;
   /** Subset of `inSampling` signed off + awaiting "Start cataloguing". */
   samplingReady: number;
@@ -94,6 +104,8 @@ export interface DashboardCards {
 export interface DashboardStylesParams {
   tab?: DashboardStyleTab;
   search?: string;
+  /** Multi-select status filter, narrows the active tab. Sent comma-joined. */
+  statuses?: DashboardStatusFilter[];
   skip?: number;
   take?: number;
   from?: string;
@@ -126,9 +138,14 @@ export function getCycleTime(days = 30): Promise<CycleTimeResponse> {
 export async function getDashboardStyles(
   params: DashboardStylesParams = {},
 ): Promise<DashboardStylesResult> {
+  const { statuses, ...rest } = params;
   const res = await apiClient.get<DashboardStylesResult>(
     '/api/dashboard/styles',
-    { params },
+    {
+      // Send statuses comma-joined (the BE normalises CSV → array) so we don't
+      // depend on Axios's array-bracket serialization. Omit when empty.
+      params: statuses?.length ? { ...rest, statuses: statuses.join(',') } : rest,
+    },
   );
   return res.data;
 }

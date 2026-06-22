@@ -30,22 +30,22 @@ import {
  */
 
 // Mirror the table's tab buckets so a `?tab=` deep link (e.g. the Live card)
-// lands on the right tab. Anything unrecognised falls back to 'needs_attention'.
+// lands on the right tab. Anything unrecognised falls back to 'my_work'.
 const VALID_TABS: DashboardStyleTab[] = [
   'all',
   'draft',
   'sampling',
   'cataloguing',
   'live',
-  'needs_attention',
+  'my_work',
 ];
 
 function tabFromParam(value: string | null): DashboardStyleTab {
   return VALID_TABS.includes(value as DashboardStyleTab)
     ? (value as DashboardStyleTab)
-    : // No (or unknown) ?tab= → land on the approver/triage queue (the first
-      // tab in the table), not the full unfiltered list.
-      'needs_attention';
+    : // No (or unknown) ?tab= → land on the role-aware "My work" queue (the
+      // first tab in the table), not the full unfiltered list.
+      'my_work';
 }
 
 /** YYYY-MM-DD for a date `n` days before today (0 = today), in the user's
@@ -113,21 +113,14 @@ export default function Home() {
               <Skeleton className="inline-block h-4 w-80 align-middle" />
             ) : cards ? (
               <span className="tabular-nums">
-                {/* First segment is role-aware, mirroring SummaryCards'
-                    first card: approvers see their pending-approvals
-                    queue; everyone else sees their own sampling queue. */}
+                {/* First segment mirrors SummaryCards' first card: the
+                    role-aware "My work" union for the signed-in user. */}
                 <b className="font-medium text-[var(--color-foreground-2)]">
-                  {cards.isApprover
-                    ? cards.pendingApprovals
-                    : cards.mySamplingWork}
+                  {cards.myWork}
                 </b>{' '}
-                {cards.isApprover
-                  ? t('dashboard.narrative.pendingApprovals', {
-                      defaultValue: 'pending approvals',
-                    })
-                  : t('dashboard.narrative.inYourQueue', {
-                      defaultValue: 'in your queue',
-                    })}
+                {t('dashboard.narrative.inYourQueue', {
+                  defaultValue: 'in your queue',
+                })}
                 {' · '}
                 <b className="font-medium text-[var(--color-foreground-2)]">
                   {cards.inSampling}

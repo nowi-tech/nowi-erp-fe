@@ -1207,7 +1207,6 @@
     "title": "Dashboard",
     "submitDesign": "Submit design",
     "narrative": {
-      "pendingApprovals": "pending approvals",
       "inYourQueue": "in your queue",
       "inSampling": "in sampling",
       "inCataloguing": "in cataloguing",
@@ -1215,8 +1214,7 @@
       "error": "Couldn't load the summary."
     },
     "cards": {
-      "pendingApprovals": "Pending approvals",
-      "mySamplingWork": "My sampling work",
+      "myWork": "My work",
       "inSampling": "Sampling",
       "inCataloguing": "Cataloguing",
       "live": "Live",
@@ -1239,7 +1237,16 @@
         "sampling": "Sampling",
         "cataloguing": "Cataloguing",
         "live": "Live",
-        "needs_attention": "Needs attention"
+        "my_work": "My work"
+      },
+      "statusFilter": {
+        "draft": "Draft",
+        "in_sampling": "In sampling",
+        "sample_approved": "Sample approved",
+        "ready_to_publish": "Ready to publish",
+        "listings_pending": "Listings pending",
+        "live": "Live",
+        "clear": "Clear"
       },
       "columns": {
         "style": "Style",

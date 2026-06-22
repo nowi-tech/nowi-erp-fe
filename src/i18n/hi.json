@@ -865,7 +865,6 @@
     "title": "डैशबोर्ड",
     "submitDesign": "डिज़ाइन सबमिट करें",
     "narrative": {
-      "pendingApprovals": "लंबित स्वीकृतियाँ",
       "inYourQueue": "आपकी कतार में",
       "inSampling": "सैंपलिंग में",
       "inCataloguing": "कैटलॉगिंग में",
@@ -873,8 +872,7 @@
       "error": "सारांश लोड नहीं हो सका।"
     },
     "cards": {
-      "pendingApprovals": "लंबित स्वीकृतियाँ",
-      "mySamplingWork": "मेरा सैंपलिंग कार्य",
+      "myWork": "मेरा काम",
       "inSampling": "सैंपलिंग में",
       "inCataloguing": "कैटलॉगिंग में",
       "live": "लाइव",
@@ -892,7 +890,16 @@
         "sampling": "सैंपलिंग",
         "cataloguing": "कैटलॉगिंग",
         "live": "लाइव",
-        "needs_attention": "ध्यान चाहिए"
+        "my_work": "मेरा काम"
+      },
+      "statusFilter": {
+        "draft": "ड्राफ्ट",
+        "in_sampling": "सैंपलिंग में",
+        "sample_approved": "सैंपल स्वीकृत",
+        "ready_to_publish": "प्रकाशित करने के लिए तैयार",
+        "listings_pending": "लिस्टिंग बाकी",
+        "live": "लाइव",
+        "clear": "हटाएँ"
       },
       "columns": {
         "style": "स्टाइल",

@@ -41,6 +41,7 @@ import {
   getDashboardStyles,
   type DashboardStyleRow,
   type DashboardStyleTab,
+  type DashboardStatusFilter,
 } from '@/api/dashboard';
 import {
   approveStyle,
@@ -96,18 +97,40 @@ interface Props {
   onActionDone?: () => void;
 }
 
-// `needs_attention` is the FIRST chip — it's the approver's queue (drafts
-// awaiting Approval #1 + in-sampling awaiting Approval #2), the exact set the
-// "Pending approvals" summary card counts, so the card lands on a highlighted
-// tab instead of a chip-less filter.
+// `my_work` is the FIRST chip — a ROLE-AWARE union of the caller's actionable
+// queue (approver → pending approvals; sampling author → their own in-progress
+// sampling; cataloguer → the cataloguing queue), the default tab + the target
+// of the "My work" summary card.
 const TABS: DashboardStyleTab[] = [
-  'needs_attention',
+  'my_work',
   'all',
   'draft',
   'sampling',
   'cataloguing',
   'live',
 ];
+
+// Multi-select status filter options per tab — only the statuses REACHABLE in
+// that tab, so the filter narrows without offering dead choices. Tabs with one
+// (or zero) reachable status (draft / live) omit the control entirely. The two
+// cataloguing sub-states mirror the Status column ("Ready to publish" once a
+// channel is prepared, else "Listings pending"). The BE AND's these with the
+// tab, so the filter always scopes the current bucket.
+const STATUS_OPTIONS_BY_TAB: Partial<
+  Record<DashboardStyleTab, DashboardStatusFilter[]>
+> = {
+  all: [
+    'draft',
+    'in_sampling',
+    'sample_approved',
+    'ready_to_publish',
+    'listings_pending',
+    'live',
+  ],
+  sampling: ['in_sampling', 'sample_approved'],
+  cataloguing: ['ready_to_publish', 'listings_pending'],
+  my_work: ['draft', 'in_sampling', 'ready_to_publish', 'listings_pending'],
+};
 
 // Rows per page in the in-flight feed. 50 keeps the smaller tabs on a single
 // page while still paginating the larger "All" list (BE caps `take` at 200).
@@ -531,6 +554,10 @@ export default function StylesInFlightTable({
   const [tab, setTab] = useState<DashboardStyleTab>(initialTab);
   const [searchText, setSearchText] = useState('');
   const debouncedSearch = useDebounced(searchText, 300);
+  // Multi-select status filter, scoped to the active tab. Cleared on any tab
+  // switch (a previous tab's statuses wouldn't apply to the new bucket).
+  const [statuses, setStatuses] = useState<DashboardStatusFilter[]>([]);
+  const statusOptions = STATUS_OPTIONS_BY_TAB[tab] ?? [];
 
   const [rows, setRows] = useState<DashboardStyleRow[]>([]);
   const [loading, setLoading] = useState(true);
@@ -569,6 +596,7 @@ export default function StylesInFlightTable({
       const res = await getDashboardStyles({
         tab,
         search: debouncedSearch.trim() || undefined,
+        statuses: statuses.length ? statuses : undefined,
         from,
         to,
         skip,
@@ -583,17 +611,26 @@ export default function StylesInFlightTable({
     } finally {
       setLoading(false);
     }
-  }, [tab, debouncedSearch, from, to, skip]);
+  }, [tab, debouncedSearch, statuses, from, to, skip]);
 
   useEffect(() => {
     void load();
   }, [load]);
 
   // Reset to the first page whenever the result SET changes (tab / search /
-  // date window) — otherwise a stale `skip` could land past the last page.
+  // status filter / date window) — otherwise a stale `skip` could land past
+  // the last page.
   useEffect(() => {
     setSkip(0);
-  }, [tab, debouncedSearch, from, to]);
+  }, [tab, debouncedSearch, statuses, from, to]);
+
+  // Clear the status filter on any tab switch — the previous tab's statuses
+  // aren't reachable in the new bucket (and the control's options change).
+  // Functional updater keeps the SAME reference when already empty so we don't
+  // invalidate `load` and trigger a redundant second fetch on every tab switch.
+  useEffect(() => {
+    setStatuses((prev) => (prev.length ? [] : prev));
+  }, [tab]);
 
   // Refetch the table AND let the Home refresh its cards.
   const afterAction = () => {
@@ -618,6 +655,12 @@ export default function StylesInFlightTable({
     params.set('tab', next);
     setSearchParams(params, { replace: true });
   };
+
+  // Toggle one status in/out of the multi-select filter.
+  const toggleStatus = (s: DashboardStatusFilter) =>
+    setStatuses((prev) =>
+      prev.includes(s) ? prev.filter((x) => x !== s) : [...prev, s],
+    );
 
   const canApprove = (row: DashboardStyleRow) =>
     row.lifecycle === 'draft' && hasAnyRole(user, APPROVER_ROLES);
@@ -1522,6 +1565,43 @@ export default function StylesInFlightTable({
                 })}
                 onApply={onDateApply}
               />
+            )}
+
+            {/* Multi-select status filter — toggle chips, only for tabs with
+                more than one reachable status. Narrows within the active tab. */}
+            {statusOptions.length > 1 && (
+              <div className="flex flex-wrap items-center gap-1.5">
+                {statusOptions.map((s) => {
+                  const on = statuses.includes(s);
+                  return (
+                    <button
+                      key={s}
+                      type="button"
+                      onClick={() => toggleStatus(s)}
+                      aria-pressed={on}
+                      className={cn(
+                        'h-8 rounded-full border px-3 text-[12px] font-medium transition-colors',
+                        on
+                          ? 'border-[var(--color-primary)] bg-[var(--color-primary)]/10 text-[var(--color-primary)]'
+                          : 'border-[var(--color-border)] text-[var(--color-muted-foreground)] hover:border-[var(--color-border-strong)] hover:text-[var(--color-foreground)]',
+                      )}
+                    >
+                      {t(`dashboard.table.statusFilter.${s}` as const)}
+                    </button>
+                  );
+                })}
+                {statuses.length > 0 && (
+                  <button
+                    type="button"
+                    onClick={() => setStatuses([])}
+                    className="h-8 px-2 text-[12px] font-medium text-[var(--color-muted-foreground)] hover:text-[var(--color-foreground)]"
+                  >
+                    {t('dashboard.table.statusFilter.clear', {
+                      defaultValue: 'Clear',
+                    })}
+                  </button>
+                )}
+              </div>
             )}
           </div>
 
