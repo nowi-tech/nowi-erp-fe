@@ -1205,9 +1205,10 @@ function ChannelsCard({
     null,
   );
   const [offlineReason, setOfflineReason] = useState('');
-  // Out-of-stock toggle (soft take-offline) — a reversible suppression on a
-  // live style. The dialog captures an optional reason when marking out of
-  // stock; bringing it back in stock is a plain confirm.
+  // Take-out-of-stock dialog state. One-way: confirming demotes the live style
+  // back to the EasyEcom checkpoint (its live listings revert to draft) to be
+  // re-published — that republish is the way back to stock, not a revive here.
+  // The dialog captures an optional reason.
   const [stockDialogOpen, setStockDialogOpen] = useState(false);
   const [stockReason, setStockReason] = useState('');
   return (
