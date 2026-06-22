@@ -125,15 +125,18 @@ function lifecycleVariant(l: Style['lifecycle']) {
  * (mutually exclusive — XOR enforced on the BE):
  *   • `familyCode` set      → "Colour of <root code>"
  *   • `basedOnStyleId` set  → "Based on <code>"
- *   • neither               → "New design"
+ *   • `oldStyleId` set       → "Relive of <source code>"
+ *   • none                  → "New design"
  */
 function styleType(s: Style): {
-  kind: 'new' | 'colour' | 'based_on';
+  kind: 'new' | 'colour' | 'based_on' | 'relive';
   ref: string | null;
 } {
   if (s.familyCode) return { kind: 'colour', ref: s.familyCode };
   if (s.basedOnStyleId != null)
     return { kind: 'based_on', ref: s.basedOnStyle?.styleId ?? null };
+  if (s.oldStyleId)
+    return { kind: 'relive', ref: s.relivedFromStyle?.styleId ?? s.oldStyleId };
   return { kind: 'new', ref: null };
 }
 
@@ -161,6 +164,16 @@ function StyleTypePill({ style }: { style: Style }) {
         {t('admin.styles.table.type.basedOn', {
           code: ref ?? '—',
           defaultValue: `Based on ${ref ?? '—'}`,
+        })}
+      </Badge>
+    );
+  }
+  if (kind === 'relive') {
+    return (
+      <Badge variant="rework" className="text-[10px]" title={ref ?? undefined}>
+        {t('admin.styles.table.type.relive', {
+          code: ref ?? '—',
+          defaultValue: `Relive of ${ref ?? '—'}`,
         })}
       </Badge>
     );
@@ -317,14 +330,41 @@ export default function StylesTable({
     return byParent;
   }, [filteredRows]);
 
-  /** Top-level rows = anything that isn't already nested under another. */
+  /**
+   * Relive grouping — re-releases (`relivedFromStyleId`) nest under their base
+   * design as collapsible children, kept OUT of the top level so the base list
+   * isn't cluttered with every `-N` version. Unlike colour families these stay
+   * COLLAPSED by default (see the pre-expand effect) — expand a base to reveal
+   * its re-releases. Mutually exclusive with `parentStyleId`, so a style nests
+   * under at most one parent.
+   */
+  const reliveChildrenByRoot = useMemo(() => {
+    const byRoot = new Map<number, Style[]>();
+    const presentIds = new Set(filteredRows.map((r) => r.id));
+    for (const s of filteredRows) {
+      if (
+        s.relivedFromStyleId != null &&
+        presentIds.has(s.relivedFromStyleId)
+      ) {
+        const arr = byRoot.get(s.relivedFromStyleId) ?? [];
+        arr.push(s);
+        byRoot.set(s.relivedFromStyleId, arr);
+      }
+    }
+    return byRoot;
+  }, [filteredRows]);
+
+  /** Top-level rows = anything not already nested under a present parent
+   *  (colour family) or base design (relive). Orphans (parent not in the
+   *  current filter) stay at the top level so they never silently vanish. */
   const topLevelRows = useMemo(
     () =>
-      filteredRows.filter(
-        (s) =>
-          s.parentStyleId == null ||
-          !filteredRows.some((p) => p.id === s.parentStyleId),
-      ),
+      filteredRows.filter((s) => {
+        const nestParent = s.parentStyleId ?? s.relivedFromStyleId;
+        return (
+          nestParent == null || !filteredRows.some((p) => p.id === nestParent)
+        );
+      }),
     [filteredRows],
   );
 
@@ -343,9 +383,10 @@ export default function StylesTable({
       topLevelRows.filter(
         (r) =>
           (r.variants?.length ?? 0) > 0 ||
-          (colourChildrenByParent.get(r.id)?.length ?? 0) > 0,
+          (colourChildrenByParent.get(r.id)?.length ?? 0) > 0 ||
+          (reliveChildrenByRoot.get(r.id)?.length ?? 0) > 0,
       ),
-    [topLevelRows, colourChildrenByParent],
+    [topLevelRows, colourChildrenByParent, reliveChildrenByRoot],
   );
   const allExpanded =
     groupsWithChildren.length > 0 &&
@@ -483,8 +524,11 @@ export default function StylesTable({
               topLevelRows.map((s) => {
                 const variants = s.variants ?? [];
                 const colourChildren = colourChildrenByParent.get(s.id) ?? [];
+                const reliveChildren = reliveChildrenByRoot.get(s.id) ?? [];
                 const hasChildren =
-                  variants.length > 0 || colourChildren.length > 0;
+                  variants.length > 0 ||
+                  colourChildren.length > 0 ||
+                  reliveChildren.length > 0;
                 const isOpen = expanded.has(s.id);
                 return (
                   <Fragment key={s.id}>
@@ -568,6 +612,21 @@ export default function StylesTable({
                               .join(', ')}
                           >
                             {`${1 + colourChildren.length} colours`}
+                          </Badge>
+                        )}
+                        {reliveChildren.length > 0 && (
+                          <Badge
+                            variant="rework"
+                            className="ml-2 text-[10px]"
+                            title={reliveChildren
+                              .map((c) => c.styleId)
+                              .filter(Boolean)
+                              .join(', ')}
+                          >
+                            {t('admin.styles.table.relivesCount', {
+                              count: reliveChildren.length,
+                              defaultValue: `${reliveChildren.length} re-releases`,
+                            })}
                           </Badge>
                         )}
                       </td>
@@ -702,6 +761,30 @@ export default function StylesTable({
                           <ColourFamilySubTable
                             parent={s}
                             children={colourChildren}
+                            isCompact={isCompact}
+                            onRowClick={onRowClick}
+                            onStyleNoClick={onStyleNoClick}
+                            onApprove={onApprove}
+                            onPark={onPark}
+                            onRevive={onRevive}
+                          />
+                        </td>
+                      </tr>
+                    )}
+
+                    {/* Relive re-releases nested under their base — kept out of
+                        the top level + collapsed by default so the base list
+                        stays clean. Same sub-table treatment as colour families;
+                        each child's "Relive of X" pill makes the lineage clear. */}
+                    {isOpen && reliveChildren.length > 0 && (
+                      <tr className="bg-[var(--color-surface-2)]/30">
+                        <td
+                          colSpan={COL_COUNT}
+                          className="pl-10 pr-3 py-2 sm:pl-14"
+                        >
+                          <ColourFamilySubTable
+                            parent={s}
+                            children={reliveChildren}
                             isCompact={isCompact}
                             onRowClick={onRowClick}
                             onStyleNoClick={onStyleNoClick}

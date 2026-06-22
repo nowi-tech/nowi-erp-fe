@@ -298,6 +298,7 @@ function StyleRefPicker({
   value,
   onChange,
   allowCode,
+  approvedOnly = false,
   placeholder,
   emptyLabel,
   addCodeLabel,
@@ -305,6 +306,10 @@ function StyleRefPicker({
   value: ForkTarget;
   onChange: (next: ForkTarget) => void;
   allowCode: boolean;
+  /** Restrict the options to already-approved styles (those with a minted
+   *  Style #). Used by the relive fork, whose new code is derived from the
+   *  source's code — so the source must already carry one. */
+  approvedOnly?: boolean;
   placeholder: string;
   emptyLabel: string;
   addCodeLabel: string;
@@ -336,7 +341,8 @@ function StyleRefPicker({
     s.styleId ?? s.workingName ?? `D-${s.draftNo ?? s.id}`;
 
   const options = useMemo<ComboboxOption<number>[]>(() => {
-    const rows = [...results];
+    // Relive sources must be approved (carry a minted Style #); drop drafts.
+    const rows = approvedOnly ? results.filter((r) => r.styleId) : [...results];
     const picked = pickedRef.current;
     if (picked && !rows.some((r) => r.id === picked.id)) rows.unshift(picked);
     const mapped = rows.map<ComboboxOption<number>>((s) => ({
@@ -353,7 +359,7 @@ function StyleRefPicker({
       mapped.unshift({ value: TYPED_CODE_ID, label: value.code });
     }
     return mapped;
-  }, [results, value]);
+  }, [results, value, approvedOnly]);
 
   const comboValue: number | null = value?.style
     ? value.style.id
@@ -620,7 +626,11 @@ const StyleIntakeForm = forwardRef<StyleIntakeFormHandle, StyleIntakeFormProps>(
     const forkTargetOk =
       forkMode === 'colour'
         ? forkTarget?.style != null && form.primaryColour.trim().length > 0
-        : forkTarget != null;
+        : forkMode === 'relive'
+          ? // Relive must resolve to an approved source (carrying a minted
+            // Style #) — the new code is derived from it.
+            forkTarget?.style?.styleId != null
+          : forkTarget != null;
     // 3rd-party uses its own free-typed code input, not the style-ref picker.
     const isThirdParty = showFork && forkMode === 'third_party';
     const thirdPartyOk = !isThirdParty || thirdPartyCode.trim().length > 0;
@@ -706,14 +716,12 @@ const StyleIntakeForm = forwardRef<StyleIntakeFormHandle, StyleIntakeFormProps>(
         }
       }
 
-      // Relive: send the OLD code as free text. The BE stores it verbatim and
-      // resolves relivedFromStyleId only when it matches. When the user picked
-      // an in-system row, prefer its minted code; otherwise the typed code.
-      if (showFork && forkMode === 'relive' && forkTarget) {
-        samplingBody.oldStyleId = forkTarget.style
-          ? (forkTarget.style.styleId ??
-            `D-${forkTarget.style.draftNo ?? forkTarget.style.id}`)
-          : forkTarget.code;
+      // Relive: send the approved source's minted Style #. The picker is
+      // approved-only with no free-text, so a resolved row carrying a styleId
+      // is guaranteed; the BE resolves it to relivedFromStyleId and derives the
+      // new code as `{source}-{n}`.
+      if (showFork && forkMode === 'relive' && forkTarget?.style?.styleId) {
+        samplingBody.oldStyleId = forkTarget.style.styleId;
       }
 
       // 3rd party: override the source — the partner's code becomes the Style #
@@ -844,10 +852,12 @@ const StyleIntakeForm = forwardRef<StyleIntakeFormHandle, StyleIntakeFormProps>(
                   <StyleRefPicker
                     value={forkTarget}
                     onChange={setForkTarget}
-                    // Relive, like based-on, accepts a free-typed code — the
-                    // old style may predate the system. Colour must resolve to
-                    // a real row (the spawn endpoint addresses it by id).
-                    allowCode={forkMode === 'based_on' || forkMode === 'relive'}
+                    // Based-on accepts a free-typed code (the design may predate
+                    // the system). Relive must resolve to an existing APPROVED
+                    // style — its new code is derived from the source's, so the
+                    // source needs a minted Style #: no free-text, approved-only.
+                    allowCode={forkMode === 'based_on'}
+                    approvedOnly={forkMode === 'relive'}
                     placeholder={t('admin.styles.intake.fork.pickPlaceholder')}
                     emptyLabel={t('admin.styles.intake.fork.pickEmpty')}
                     addCodeLabel={t('admin.styles.intake.fork.addCode')}

@@ -398,11 +398,14 @@
         "noStyleNo": "—",
         "variantsCount_one": "{{count}} variant",
         "variantsCount_other": "{{count}} variants",
+        "relivesCount_one": "{{count}} re-release",
+        "relivesCount_other": "{{count}} re-releases",
         "type": {
           "label": "Type",
           "new": "New design",
           "colourOf": "Colour of {{code}}",
-          "basedOn": "Based on {{code}}"
+          "basedOn": "Based on {{code}}",
+          "relive": "Relive of {{code}}"
         },
         "empty": "No styles. Click \"New design submission\" to create one.",
         "draftNo": "Draft #",
