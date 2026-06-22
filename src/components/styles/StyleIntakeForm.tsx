@@ -59,10 +59,18 @@ import type {
  *                   matches an in-system Style). Skips sampling like based-on,
  *                   but — unlike based-on — the old code may NOT be in the
  *                   system (legacy codes), so a miss is fine, not an error.
+ *   - `third_party` — finished goods from a partner. Overrides the emitted
+ *                   `source` to `third_party`; the typed partner code becomes
+ *                   the Style # verbatim (no NOWI minting). Skips sampling.
  *
  * The fork only exists in create mode; edit never re-forks a style.
  */
-export type SubmissionForkMode = 'new' | 'colour' | 'based_on' | 'relive';
+export type SubmissionForkMode =
+  | 'new'
+  | 'colour'
+  | 'based_on'
+  | 'relive'
+  | 'third_party';
 
 /**
  * Shared intake / edit form for the Product Development module.
@@ -414,6 +422,10 @@ const StyleIntakeForm = forwardRef<StyleIntakeFormHandle, StyleIntakeFormProps>(
     // Submission fork (create + sampling only). Defaults to the net-new path.
     const [forkMode, setForkMode] = useState<SubmissionForkMode>('new');
     const [forkTarget, setForkTarget] = useState<ForkTarget>(null);
+    // 3rd-party fork: the partner's own style code (becomes the Style #). A
+    // brand-new free-typed code, NOT a reference to an existing style — so it
+    // uses a plain input, not the StyleRefPicker.
+    const [thirdPartyCode, setThirdPartyCode] = useState('');
 
     // Re-seed when the parent swaps the style under us (e.g. modal
     // reopened for a different row). We deliberately don't re-seed on
@@ -580,11 +592,13 @@ const StyleIntakeForm = forwardRef<StyleIntakeFormHandle, StyleIntakeFormProps>(
       );
     }, [selectedFabric, form.primaryColour]);
 
-    // Switching the fork is a hard reset of the link target so a stale
-    // pick from another branch can never travel on submit.
+    // Switching the fork is a hard reset of BOTH link inputs (the style-ref
+    // target and the 3rd-party code) so a stale value from another branch can
+    // never travel on submit.
     const onForkModeChange = (next: SubmissionForkMode) => {
       setForkMode(next);
       setForkTarget(null);
+      setThirdPartyCode('');
       notifyForkModeChange?.(next);
     };
 
@@ -607,7 +621,13 @@ const StyleIntakeForm = forwardRef<StyleIntakeFormHandle, StyleIntakeFormProps>(
       forkMode === 'colour'
         ? forkTarget?.style != null && form.primaryColour.trim().length > 0
         : forkTarget != null;
-    const needsForkTarget = showFork && forkMode !== 'new';
+    // 3rd-party uses its own free-typed code input, not the style-ref picker.
+    const isThirdParty = showFork && forkMode === 'third_party';
+    const thirdPartyOk = !isThirdParty || thirdPartyCode.trim().length > 0;
+    // The style-ref picker is needed by the linking branches (colour / based-on
+    // / relive) but NOT by net-new or 3rd-party.
+    const needsForkTarget =
+      showFork && forkMode !== 'new' && forkMode !== 'third_party';
     // Collection is required at submission on every path EXCEPT the colour
     // fork — a colour variant inherits its parent's collection server-side
     // (spawnColourVariant), so the picker isn't shown there.
@@ -616,7 +636,8 @@ const StyleIntakeForm = forwardRef<StyleIntakeFormHandle, StyleIntakeFormProps>(
     const isValid =
       form.workingName.trim().length > 0 &&
       collectionOk &&
-      (!needsForkTarget || forkTargetOk);
+      (!needsForkTarget || forkTargetOk) &&
+      thirdPartyOk;
 
     // Notify the parent on every validity flip so it can enable / disable
     // its submit button without subscribing to form state changes.
@@ -695,6 +716,14 @@ const StyleIntakeForm = forwardRef<StyleIntakeFormHandle, StyleIntakeFormProps>(
           : forkTarget.code;
       }
 
+      // 3rd party: override the source — the partner's code becomes the Style #
+      // (the BE stores it verbatim and mints nothing). The sampling fields above
+      // ride along as nulls and are ignored for this source.
+      if (showFork && forkMode === 'third_party') {
+        samplingBody.source = 'third_party';
+        samplingBody.thirdPartyStyleId = thirdPartyCode.trim();
+      }
+
       return samplingBody;
     };
 
@@ -741,6 +770,7 @@ const StyleIntakeForm = forwardRef<StyleIntakeFormHandle, StyleIntakeFormProps>(
         showFork,
         forkMode,
         forkTarget,
+        thirdPartyCode,
         apiCall,
         onSaved,
       ],
@@ -782,6 +812,9 @@ const StyleIntakeForm = forwardRef<StyleIntakeFormHandle, StyleIntakeFormProps>(
                   <option value="relive">
                     {t('admin.styles.intake.fork.reliveTitle')}
                   </option>
+                  <option value="third_party">
+                    {t('admin.styles.intake.fork.thirdPartyTitle')}
+                  </option>
                 </Select>
                 {/* Describe the chosen path — the dropdown only shows titles. */}
                 <p className="mt-1.5 text-[12px] text-[var(--color-muted-foreground)]">
@@ -791,11 +824,15 @@ const StyleIntakeForm = forwardRef<StyleIntakeFormHandle, StyleIntakeFormProps>(
                       ? t('admin.styles.intake.fork.colourDesc')
                       : forkMode === 'based_on'
                         ? t('admin.styles.intake.fork.basedOnDesc')
-                        : t('admin.styles.intake.fork.reliveDesc')}
+                        : forkMode === 'relive'
+                          ? t('admin.styles.intake.fork.reliveDesc')
+                          : t('admin.styles.intake.fork.thirdPartyDesc')}
                 </p>
               </div>
 
-              {forkMode !== 'new' && (
+              {/* Linking branches (colour / based-on / relive) resolve against
+                  an existing style via the ref picker. */}
+              {needsForkTarget && (
                 <div className="mt-4">
                   <Label>
                     {forkMode === 'colour'
@@ -821,6 +858,23 @@ const StyleIntakeForm = forwardRef<StyleIntakeFormHandle, StyleIntakeFormProps>(
                       : forkMode === 'relive'
                         ? t('admin.styles.intake.fork.reliveHelp')
                         : t('admin.styles.intake.fork.basedOnHelp')}
+                  </p>
+                </div>
+              )}
+
+              {/* 3rd party: the partner's own code is typed here and becomes the
+                  Style # (a brand-new code, so a plain input, not the picker). */}
+              {isThirdParty && (
+                <div className="mt-4 max-w-md">
+                  <Label>{t('admin.styles.intake.fork.thirdPartyPickLabel')} *</Label>
+                  <Input
+                    value={thirdPartyCode}
+                    onChange={(e) => setThirdPartyCode(e.target.value)}
+                    placeholder={t('admin.styles.intake.fork.thirdPartyPlaceholder')}
+                    autoCapitalize="characters"
+                  />
+                  <p className="mt-1.5 text-[12px] text-[var(--color-muted-foreground)]">
+                    {t('admin.styles.intake.fork.thirdPartyHelp')}
                   </p>
                 </div>
               )}

@@ -383,6 +383,9 @@ export default function StyleWorkspace() {
   // China Import is a simple single-approval flow — no sampling stage,
   // no Approval #2, no inspections. Sampling-only UI is hidden for it.
   const isChinaImport = style.source === 'china_import';
+  // 3rd-party finished goods — surface the source as a headline badge (like
+  // China Import) so it's obvious the Style # is a partner code, not minted.
+  const isThirdParty = style.source === 'third_party';
   // Approval #1 is APPROVE-gated on the BE (`@Post('approve')` → `@Roles(APPROVE)`),
   // so gate the button to approvers too — matching the dashboard's `canApprove`.
   // Without this a non-approver writer sees "Approve intake" and 403s on click.
@@ -784,7 +787,9 @@ export default function StyleWorkspace() {
             {/* For China Import styles the source IS the story — surface it.
                 For sampling styles the NOWI prefix already implies source,
                 so the source chip is redundant and we omit it. */}
-            {isChinaImport && <Badge variant="stitch">{sourceLabel}</Badge>}
+            {(isChinaImport || isThirdParty) && (
+              <Badge variant="stitch">{sourceLabel}</Badge>
+            )}
             <Badge variant={isProductionLayout ? 'ready' : 'secondary'}>
               {lifecycleLabel}
             </Badge>

@@ -198,7 +198,13 @@ export interface CollectionLite {
 // ─── Product Development — Styles, variants, inspections, channels ──
 // Source of truth: docs/PRODUCT_DEV_MODULE_PLAN.md §6.
 
-export type StyleSource = 'sampling' | 'china_import' | 'legacy_floor_intake';
+export type StyleSource =
+  | 'sampling'
+  | 'china_import'
+  | 'legacy_floor_intake'
+  // 3rd-party finished goods — the partner's own style code is typed at intake
+  // and stored verbatim as the Style # (no NOWI minting). Skips sampling.
+  | 'third_party';
 
 export type StyleLifecycle =
   | 'draft'

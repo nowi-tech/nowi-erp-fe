@@ -104,6 +104,9 @@ export type CreateStyleRequest = Partial<
   basedOnStyleId?: number;
   /** …or by entering its minted style code (BE resolves to the id). */
   basedOnStyleCode?: string;
+  /** 3rd-party fork: the partner's own style code, stored verbatim as the
+   *  Style # (sent with source='third_party'; no NOWI minting). */
+  thirdPartyStyleId?: string;
 };
 
 export type UpdateStyleRequest = Partial<CreateStyleRequest>;
