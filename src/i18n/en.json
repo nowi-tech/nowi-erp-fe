@@ -398,11 +398,14 @@
         "noStyleNo": "—",
         "variantsCount_one": "{{count}} variant",
         "variantsCount_other": "{{count}} variants",
+        "relivesCount_one": "{{count}} re-release",
+        "relivesCount_other": "{{count}} re-releases",
         "type": {
           "label": "Type",
           "new": "New design",
           "colourOf": "Colour of {{code}}",
-          "basedOn": "Based on {{code}}"
+          "basedOn": "Based on {{code}}",
+          "relive": "Relive of {{code}}"
         },
         "empty": "No styles. Click \"New design submission\" to create one.",
         "draftNo": "Draft #",
@@ -416,7 +419,8 @@
       "source": {
         "sampling": "Sampling",
         "china_import": "China Import",
-        "legacy_floor_intake": "Floor"
+        "legacy_floor_intake": "Floor",
+        "third_party": "3rd party"
       },
       "lifecycle": {
         "draft": "Draft",
@@ -513,13 +517,22 @@
           "colourDesc": "Same design, a new colour. Skips sampling.",
           "basedOnTitle": "Based on an existing sample",
           "basedOnDesc": "A different design that reused an approved sample. Skips sampling.",
+          "reliveTitle": "Relive an old style",
+          "reliveDesc": "Re-release a past design. Skips sampling; keeps a link to the old style #.",
+          "thirdPartyTitle": "From a 3rd party",
+          "thirdPartyDesc": "Finished goods from a partner. Their style code becomes the Style #. Skips sampling.",
           "colourPickLabel": "Parent style",
           "basedOnPickLabel": "Source style",
+          "relivePickLabel": "Old style #",
+          "thirdPartyPickLabel": "Style ID (from 3rd party)",
+          "thirdPartyPlaceholder": "Partner's style code, e.g. ABC-123",
+          "thirdPartyHelp": "Stored exactly as entered and used as the Style # — the SKUs and dispatch codes derive from it, so it must match what the warehouse already uses. Must be unique.",
           "pickPlaceholder": "Search a style or type a code",
           "pickEmpty": "No matching styles",
           "addCode": "Use this style code",
           "colourHelp": "Inherits the family — fabric, gender, category and CAD come from the parent.",
           "basedOnHelp": "Records sampling provenance only. This stays its own independent style.",
+          "reliveHelp": "Type the old style # — even if it's a legacy code not in the system. It's saved as a searchable reference and linked when it matches.",
           "needsTarget": "Pick the style this is based on to submit",
           "skipsSampling": "skips sampling",
           "submitColour": "Submit colour",

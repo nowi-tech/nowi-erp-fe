@@ -11,6 +11,7 @@ import { useTranslation } from 'react-i18next';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
+import { Select } from '@/components/ui/select';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Combobox, type ComboboxOption } from '@/components/ui/combobox';
 
@@ -53,10 +54,23 @@ import type {
  *                   variant (skips sampling, inherits the family).
  *   - `based_on`  — a *different* design that reused an existing approved
  *                   sample to skip sampling → carries `basedOnStyleId`.
+ *   - `relive`    — re-releasing an OLD design → carries the typed old code
+ *                   in `oldStyleId` (resolved to `relivedFromStyleId` when it
+ *                   matches an in-system Style). Skips sampling like based-on,
+ *                   but — unlike based-on — the old code may NOT be in the
+ *                   system (legacy codes), so a miss is fine, not an error.
+ *   - `third_party` — finished goods from a partner. Overrides the emitted
+ *                   `source` to `third_party`; the typed partner code becomes
+ *                   the Style # verbatim (no NOWI minting). Skips sampling.
  *
  * The fork only exists in create mode; edit never re-forks a style.
  */
-export type SubmissionForkMode = 'new' | 'colour' | 'based_on';
+export type SubmissionForkMode =
+  | 'new'
+  | 'colour'
+  | 'based_on'
+  | 'relive'
+  | 'third_party';
 
 /**
  * Shared intake / edit form for the Product Development module.
@@ -268,56 +282,6 @@ function buildInitialForm(style: Style | null | undefined): FormState {
   };
 }
 
-/** One selectable radio-card in the submission fork (New / Colour / Based-on). */
-function ForkCard({
-  active,
-  title,
-  description,
-  onSelect,
-}: {
-  active: boolean;
-  title: string;
-  description: string;
-  onSelect: () => void;
-}) {
-  return (
-    <button
-      type="button"
-      role="radio"
-      aria-checked={active}
-      onClick={onSelect}
-      className={cn(
-        'flex items-start gap-3 rounded-[var(--radius-md)] border p-3.5 text-left transition-colors',
-        active
-          ? 'border-[var(--color-primary)] bg-[var(--color-primary)]/5 shadow-sm'
-          : 'border-[var(--color-border)] bg-[var(--color-surface)] hover:border-[var(--color-primary)]/40',
-      )}
-    >
-      <span
-        aria-hidden
-        className={cn(
-          'mt-0.5 flex h-4 w-4 shrink-0 items-center justify-center rounded-full border',
-          active
-            ? 'border-[var(--color-primary)]'
-            : 'border-[var(--color-input)]',
-        )}
-      >
-        {active && (
-          <span className="h-2 w-2 rounded-full bg-[var(--color-primary)]" />
-        )}
-      </span>
-      <span className="min-w-0">
-        <span className="block text-[14px] font-medium text-[var(--color-foreground)]">
-          {title}
-        </span>
-        <span className="mt-0.5 block text-[12px] text-[var(--color-muted-foreground)]">
-          {description}
-        </span>
-      </span>
-    </button>
-  );
-}
-
 /** Sentinel id for the synthetic "typed style code" option — never
  *  collides with a real (positive) Style.id. */
 const TYPED_CODE_ID = -1;
@@ -334,6 +298,7 @@ function StyleRefPicker({
   value,
   onChange,
   allowCode,
+  approvedOnly = false,
   placeholder,
   emptyLabel,
   addCodeLabel,
@@ -341,6 +306,10 @@ function StyleRefPicker({
   value: ForkTarget;
   onChange: (next: ForkTarget) => void;
   allowCode: boolean;
+  /** Restrict the options to already-approved styles (those with a minted
+   *  Style #). Used by the relive fork, whose new code is derived from the
+   *  source's code — so the source must already carry one. */
+  approvedOnly?: boolean;
   placeholder: string;
   emptyLabel: string;
   addCodeLabel: string;
@@ -372,7 +341,8 @@ function StyleRefPicker({
     s.styleId ?? s.workingName ?? `D-${s.draftNo ?? s.id}`;
 
   const options = useMemo<ComboboxOption<number>[]>(() => {
-    const rows = [...results];
+    // Relive sources must be approved (carry a minted Style #); drop drafts.
+    const rows = approvedOnly ? results.filter((r) => r.styleId) : [...results];
     const picked = pickedRef.current;
     if (picked && !rows.some((r) => r.id === picked.id)) rows.unshift(picked);
     const mapped = rows.map<ComboboxOption<number>>((s) => ({
@@ -389,7 +359,7 @@ function StyleRefPicker({
       mapped.unshift({ value: TYPED_CODE_ID, label: value.code });
     }
     return mapped;
-  }, [results, value]);
+  }, [results, value, approvedOnly]);
 
   const comboValue: number | null = value?.style
     ? value.style.id
@@ -458,6 +428,10 @@ const StyleIntakeForm = forwardRef<StyleIntakeFormHandle, StyleIntakeFormProps>(
     // Submission fork (create + sampling only). Defaults to the net-new path.
     const [forkMode, setForkMode] = useState<SubmissionForkMode>('new');
     const [forkTarget, setForkTarget] = useState<ForkTarget>(null);
+    // 3rd-party fork: the partner's own style code (becomes the Style #). A
+    // brand-new free-typed code, NOT a reference to an existing style — so it
+    // uses a plain input, not the StyleRefPicker.
+    const [thirdPartyCode, setThirdPartyCode] = useState('');
 
     // Re-seed when the parent swaps the style under us (e.g. modal
     // reopened for a different row). We deliberately don't re-seed on
@@ -624,11 +598,13 @@ const StyleIntakeForm = forwardRef<StyleIntakeFormHandle, StyleIntakeFormProps>(
       );
     }, [selectedFabric, form.primaryColour]);
 
-    // Switching the fork is a hard reset of the link target so a stale
-    // pick from another branch can never travel on submit.
+    // Switching the fork is a hard reset of BOTH link inputs (the style-ref
+    // target and the 3rd-party code) so a stale value from another branch can
+    // never travel on submit.
     const onForkModeChange = (next: SubmissionForkMode) => {
       setForkMode(next);
       setForkTarget(null);
+      setThirdPartyCode('');
       notifyForkModeChange?.(next);
     };
 
@@ -650,8 +626,18 @@ const StyleIntakeForm = forwardRef<StyleIntakeFormHandle, StyleIntakeFormProps>(
     const forkTargetOk =
       forkMode === 'colour'
         ? forkTarget?.style != null && form.primaryColour.trim().length > 0
-        : forkTarget != null;
-    const needsForkTarget = showFork && forkMode !== 'new';
+        : forkMode === 'relive'
+          ? // Relive must resolve to an approved source (carrying a minted
+            // Style #) — the new code is derived from it.
+            forkTarget?.style?.styleId != null
+          : forkTarget != null;
+    // 3rd-party uses its own free-typed code input, not the style-ref picker.
+    const isThirdParty = showFork && forkMode === 'third_party';
+    const thirdPartyOk = !isThirdParty || thirdPartyCode.trim().length > 0;
+    // The style-ref picker is needed by the linking branches (colour / based-on
+    // / relive) but NOT by net-new or 3rd-party.
+    const needsForkTarget =
+      showFork && forkMode !== 'new' && forkMode !== 'third_party';
     // Collection is required at submission on every path EXCEPT the colour
     // fork — a colour variant inherits its parent's collection server-side
     // (spawnColourVariant), so the picker isn't shown there.
@@ -660,7 +646,8 @@ const StyleIntakeForm = forwardRef<StyleIntakeFormHandle, StyleIntakeFormProps>(
     const isValid =
       form.workingName.trim().length > 0 &&
       collectionOk &&
-      (!needsForkTarget || forkTargetOk);
+      (!needsForkTarget || forkTargetOk) &&
+      thirdPartyOk;
 
     // Notify the parent on every validity flip so it can enable / disable
     // its submit button without subscribing to form state changes.
@@ -729,6 +716,22 @@ const StyleIntakeForm = forwardRef<StyleIntakeFormHandle, StyleIntakeFormProps>(
         }
       }
 
+      // Relive: send the approved source's minted Style #. The picker is
+      // approved-only with no free-text, so a resolved row carrying a styleId
+      // is guaranteed; the BE resolves it to relivedFromStyleId and derives the
+      // new code as `{source}-{n}`.
+      if (showFork && forkMode === 'relive' && forkTarget?.style?.styleId) {
+        samplingBody.oldStyleId = forkTarget.style.styleId;
+      }
+
+      // 3rd party: override the source — the partner's code becomes the Style #
+      // (the BE stores it verbatim and mints nothing). The sampling fields above
+      // ride along as nulls and are ignored for this source.
+      if (showFork && forkMode === 'third_party') {
+        samplingBody.source = 'third_party';
+        samplingBody.thirdPartyStyleId = thirdPartyCode.trim();
+      }
+
       return samplingBody;
     };
 
@@ -775,6 +778,7 @@ const StyleIntakeForm = forwardRef<StyleIntakeFormHandle, StyleIntakeFormProps>(
         showFork,
         forkMode,
         forkTarget,
+        thirdPartyCode,
         apiCall,
         onSaved,
       ],
@@ -796,42 +800,64 @@ const StyleIntakeForm = forwardRef<StyleIntakeFormHandle, StyleIntakeFormProps>(
               title={t('admin.styles.intake.fork.title')}
               subtitle={t('admin.styles.intake.fork.subtitle')}
             >
-              <div
-                role="radiogroup"
-                aria-label={t('admin.styles.intake.fork.title')}
-                className="grid grid-cols-1 gap-3 sm:grid-cols-3"
-              >
-                <ForkCard
-                  active={forkMode === 'new'}
-                  title={t('admin.styles.intake.fork.newTitle')}
-                  description={t('admin.styles.intake.fork.newDesc')}
-                  onSelect={() => onForkModeChange('new')}
-                />
-                <ForkCard
-                  active={forkMode === 'colour'}
-                  title={t('admin.styles.intake.fork.colourTitle')}
-                  description={t('admin.styles.intake.fork.colourDesc')}
-                  onSelect={() => onForkModeChange('colour')}
-                />
-                <ForkCard
-                  active={forkMode === 'based_on'}
-                  title={t('admin.styles.intake.fork.basedOnTitle')}
-                  description={t('admin.styles.intake.fork.basedOnDesc')}
-                  onSelect={() => onForkModeChange('based_on')}
-                />
+              <div className="max-w-md">
+                <Select
+                  aria-label={t('admin.styles.intake.fork.title')}
+                  value={forkMode}
+                  onChange={(e) =>
+                    onForkModeChange(e.target.value as SubmissionForkMode)
+                  }
+                >
+                  <option value="new">
+                    {t('admin.styles.intake.fork.newTitle')}
+                  </option>
+                  <option value="colour">
+                    {t('admin.styles.intake.fork.colourTitle')}
+                  </option>
+                  <option value="based_on">
+                    {t('admin.styles.intake.fork.basedOnTitle')}
+                  </option>
+                  <option value="relive">
+                    {t('admin.styles.intake.fork.reliveTitle')}
+                  </option>
+                  <option value="third_party">
+                    {t('admin.styles.intake.fork.thirdPartyTitle')}
+                  </option>
+                </Select>
+                {/* Describe the chosen path — the dropdown only shows titles. */}
+                <p className="mt-1.5 text-[12px] text-[var(--color-muted-foreground)]">
+                  {forkMode === 'new'
+                    ? t('admin.styles.intake.fork.newDesc')
+                    : forkMode === 'colour'
+                      ? t('admin.styles.intake.fork.colourDesc')
+                      : forkMode === 'based_on'
+                        ? t('admin.styles.intake.fork.basedOnDesc')
+                        : forkMode === 'relive'
+                          ? t('admin.styles.intake.fork.reliveDesc')
+                          : t('admin.styles.intake.fork.thirdPartyDesc')}
+                </p>
               </div>
 
-              {forkMode !== 'new' && (
+              {/* Linking branches (colour / based-on / relive) resolve against
+                  an existing style via the ref picker. */}
+              {needsForkTarget && (
                 <div className="mt-4">
                   <Label>
                     {forkMode === 'colour'
                       ? t('admin.styles.intake.fork.colourPickLabel')
-                      : t('admin.styles.intake.fork.basedOnPickLabel')}
+                      : forkMode === 'relive'
+                        ? t('admin.styles.intake.fork.relivePickLabel')
+                        : t('admin.styles.intake.fork.basedOnPickLabel')}
                   </Label>
                   <StyleRefPicker
                     value={forkTarget}
                     onChange={setForkTarget}
+                    // Based-on accepts a free-typed code (the design may predate
+                    // the system). Relive must resolve to an existing APPROVED
+                    // style — its new code is derived from the source's, so the
+                    // source needs a minted Style #: no free-text, approved-only.
                     allowCode={forkMode === 'based_on'}
+                    approvedOnly={forkMode === 'relive'}
                     placeholder={t('admin.styles.intake.fork.pickPlaceholder')}
                     emptyLabel={t('admin.styles.intake.fork.pickEmpty')}
                     addCodeLabel={t('admin.styles.intake.fork.addCode')}
@@ -839,7 +865,26 @@ const StyleIntakeForm = forwardRef<StyleIntakeFormHandle, StyleIntakeFormProps>(
                   <p className="mt-1.5 text-[12px] text-[var(--color-muted-foreground)]">
                     {forkMode === 'colour'
                       ? t('admin.styles.intake.fork.colourHelp')
-                      : t('admin.styles.intake.fork.basedOnHelp')}
+                      : forkMode === 'relive'
+                        ? t('admin.styles.intake.fork.reliveHelp')
+                        : t('admin.styles.intake.fork.basedOnHelp')}
+                  </p>
+                </div>
+              )}
+
+              {/* 3rd party: the partner's own code is typed here and becomes the
+                  Style # (a brand-new code, so a plain input, not the picker). */}
+              {isThirdParty && (
+                <div className="mt-4 max-w-md">
+                  <Label>{t('admin.styles.intake.fork.thirdPartyPickLabel')} *</Label>
+                  <Input
+                    value={thirdPartyCode}
+                    onChange={(e) => setThirdPartyCode(e.target.value)}
+                    placeholder={t('admin.styles.intake.fork.thirdPartyPlaceholder')}
+                    autoCapitalize="characters"
+                  />
+                  <p className="mt-1.5 text-[12px] text-[var(--color-muted-foreground)]">
+                    {t('admin.styles.intake.fork.thirdPartyHelp')}
                   </p>
                 </div>
               )}

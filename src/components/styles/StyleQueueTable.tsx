@@ -383,10 +383,11 @@ export function Thumbnail({ src, alt }: { src: string | null; alt: string }) {
 }
 
 /**
- * The submission-fork TYPE pill — New design / Colour of X / Based on X.
- * Derives the kind by XOR on familyCode (colour) vs basedOnStyleId
- * (based-on); neither ⇒ new. Follows the Stitch accent palette: new =
- * filled primary, colour = amber, based-on = blue.
+ * The submission-fork TYPE pill — New design / Colour of X / Based on X /
+ * Relive of X. Derives the kind from familyCode (colour) → basedOnStyleId
+ * (based-on) → oldStyleId (relive); none ⇒ new. Follows the Stitch accent
+ * palette: new = filled primary, colour = amber, based-on = blue, relive =
+ * violet.
  */
 export function TypePill({ style }: { style: Style }) {
   const { t } = useTranslation();
@@ -414,6 +415,21 @@ export function TypePill({ style }: { style: Style }) {
         title={ref}
       >
         {t('admin.styles.table.type.basedOn', { code: ref ?? '—' })}
+      </span>
+    );
+  }
+  if (style.oldStyleId) {
+    // Prefer the resolved source's current code; fall back to the typed code.
+    const ref = style.relivedFromStyle?.styleId ?? style.oldStyleId;
+    return (
+      <span
+        className={cn(
+          base,
+          'border border-violet-200 bg-violet-100 text-violet-900',
+        )}
+        title={ref}
+      >
+        {t('admin.styles.table.type.relive', { code: ref })}
       </span>
     );
   }

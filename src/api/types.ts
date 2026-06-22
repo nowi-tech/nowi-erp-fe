@@ -198,7 +198,13 @@ export interface CollectionLite {
 // ─── Product Development — Styles, variants, inspections, channels ──
 // Source of truth: docs/PRODUCT_DEV_MODULE_PLAN.md §6.
 
-export type StyleSource = 'sampling' | 'china_import' | 'legacy_floor_intake';
+export type StyleSource =
+  | 'sampling'
+  | 'china_import'
+  | 'legacy_floor_intake'
+  // 3rd-party finished goods — the partner's own style code is typed at intake
+  // and stored verbatim as the Style # (no NOWI minting). Skips sampling.
+  | 'third_party';
 
 export type StyleLifecycle =
   | 'draft'
@@ -469,6 +475,13 @@ export interface Style {
   easyecomDone: boolean;
   /** When the style first went live (stable; not derived from listing edits). */
   wentLiveAt: string | null;
+  /** Out of stock — set when a live style was taken out of stock. That demotes
+   *  it back to the EasyEcom checkpoint (lifecycle → `cataloguing`, easyecom
+   *  pending; its live listings revert to draft), so it must be re-published to
+   *  sell again. Cleared on republish / revive. */
+  outOfStock: boolean;
+  outOfStockAt: string | null;
+  outOfStockReason: string | null;
   workingName: string | null;
   /** Free-text rationale for why this style is being developed. Captured at intake. */
   developmentReason: string | null;
@@ -524,6 +537,24 @@ export interface Style {
   basedOnStyleId?: number | null;
   /** Hydrated mirror of the based-on style when reads include it. */
   basedOnStyle?: { id: number; styleId: string | null } | null;
+
+  /** "Relive" provenance — the source style's minted Style # (the approved
+   *  design being re-released). A relive must point at an existing approved
+   *  in-system style, so this is always that source's code; the relive's own
+   *  code is derived from it as `{oldStyleId}-{n}`. Shown as "Relived from" on
+   *  the workspace + "Relive of X" in the type column. */
+  oldStyleId?: string | null;
+  /** Self-FK to the approved in-system Style this re-releases. Always set
+   *  together with `oldStyleId` (a relive requires a resolvable source). */
+  relivedFromStyleId?: number | null;
+  /** Hydrated mirror of the relived-from style when reads include it — the
+   *  resolved source's CURRENT code/name (preferred over the raw `oldStyleId`
+   *  snapshot for display + linking). */
+  relivedFromStyle?: {
+    id: number;
+    styleId: string | null;
+    workingName: string | null;
+  } | null;
 
   // Sampling state
   samplingStatus: string | null;

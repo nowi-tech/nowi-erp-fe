@@ -1156,9 +1156,33 @@ export default function StylesInFlightTable({
         detail = byLifecycle[row.lifecycle] ?? label;
       }
 
+      // Out of stock — a restock-pending style sits in cataloguing (it was
+      // demoted from live). Note it in the hover detail regardless of branch.
+      if (row.outOfStock) {
+        const oos = t('dashboard.table.statusDetail.outOfStock', {
+          defaultValue: 'Out of stock — re-publish (EasyEcom) to restock.',
+        });
+        detail = detail ? (
+          <>
+            {detail}
+            <br />
+            {oos}
+          </>
+        ) : (
+          oos
+        );
+      }
+
       return (
         <HoverTip content={detail}>
-          <DotStatusPill label={label} tone={tone} />
+          <div className="flex items-center gap-1">
+            <DotStatusPill label={label} tone={tone} />
+            {row.outOfStock && (
+              <Badge variant="destructive" className="text-[9px] uppercase">
+                {t('dashboard.table.outOfStockBadge', { defaultValue: 'OOS' })}
+              </Badge>
+            )}
+          </div>
         </HoverTip>
       );
     },

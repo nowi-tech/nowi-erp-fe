@@ -104,6 +104,9 @@ export type CreateStyleRequest = Partial<
   basedOnStyleId?: number;
   /** …or by entering its minted style code (BE resolves to the id). */
   basedOnStyleCode?: string;
+  /** 3rd-party fork: the partner's own style code, stored verbatim as the
+   *  Style # (sent with source='third_party'; no NOWI minting). */
+  thirdPartyStyleId?: string;
 };
 
 export type UpdateStyleRequest = Partial<CreateStyleRequest>;
@@ -368,6 +371,27 @@ export async function setMarketplaceListing(
 ): Promise<Style> {
   const res = await apiClient.post<Style>(
     `/api/styles/${styleId}/actions/marketplace-listing`,
+    body,
+  );
+  return res.data;
+}
+
+/**
+ * Take a live style out of stock — the inverse of go-live. Demotes it back to
+ * the EasyEcom checkpoint (lifecycle → cataloguing, easyecom pending; its live
+ * listings revert to draft), so it must be re-published to sell again. One-way:
+ * the way back is the normal republish (`setEasyecomDone`). NOWI doesn't push
+ * to EasyEcom — the operator zeroes the inventory there by hand.
+ */
+export async function markOutOfStock(
+  styleId: number,
+  body: {
+    /** Reason for taking out of stock (recorded on the audit trail). */
+    reason?: string;
+  },
+): Promise<Style> {
+  const res = await apiClient.post<Style>(
+    `/api/styles/${styleId}/actions/out-of-stock`,
     body,
   );
   return res.data;

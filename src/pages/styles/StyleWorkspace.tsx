@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
-import { useLocation, useNavigate, useParams } from 'react-router-dom';
+import { Link, useLocation, useNavigate, useParams } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import {
   ArrowLeft,
@@ -10,6 +10,9 @@ import {
   CheckCircle2,
   ExternalLink,
   Link2,
+  PackageCheck,
+  PackageX,
+  Store,
 } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -43,6 +46,7 @@ import {
   startCataloguing,
   setMarketplaceListing,
   setEasyecomDone,
+  markOutOfStock,
   type SamplingStatus,
 } from '@/api/styles';
 import type {
@@ -167,6 +171,7 @@ const AUDIT_FIELD_LABELS: Record<string, string> = {
   styleId: 'Style #',
   familyCode: 'Colour family',
   basedOnStyleId: 'Based on',
+  oldStyleId: 'Relived from',
   reason: 'Reason',
 };
 
@@ -378,6 +383,9 @@ export default function StyleWorkspace() {
   // China Import is a simple single-approval flow — no sampling stage,
   // no Approval #2, no inspections. Sampling-only UI is hidden for it.
   const isChinaImport = style.source === 'china_import';
+  // 3rd-party finished goods — surface the source as a headline badge (like
+  // China Import) so it's obvious the Style # is a partner code, not minted.
+  const isThirdParty = style.source === 'third_party';
   // Approval #1 is APPROVE-gated on the BE (`@Post('approve')` → `@Roles(APPROVE)`),
   // so gate the button to approvers too — matching the dashboard's `canApprove`.
   // Without this a non-approver writer sees "Approve intake" and 403s on click.
@@ -485,6 +493,11 @@ export default function StyleWorkspace() {
     });
   }
 
+  // The lifecycle badge's label. The stage pill is suppressed when it would
+  // just repeat this (e.g. the `live` stage pill is literally "Live"), so the
+  // header never shows the same word twice.
+  const lifecycleLabel = t(`admin.styles.lifecycle.${style.lifecycle}`);
+
   // Section card chrome — Stitch's "surface card with header strip" look,
   // rendered in the app's tokens (surface / border / radius), not the
   // Stitch navy literals.
@@ -552,6 +565,34 @@ export default function StyleWorkspace() {
               </span>
             }
           />
+          {/* Relive provenance — the OLD style code this design was re-released
+              from. Links to the source when it resolved to an in-system Style
+              (relivedFromStyleId set); otherwise shown as a bare reference with
+              a quiet "not in system" note. Only rendered for relived styles. */}
+          {style.oldStyleId && (
+            <SpecRow
+              label="Relived from"
+              value={
+                style.relivedFromStyleId ? (
+                  // oldStyleId is the matched Style #, so it resolves directly
+                  // via the workspace's id-or-code route.
+                  <Link
+                    to={`/styles/${style.oldStyleId}`}
+                    className="text-[var(--color-primary)] hover:underline"
+                  >
+                    {style.oldStyleId}
+                  </Link>
+                ) : (
+                  <span className="inline-flex items-center gap-2">
+                    {style.oldStyleId}
+                    <span className="font-sans text-[11px] text-[var(--color-muted-foreground)]">
+                      not in system
+                    </span>
+                  </span>
+                )
+              }
+            />
+          )}
           {/* Sampling layout carries the sample-fabric requirement; the
               production layout drops it (mock has neither sampling row). */}
           {!isProductionLayout &&
@@ -718,6 +759,10 @@ export default function StyleWorkspace() {
           setMarketplaceListing(style.id, { channel, listed: false, reason }),
         )
       }
+      outOfStock={style.outOfStock}
+      onMarkOutOfStock={(reason) =>
+        doAction('out-of-stock', () => markOutOfStock(style.id, { reason }))
+      }
     />
   ) : null;
 
@@ -742,12 +787,16 @@ export default function StyleWorkspace() {
             {/* For China Import styles the source IS the story — surface it.
                 For sampling styles the NOWI prefix already implies source,
                 so the source chip is redundant and we omit it. */}
-            {isChinaImport && <Badge variant="stitch">{sourceLabel}</Badge>}
+            {(isChinaImport || isThirdParty) && (
+              <Badge variant="stitch">{sourceLabel}</Badge>
+            )}
             <Badge variant={isProductionLayout ? 'ready' : 'secondary'}>
-              {t(`admin.styles.lifecycle.${style.lifecycle}`)}
+              {lifecycleLabel}
             </Badge>
-            {/* Stage pill — names the current workflow stage. */}
-            {!isChinaImport && stagePill && (
+            {/* Stage pill — the finer workflow step within the lifecycle.
+                Hidden when it would just repeat the lifecycle label (the `live`
+                stage pill is "Live") so the header never shows the same twice. */}
+            {!isChinaImport && stagePill && stagePill !== lifecycleLabel && (
               <Badge variant="outline">{stagePill}</Badge>
             )}
           </div>
@@ -1130,6 +1179,8 @@ function ChannelsCard({
   easyecomDone,
   onSetEasyecom,
   onTakeOffline,
+  outOfStock,
+  onMarkOutOfStock,
 }: {
   style: Style;
   cardClasses: string;
@@ -1138,6 +1189,8 @@ function ChannelsCard({
   easyecomDone: boolean;
   onSetEasyecom: (done: boolean) => void;
   onTakeOffline: (channel: ChannelName, reason: string) => void;
+  outOfStock: boolean;
+  onMarkOutOfStock: (reason: string) => void;
 }) {
   const { t } = useTranslation();
   const listings = (style.channelListings ?? []).filter(
@@ -1157,6 +1210,12 @@ function ChannelsCard({
     null,
   );
   const [offlineReason, setOfflineReason] = useState('');
+  // Take-out-of-stock dialog state. One-way: confirming demotes the live style
+  // back to the EasyEcom checkpoint (its live listings revert to draft) to be
+  // re-published — that republish is the way back to stock, not a revive here.
+  // The dialog captures an optional reason.
+  const [stockDialogOpen, setStockDialogOpen] = useState(false);
+  const [stockReason, setStockReason] = useState('');
   return (
     <section className={cardClasses}>
       <CardHeader
@@ -1187,6 +1246,38 @@ function ChannelsCard({
         }
       />
       <div className="p-5">
+        {/* Restock-pending banner — this style is back in cataloguing because
+            it was taken out of stock. Re-publishing it (the EasyEcom checkpoint
+            below) re-promotes its prepared listings and restocks it. */}
+        {style.lifecycle === 'cataloguing' && outOfStock && (
+          <div className="mb-4 flex items-start gap-2.5 rounded-[var(--radius-sm)] border border-red-200 bg-red-50 px-3 py-2.5">
+            <PackageX
+              size={18}
+              aria-hidden
+              className="mt-0.5 shrink-0 text-red-600"
+            />
+            <div className="min-w-0">
+              <div className="flex items-center gap-2">
+                <p className="text-sm font-medium">
+                  {t('admin.styles.workspace.stockTitle', {
+                    defaultValue: 'Stock',
+                  })}
+                </p>
+                <Badge variant="destructive" className="text-[10px]">
+                  {t('admin.styles.workspace.outOfStock', {
+                    defaultValue: 'Out of stock',
+                  })}
+                </Badge>
+              </div>
+              <p className="mt-0.5 text-xs text-[var(--color-muted-foreground)]">
+                {t('admin.styles.workspace.outOfStockBanner', {
+                  defaultValue:
+                    'Taken out of stock — re-publish (mark EasyEcom done) to restock and go live again.',
+                })}
+              </p>
+            </div>
+          </div>
+        )}
         {/* EasyEcom checkpoint — the go-live trigger. Ticking it auto-promotes
             the prepared (listed) channels to live; it's disabled until at least
             one channel is listed with a link (see easyecomBlocked).
@@ -1256,6 +1347,56 @@ function ChannelsCard({
             )}
           </div>
         )}
+        {/* Stock — a live style is buyable. Taking it out of stock is the
+            INVERSE of go-live: it returns to the EasyEcom checkpoint to be
+            re-published (one-way; republishing restocks it). Editable by
+            cataloguers. */}
+        {style.lifecycle === 'live' && (
+          <div className="mb-4 flex items-start justify-between gap-3 rounded-[var(--radius-sm)] border border-[var(--color-border)] px-3 py-2.5">
+            <div className="flex min-w-0 items-start gap-2.5">
+              <PackageCheck
+                size={18}
+                aria-hidden
+                className="mt-0.5 shrink-0 text-emerald-600"
+              />
+              <div className="min-w-0">
+                <div className="flex items-center gap-2">
+                  <p className="text-sm font-medium">
+                    {t('admin.styles.workspace.stockTitle', {
+                      defaultValue: 'Stock',
+                    })}
+                  </p>
+                  <Badge variant="success" className="text-[10px]">
+                    {t('admin.styles.workspace.inStock', {
+                      defaultValue: 'In stock',
+                    })}
+                  </Badge>
+                </div>
+                <p className="mt-0.5 text-xs text-[var(--color-muted-foreground)]">
+                  {t('admin.styles.workspace.outOfStockHint', {
+                    defaultValue:
+                      'Taking it out of stock returns it to the EasyEcom checkpoint to re-publish. Zero its EasyEcom inventory by hand.',
+                  })}
+                </p>
+              </div>
+            </div>
+            {canManage && (
+              <Button
+                size="sm"
+                variant="destructive"
+                className="shrink-0"
+                onClick={() => {
+                  setStockReason('');
+                  setStockDialogOpen(true);
+                }}
+              >
+                {t('admin.styles.workspace.markOutOfStock', {
+                  defaultValue: 'Mark out of stock',
+                })}
+              </Button>
+            )}
+          </div>
+        )}
         {listings.length === 0 ? (
           <p className="text-sm text-[var(--color-muted-foreground)]">
             {t('admin.styles.workspace.channelsNone', {
@@ -1268,62 +1409,85 @@ function ChannelsCard({
             {listings.map((l) => (
               <li
                 key={l.id}
-                className="flex items-center justify-between gap-3 rounded-[var(--radius-sm)] border border-[var(--color-border)] px-3 py-2"
+                className="flex items-start justify-between gap-3 rounded-[var(--radius-sm)] border border-[var(--color-border)] px-3 py-2.5"
               >
-                <div className="flex items-center gap-2 min-w-0">
-                  <span className="text-sm font-medium">
-                    {t(`admin.styles.channel.${l.channel}` as const, {
-                      defaultValue: l.channel,
-                    })}
-                  </span>
-                  <Badge variant={stateBadge(l.state)} className="text-[10px]">
-                    {t(`admin.styles.channel.state.${l.state}` as const, {
-                      defaultValue: l.state,
-                    })}
-                  </Badge>
-                  {/* Per-channel MRP — edited via the "Add listings" dialog. */}
-                  {l.mrp != null && (
-                    <span className="text-xs tabular-nums text-[var(--color-muted-foreground)]">
-                      {formatInr(l.mrp)}
-                    </span>
-                  )}
+                <div className="flex min-w-0 items-start gap-2.5">
+                  <Store
+                    size={18}
+                    aria-hidden
+                    className={cn(
+                      'mt-0.5 shrink-0',
+                      l.state === 'live'
+                        ? 'text-emerald-600'
+                        : l.state === 'draft'
+                          ? 'text-amber-600'
+                          : 'text-[var(--color-muted-foreground)]',
+                    )}
+                  />
+                  <div className="min-w-0">
+                    <div className="flex items-center gap-2">
+                      <span className="text-sm font-medium">
+                        {t(`admin.styles.channel.${l.channel}` as const, {
+                          defaultValue: l.channel,
+                        })}
+                      </span>
+                      <Badge
+                        variant={stateBadge(l.state)}
+                        className="text-[10px]"
+                      >
+                        {t(`admin.styles.channel.state.${l.state}` as const, {
+                          defaultValue: l.state,
+                        })}
+                      </Badge>
+                      {/* Per-channel MRP — edited via the "Add listings" dialog. */}
+                      {l.mrp != null && (
+                        <span className="text-xs tabular-nums text-[var(--color-muted-foreground)]">
+                          {formatInr(l.mrp)}
+                        </span>
+                      )}
+                    </div>
+                    {/* Secondary line — mirrors the Stock row's hint slot. */}
+                    <div className="mt-0.5">
+                      {l.listingUrl ? (
+                        <a
+                          href={l.listingUrl}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="inline-flex items-center gap-1 text-xs text-[var(--color-primary)] hover:underline"
+                        >
+                          {t('admin.styles.workspace.viewListing', {
+                            defaultValue: 'View listing',
+                          })}
+                          <ExternalLink size={12} aria-hidden />
+                        </a>
+                      ) : (
+                        <span className="text-xs text-[var(--color-muted-foreground)]">
+                          {t('admin.styles.workspace.noListingUrl', {
+                            defaultValue: 'No URL',
+                          })}
+                        </span>
+                      )}
+                    </div>
+                  </div>
                 </div>
-                <div className="flex items-center gap-3 shrink-0">
-                  {l.listingUrl ? (
-                    <a
-                      href={l.listingUrl}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="inline-flex items-center gap-1 text-xs text-[var(--color-primary)] hover:underline"
-                    >
-                      {t('admin.styles.workspace.viewListing', {
-                        defaultValue: 'View listing',
-                      })}
-                      <ExternalLink size={12} aria-hidden />
-                    </a>
-                  ) : (
-                    <span className="text-xs text-[var(--color-muted-foreground)]">
-                      {t('admin.styles.workspace.noListingUrl', {
-                        defaultValue: 'No URL',
-                      })}
-                    </span>
-                  )}
-                  {/* Take-offline — only for live channels, write-gated. */}
-                  {canManage && l.state === 'live' && (
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setOfflineReason('');
-                        setOfflineChannel(l.channel);
-                      }}
-                      className="text-xs text-[var(--color-destructive)] hover:underline"
-                    >
-                      {t('admin.styles.workspace.takeOffline', {
-                        defaultValue: 'Take offline',
-                      })}
-                    </button>
-                  )}
-                </div>
+                {/* Take-offline — only for live channels, write-gated. A button
+                    (not a text link) so it reads as the same design family as
+                    the Stock row's action. */}
+                {canManage && l.state === 'live' && (
+                  <Button
+                    size="sm"
+                    variant="destructive"
+                    className="shrink-0"
+                    onClick={() => {
+                      setOfflineReason('');
+                      setOfflineChannel(l.channel);
+                    }}
+                  >
+                    {t('admin.styles.workspace.takeOffline', {
+                      defaultValue: 'Take offline',
+                    })}
+                  </Button>
+                )}
               </li>
             ))}
           </ul>
@@ -1378,6 +1542,55 @@ function ChannelsCard({
         <Textarea
           value={offlineReason}
           onChange={(e) => setOfflineReason(e.target.value)}
+        />
+      </Dialog>
+
+      {/* Take-out-of-stock dialog. One-way: confirming demotes the live style
+          back to the EasyEcom checkpoint to be re-published. Optional reason. */}
+      <Dialog
+        open={stockDialogOpen}
+        onClose={() => setStockDialogOpen(false)}
+        title={t('admin.styles.workspace.outOfStockTitle', {
+          defaultValue: 'Mark out of stock',
+        })}
+        footer={
+          <>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setStockDialogOpen(false)}
+            >
+              {t('common.cancel', { defaultValue: 'Cancel' })}
+            </Button>
+            <Button
+              size="sm"
+              variant="destructive"
+              onClick={() => {
+                onMarkOutOfStock(stockReason.trim());
+                setStockDialogOpen(false);
+              }}
+            >
+              {t('admin.styles.workspace.markOutOfStock', {
+                defaultValue: 'Mark out of stock',
+              })}
+            </Button>
+          </>
+        }
+      >
+        <p className="mb-3 text-sm text-[var(--color-muted-foreground)]">
+          {t('admin.styles.workspace.outOfStockIntro', {
+            defaultValue:
+              'Returns the style to the EasyEcom checkpoint (its live listings revert to prepared) — re-publish to sell again. Zero its inventory in EasyEcom yourself; NOWI only records the state.',
+          })}
+        </p>
+        <label className="mb-1 block text-xs text-[var(--color-muted-foreground)]">
+          {t('admin.styles.workspace.outOfStockReason', {
+            defaultValue: 'Reason (optional)',
+          })}
+        </label>
+        <Textarea
+          value={stockReason}
+          onChange={(e) => setStockReason(e.target.value)}
         />
       </Dialog>
     </section>
