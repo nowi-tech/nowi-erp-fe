@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
-import { useLocation, useNavigate, useParams } from 'react-router-dom';
+import { Link, useLocation, useNavigate, useParams } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import {
   ArrowLeft,
@@ -171,6 +171,7 @@ const AUDIT_FIELD_LABELS: Record<string, string> = {
   styleId: 'Style #',
   familyCode: 'Colour family',
   basedOnStyleId: 'Based on',
+  oldStyleId: 'Relived from',
   reason: 'Reason',
 };
 
@@ -561,6 +562,34 @@ export default function StyleWorkspace() {
               </span>
             }
           />
+          {/* Relive provenance — the OLD style code this design was re-released
+              from. Links to the source when it resolved to an in-system Style
+              (relivedFromStyleId set); otherwise shown as a bare reference with
+              a quiet "not in system" note. Only rendered for relived styles. */}
+          {style.oldStyleId && (
+            <SpecRow
+              label="Relived from"
+              value={
+                style.relivedFromStyleId ? (
+                  // oldStyleId is the matched Style #, so it resolves directly
+                  // via the workspace's id-or-code route.
+                  <Link
+                    to={`/styles/${style.oldStyleId}`}
+                    className="text-[var(--color-primary)] hover:underline"
+                  >
+                    {style.oldStyleId}
+                  </Link>
+                ) : (
+                  <span className="inline-flex items-center gap-2">
+                    {style.oldStyleId}
+                    <span className="font-sans text-[11px] text-[var(--color-muted-foreground)]">
+                      not in system
+                    </span>
+                  </span>
+                )
+              }
+            />
+          )}
           {/* Sampling layout carries the sample-fabric requirement; the
               production layout drops it (mock has neither sampling row). */}
           {!isProductionLayout &&

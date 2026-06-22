@@ -11,6 +11,7 @@ import { useTranslation } from 'react-i18next';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
+import { Select } from '@/components/ui/select';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Combobox, type ComboboxOption } from '@/components/ui/combobox';
 
@@ -53,10 +54,15 @@ import type {
  *                   variant (skips sampling, inherits the family).
  *   - `based_on`  — a *different* design that reused an existing approved
  *                   sample to skip sampling → carries `basedOnStyleId`.
+ *   - `relive`    — re-releasing an OLD design → carries the typed old code
+ *                   in `oldStyleId` (resolved to `relivedFromStyleId` when it
+ *                   matches an in-system Style). Skips sampling like based-on,
+ *                   but — unlike based-on — the old code may NOT be in the
+ *                   system (legacy codes), so a miss is fine, not an error.
  *
  * The fork only exists in create mode; edit never re-forks a style.
  */
-export type SubmissionForkMode = 'new' | 'colour' | 'based_on';
+export type SubmissionForkMode = 'new' | 'colour' | 'based_on' | 'relive';
 
 /**
  * Shared intake / edit form for the Product Development module.
@@ -266,56 +272,6 @@ function buildInitialForm(style: Style | null | undefined): FormState {
     remark: style.remark ?? '',
     samplingTimeline: timeline,
   };
-}
-
-/** One selectable radio-card in the submission fork (New / Colour / Based-on). */
-function ForkCard({
-  active,
-  title,
-  description,
-  onSelect,
-}: {
-  active: boolean;
-  title: string;
-  description: string;
-  onSelect: () => void;
-}) {
-  return (
-    <button
-      type="button"
-      role="radio"
-      aria-checked={active}
-      onClick={onSelect}
-      className={cn(
-        'flex items-start gap-3 rounded-[var(--radius-md)] border p-3.5 text-left transition-colors',
-        active
-          ? 'border-[var(--color-primary)] bg-[var(--color-primary)]/5 shadow-sm'
-          : 'border-[var(--color-border)] bg-[var(--color-surface)] hover:border-[var(--color-primary)]/40',
-      )}
-    >
-      <span
-        aria-hidden
-        className={cn(
-          'mt-0.5 flex h-4 w-4 shrink-0 items-center justify-center rounded-full border',
-          active
-            ? 'border-[var(--color-primary)]'
-            : 'border-[var(--color-input)]',
-        )}
-      >
-        {active && (
-          <span className="h-2 w-2 rounded-full bg-[var(--color-primary)]" />
-        )}
-      </span>
-      <span className="min-w-0">
-        <span className="block text-[14px] font-medium text-[var(--color-foreground)]">
-          {title}
-        </span>
-        <span className="mt-0.5 block text-[12px] text-[var(--color-muted-foreground)]">
-          {description}
-        </span>
-      </span>
-    </button>
-  );
 }
 
 /** Sentinel id for the synthetic "typed style code" option — never
@@ -729,6 +685,16 @@ const StyleIntakeForm = forwardRef<StyleIntakeFormHandle, StyleIntakeFormProps>(
         }
       }
 
+      // Relive: send the OLD code as free text. The BE stores it verbatim and
+      // resolves relivedFromStyleId only when it matches. When the user picked
+      // an in-system row, prefer its minted code; otherwise the typed code.
+      if (showFork && forkMode === 'relive' && forkTarget) {
+        samplingBody.oldStyleId = forkTarget.style
+          ? (forkTarget.style.styleId ??
+            `D-${forkTarget.style.draftNo ?? forkTarget.style.id}`)
+          : forkTarget.code;
+      }
+
       return samplingBody;
     };
 
@@ -796,29 +762,37 @@ const StyleIntakeForm = forwardRef<StyleIntakeFormHandle, StyleIntakeFormProps>(
               title={t('admin.styles.intake.fork.title')}
               subtitle={t('admin.styles.intake.fork.subtitle')}
             >
-              <div
-                role="radiogroup"
-                aria-label={t('admin.styles.intake.fork.title')}
-                className="grid grid-cols-1 gap-3 sm:grid-cols-3"
-              >
-                <ForkCard
-                  active={forkMode === 'new'}
-                  title={t('admin.styles.intake.fork.newTitle')}
-                  description={t('admin.styles.intake.fork.newDesc')}
-                  onSelect={() => onForkModeChange('new')}
-                />
-                <ForkCard
-                  active={forkMode === 'colour'}
-                  title={t('admin.styles.intake.fork.colourTitle')}
-                  description={t('admin.styles.intake.fork.colourDesc')}
-                  onSelect={() => onForkModeChange('colour')}
-                />
-                <ForkCard
-                  active={forkMode === 'based_on'}
-                  title={t('admin.styles.intake.fork.basedOnTitle')}
-                  description={t('admin.styles.intake.fork.basedOnDesc')}
-                  onSelect={() => onForkModeChange('based_on')}
-                />
+              <div className="max-w-md">
+                <Select
+                  aria-label={t('admin.styles.intake.fork.title')}
+                  value={forkMode}
+                  onChange={(e) =>
+                    onForkModeChange(e.target.value as SubmissionForkMode)
+                  }
+                >
+                  <option value="new">
+                    {t('admin.styles.intake.fork.newTitle')}
+                  </option>
+                  <option value="colour">
+                    {t('admin.styles.intake.fork.colourTitle')}
+                  </option>
+                  <option value="based_on">
+                    {t('admin.styles.intake.fork.basedOnTitle')}
+                  </option>
+                  <option value="relive">
+                    {t('admin.styles.intake.fork.reliveTitle')}
+                  </option>
+                </Select>
+                {/* Describe the chosen path — the dropdown only shows titles. */}
+                <p className="mt-1.5 text-[12px] text-[var(--color-muted-foreground)]">
+                  {forkMode === 'new'
+                    ? t('admin.styles.intake.fork.newDesc')
+                    : forkMode === 'colour'
+                      ? t('admin.styles.intake.fork.colourDesc')
+                      : forkMode === 'based_on'
+                        ? t('admin.styles.intake.fork.basedOnDesc')
+                        : t('admin.styles.intake.fork.reliveDesc')}
+                </p>
               </div>
 
               {forkMode !== 'new' && (
@@ -826,12 +800,17 @@ const StyleIntakeForm = forwardRef<StyleIntakeFormHandle, StyleIntakeFormProps>(
                   <Label>
                     {forkMode === 'colour'
                       ? t('admin.styles.intake.fork.colourPickLabel')
-                      : t('admin.styles.intake.fork.basedOnPickLabel')}
+                      : forkMode === 'relive'
+                        ? t('admin.styles.intake.fork.relivePickLabel')
+                        : t('admin.styles.intake.fork.basedOnPickLabel')}
                   </Label>
                   <StyleRefPicker
                     value={forkTarget}
                     onChange={setForkTarget}
-                    allowCode={forkMode === 'based_on'}
+                    // Relive, like based-on, accepts a free-typed code — the
+                    // old style may predate the system. Colour must resolve to
+                    // a real row (the spawn endpoint addresses it by id).
+                    allowCode={forkMode === 'based_on' || forkMode === 'relive'}
                     placeholder={t('admin.styles.intake.fork.pickPlaceholder')}
                     emptyLabel={t('admin.styles.intake.fork.pickEmpty')}
                     addCodeLabel={t('admin.styles.intake.fork.addCode')}
@@ -839,7 +818,9 @@ const StyleIntakeForm = forwardRef<StyleIntakeFormHandle, StyleIntakeFormProps>(
                   <p className="mt-1.5 text-[12px] text-[var(--color-muted-foreground)]">
                     {forkMode === 'colour'
                       ? t('admin.styles.intake.fork.colourHelp')
-                      : t('admin.styles.intake.fork.basedOnHelp')}
+                      : forkMode === 'relive'
+                        ? t('admin.styles.intake.fork.reliveHelp')
+                        : t('admin.styles.intake.fork.basedOnHelp')}
                   </p>
                 </div>
               )}

@@ -532,6 +532,16 @@ export interface Style {
   /** Hydrated mirror of the based-on style when reads include it. */
   basedOnStyle?: { id: number; styleId: string | null } | null;
 
+  /** "Relive" provenance — the OLD style code typed at intake when
+   *  re-releasing a past design. ALWAYS set on a relive (uppercased), even
+   *  when it doesn't match an in-system Style. Searchable in the workspace
+   *  registry; shown as the "Relived from" row on the workspace. */
+  oldStyleId?: string | null;
+  /** Self-FK to the in-system Style this was relived from — set only when
+   *  `oldStyleId` resolved to a Style #. Truthy ⇒ render the old code as a
+   *  link (it equals the resolved Style #); null ⇒ a bare legacy reference. */
+  relivedFromStyleId?: number | null;
+
   // Sampling state
   samplingStatus: string | null;
   samplingTimeline: string | null;
