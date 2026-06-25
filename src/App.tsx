@@ -24,6 +24,7 @@ const SkuDetail = lazy(() => import('./pages/admin/SkuDetail'));
 const Dispatches = lazy(() => import('./pages/admin/Dispatches'));
 const DispatchDetail = lazy(() => import('./pages/admin/DispatchDetail'));
 const Warehouses = lazy(() => import('./pages/admin/Warehouses'));
+const ProductionKpis = lazy(() => import('./pages/admin/ProductionKpis'));
 const StitchingHome = lazy(() => import('./pages/stitching/StitchingHome'));
 const StitchingReceiveLot = lazy(
   () => import('./pages/stitching/StitchingReceiveLot'),
@@ -214,6 +215,16 @@ function App() {
                 element={
                   <S>
                     <Locator />
+                  </S>
+                }
+              />
+              {/* Production KPI dashboard (Google Sheet). Inherits the /admin
+                  parent guard: admin / viewer / production_lead. */}
+              <Route
+                path="production-kpis"
+                element={
+                  <S>
+                    <ProductionKpis />
                   </S>
                 }
               />
