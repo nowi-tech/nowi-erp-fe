@@ -5,6 +5,7 @@ import {
   LayoutDashboard,
   Users,
   Search,
+  BarChart3,
   LogOut,
   FlaskConical,
   Inbox,
@@ -88,6 +89,7 @@ const NAV_SECTIONS: NavSection[] = [
       { to: '/styles', end: true, icon: <Shirt size={18} />, labelKey: 'admin.nav.styles', roles: [...PD_ROLES, 'cataloguer'] },
       // Production = the renamed Locator. Dispatch lives inside it as a tab.
       { to: '/admin/locator', icon: <Search size={18} />, labelKey: 'admin.nav.production', roles: ['admin', 'viewer', 'production_lead'] },
+      { to: '/admin/production-kpis', icon: <BarChart3 size={18} />, labelKey: 'admin.nav.productionKpis', roles: ['admin', 'viewer', 'production_lead'] },
     ],
   },
   {
