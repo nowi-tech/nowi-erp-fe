@@ -352,7 +352,8 @@ export function StyleRefLink({
         e.stopPropagation();
         onClick?.();
       }}
-      className="text-left font-mono text-[13px] text-[var(--color-primary)] hover:underline"
+      title={formatStyleRef(style)}
+      className="block max-w-full truncate text-left font-mono text-[13px] text-[var(--color-primary)] hover:underline"
     >
       {formatStyleRef(style)}
     </button>
