@@ -386,6 +386,20 @@ export default function StyleWorkspace() {
   // 3rd-party finished goods — surface the source as a headline badge (like
   // China Import) so it's obvious the Style # is a partner code, not minted.
   const isThirdParty = style.source === 'third_party';
+  // Imported / partner *finished goods* — a single-approval flow with no
+  // sampling phase AND no colour family of their own (china = NW-minted,
+  // 3rd-party = verbatim partner code). They can't fan out colours.
+  const isFinishedGoodsSource = isChinaImport || isThirdParty;
+  // Whether this style passes through the sampling phase at all. Mirrors the BE
+  // `skipSampling` predicate (styles-actions.service): finished-goods sources,
+  // colour variants (familyCode), based-on rows, and relives (oldStyleId) all
+  // require Approval #1 but then land straight at sample_approved — no
+  // in_sampling stage, so no stepper band and no Approval #2.
+  const skipsSampling =
+    isFinishedGoodsSource ||
+    style.familyCode != null ||
+    style.basedOnStyleId != null ||
+    style.oldStyleId != null;
   // Approval #1 is APPROVE-gated on the BE (`@Post('approve')` → `@Roles(APPROVE)`),
   // so gate the button to approvers too — matching the dashboard's `canApprove`.
   // Without this a non-approver writer sees "Approve intake" and 403s on click.
@@ -395,17 +409,18 @@ export default function StyleWorkspace() {
   // Sample sign-off (Approval #2) is approver-only — the BE endpoint is
   // APPROVE-gated, so don't show the button to writers who would 403.
   const canSampleApprove =
-    !isChinaImport &&
+    !skipsSampling &&
     style.lifecycle === 'in_sampling' &&
     roles.some((r) => APPROVER_ROLES.includes(r));
 
   // Add-Colour: only once the family has an approved sample to inherit
-  // (POST_SAMPLING), never for china_import, and only for colour-WRITE
+  // (POST_SAMPLING), never for imported/partner finished goods (china_import /
+  // 3rd-party have no NOWI colour family to extend), and only for colour-WRITE
   // roles. A colour add is a SUBMISSION — the spawned draft re-enters the
   // Inbox for Approval #1 (NOT an inline approval here).
   const canAddColour =
     POST_SAMPLING.has(style.lifecycle) &&
-    !isChinaImport &&
+    !isFinishedGoodsSource &&
     roles.some((r) => COLOUR_WRITE.includes(r));
 
   // Whether the user may edit this style's fields at all — mirrors the BE
@@ -459,10 +474,11 @@ export default function StyleWorkspace() {
 
   // Layout selector. The sampling layout (stepper band + 7/5 grid) covers
   // draft / in_sampling; the production layout (colour strip + 2-up grid)
-  // covers sample_approved and beyond. China Import never samples — it
-  // rides the sampling shell (no band) with its approval-record card.
+  // covers sample_approved and beyond. China Import / 3rd-party never sample
+  // — they ride the sampling shell (no band) with their approval-record card,
+  // including while still draft.
   const isProductionLayout = POST_SAMPLING.has(style.lifecycle);
-  const showSamplingBand = !isChinaImport && !isProductionLayout;
+  const showSamplingBand = !skipsSampling && !isProductionLayout;
 
   // The second header pill names the current workflow stage. In sampling
   // it tracks the live sampling step ("Fabric sourcing"); in the go-to-market
