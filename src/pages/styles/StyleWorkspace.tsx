@@ -84,9 +84,11 @@ const POST_SAMPLING = new Set<StyleLifecycle>([
   'dispatched',
 ]);
 
-// Roles allowed to WRITE a new colour (spawn a sibling submission) —
-// mirrors the BE variants write set via the shared PD_WRITE_ROLES.
-const COLOUR_WRITE = PD_WRITE_ROLES;
+// Roles allowed to add a new colour (spawn a sibling submission). Adding a
+// colour is a CREATE-flavoured action — colourways are finished-goods /
+// marketplace work — so it admits the narrow `cataloguer` on top of the PD
+// editors. Mirrors the BE colour-variants @Roles (CATALOGUER_WRITE_ROLES).
+const COLOUR_WRITE = CATALOGUER_WRITE_ROLES;
 
 // Gender may arrive as a code (W/M/U) or long form (women/men/unisex)
 // depending on the row — render the human label either way so the header /
@@ -1842,9 +1844,12 @@ function ColourFamilyCard({
 }) {
   const { t } = useTranslation();
   const navigate = useNavigate();
-  // Siblings = every family member that isn't the style we're viewing.
-  const siblings = family.filter((f) => f.id !== style.id);
   const hasFamily = family.length > 1;
+  // Render the WHOLE family in its stable order (the BE colourGroup order),
+  // highlighting the style we're viewing IN PLACE — selecting a sibling only
+  // navigates + re-highlights, so a colour never jumps to the front. Falls
+  // back to the lone current style when it has no family yet (chip still shows).
+  const members = family.length > 0 ? family : [style];
   // Hide entirely when there's no family AND no add affordance.
   if (!hasFamily && !canAddColour) return null;
   return (
@@ -1869,35 +1874,40 @@ function ColourFamilyCard({
         </p>
       </div>
       <div className="flex flex-wrap items-center gap-3">
-        {/* Current style — the highlighted "this style" chip. */}
-        <span
-          className="inline-flex items-center gap-2 rounded-full border border-[var(--color-primary)] bg-[var(--color-primary-soft)] px-3 py-1.5 text-xs text-[var(--color-primary)]"
-          title={style.styleId ?? undefined}
-        >
-          <ColourSwatch colour={style.primaryColour} />
-          <span className="font-mono">
-            {style.primaryColour ?? '—'}
-            {' · '}
-            {t('admin.styles.workspace.colourFamilyThisStyle', {
-              defaultValue: 'this style',
-            })}
-          </span>
-        </span>
-        {siblings.map((v) => (
-          <button
-            key={v.id}
-            type="button"
-            onClick={() => navigate(`/styles/${v.styleId ?? v.id}`)}
-            className="inline-flex items-center gap-2 rounded-full bg-[var(--color-surface)] border border-[var(--color-border)] px-3 py-1.5 text-xs text-[var(--color-foreground-2)] hover:bg-[var(--color-surface-2)] transition-colors"
-            title={v.styleId ?? undefined}
-          >
-            <ColourSwatch colour={v.primaryColour} />
-            <span className="font-mono">
-              {v.primaryColour ?? '—'}
-              {v.styleId ? ` → ${v.styleId}` : ''}
+        {members.map((v) =>
+          v.id === style.id ? (
+            // Current style — highlighted IN PLACE (kept in its family slot,
+            // never moved to the front).
+            <span
+              key={v.id}
+              className="inline-flex items-center gap-2 rounded-full border border-[var(--color-primary)] bg-[var(--color-primary-soft)] px-3 py-1.5 text-xs text-[var(--color-primary)]"
+              title={v.styleId ?? undefined}
+            >
+              <ColourSwatch colour={v.primaryColour} />
+              <span className="font-mono">
+                {v.primaryColour ?? '—'}
+                {' · '}
+                {t('admin.styles.workspace.colourFamilyThisStyle', {
+                  defaultValue: 'this style',
+                })}
+              </span>
             </span>
-          </button>
-        ))}
+          ) : (
+            <button
+              key={v.id}
+              type="button"
+              onClick={() => navigate(`/styles/${v.styleId ?? v.id}`)}
+              className="inline-flex items-center gap-2 rounded-full bg-[var(--color-surface)] border border-[var(--color-border)] px-3 py-1.5 text-xs text-[var(--color-foreground-2)] hover:bg-[var(--color-surface-2)] transition-colors"
+              title={v.styleId ?? undefined}
+            >
+              <ColourSwatch colour={v.primaryColour} />
+              <span className="font-mono">
+                {v.primaryColour ?? '—'}
+                {v.styleId ? ` → ${v.styleId}` : ''}
+              </span>
+            </button>
+          ),
+        )}
         {canAddColour && (
           <button
             type="button"
