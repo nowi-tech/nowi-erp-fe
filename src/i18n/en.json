@@ -975,6 +975,22 @@
         }
       }
     },
+    "productionKpis": {
+      "title": "Production KPIs",
+      "subtitle": "Floor output across Yesterday, the Last 7 days, and This month.",
+      "yesterday": "Yesterday",
+      "last7Days": "Last 7 days",
+      "thisMonth": "This month",
+      "asOf": "As of date",
+      "loading": "Loading…",
+      "live": "Live · synced",
+      "notConnected": "Not connected",
+      "notLive": "Sheet not connected yet — KPIs will appear once it’s reachable.",
+      "updated": "Updated",
+      "failed": "Couldn’t load production KPIs",
+      "failedHint": "The request failed. Check your connection and try again.",
+      "retry": "Retry"
+    },
     "locator": {
       "title": "Production",
       "exportXlsx": "Export to Excel",

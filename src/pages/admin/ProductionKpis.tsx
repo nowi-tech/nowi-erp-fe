@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Skeleton } from '@/components/ui/skeleton';
+import { todayISO } from '@/lib/date';
 import {
   getProductionKpis,
   type ProductionKpiCard,
@@ -161,19 +162,7 @@ function KpiCard({
   const unitSuffix = card.unit ? ` ${card.unit}` : '';
 
   return (
-    <div
-      style={{
-        background: '#ffffff',
-        border: '1px solid #ebedf0',
-        borderRadius: 16,
-        padding: '18px 18px 16px',
-        boxShadow:
-          '0 1px 2px rgba(16,24,40,0.04), 0 8px 24px -16px rgba(16,24,40,0.18)',
-        display: 'flex',
-        flexDirection: 'column',
-        fontFamily: SANS,
-      }}
-    >
+    <div style={{ ...CARD_SHELL, display: 'flex', flexDirection: 'column', fontFamily: SANS }}>
       {/* Header: accent square + label, trend chip */}
       <div
         style={{
@@ -233,7 +222,7 @@ function KpiCard({
             fontFeatureSettings: "'tnum' 1",
           }}
         >
-          {live ? fmt(card.yesterday) : '0'}
+          {live ? fmt(card.yesterday) : '—'}
         </span>
         {card.unit && (
           <span style={{ fontSize: 16, fontWeight: 600, color: '#9ca3af' }}>{card.unit}</span>
@@ -256,7 +245,7 @@ function KpiCard({
           <div
             style={{ fontFamily: DISPLAY, fontSize: 16, fontWeight: 600, color: '#1f2937', fontFeatureSettings: "'tnum' 1" }}
           >
-            {live ? `${fmt(card.last7Days)}${unitSuffix}` : `0${unitSuffix}`}
+            {live ? `${fmt(card.last7Days)}${unitSuffix}` : '—'}
           </div>
           <div
             style={{ fontSize: 10.5, fontWeight: 700, letterSpacing: '0.06em', textTransform: 'uppercase', color: '#9ca3af', marginTop: 4 }}
@@ -268,7 +257,7 @@ function KpiCard({
           <div
             style={{ fontFamily: DISPLAY, fontSize: 16, fontWeight: 600, color: '#1f2937', fontFeatureSettings: "'tnum' 1" }}
           >
-            {live ? `${fmt(card.thisMonth)}${unitSuffix}` : `0${unitSuffix}`}
+            {live ? `${fmt(card.thisMonth)}${unitSuffix}` : '—'}
           </div>
           <div
             style={{ fontSize: 10.5, fontWeight: 700, letterSpacing: '0.06em', textTransform: 'uppercase', color: '#9ca3af', marginTop: 4 }}
@@ -374,14 +363,6 @@ function ErrorPanel({ onRetry }: { onRetry: () => void }): React.ReactNode {
   );
 }
 
-/** Today as YYYY-MM-DD (local), for the date input's default + max. */
-function todayIso(): string {
-  const d = new Date();
-  const mm = String(d.getMonth() + 1).padStart(2, '0');
-  const dd = String(d.getDate()).padStart(2, '0');
-  return `${d.getFullYear()}-${mm}-${dd}`;
-}
-
 export default function ProductionKpis(): React.ReactNode {
   const { t } = useTranslation();
   const [data, setData] = useState<ProductionKpisResponse | null>(null);
@@ -391,7 +372,7 @@ export default function ProductionKpis(): React.ReactNode {
   const [asOf, setAsOf] = useState('');
   // Bumped by the error-state Retry button to re-run the fetch.
   const [tick, setTick] = useState(0);
-  const today = todayIso();
+  const today = todayISO();
 
   useEffect(() => {
     let cancelled = false;
@@ -558,12 +539,13 @@ export default function ProductionKpis(): React.ReactNode {
         </div>
       )}
 
-      {/* Cards: failure → error panel; loading / not-connected → skeletons;
-          otherwise the live KPI cards. We never render zeros as if they were real. */}
+      {/* Cards: failure → error panel; loading → shimmer skeletons; otherwise
+          the KPI cards (live values, or muted "—" when the sheet isn't connected
+          — never zeros, and never a perpetual shimmer once the BE has answered). */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 lg:gap-[18px]">
         {failed && !loading ? (
           <ErrorPanel onRetry={() => setTick((n) => n + 1)} />
-        ) : loading || !live || !data ? (
+        ) : loading || !data ? (
           Array.from({ length: 4 }).map((_, i) => <SkeletonCard key={i} />)
         ) : (
           data.cards.map((card, i) => (
