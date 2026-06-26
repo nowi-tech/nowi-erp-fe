@@ -387,8 +387,10 @@ export default function StyleWorkspace() {
   // China Import) so it's obvious the Style # is a partner code, not minted.
   const isThirdParty = style.source === 'third_party';
   // Imported / partner *finished goods* — a single-approval flow with no
-  // sampling phase AND no colour family of their own (china = NW-minted,
-  // 3rd-party = verbatim partner code). They can't fan out colours.
+  // sampling phase (china = NW-minted, 3rd-party = verbatim partner code).
+  // Used only for the sampling-skip below; colour fan-out is gated separately
+  // (3rd-party CAN fan out colours — each carries the partner's own code —
+  // China Import can't).
   const isFinishedGoodsSource = isChinaImport || isThirdParty;
   // Whether this style passes through the sampling phase at all. Mirrors the BE
   // `skipSampling` predicate (styles-actions.service): finished-goods sources,
@@ -414,13 +416,13 @@ export default function StyleWorkspace() {
     roles.some((r) => APPROVER_ROLES.includes(r));
 
   // Add-Colour: only once the family has an approved sample to inherit
-  // (POST_SAMPLING), never for imported/partner finished goods (china_import /
-  // 3rd-party have no NOWI colour family to extend), and only for colour-WRITE
-  // roles. A colour add is a SUBMISSION — the spawned draft re-enters the
-  // Inbox for Approval #1 (NOT an inline approval here).
+  // (POST_SAMPLING) and only for colour-WRITE roles. Excluded for China Import
+  // (no NOWI colour family to extend); 3rd-party IS allowed — its colour child
+  // carries the partner's own verbatim code (entered in the modal). A colour
+  // add is a SUBMISSION — the spawned draft re-enters the Inbox for Approval #1.
   const canAddColour =
     POST_SAMPLING.has(style.lifecycle) &&
-    !isFinishedGoodsSource &&
+    !isChinaImport &&
     roles.some((r) => COLOUR_WRITE.includes(r));
 
   // Whether the user may edit this style's fields at all — mirrors the BE

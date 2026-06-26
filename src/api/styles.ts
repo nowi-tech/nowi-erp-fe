@@ -229,6 +229,9 @@ export interface CreateColourVariantRequest {
   referenceLink?: string | null;
   referenceImages?: string[];
   referenceImageUrl?: string | null;
+  /** 3rd-party only: the partner's verbatim code for this colour (becomes the
+   *  child Style #). Required when the parent is a 3rd-party style. */
+  thirdPartyStyleId?: string;
 }
 
 /** Spawn a draft colour variant inheriting fabric/gender/category/CAD

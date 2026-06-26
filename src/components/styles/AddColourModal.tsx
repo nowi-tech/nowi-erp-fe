@@ -58,6 +58,11 @@ export default function AddColourModal({
   const [colour, setColour] = useState('');
   const [referenceLink, setReferenceLink] = useState('');
   const [referenceImages, setReferenceImages] = useState<string[]>([]);
+  // 3rd-party parents: the colour child carries the partner's OWN verbatim code
+  // (becomes its Style #), entered here instead of being NOWI-minted on
+  // approval. Required only for 3rd-party; unused for every other source.
+  const isThirdParty = parent.source === 'third_party';
+  const [thirdPartyCode, setThirdPartyCode] = useState('');
   const [saving, setSaving] = useState(false);
   const submitRef = useRef<HTMLButtonElement>(null);
 
@@ -109,6 +114,7 @@ export default function AddColourModal({
     setColour('');
     setReferenceLink('');
     setReferenceImages([]);
+    setThirdPartyCode('');
   };
 
   const submit = async () => {
@@ -133,6 +139,17 @@ export default function AddColourModal({
       );
       return;
     }
+    // 3rd-party child carries the partner's own code (becomes its Style #).
+    const code = thirdPartyCode.trim();
+    if (isThirdParty && !code) {
+      toast.show(
+        t('admin.styles.addColour.thirdPartyCodeRequired', {
+          defaultValue: 'Enter the partner style code for this colour.',
+        }),
+        'error',
+      );
+      return;
+    }
     setSaving(true);
     try {
       const created = await spawnColourVariant(parent.id, {
@@ -140,6 +157,7 @@ export default function AddColourModal({
         referenceLink: referenceLink.trim() || null,
         referenceImages:
           referenceImages.length > 0 ? referenceImages : undefined,
+        ...(isThirdParty ? { thirdPartyStyleId: code } : {}),
       });
       toast.show(
         t('admin.styles.addColour.createdToast', { colour: v }),
@@ -254,7 +272,12 @@ export default function AddColourModal({
       footer={
         <div className="flex items-center justify-between gap-3 w-full">
           <span className="min-w-0 truncate text-[11px] leading-snug text-[var(--color-muted-foreground)]">
-            {t('admin.styles.addColour.mintHint')}
+            {isThirdParty
+              ? t('admin.styles.addColour.thirdPartyMintHint', {
+                  defaultValue:
+                    'The partner code becomes this colour’s Style # — nothing is minted.',
+                })
+              : t('admin.styles.addColour.mintHint')}
           </span>
           <div className="flex shrink-0 gap-2">
             <Button
@@ -271,7 +294,11 @@ export default function AddColourModal({
             <Button
               ref={submitRef}
               size="sm"
-              disabled={saving || !colour.trim()}
+              disabled={
+                saving ||
+                !colour.trim() ||
+                (isThirdParty && !thirdPartyCode.trim())
+              }
               onClick={() => void submit()}
             >
               {saving
@@ -320,6 +347,31 @@ export default function AddColourModal({
               fabricColours={parent.fabric?.colours ?? []}
             />
           </div>
+
+          {/* 3rd-party: the partner's code for THIS colour becomes its Style #
+              (verbatim, no minting) so its SKUs match EasyEcom. */}
+          {isThirdParty && (
+            <div>
+              <Label required>
+                {t('admin.styles.addColour.thirdPartyCodeLabel', {
+                  defaultValue: 'Partner style code (this colour)',
+                })}
+              </Label>
+              <Input
+                value={thirdPartyCode}
+                onChange={(e) => setThirdPartyCode(e.target.value)}
+                placeholder={t('admin.styles.addColour.thirdPartyCodePh', {
+                  defaultValue: 'e.g. NOWIDRESS585-BLUE',
+                })}
+              />
+              <p className="mt-1 text-[12px] text-[var(--color-muted-foreground)]">
+                {t('admin.styles.addColour.thirdPartyCodeHelp', {
+                  defaultValue:
+                    "Stored verbatim as this colour's Style # (no minting), so its per-size SKUs match the partner's EasyEcom catalog.",
+                })}
+              </p>
+            </div>
+          )}
 
           <div>
             <Label>{t('admin.styles.addColour.refImagesLabel')}</Label>
