@@ -1366,11 +1366,47 @@ export default function StylesInFlightTable({
       ),
   };
 
-  // Default grammar (All · Needs attention · Draft): IMG · Style/Name ·
+  // Type — the style's SOURCE (Sampling / China Import / 3rd-party) so imports
+  // are identifiable at a glance. Imports get a highlighted chip; sampling is
+  // muted (it's the default). Source-defined, not the submit-fork.
+  const typeColumn: QueueColumn<DashboardStyleRow> = {
+    key: 'type',
+    header: t('dashboard.table.columns.type', { defaultValue: 'Type' }),
+    width: '104px',
+    cell: (row) => {
+      const isImport =
+        row.source === 'china_import' || row.source === 'third_party';
+      const label =
+        row.source === 'china_import'
+          ? t('dashboard.table.sourceType.chinaImport', {
+              defaultValue: 'China Import',
+            })
+          : row.source === 'third_party'
+            ? t('dashboard.table.sourceType.thirdParty', {
+                defaultValue: '3rd-party',
+              })
+            : row.source === 'legacy_floor_intake'
+              ? t('dashboard.table.sourceType.legacy', { defaultValue: 'Legacy' })
+              : t('dashboard.table.sourceType.sampling', {
+                  defaultValue: 'Sampling',
+                });
+      return (
+        <Badge
+          variant={isImport ? 'stitch' : 'secondary'}
+          className="text-[10px]"
+        >
+          {label}
+        </Badge>
+      );
+    },
+  };
+
+  // Default grammar (All · Needs attention · Draft): IMG · Style/Name · Type ·
   // Collection · Colour · Status · Metrics — same shared cells as every other tab.
   const defaultColumns: QueueColumn<DashboardStyleRow>[] = [
     imgColumn,
     styleNameColumn,
+    typeColumn,
     collectionColumn,
     colourColumn,
     statusColumn,
@@ -1469,6 +1505,7 @@ export default function StylesInFlightTable({
   const cataloguingColumns: QueueColumn<DashboardStyleRow>[] = [
     imgColumn,
     styleNameColumn,
+    typeColumn,
     collectionColumn,
     colourColumn,
     statusColumn,
@@ -1484,6 +1521,7 @@ export default function StylesInFlightTable({
   const liveColumns: QueueColumn<DashboardStyleRow>[] = [
     imgColumn,
     styleNameColumn,
+    typeColumn,
     collectionColumn,
     colourColumn,
     statusColumn,

@@ -406,7 +406,9 @@
           "new": "New design",
           "colourOf": "Colour of {{code}}",
           "basedOn": "Based on {{code}}",
-          "relive": "Relive of {{code}}"
+          "relive": "Relive of {{code}}",
+          "chinaImport": "China Import",
+          "thirdParty": "3rd-party"
         },
         "empty": "No styles. Click \"New design submission\" to create one.",
         "draftNo": "Draft #",

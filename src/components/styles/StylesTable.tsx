@@ -129,9 +129,21 @@ function lifecycleVariant(l: Style['lifecycle']) {
  *   • none                  → "New design"
  */
 function styleType(s: Style): {
-  kind: 'new' | 'colour' | 'based_on' | 'relive';
+  kind:
+    | 'new'
+    | 'colour'
+    | 'based_on'
+    | 'relive'
+    | 'china_import'
+    | 'third_party';
   ref: string | null;
 } {
+  // Source-defined imports take precedence — for these the submit-fork is
+  // meaningless (they don't sample/fork), so the Type column names what they
+  // ARE rather than showing a misleading "New design". (A 3rd-party colour
+  // child reads "3rd-party" too; its colour family shows in the workspace.)
+  if (s.source === 'china_import') return { kind: 'china_import', ref: null };
+  if (s.source === 'third_party') return { kind: 'third_party', ref: null };
   if (s.familyCode) return { kind: 'colour', ref: s.familyCode };
   if (s.basedOnStyleId != null)
     return { kind: 'based_on', ref: s.basedOnStyle?.styleId ?? null };
@@ -148,6 +160,22 @@ function styleType(s: Style): {
 function StyleTypePill({ style }: { style: Style }) {
   const { t } = useTranslation();
   const { kind, ref } = styleType(style);
+  if (kind === 'china_import') {
+    return (
+      <Badge variant="default" className="text-[10px]">
+        {t('admin.styles.table.type.chinaImport', {
+          defaultValue: 'China Import',
+        })}
+      </Badge>
+    );
+  }
+  if (kind === 'third_party') {
+    return (
+      <Badge variant="default" className="text-[10px]">
+        {t('admin.styles.table.type.thirdParty', { defaultValue: '3rd-party' })}
+      </Badge>
+    );
+  }
   if (kind === 'colour') {
     return (
       <Badge variant="stitch" className="text-[10px]" title={ref ?? undefined}>
