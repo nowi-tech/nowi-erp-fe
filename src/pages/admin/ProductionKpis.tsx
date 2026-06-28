@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Skeleton } from '@/components/ui/skeleton';
-import { todayISO } from '@/lib/date';
+import { localISO, todayISO } from '@/lib/date';
 import {
   getProductionKpis,
   type ProductionKpiCard,
@@ -151,11 +151,14 @@ function KpiCard({
   accent,
   live,
   showSpark,
+  yesterdayLabel,
 }: {
   card: ProductionKpiCard;
   accent: string;
   live: boolean;
   showSpark: boolean;
+  /** Label under the headline value — the date of the day it's from. */
+  yesterdayLabel: string;
 }): React.ReactNode {
   const { t } = useTranslation();
   const up = card.trendPct >= 0;
@@ -229,7 +232,7 @@ function KpiCard({
         )}
       </div>
       <div style={{ fontSize: 12, fontWeight: 600, color: '#9ca3af', marginTop: 5 }}>
-        {t('admin.productionKpis.yesterday', { defaultValue: 'Yesterday' })}
+        {yesterdayLabel}
       </div>
 
       {/* Sparkline */}
@@ -368,17 +371,27 @@ export default function ProductionKpis(): React.ReactNode {
   const [data, setData] = useState<ProductionKpisResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [failed, setFailed] = useState(false);
-  // '' = today; otherwise the chosen reference date (YYYY-MM-DD).
-  const [asOf, setAsOf] = useState('');
+  const today = todayISO();
+  // Calendar yesterday (local). Both the default reference day AND the label
+  // rule: today's row usually isn't entered yet, so the page opens on yesterday;
+  // and the headline reads the word "Yesterday" only when the data is actually
+  // from yesterday — if it's older (holiday/weekend, or a back-dated pick) it
+  // shows the real date instead.
+  const yesterday = (() => {
+    const d = new Date();
+    d.setDate(d.getDate() - 1);
+    return localISO(d);
+  })();
+  // The reference day being viewed (YYYY-MM-DD). Defaults to yesterday.
+  const [asOf, setAsOf] = useState(yesterday);
   // Bumped by the error-state Retry button to re-run the fetch.
   const [tick, setTick] = useState(0);
-  const today = todayISO();
 
   useEffect(() => {
     let cancelled = false;
     setLoading(true);
     setFailed(false);
-    getProductionKpis(asOf || undefined)
+    getProductionKpis(asOf)
       .then((d) => {
         if (!cancelled) setData(d);
       })
@@ -397,6 +410,14 @@ export default function ProductionKpis(): React.ReactNode {
   }, [asOf, tick]);
 
   const live = !!data?.isLive;
+  // Headline column label. The day the figure is from = the BE's latest WORKING
+  // day (holidays skipped), falling back to the selected date. Show the word
+  // "Yesterday" when that IS yesterday; otherwise show its date (e.g. "23 Jun").
+  const headlineDate = data?.latestWorkingDate || asOf;
+  const headlineLabel =
+    headlineDate === yesterday
+      ? t('admin.productionKpis.yesterday', { defaultValue: 'Yesterday' })
+      : fmtDate(headlineDate);
   const updated = data
     ? new Date(data.generatedAt).toLocaleString('en-GB', {
         day: '2-digit',
@@ -452,12 +473,15 @@ export default function ProductionKpis(): React.ReactNode {
           </p>
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
-          {/* Date filter — treats the chosen date as "today" for the windows. */}
+          {/* Date filter — the chosen day is the latest day VIEWED (windows end
+              on it); defaults to yesterday. */}
           <input
             type="date"
-            value={asOf || today}
+            value={asOf}
             max={today}
-            onChange={(e) => setAsOf(e.target.value === today ? '' : e.target.value)}
+            onChange={(e) => {
+              if (e.target.value) setAsOf(e.target.value);
+            }}
             aria-label={t('admin.productionKpis.asOf', { defaultValue: 'As of date' })}
             style={{
               fontFamily: SANS,
@@ -542,11 +566,13 @@ export default function ProductionKpis(): React.ReactNode {
       {/* Cards: failure → error panel; loading → shimmer skeletons; otherwise
           the KPI cards (live values, or muted "—" when the sheet isn't connected
           — never zeros, and never a perpetual shimmer once the BE has answered). */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 lg:gap-[18px]">
+      <div className="grid grid-cols-2 lg:grid-cols-3 gap-3 lg:gap-[18px]">
         {failed && !loading ? (
           <ErrorPanel onRetry={() => setTick((n) => n + 1)} />
         ) : loading || !data ? (
-          Array.from({ length: 4 }).map((_, i) => <SkeletonCard key={i} />)
+          // Skeleton count tracks the live card count (BE KPI_DEFS) — 3 since
+          // Total Loading is hidden. Bump back to 4 if it's re-enabled.
+          Array.from({ length: 3 }).map((_, i) => <SkeletonCard key={i} />)
         ) : (
           data.cards.map((card, i) => (
             <KpiCard
@@ -555,6 +581,7 @@ export default function ProductionKpis(): React.ReactNode {
               accent={PALETTE[i % PALETTE.length]}
               live={live}
               showSpark={live}
+              yesterdayLabel={headlineLabel}
             />
           ))
         )}
