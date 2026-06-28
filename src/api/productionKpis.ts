@@ -28,11 +28,10 @@ export interface ProductionKpisResponse {
   /** False when the BE sheet isn't configured/readable (every value is 0). */
   isLive: boolean;
   /**
-   * ISO date (YYYY-MM-DD) of the latest WORKING day — the day the headline
-   * (`card.yesterday`) figure is from, holidays skipped. Null when there's no
-   * working day in range. Rendered as the first column's label.
+   * Status of the headline (`asOf`) day: 'working' (show the value), 'holiday'
+   * (closed, value 0), or 'not_filled' (blank → show N/A).
    */
-  latestWorkingDate?: string | null;
+  headlineStatus?: 'working' | 'holiday' | 'not_filled';
 }
 
 /**

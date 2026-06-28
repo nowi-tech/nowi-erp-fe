@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Skeleton } from '@/components/ui/skeleton';
+import { DatePicker } from '@/components/ui/DatePicker';
 import { localISO, todayISO } from '@/lib/date';
 import {
   getProductionKpis,
@@ -152,6 +153,7 @@ function KpiCard({
   live,
   showSpark,
   yesterdayLabel,
+  headlineNa,
 }: {
   card: ProductionKpiCard;
   accent: string;
@@ -159,10 +161,15 @@ function KpiCard({
   showSpark: boolean;
   /** Label under the headline value — the date of the day it's from. */
   yesterdayLabel: string;
+  /** The picked day isn't filled — show N/A for the headline (no trend). */
+  headlineNa: boolean;
 }): React.ReactNode {
   const { t } = useTranslation();
   const up = card.trendPct >= 0;
   const unitSuffix = card.unit ? ` ${card.unit}` : '';
+  // Headline is "muted" (no real value/trend) when the sheet isn't live OR the
+  // picked day isn't filled.
+  const muted = !live || headlineNa;
 
   return (
     <div style={{ ...CARD_SHELL, display: 'flex', flexDirection: 'column', fontFamily: SANS }}>
@@ -203,12 +210,12 @@ function KpiCard({
             borderRadius: 7,
             fontSize: 12,
             fontWeight: 700,
-            background: !live ? '#f3f4f6' : up ? 'rgba(15,122,82,0.10)' : 'rgba(196,50,42,0.10)',
-            color: !live ? '#9ca3af' : up ? '#0f7a52' : '#c4322a',
+            background: muted ? '#f3f4f6' : up ? 'rgba(15,122,82,0.10)' : 'rgba(196,50,42,0.10)',
+            color: muted ? '#9ca3af' : up ? '#0f7a52' : '#c4322a',
           }}
         >
-          {!live ? '–' : up ? '▲' : '▼'}{' '}
-          {live ? `${Math.abs(card.trendPct).toFixed(1)}%` : '—'}
+          {muted ? '–' : up ? '▲' : '▼'}{' '}
+          {muted ? '—' : `${Math.abs(card.trendPct).toFixed(1)}%`}
         </span>
       </div>
 
@@ -225,7 +232,7 @@ function KpiCard({
             fontFeatureSettings: "'tnum' 1",
           }}
         >
-          {live ? fmt(card.yesterday) : '—'}
+          {!live ? '—' : headlineNa ? 'N/A' : fmt(card.yesterday)}
         </span>
         {card.unit && (
           <span style={{ fontSize: 16, fontWeight: 600, color: '#9ca3af' }}>{card.unit}</span>
@@ -382,8 +389,13 @@ export default function ProductionKpis(): React.ReactNode {
     d.setDate(d.getDate() - 1);
     return localISO(d);
   })();
-  // The reference day being viewed (YYYY-MM-DD). Defaults to yesterday.
-  const [asOf, setAsOf] = useState(yesterday);
+  // What we SEND to the BE: undefined = the default view (the BE resolves the
+  // day, skipping holidays/Sundays); a date string = an explicit pick (literal).
+  const [sendAsOf, setSendAsOf] = useState<string | undefined>(undefined);
+  // What the PICKER shows — synced from the resolved `asOf` the BE returns, so
+  // the picker always matches the card. Seeded to yesterday until the first
+  // response lands.
+  const [displayAsOf, setDisplayAsOf] = useState(yesterday);
   // Bumped by the error-state Retry button to re-run the fetch.
   const [tick, setTick] = useState(0);
 
@@ -391,9 +403,14 @@ export default function ProductionKpis(): React.ReactNode {
     let cancelled = false;
     setLoading(true);
     setFailed(false);
-    getProductionKpis(asOf)
+    getProductionKpis(sendAsOf)
       .then((d) => {
-        if (!cancelled) setData(d);
+        if (cancelled) return;
+        setData(d);
+        // Sync the picker to the day the BE actually resolved (the default may
+        // have rolled back past a holiday/Sunday). No extra fetch — `sendAsOf`
+        // is unchanged.
+        setDisplayAsOf(d.asOf);
       })
       .catch(() => {
         if (!cancelled) {
@@ -407,17 +424,17 @@ export default function ProductionKpis(): React.ReactNode {
     return () => {
       cancelled = true;
     };
-  }, [asOf, tick]);
+  }, [sendAsOf, tick]);
 
   const live = !!data?.isLive;
-  // Headline column label. The day the figure is from = the BE's latest WORKING
-  // day (holidays skipped), falling back to the selected date. Show the word
-  // "Yesterday" when that IS yesterday; otherwise show its date (e.g. "23 Jun").
-  const headlineDate = data?.latestWorkingDate || asOf;
+  // The headline shows the day the BE resolved (`displayAsOf`). Label is
+  // "Yesterday" when that IS yesterday, else its date. The value is N/A when
+  // that day isn't filled (blank/no row); a holiday shows its 0.
+  const headlineNa = data?.headlineStatus === 'not_filled';
   const headlineLabel =
-    headlineDate === yesterday
+    displayAsOf === yesterday
       ? t('admin.productionKpis.yesterday', { defaultValue: 'Yesterday' })
-      : fmtDate(headlineDate);
+      : fmtDate(displayAsOf);
   const updated = data
     ? new Date(data.generatedAt).toLocaleString('en-GB', {
         day: '2-digit',
@@ -474,27 +491,16 @@ export default function ProductionKpis(): React.ReactNode {
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
           {/* Date filter — the chosen day is the latest day VIEWED (windows end
-              on it); defaults to yesterday. */}
-          <input
-            type="date"
-            value={asOf}
-            max={today}
-            onChange={(e) => {
-              if (e.target.value) setAsOf(e.target.value);
+              on it); defaults to yesterday. Same picker UI as the dashboard. */}
+          <DatePicker
+            value={displayAsOf}
+            onChange={(d) => {
+              // An explicit pick — sent literally to the BE (no default skip).
+              setSendAsOf(d);
+              setDisplayAsOf(d);
             }}
-            aria-label={t('admin.productionKpis.asOf', { defaultValue: 'As of date' })}
-            style={{
-              fontFamily: SANS,
-              fontSize: 13,
-              fontWeight: 600,
-              color: '#374151',
-              padding: '8px 12px',
-              background: '#ffffff',
-              border: '1px solid #e5e7eb',
-              borderRadius: 999,
-              boxShadow: '0 1px 2px rgba(16,24,40,0.04)',
-              cursor: 'pointer',
-            }}
+            maxDate={today}
+            label={t('admin.productionKpis.asOf', { defaultValue: 'As of' })}
           />
           <div
           style={{
@@ -582,6 +588,7 @@ export default function ProductionKpis(): React.ReactNode {
               live={live}
               showSpark={live}
               yesterdayLabel={headlineLabel}
+              headlineNa={headlineNa}
             />
           ))
         )}
