@@ -1272,6 +1272,7 @@
         "sampling": "Sampling",
         "cataloguing": "Cataloguing",
         "live": "Live",
+        "parked": "Parked",
         "my_work": "My work"
       },
       "statusFilter": {

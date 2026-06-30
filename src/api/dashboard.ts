@@ -19,6 +19,7 @@ export type DashboardStyleTab =
   | 'sampling'
   | 'cataloguing'
   | 'live'
+  | 'parked'
   | 'my_work';
 
 /** Multi-select status filter vocabulary (mirrors the BE). Each narrows the

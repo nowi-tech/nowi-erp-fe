@@ -108,6 +108,9 @@ const TABS: DashboardStyleTab[] = [
   'sampling',
   'cataloguing',
   'live',
+  // Paused designs (lifecycle = parked). A standing bucket like draft/live —
+  // no STATUS_OPTIONS_BY_TAB entry, so its status-filter control auto-hides.
+  'parked',
 ];
 
 // Multi-select status filter options per tab — only the statuses REACHABLE in
