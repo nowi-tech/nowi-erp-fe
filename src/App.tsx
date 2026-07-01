@@ -25,6 +25,7 @@ const Dispatches = lazy(() => import('./pages/admin/Dispatches'));
 const DispatchDetail = lazy(() => import('./pages/admin/DispatchDetail'));
 const Warehouses = lazy(() => import('./pages/admin/Warehouses'));
 const ProductionKpis = lazy(() => import('./pages/admin/ProductionKpis'));
+const SalesKpis = lazy(() => import('./pages/admin/SalesKpis'));
 const StitchingHome = lazy(() => import('./pages/stitching/StitchingHome'));
 const StitchingReceiveLot = lazy(
   () => import('./pages/stitching/StitchingReceiveLot'),
@@ -225,6 +226,48 @@ function App() {
                 element={
                   <S>
                     <ProductionKpis />
+                  </S>
+                }
+              />
+              {/* Sales analytics — one shared view (SalesKpis), filtered per section.
+                  All hit /sales-kpis (5-min cached) + share Refresh. Inherit the
+                  /admin guard; BE re-checks admin / viewer. */}
+              <Route
+                path="sales-kpis"
+                element={
+                  <S>
+                    <SalesKpis
+                      buckets={['sales']}
+                      titleKey="admin.nav.salesKpis"
+                      titleDefault="Sales KPIs"
+                      subtitleDefault="Revenue, orders, AOV/ASP & returns — all warehouses."
+                    />
+                  </S>
+                }
+              />
+              <Route
+                path="analytics/live-inventory"
+                element={
+                  <S>
+                    <SalesKpis
+                      buckets={['live', 'inventory']}
+                      titleKey="admin.nav.analyticsLiveInventory"
+                      titleDefault="Live & Inventory"
+                      subtitleDefault="Catalogue go-live, stock in & closing across warehouses."
+                    />
+                  </S>
+                }
+              />
+              <Route
+                path="analytics/fulfilment"
+                element={
+                  <S>
+                    <SalesKpis
+                      buckets={['fulfilment']}
+                      titleKey="admin.nav.analyticsFulfilment"
+                      titleDefault="Fulfilment"
+                      subtitleDefault="Dispatch volume, TAT & SLA."
+                    />
                   </S>
                 }
               />

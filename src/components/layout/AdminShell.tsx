@@ -6,6 +6,8 @@ import {
   Users,
   Search,
   BarChart3,
+  TrendingUp,
+  LineChart,
   LogOut,
   FlaskConical,
   Inbox,
@@ -89,7 +91,16 @@ const NAV_SECTIONS: NavSection[] = [
       { to: '/styles', end: true, icon: <Shirt size={18} />, labelKey: 'admin.nav.styles', roles: [...PD_ROLES, 'cataloguer'] },
       // Production = the renamed Locator. Dispatch lives inside it as a tab.
       { to: '/admin/locator', icon: <Search size={18} />, labelKey: 'admin.nav.production', roles: ['admin', 'viewer', 'production_lead'] },
+    ],
+  },
+  {
+    id: 'analytics',
+    titleKey: 'admin.nav.sections.analytics',
+    items: [
+      { to: '/admin/sales-kpis', icon: <TrendingUp size={18} />, labelKey: 'admin.nav.salesKpis', roles: ['admin', 'viewer'] },
       { to: '/admin/production-kpis', icon: <BarChart3 size={18} />, labelKey: 'admin.nav.productionKpis', roles: ['admin', 'viewer', 'production_lead'] },
+      { to: '/admin/analytics/live-inventory', icon: <Boxes size={18} />, labelKey: 'admin.nav.analyticsLiveInventory', roles: ['admin', 'viewer'] },
+      { to: '/admin/analytics/fulfilment', icon: <LineChart size={18} />, labelKey: 'admin.nav.analyticsFulfilment', roles: ['admin', 'viewer'] },
     ],
   },
   {
