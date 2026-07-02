@@ -15,6 +15,12 @@ import {
   type SalesMetric,
 } from '@/api/salesKpis';
 
+/** Manual refresh is async: the POST starts a background sync, then we poll
+ *  GET /sales-kpis every REFRESH_POLL_MS until `syncing` clears, giving up after
+ *  REFRESH_MAX_WAIT_MS (kept above the backend's ~4-min report-poll ceiling). */
+const REFRESH_POLL_MS = 15_000;
+const REFRESH_MAX_WAIT_MS = 5 * 60_000;
+
 /** Per-bucket accent — cards in a bucket share a colour so groups read at a glance. */
 const BUCKET_ACCENT: Record<SalesBucket, string> = {
   sales: '#3b5bdb',
@@ -104,7 +110,7 @@ export default function SalesKpis({
     };
   }, [sendAsOf, tick]);
 
-  const onRefresh = (): void => {
+  const onRefresh = async (): Promise<void> => {
     if (refreshing) {
       toast.show(
         t('admin.salesKpis.refreshInProgress', {
@@ -115,42 +121,67 @@ export default function SalesKpis({
       return;
     }
     setRefreshing(true);
-    // No "started" toast — the in-body FetchingBanner already says "fetching…,
-    // can take 2-3 min". A start toast collides with the result toast when the
-    // refresh returns fast (e.g. quota 429 → cache fallback), showing two
-    // contradictory messages at once. Banner during, one toast on the result.
-    // Scope the refresh to just this page's buckets — no need to pull every report.
-    refreshSalesKpis(sendAsOf, buckets)
-      .then((d) => {
-        setData(d);
-        setDisplayAsOf(d.asOf);
-        setFailed(false);
-        toast.show(
-          d.stale
-            ? t('admin.salesKpis.refreshedStale', {
-                defaultValue: 'Couldn’t fetch new data from EasyEcom — showing the latest available.',
-              })
-            : t('admin.salesKpis.refreshed', { defaultValue: 'Sales data refreshed.' }),
-          d.stale ? 'info' : 'success',
-        );
-      })
-      .catch((err: unknown) => {
-        const res = (err as { response?: { status?: number; data?: { message?: string } } }).response;
-        if (res?.status === 429) {
-          // Cooldown (non-admin refreshed too soon) — data is still valid, not a failure.
-          toast.show(
-            res.data?.message ??
-              t('admin.salesKpis.refreshCooldown', {
-                defaultValue: 'Refreshed recently — please try again soon.',
-              }),
-            'info',
-          );
-          return;
+    // Async refresh: the POST kicks off a BACKGROUND sync and returns fast with
+    // `syncing: true` (generating fresh reports can take minutes). Poll GET until
+    // `syncing` clears, keeping the current data + FetchingBanner on screen. No
+    // "started" toast — the banner covers the in-progress state; one toast on the
+    // result. Scope to this page's buckets so we don't pull every report.
+    try {
+      let d = await refreshSalesKpis(sendAsOf, buckets);
+      const startAt = Date.now();
+      while (d.syncing && Date.now() - startAt < REFRESH_MAX_WAIT_MS) {
+        await new Promise((r) => setTimeout(r, REFRESH_POLL_MS));
+        try {
+          d = await getSalesKpis(sendAsOf);
+        } catch {
+          // A transient blip while POLLING isn't a refresh failure — the
+          // background sync is still running and the current data is still
+          // valid. Keep waiting; if it never recovers we fall through to the
+          // "taking longer than usual" path, not "Refresh failed".
+          continue;
         }
-        setFailed(true);
-        toast.show(t('admin.salesKpis.refreshFailed', { defaultValue: 'Refresh failed. Please try again.' }), 'error');
-      })
-      .finally(() => setRefreshing(false));
+      }
+      if (d.syncing) {
+        // Still running server-side after our wait — the sync continues and the
+        // next page load / hourly cron will surface it. Don't claim success.
+        toast.show(
+          t('admin.salesKpis.refreshSlow', {
+            defaultValue:
+              'Still fetching from EasyEcom — this is taking longer than usual. Refresh again in a minute to see it.',
+          }),
+          'info',
+        );
+        return;
+      }
+      setData(d);
+      setDisplayAsOf(d.asOf);
+      setFailed(false);
+      toast.show(
+        d.stale
+          ? t('admin.salesKpis.refreshedStale', {
+              defaultValue: 'Couldn’t fetch new data from EasyEcom — showing the latest available.',
+            })
+          : t('admin.salesKpis.refreshed', { defaultValue: 'Sales data refreshed.' }),
+        d.stale ? 'info' : 'success',
+      );
+    } catch (err: unknown) {
+      const res = (err as { response?: { status?: number; data?: { message?: string } } }).response;
+      if (res?.status === 429) {
+        // Cooldown (non-admin refreshed too soon) — data is still valid, not a failure.
+        toast.show(
+          res.data?.message ??
+            t('admin.salesKpis.refreshCooldown', {
+              defaultValue: 'Refreshed recently — please try again soon.',
+            }),
+          'info',
+        );
+        return;
+      }
+      setFailed(true);
+      toast.show(t('admin.salesKpis.refreshFailed', { defaultValue: 'Refresh failed. Please try again.' }), 'error');
+    } finally {
+      setRefreshing(false);
+    }
   };
 
   const live = data?.isLive ?? false;
@@ -233,17 +264,15 @@ export default function SalesKpis({
               {t('admin.salesKpis.retry', { defaultValue: 'Retry' })}
             </button>
           </div>
-        ) : (loading && !data) || refreshing ? (
-          // Skeleton while first-loading OR while a manual Refresh is in flight.
-          // A manual refresh generates a FRESH EasyEcom report, which takes a few
-          // minutes — so show an explicit "please wait" banner above the skeleton
-          // rather than leaving the user staring at bare placeholders.
-          <>
-            {refreshing && <FetchingBanner t={t} />}
-            <SkeletonGrid />
-          </>
+        ) : loading && !data ? (
+          // First load only — bare placeholders while we have nothing to show.
+          <SkeletonGrid />
         ) : data ? (
           <>
+            {/* A manual refresh runs in the BACKGROUND for minutes; keep the
+                current data on screen with a "fetching…" banner on top, rather
+                than blanking it behind a skeleton for the whole wait. */}
+            {refreshing && <FetchingBanner t={t} />}
             <div className="flex flex-col gap-7">
               {data.buckets
                 .filter((bucket) => !buckets || buckets.includes(bucket.key))

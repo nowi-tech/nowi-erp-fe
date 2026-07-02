@@ -46,6 +46,9 @@ export interface SalesKpisResponse {
   lastSyncedAt?: string | null;
   /** True when the latest sync served STALE (cached) data — the live fetch failed. */
   stale?: boolean;
+  /** True while a manual refresh is still generating reports in the background.
+   *  The FE keeps showing "fetching…" and polls until this flips to false. */
+  syncing?: boolean;
 }
 
 /** GET /api/sales-kpis — the bucketed dashboard metrics. */
@@ -55,9 +58,10 @@ export function getSalesKpis(asOf?: string): Promise<SalesKpisResponse> {
     .then((res) => res.data);
 }
 
-/** POST /api/sales-kpis/refresh — force an EasyEcom resync, then return fresh
- *  metrics. `buckets` scopes the refresh to just that page's data sources (much
- *  faster); omit to refresh everything. May take ~10–30s while reports generate. */
+/** POST /api/sales-kpis/refresh — kicks off a BACKGROUND EasyEcom resync and
+ *  returns immediately with `syncing: true` (generating reports can take a few
+ *  minutes). Poll {@link getSalesKpis} until `syncing` is false for the result.
+ *  `buckets` scopes the refresh to just that page's data sources. */
 export function refreshSalesKpis(asOf?: string, buckets?: SalesBucket[]): Promise<SalesKpisResponse> {
   // Body is `{}`, not `null`: the API client forces `Content-Type: application/json`
   // and Express's body-parser (strict mode) rejects a top-level `null`.
