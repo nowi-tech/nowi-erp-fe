@@ -408,7 +408,12 @@ export function DateRangePicker({
                     weekday:
                       'flex h-8 w-9 items-center justify-center text-[11px] font-medium text-[var(--color-muted-foreground)]',
                     week: 'flex',
-                    day: 'p-0',
+                    // Fixed cell size so the LEADING empty cells (outside days,
+                    // rendered without a button when showOutsideDays is off) still
+                    // occupy their column under `week: flex` — otherwise they
+                    // collapse to 0 width and the month's days pack left, landing
+                    // under the wrong weekday (e.g. the 1st shown as Sunday).
+                    day: 'h-9 w-9 p-0',
                     day_button: dayBase,
                     today:
                       '[&_button]:font-semibold [&_button]:text-[var(--color-primary)]',
