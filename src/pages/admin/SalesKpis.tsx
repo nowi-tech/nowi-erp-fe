@@ -115,12 +115,10 @@ export default function SalesKpis({
       return;
     }
     setRefreshing(true);
-    toast.show(
-      t('admin.salesKpis.refreshStarted', {
-        defaultValue: 'Refreshing your data — generating a fresh report can take 2–3 minutes…',
-      }),
-      'info',
-    );
+    // No "started" toast — the in-body FetchingBanner already says "fetching…,
+    // can take 2-3 min". A start toast collides with the result toast when the
+    // refresh returns fast (e.g. quota 429 → cache fallback), showing two
+    // contradictory messages at once. Banner during, one toast on the result.
     // Scope the refresh to just this page's buckets — no need to pull every report.
     refreshSalesKpis(sendAsOf, buckets)
       .then((d) => {
