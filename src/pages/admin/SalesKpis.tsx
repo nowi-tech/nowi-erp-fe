@@ -139,7 +139,7 @@ export default function SalesKpis({
         toast.show(
           t('admin.salesKpis.refreshSlow', {
             defaultValue:
-              'Still fetching from EasyEcom — this is taking longer than usual. The data will update shortly.',
+              'Still fetching from EasyEcom — this is taking longer than usual. Refresh again in a minute to see it.',
           }),
           'info',
         );
