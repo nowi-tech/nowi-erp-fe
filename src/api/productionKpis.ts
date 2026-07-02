@@ -10,7 +10,7 @@ export interface ProductionKpiCard {
   label: string;
   yesterday: number;
   last7Days: number;
-  thisMonth: number;
+  last30Days: number;
   /** Per-day values for the last 7 days (oldest → newest), for the sparkline. */
   spark: number[];
   /** ISO date (YYYY-MM-DD) for each spark point, aligned 1:1 with `spark`. */

@@ -135,12 +135,12 @@ function KpiCard({
           <div
             style={{ fontFamily: DISPLAY, fontSize: 16, fontWeight: 600, color: '#1f2937', fontFeatureSettings: "'tnum' 1" }}
           >
-            {live ? `${fmt(card.thisMonth)}${unitSuffix}` : '—'}
+            {live ? `${fmt(card.last30Days)}${unitSuffix}` : '—'}
           </div>
           <div
             style={{ fontSize: 10.5, fontWeight: 700, letterSpacing: '0.06em', textTransform: 'uppercase', color: '#9ca3af', marginTop: 4 }}
           >
-            {t('admin.productionKpis.thisMonth', { defaultValue: 'This month' })}
+            {t('admin.productionKpis.last30Days', { defaultValue: 'Last 30 days' })}
           </div>
         </div>
       </div>
@@ -344,7 +344,7 @@ export default function ProductionKpis(): React.ReactNode {
           </h1>
           <p style={{ fontSize: 16, lineHeight: 1.4, color: '#6b7280', margin: 0, maxWidth: 560 }}>
             {t('admin.productionKpis.subtitle', {
-              defaultValue: 'Floor output across Yesterday, the Last 7 days, and This month.',
+              defaultValue: 'Floor output across Yesterday, the Last 7 days, and the Last 30 days.',
             })}
           </p>
         </div>

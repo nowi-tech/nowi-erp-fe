@@ -986,10 +986,10 @@
     },
     "productionKpis": {
       "title": "Production KPIs",
-      "subtitle": "Floor output across Yesterday, the Last 7 days, and This month.",
+      "subtitle": "Floor output across Yesterday, the Last 7 days, and the Last 30 days.",
       "yesterday": "Yesterday",
       "last7Days": "Last 7 days",
-      "thisMonth": "This month",
+      "last30Days": "Last 30 days",
       "asOf": "As of date",
       "loading": "Loading…",
       "live": "Live · synced",
