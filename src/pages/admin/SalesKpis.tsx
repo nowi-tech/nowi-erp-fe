@@ -131,7 +131,15 @@ export default function SalesKpis({
       const startAt = Date.now();
       while (d.syncing && Date.now() - startAt < REFRESH_MAX_WAIT_MS) {
         await new Promise((r) => setTimeout(r, REFRESH_POLL_MS));
-        d = await getSalesKpis(sendAsOf);
+        try {
+          d = await getSalesKpis(sendAsOf);
+        } catch {
+          // A transient blip while POLLING isn't a refresh failure — the
+          // background sync is still running and the current data is still
+          // valid. Keep waiting; if it never recovers we fall through to the
+          // "taking longer than usual" path, not "Refresh failed".
+          continue;
+        }
       }
       if (d.syncing) {
         // Still running server-side after our wait — the sync continues and the
