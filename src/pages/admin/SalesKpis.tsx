@@ -121,7 +121,8 @@ export default function SalesKpis({
       }),
       'info',
     );
-    refreshSalesKpis(sendAsOf)
+    // Scope the refresh to just this page's buckets — no need to pull every report.
+    refreshSalesKpis(sendAsOf, buckets)
       .then((d) => {
         setData(d);
         setDisplayAsOf(d.asOf);
@@ -234,7 +235,9 @@ export default function SalesKpis({
               {t('admin.salesKpis.retry', { defaultValue: 'Retry' })}
             </button>
           </div>
-        ) : loading && !data ? (
+        ) : (loading && !data) || refreshing ? (
+          // Skeleton while first-loading OR while a manual Refresh is in flight
+          // (the EasyEcom sync can take up to ~a minute).
           <SkeletonGrid />
         ) : data ? (
           <>
@@ -276,7 +279,8 @@ export default function SalesKpis({
 /** Compact card for `snapshot` metrics (Total Design Live, Closing Inventory):
  *  a single current value — no Today/Yesterday/7d/Month breakdown or trend. */
 function SnapshotCard({ metric, accent }: { metric: SalesMetric; accent: string }): ReactNode {
-  const current = metric.today ?? metric.last7Days ?? metric.thisMonth;
+  const { t } = useTranslation();
+  const current = metric.today ?? metric.last7Days ?? metric.last30Days;
   return (
     <div style={{ ...CARD_SHELL, display: 'flex', flexDirection: 'column' }}>
       <div className="mb-3.5 flex min-w-0 items-center gap-2.5">
@@ -298,7 +302,9 @@ function SnapshotCard({ metric, accent }: { metric: SalesMetric; accent: string 
       >
         {formatValue(current, metric.format)}
       </div>
-      <div className="mt-1.5 text-xs font-semibold text-neutral-400">{'Current total'}</div>
+      <div className="mt-1.5 text-xs font-semibold text-neutral-400">
+        {t('admin.salesKpis.currentTotal', { defaultValue: 'Current total' })}
+      </div>
     </div>
   );
 }
@@ -312,12 +318,13 @@ function SalesCard({
   accent: string;
   headlineLabel: string;
 }): ReactNode {
+  const { t } = useTranslation();
   if (metric.kind === 'snapshot') return <SnapshotCard metric={metric} accent={accent} />;
   const naAll =
     metric.today == null &&
     metric.yesterday == null &&
     metric.last7Days == null &&
-    metric.thisMonth == null;
+    metric.last30Days == null;
   const showSpark = !naAll && metric.spark.some((v) => v !== 0);
   const muted = naAll || metric.today == null;
   const up = metric.trendPct >= 0;
@@ -371,11 +378,20 @@ function SalesCard({
 
       <div style={{ height: 1, background: '#eef0f3', margin: '13px 0 12px' }} />
 
-      {/* Footer: Yesterday / Last 7 days / This month */}
+      {/* Footer: Yesterday / Last 7 days / Last 30 days */}
       <div className="grid grid-cols-3 gap-2">
-        <FooterCell label="Yesterday" value={formatValue(metric.yesterday, metric.format)} />
-        <FooterCell label="Last 7 days" value={formatValue(metric.last7Days, metric.format)} />
-        <FooterCell label="This month" value={formatValue(metric.thisMonth, metric.format)} />
+        <FooterCell
+          label={t('admin.salesKpis.yesterday', { defaultValue: 'Yesterday' })}
+          value={formatValue(metric.yesterday, metric.format)}
+        />
+        <FooterCell
+          label={t('admin.salesKpis.last7Days', { defaultValue: 'Last 7 days' })}
+          value={formatValue(metric.last7Days, metric.format)}
+        />
+        <FooterCell
+          label={t('admin.salesKpis.last30Days', { defaultValue: 'Last 30 days' })}
+          value={formatValue(metric.last30Days, metric.format)}
+        />
       </div>
     </div>
   );
@@ -399,12 +415,17 @@ function FooterCell({ label, value }: { label: string; value: string }): ReactNo
 
 /** Small footnote listing metrics we don't have a data source for yet. */
 function UnavailableNote({ metrics }: { metrics: SalesMetric[] }): ReactNode {
+  const { t } = useTranslation();
   const missing = metrics.filter((m) => !m.available);
   if (!missing.length) return null;
   return (
     <div className="mt-7 border-t border-neutral-200 pt-3 text-xs text-neutral-400">
-      <span className="font-semibold text-neutral-500">Not yet available</span>{' '}
-      <span className="text-neutral-300">(pending EasyEcom report access):</span>{' '}
+      <span className="font-semibold text-neutral-500">
+        {t('admin.salesKpis.notYetAvailable', { defaultValue: 'Not yet available' })}
+      </span>{' '}
+      <span className="text-neutral-300">
+        {t('admin.salesKpis.pendingAccess', { defaultValue: '(pending EasyEcom report access):' })}
+      </span>{' '}
       {missing.map((m) => m.label).join(' · ')}
     </div>
   );

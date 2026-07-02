@@ -20,7 +20,7 @@ export interface SalesMetric {
   today: number | null;
   yesterday: number | null;
   last7Days: number | null;
-  thisMonth: number | null;
+  last30Days: number | null;
   /** Per-day values for the 7 days ending on the reference day (oldest → newest). */
   spark: number[];
   /** ISO date (YYYY-MM-DD) for each spark point, 1:1 with `spark`. */
@@ -56,13 +56,17 @@ export function getSalesKpis(asOf?: string): Promise<SalesKpisResponse> {
 }
 
 /** POST /api/sales-kpis/refresh — force an EasyEcom resync, then return fresh
- *  metrics. May take ~10–60s while the report is generated. */
-export function refreshSalesKpis(asOf?: string): Promise<SalesKpisResponse> {
+ *  metrics. `buckets` scopes the refresh to just that page's data sources (much
+ *  faster); omit to refresh everything. May take ~10–30s while reports generate. */
+export function refreshSalesKpis(asOf?: string, buckets?: SalesBucket[]): Promise<SalesKpisResponse> {
   // Body is `{}`, not `null`: the API client forces `Content-Type: application/json`
   // and Express's body-parser (strict mode) rejects a top-level `null`.
+  const params: Record<string, string> = {};
+  if (asOf) params.asOf = asOf;
+  if (buckets?.length) params.buckets = buckets.join(',');
   return apiClient
     .post<SalesKpisResponse>('/api/sales-kpis/refresh', {}, {
-      params: asOf ? { asOf } : undefined,
+      params: Object.keys(params).length ? params : undefined,
     })
     .then((res) => res.data);
 }

@@ -229,46 +229,53 @@ function App() {
                   </S>
                 }
               />
-              {/* Sales analytics — one shared view (SalesKpis), filtered per section.
-                  All hit /sales-kpis (5-min cached) + share Refresh. Inherit the
-                  /admin guard; BE re-checks admin / viewer. */}
+              {/* Sales analytics — the same SalesKpis view, filtered per section
+                  (each route mounts its own instance, all hitting the 5-min-cached
+                  /sales-kpis). Guarded to admin + viewer (production_lead only sees
+                  Production KPIs); the BE re-checks the same roles. */}
               <Route
                 path="sales-kpis"
                 element={
-                  <S>
-                    <SalesKpis
-                      buckets={['sales']}
-                      titleKey="admin.nav.salesKpis"
-                      titleDefault="Sales KPIs"
-                      subtitleDefault="Revenue, orders, AOV/ASP & returns — all warehouses."
-                    />
-                  </S>
+                  <ProtectedRoute allowedRoles={['admin', 'viewer']}>
+                    <S>
+                      <SalesKpis
+                        buckets={['sales']}
+                        titleKey="admin.nav.salesKpis"
+                        titleDefault="Sales KPIs"
+                        subtitleDefault="Revenue, orders, AOV/ASP & returns — all warehouses."
+                      />
+                    </S>
+                  </ProtectedRoute>
                 }
               />
               <Route
                 path="analytics/live-inventory"
                 element={
-                  <S>
-                    <SalesKpis
-                      buckets={['live', 'inventory']}
-                      titleKey="admin.nav.analyticsLiveInventory"
-                      titleDefault="Live & Inventory"
-                      subtitleDefault="Catalogue go-live, stock in & closing across warehouses."
-                    />
-                  </S>
+                  <ProtectedRoute allowedRoles={['admin', 'viewer']}>
+                    <S>
+                      <SalesKpis
+                        buckets={['live', 'inventory']}
+                        titleKey="admin.nav.analyticsLiveInventory"
+                        titleDefault="Live & Inventory"
+                        subtitleDefault="Catalogue go-live, stock in & closing across warehouses."
+                      />
+                    </S>
+                  </ProtectedRoute>
                 }
               />
               <Route
                 path="analytics/fulfilment"
                 element={
-                  <S>
-                    <SalesKpis
-                      buckets={['fulfilment']}
-                      titleKey="admin.nav.analyticsFulfilment"
-                      titleDefault="Fulfilment"
-                      subtitleDefault="Dispatch volume, TAT & SLA."
-                    />
-                  </S>
+                  <ProtectedRoute allowedRoles={['admin', 'viewer']}>
+                    <S>
+                      <SalesKpis
+                        buckets={['fulfilment']}
+                        titleKey="admin.nav.analyticsFulfilment"
+                        titleDefault="Fulfilment"
+                        subtitleDefault="Dispatch volume, TAT & SLA."
+                      />
+                    </S>
+                  </ProtectedRoute>
                 }
               />
               <Route
