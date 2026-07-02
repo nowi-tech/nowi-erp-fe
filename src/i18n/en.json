@@ -325,6 +325,7 @@
       "settings": "Settings",
       "masterData": "Master data",
       "productionKpis": "Production KPIs",
+      "salesKpis": "Sales KPIs",
       "editRequests": "Edit requests",
       "floor": "Floor",
       "stitching": "Stitching",
@@ -335,11 +336,14 @@
       "fabricLibrary": "Fabric library",
       "sections": {
         "overview": "Overview",
+        "analytics": "Analytics",
         "production": "Production",
         "productDevelopment": "Product Development",
         "administration": "Administration"
       },
-      "production": "Production"
+      "production": "Production",
+      "analyticsLiveInventory": "Live & Inventory",
+      "analyticsFulfilment": "Fulfilment"
     },
     "home": {
       "approvalCta": {
@@ -982,10 +986,10 @@
     },
     "productionKpis": {
       "title": "Production KPIs",
-      "subtitle": "Floor output across Yesterday, the Last 7 days, and This month.",
+      "subtitle": "Floor output across Yesterday, the Last 7 days, and the Last 30 days.",
       "yesterday": "Yesterday",
       "last7Days": "Last 7 days",
-      "thisMonth": "This month",
+      "last30Days": "Last 30 days",
       "asOf": "As of date",
       "loading": "Loading…",
       "live": "Live · synced",
@@ -1272,6 +1276,7 @@
         "sampling": "Sampling",
         "cataloguing": "Cataloguing",
         "live": "Live",
+        "parked": "Parked",
         "my_work": "My work"
       },
       "statusFilter": {

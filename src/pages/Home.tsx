@@ -37,6 +37,7 @@ const VALID_TABS: DashboardStyleTab[] = [
   'sampling',
   'cataloguing',
   'live',
+  'parked',
   'my_work',
 ];
 
