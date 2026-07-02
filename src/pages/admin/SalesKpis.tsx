@@ -117,7 +117,7 @@ export default function SalesKpis({
     setRefreshing(true);
     toast.show(
       t('admin.salesKpis.refreshStarted', {
-        defaultValue: 'Refreshing your data — this can take up to a minute…',
+        defaultValue: 'Refreshing your data — generating a fresh report can take 2–3 minutes…',
       }),
       'info',
     );
@@ -236,9 +236,14 @@ export default function SalesKpis({
             </button>
           </div>
         ) : (loading && !data) || refreshing ? (
-          // Skeleton while first-loading OR while a manual Refresh is in flight
-          // (the EasyEcom sync can take up to ~a minute).
-          <SkeletonGrid />
+          // Skeleton while first-loading OR while a manual Refresh is in flight.
+          // A manual refresh generates a FRESH EasyEcom report, which takes a few
+          // minutes — so show an explicit "please wait" banner above the skeleton
+          // rather than leaving the user staring at bare placeholders.
+          <>
+            {refreshing && <FetchingBanner t={t} />}
+            <SkeletonGrid />
+          </>
         ) : data ? (
           <>
             <div className="flex flex-col gap-7">
@@ -427,6 +432,22 @@ function UnavailableNote({ metrics }: { metrics: SalesMetric[] }): ReactNode {
         {t('admin.salesKpis.pendingAccess', { defaultValue: '(pending EasyEcom report access):' })}
       </span>{' '}
       {missing.map((m) => m.label).join(' · ')}
+    </div>
+  );
+}
+
+/** Shown above the skeleton during a manual refresh: a fresh EasyEcom report
+ *  takes a few minutes to generate, so tell the user to hang on. */
+function FetchingBanner({ t }: { t: ReturnType<typeof useTranslation>['t'] }): ReactNode {
+  return (
+    <div className="mb-4 flex items-center gap-3 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+      <RefreshCw size={16} className="shrink-0 animate-spin" />
+      <span>
+        {t('admin.salesKpis.fetchingReport', {
+          defaultValue:
+            'Fetching your latest report from EasyEcom — this can take 2–3 minutes. Please keep this page open.',
+        })}
+      </span>
     </div>
   );
 }
