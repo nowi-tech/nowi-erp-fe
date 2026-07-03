@@ -49,6 +49,10 @@ export interface SalesKpisResponse {
   /** True while a manual refresh is still generating reports in the background.
    *  The FE keeps showing "fetching…" and polls until this flips to false. */
   syncing?: boolean;
+  /** Dashboard buckets whose data is currently being refreshed. A page shows
+   *  "fetching…" only while one of ITS buckets appears here, so refreshes on
+   *  different pages stay independent. */
+  syncingBuckets?: SalesBucket[];
 }
 
 /** GET /api/sales-kpis — the bucketed dashboard metrics. */

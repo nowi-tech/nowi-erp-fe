@@ -59,6 +59,30 @@ function relativeTime(iso: string | null | undefined): string | null {
   return `${Math.round(hrs / 24)}d ago`;
 }
 
+/** Absolute clock label for the last sync, e.g. "3 Jul, 3:39 AM". Anchors exactly
+ *  "as of when" the data is (relativeTime alone gets vague past ~a day). Users are
+ *  in India, so this must read in IST no matter the viewer's browser timezone. */
+function absTime(iso: string | null | undefined): string | null {
+  if (!iso) return null;
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return null;
+  // Pin to IST so a viewer whose browser is on another timezone still reads the
+  // Indian clock. Date part mirrors dayLabel()'s en-GB "03 Jul"; en-US time gives
+  // the "3:39 AM" (uppercase meridiem) form.
+  const date = d.toLocaleDateString('en-GB', {
+    timeZone: 'Asia/Kolkata',
+    day: '2-digit',
+    month: 'short',
+  });
+  const time = d.toLocaleTimeString('en-US', {
+    timeZone: 'Asia/Kolkata',
+    hour: 'numeric',
+    minute: '2-digit',
+    hour12: true,
+  });
+  return `${date}, ${time}`;
+}
+
 /** One Sales-analytics page: the same cards + Refresh, filtered to a section.
  *  `buckets` selects which metric groups show (Sales / Live / Inventory /
  *  Fulfilment); all pages share one `/sales-kpis` fetch (5-min cached) + Refresh. */
@@ -89,6 +113,20 @@ export default function SalesKpis({
   // Guards the passive sync-watcher (below) against starting twice, and against
   // colliding with the button's own poll loop in onRefresh.
   const syncWatchRef = useRef(false);
+
+  // Is a source feeding one of THIS page's buckets currently syncing? Keeps the
+  // "fetching…" banner + poll scoped to this page, so a refresh on ANOTHER page
+  // (or a partial cron) doesn't spin this one. `buckets` undefined = the combined
+  // all-buckets page. Falls back to the legacy global `syncing` if an older BE
+  // didn't send `syncingBuckets`.
+  const pageSyncing = (d: SalesKpisResponse | null): boolean => {
+    if (!d) return false;
+    if (!d.syncingBuckets) return d.syncing ?? false;
+    return buckets
+      ? d.syncingBuckets.some((b) => buckets.includes(b))
+      : d.syncingBuckets.length > 0;
+  };
+  const mySyncing = pageSyncing(data);
 
   useEffect(() => {
     let cancelled = false;
@@ -121,14 +159,14 @@ export default function SalesKpis({
   // double-starting or overlapping the button's own loop. No result toast here —
   // it's passive, so we just let the fresh data appear.
   useEffect(() => {
-    if (!data?.syncing || syncWatchRef.current) return;
+    if (!mySyncing || syncWatchRef.current) return;
     syncWatchRef.current = true;
     setRefreshing(true);
     let cancelled = false;
     void (async () => {
       const startAt = Date.now();
       let d = data;
-      while (!cancelled && d.syncing && Date.now() - startAt < REFRESH_MAX_WAIT_MS) {
+      while (!cancelled && pageSyncing(d) && Date.now() - startAt < REFRESH_MAX_WAIT_MS) {
         await new Promise((r) => setTimeout(r, REFRESH_POLL_MS));
         try {
           d = await getSalesKpis(sendAsOf);
@@ -146,7 +184,7 @@ export default function SalesKpis({
       cancelled = true;
       syncWatchRef.current = false;
     };
-  }, [data?.syncing, sendAsOf]);
+  }, [mySyncing, sendAsOf]);
 
   const onRefresh = async (): Promise<void> => {
     if (refreshing) {
@@ -167,7 +205,7 @@ export default function SalesKpis({
     try {
       let d = await refreshSalesKpis(sendAsOf, buckets);
       const startAt = Date.now();
-      while (d.syncing && Date.now() - startAt < REFRESH_MAX_WAIT_MS) {
+      while (pageSyncing(d) && Date.now() - startAt < REFRESH_MAX_WAIT_MS) {
         await new Promise((r) => setTimeout(r, REFRESH_POLL_MS));
         try {
           d = await getSalesKpis(sendAsOf);
@@ -179,7 +217,7 @@ export default function SalesKpis({
           continue;
         }
       }
-      if (d.syncing) {
+      if (pageSyncing(d)) {
         // Still running server-side after our wait — the sync continues and the
         // next page load / hourly cron will surface it. Don't claim success.
         toast.show(
@@ -224,7 +262,16 @@ export default function SalesKpis({
 
   const live = data?.isLive ?? false;
   const stale = data?.stale ?? false;
-  const synced = relativeTime(data?.lastSyncedAt);
+  // "As of when" is the last SUCCESSFUL sync. Absolute time answers "whose data is
+  // this?" precisely; relative gives freshness at a glance. Shown in every status
+  // state — a stale/older view needs the timestamp most of all.
+  const syncedRel = relativeTime(data?.lastSyncedAt);
+  const syncedAbs = absTime(data?.lastSyncedAt);
+  const synced = syncedAbs
+    ? syncedRel
+      ? `${syncedAbs} · ${syncedRel}`
+      : syncedAbs
+    : syncedRel;
   // Headline column label: "Today" only when the resolved as-of IS today;
   // otherwise the actual picked date, so a back-dated view doesn't read "Today".
   const headlineLabel =
@@ -281,7 +328,9 @@ export default function SalesKpis({
               ? t('admin.salesKpis.loading', { defaultValue: 'Loading…' })
               : stale
                 ? t('admin.salesKpis.stale', {
-                    defaultValue: 'Showing older data — couldn’t fetch the latest from EasyEcom.',
+                    defaultValue:
+                      'Showing data from {{when}} — couldn’t fetch the latest from EasyEcom.',
+                    when: synced ?? '—',
                   })
                 : live
                   ? t('admin.salesKpis.liveSynced', {
