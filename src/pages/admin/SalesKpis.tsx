@@ -1,4 +1,4 @@
-import { useEffect, useState, type ReactNode } from 'react';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
 import { RefreshCw } from 'lucide-react';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -86,6 +86,9 @@ export default function SalesKpis({
   const [sendAsOf, setSendAsOf] = useState<string | undefined>(undefined);
   const [displayAsOf, setDisplayAsOf] = useState(today);
   const [tick, setTick] = useState(0);
+  // Guards the passive sync-watcher (below) against starting twice, and against
+  // colliding with the button's own poll loop in onRefresh.
+  const syncWatchRef = useRef(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -109,6 +112,41 @@ export default function SalesKpis({
       cancelled = true;
     };
   }, [sendAsOf, tick]);
+
+  // Passive sync watcher: if a load (or a prior poll) reports a sync still in
+  // flight — e.g. the page was reloaded mid-refresh, or the hourly cron is
+  // running — show the "fetching…" banner and poll until it clears, WITHOUT the
+  // user clicking Refresh. The button path (onRefresh) never writes `syncing:true`
+  // into `data`, so this only fires for background syncs; the ref stops it
+  // double-starting or overlapping the button's own loop. No result toast here —
+  // it's passive, so we just let the fresh data appear.
+  useEffect(() => {
+    if (!data?.syncing || syncWatchRef.current) return;
+    syncWatchRef.current = true;
+    setRefreshing(true);
+    let cancelled = false;
+    void (async () => {
+      const startAt = Date.now();
+      let d = data;
+      while (!cancelled && d.syncing && Date.now() - startAt < REFRESH_MAX_WAIT_MS) {
+        await new Promise((r) => setTimeout(r, REFRESH_POLL_MS));
+        try {
+          d = await getSalesKpis(sendAsOf);
+        } catch {
+          continue;
+        }
+      }
+      if (!cancelled) {
+        setData(d);
+        setRefreshing(false);
+      }
+      syncWatchRef.current = false;
+    })();
+    return () => {
+      cancelled = true;
+      syncWatchRef.current = false;
+    };
+  }, [data?.syncing, sendAsOf]);
 
   const onRefresh = async (): Promise<void> => {
     if (refreshing) {
