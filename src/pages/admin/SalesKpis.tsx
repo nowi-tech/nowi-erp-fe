@@ -472,7 +472,7 @@ function FetchingBanner({ t }: { t: ReturnType<typeof useTranslation>['t'] }): R
       <span>
         {t('admin.salesKpis.fetchingReport', {
           defaultValue:
-            'Fetching your latest report from EasyEcom — this can take 2–3 minutes. Please keep this page open.',
+            'Fetching your latest report from EasyEcom — this can take a few minutes. It runs in the background, so you can keep working.',
         })}
       </span>
     </div>
