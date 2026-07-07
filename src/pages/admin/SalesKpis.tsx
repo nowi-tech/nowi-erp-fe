@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
-import { RefreshCw } from 'lucide-react';
+import { RefreshCw, Info } from 'lucide-react';
 import { Skeleton } from '@/components/ui/skeleton';
 import { DatePicker } from '@/components/ui/DatePicker';
 import { useToast } from '@/components/ui/toast';
@@ -395,6 +395,18 @@ export default function SalesKpis({
   );
 }
 
+/** ⓘ affordance next to a card label — native-title tooltip of the metric's
+ *  meaning. ponytail: native `title` (zero-dep, keyboard-focusable); hover-only,
+ *  so it won't surface on touch — swap for a Radix tooltip if the APK needs it. */
+function InfoDot({ text }: { text?: string }): ReactNode {
+  if (!text) return null;
+  return (
+    <span title={text} tabIndex={0} className="flex-none cursor-help text-neutral-300 hover:text-neutral-500" aria-label={text}>
+      <Info size={13} />
+    </span>
+  );
+}
+
 /** Compact card for `snapshot` metrics (Total Design Live, Closing Inventory):
  *  a single current value — no Today/Yesterday/7d/Month breakdown or trend. */
 function SnapshotCard({ metric, accent }: { metric: SalesMetric; accent: string }): ReactNode {
@@ -407,6 +419,7 @@ function SnapshotCard({ metric, accent }: { metric: SalesMetric; accent: string 
         <span className="truncate text-xs font-bold uppercase leading-tight tracking-wider text-neutral-500">
           {metric.label}
         </span>
+        <InfoDot text={metric.description} />
       </div>
       <div
         style={{
@@ -457,6 +470,7 @@ function SalesCard({
           <span className="truncate text-xs font-bold uppercase leading-tight tracking-wider text-neutral-500">
             {metric.label}
           </span>
+          <InfoDot text={metric.description} />
         </div>
         <span
           className="inline-flex flex-none items-center gap-1 rounded-md px-2 py-1 text-xs font-bold"

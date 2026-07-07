@@ -12,6 +12,8 @@ export type SalesKind = 'flow' | 'ratio' | 'snapshot';
 export interface SalesMetric {
   key: string;
   label: string;
+  /** Plain-English "exactly what this means" — shown in the card's ⓘ tooltip. */
+  description?: string;
   bucket: SalesBucket;
   format: SalesFormat;
   kind: SalesKind;
