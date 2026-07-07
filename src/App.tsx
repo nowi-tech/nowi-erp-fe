@@ -51,7 +51,6 @@ const UsersPage = lazy(() => import('./pages/admin/Users'));
 const EditRequestsPage = lazy(() => import('./pages/admin/EditRequests'));
 const DispatchPrint = lazy(() => import('./pages/dispatches/DispatchPrint'));
 const CadPreviewPage = lazy(() => import('./pages/cad/CadPreviewPage'));
-const StylesRegistry = lazy(() => import('./pages/styles/StylesRegistry'));
 const ChinaImportRegistry = lazy(
   () => import('./pages/china-import/ChinaImportRegistry'),
 );
@@ -518,14 +517,12 @@ function App() {
                 </ProtectedRoute>
               }
             >
-              <Route
-                index
-                element={
-                  <S>
-                    <StylesRegistry />
-                  </S>
-                }
-              />
+              {/* Old Sampling registry list is RETIRED — the Dashboard
+                  ("Sampling") is the single sampling surface. The index bounces
+                  to it so /styles is unreachable by nav OR direct URL, while the
+                  workspace (/styles/:id) + intake (/styles/new) below stay live
+                  (the dashboard drill-down + "Submit design" still use them). */}
+              <Route index element={<Navigate to="/" replace />} />
               <Route
                 path="new"
                 element={

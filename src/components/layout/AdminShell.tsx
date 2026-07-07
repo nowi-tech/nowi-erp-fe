@@ -85,10 +85,13 @@ const NAV_SECTIONS: NavSection[] = [
     items: [
       // Unified office Home — every office role lands here.
       { to: '/', end: true, icon: <LayoutDashboard size={18} />, labelKey: 'admin.nav.dashboard', roles: OFFICE_ROLES },
-      // Sampling registry (the old Styles page) — the "View more" drill-down.
-      // `cataloguer` is added inline (not via PD_ROLES) so it doesn't also
-      // surface the /fabric-library link below, which it can't access.
-      { to: '/styles', end: true, icon: <Shirt size={18} />, labelKey: 'admin.nav.styles', roles: [...PD_ROLES, 'cataloguer'] },
+      // Old Sampling registry (the legacy Styles page). RETIRED from the nav —
+      // the Dashboard ("Sampling") is now the single sampling surface. The
+      // /styles ROUTE stays (the dashboard drill-down + intake still use it),
+      // only the nav entry is hidden via empty roles. No further development is
+      // needed on this page; leave it as-is until it's removed for good.
+      // ponytail: empty roles = hidden from all (roles.some(...) is false).
+      { to: '/styles', end: true, icon: <Shirt size={18} />, labelKey: 'admin.nav.styles', roles: [] },
       // Production = the renamed Locator. Dispatch lives inside it as a tab.
       { to: '/admin/locator', icon: <Search size={18} />, labelKey: 'admin.nav.production', roles: ['admin', 'viewer', 'production_lead'] },
     ],
@@ -109,10 +112,14 @@ const NAV_SECTIONS: NavSection[] = [
     id: 'productDevelopment',
     titleKey: 'admin.nav.sections.productDevelopment',
     items: [
-      // China Import is its own first-class destination (a simple, separate
-      // flow for NW- prefixed imported styles). Fabric Library = the master
-      // fabric catalogue used across styles.
-      { to: '/china-import', icon: <Container size={18} />, labelKey: 'admin.nav.chinaImport', roles: ['admin', 'sampling_editor', 'sampling_lead', 'production_lead'] },
+      // China Import is a simple, separate flow for NW- prefixed imported
+      // styles. HIDDEN from the nav (empty roles) alongside the retired Styles
+      // registry — but the /china-import ROUTE stays live (unlike sampling, it
+      // has no Dashboard replacement: it's the only place to list AND create
+      // china_import styles). Reachable by direct URL; restore roles to unhide.
+      // ponytail: empty roles = hidden from all (roles.some(...) is false).
+      { to: '/china-import', icon: <Container size={18} />, labelKey: 'admin.nav.chinaImport', roles: [] },
+      // Fabric Library = the master fabric catalogue used across styles.
       // fabric_manager is added inline (not via PD_ROLES) so the fabric desk
       // sees the fabric library without gaining the other PD_ROLES nav links.
       { to: '/fabric-library', icon: <Layers size={18} />, labelKey: 'admin.nav.fabricLibrary', roles: [...PD_ROLES, 'fabric_manager'] },

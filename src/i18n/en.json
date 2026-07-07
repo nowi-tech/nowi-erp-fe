@@ -317,7 +317,7 @@
     "lotsByStatus": "Lots by status",
     "totalOrders": "Total orders",
     "nav": {
-      "dashboard": "Dashboard",
+      "dashboard": "Sampling",
       "vendors": "Vendors",
       "skus": "SKUs",
       "users": "Users",
@@ -331,7 +331,7 @@
       "stitching": "Stitching",
       "finishing": "Finishing",
       "productDev": "Product development",
-      "styles": "Sampling",
+      "styles": "Sampling Old",
       "chinaImport": "China Import",
       "fabricLibrary": "Fabric library",
       "sections": {
@@ -354,7 +354,7 @@
       }
     },
     "styles": {
-      "title": "Sampling",
+      "title": "Sampling Old",
       "subtitle": "Every design in flight — submitted, in sampling, parked, or sent to production.",
       "newDesign": "New design submission",
       "newChinaImport": "New China Import intake",
@@ -1243,7 +1243,7 @@
     "dismissButton": "Not now"
   },
   "dashboard": {
-    "title": "Dashboard",
+    "title": "Sampling",
     "submitDesign": "Submit design",
     "narrative": {
       "inYourQueue": "in your queue",
@@ -1265,6 +1265,7 @@
     },
     "table": {
       "searchPlaceholder": "Search styles…",
+      "viewAll": "View all",
       "loading": "Loading…",
       "error": "Couldn't load styles. Try again.",
       "empty": "No styles in flight",
@@ -1316,6 +1317,8 @@
       },
       "editCost": "Edit cost price",
       "addCost": "Add",
+      "editMrp": "Edit MRP",
+      "addMrp": "Add",
       "showing": "Showing {{from}}–{{to}} of {{total}}",
       "prevPage": "Previous page",
       "nextPage": "Next page",
@@ -1346,6 +1349,8 @@
         "statusError": "Could not update status.",
         "costSaved": "Cost price saved.",
         "costError": "Could not save cost price.",
+        "mrpSaved": "MRP saved.",
+        "mrpError": "Could not save MRP.",
         "checkpointError": "Could not update checkpoint.",
         "easyecomDone": "EasyEcom marked done.",
         "easyecomFirst": "Mark EasyEcom done before going live.",

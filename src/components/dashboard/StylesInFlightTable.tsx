@@ -95,6 +95,12 @@ interface Props {
    * table's own refetch) so the Home can refresh its summary cards.
    */
   onActionDone?: () => void;
+  /**
+   * "View all" — reset the shared activity window so every product shows,
+   * regardless of last-touched date. Rendered as a bottom-bar button on
+   * every tab; omit to hide it.
+   */
+  onViewAll?: () => void;
 }
 
 // `my_work` is the FIRST chip — a ROLE-AWARE union of the caller's actionable
@@ -540,6 +546,112 @@ function CostCell({
   );
 }
 
+/**
+ * Inline-editable MRP cell — the CostCell twin, but MRP has no style-level
+ * column: it lives per-channel on the listings. Under the "single MRP" model we
+ * edit ONE value and write it to every channel listing (see `changeMrp`), so a
+ * single-channel style just updates its one price. Editable only where a listed
+ * channel exists (Cataloguing/Live) — pre-listing there's no channel to price,
+ * so it falls back to the read-only min–max summary. The read state keeps the
+ * per-channel range so a multi-channel style still reads correctly.
+ */
+function MrpCell({
+  row,
+  canEdit,
+  onSave,
+}: {
+  row: DashboardStyleRow;
+  canEdit: boolean;
+  onSave: (next: number) => void;
+}) {
+  const { t } = useTranslation();
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState('');
+
+  const summary = mrpSummary(row);
+  // Listings carrying a public link — the write path needs the URL echoed back
+  // (setMarketplaceListing requires it to keep a channel listed).
+  const linked = [...row.liveListings, ...row.preparedListings].filter(
+    (l) => l.url,
+  );
+  // The single value the editor seeds from + writes: the first priced channel.
+  const single = linked.find((l) => l.mrp != null)?.mrp ?? null;
+  const editable = canEdit && linked.length > 0;
+
+  const start = (e: MouseEvent) => {
+    e.stopPropagation();
+    setDraft(single != null ? String(single) : '');
+    setEditing(true);
+  };
+  const commit = () => {
+    const n = draft.trim() ? Number(draft) : NaN;
+    setEditing(false);
+    if (Number.isFinite(n) && n >= 0 && n !== single) onSave(n);
+  };
+
+  if (editing) {
+    return (
+      <div className="relative w-24" onClick={(e) => e.stopPropagation()}>
+        <span className="pointer-events-none absolute left-2 top-1/2 -translate-y-1/2 text-[12px] text-[var(--color-muted-foreground)]">
+          ₹
+        </span>
+        <input
+          autoFocus
+          type="number"
+          min={0}
+          step="0.01"
+          inputMode="decimal"
+          value={draft}
+          onChange={(e) => setDraft(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter') {
+              e.preventDefault();
+              commit();
+            } else if (e.key === 'Escape') {
+              setEditing(false);
+            }
+          }}
+          onBlur={commit}
+          className="h-8 w-full rounded-md border border-[var(--color-input)] bg-[var(--color-surface)] pl-5 pr-2 text-[12px] tabular-nums text-[var(--color-foreground)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-ring)]"
+        />
+      </div>
+    );
+  }
+
+  if (!editable) {
+    return summary.label ? (
+      <span
+        className="tabular-nums text-[var(--color-foreground)]"
+        title={summary.title}
+      >
+        {summary.label}
+      </span>
+    ) : (
+      <span className="text-[var(--color-muted-foreground)]">—</span>
+    );
+  }
+
+  return (
+    <button
+      type="button"
+      onClick={start}
+      className="inline-flex items-center gap-1 rounded-[var(--radius-sm)] px-1.5 py-0.5 text-[13px] tabular-nums transition-colors hover:bg-[var(--color-surface-2)]"
+      title={t('dashboard.table.editMrp', { defaultValue: 'Edit MRP' })}
+    >
+      {summary.label ? (
+        <span className="text-[var(--color-foreground)]" title={summary.title}>
+          {summary.label}
+        </span>
+      ) : (
+        <span className="inline-flex items-center gap-1 text-[var(--color-primary)]">
+          <Pencil size={12} aria-hidden />
+          {t('dashboard.table.addMrp', { defaultValue: 'Add' })}
+        </span>
+      )}
+    </button>
+  );
+}
+
 export default function StylesInFlightTable({
   initialTab = 'all',
   from,
@@ -547,6 +659,7 @@ export default function StylesInFlightTable({
   onDateApply,
   maxDate,
   onActionDone,
+  onViewAll,
 }: Props) {
   const { t } = useTranslation();
   const { user } = useAuth();
@@ -863,6 +976,65 @@ export default function StylesInFlightTable({
         toast.show(
           t('dashboard.table.toast.costError', {
             defaultValue: 'Could not save cost price.',
+          }),
+          'error',
+        );
+      });
+  };
+
+  // Inline MRP edit — "single MRP" model: write ONE price to EVERY linked
+  // channel (one call for a single-channel style, all channels kept in sync for
+  // a multi-channel one). Reuses setMarketplaceListing, echoing back each
+  // channel's existing URL (the BE requires it to keep the channel listed).
+  // Optimistic across all listings; revert the whole row on error.
+  const changeMrp = (row: DashboardStyleRow, next: number) => {
+    const linked = [...row.liveListings, ...row.preparedListings].filter(
+      (l) => l.url,
+    );
+    if (!linked.length) return;
+    const prevLive = row.liveListings;
+    const prevPrepared = row.preparedListings;
+    setRows((rs) =>
+      rs.map((r) =>
+        r.id === row.id
+          ? {
+              ...r,
+              liveListings: r.liveListings.map((l) => ({ ...l, mrp: next })),
+              preparedListings: r.preparedListings.map((l) => ({
+                ...l,
+                mrp: next,
+              })),
+            }
+          : r,
+      ),
+    );
+    Promise.all(
+      linked.map((l) =>
+        setMarketplaceListing(row.id, {
+          channel: l.channel as GoLiveChannel['channel'],
+          listed: true,
+          listingUrl: l.url ?? undefined,
+          mrp: next,
+        }),
+      ),
+    )
+      .then(() => {
+        toast.show(
+          t('dashboard.table.toast.mrpSaved', { defaultValue: 'MRP saved.' }),
+          'success',
+        );
+      })
+      .catch(() => {
+        setRows((rs) =>
+          rs.map((r) =>
+            r.id === row.id
+              ? { ...r, liveListings: prevLive, preparedListings: prevPrepared }
+              : r,
+          ),
+        );
+        toast.show(
+          t('dashboard.table.toast.mrpError', {
+            defaultValue: 'Could not save MRP.',
           }),
           'error',
         );
@@ -1323,19 +1495,13 @@ export default function StylesInFlightTable({
     key: 'mrp',
     header: t('dashboard.table.columns.mrp', { defaultValue: 'MRP' }),
     width: '110px',
-    cell: (row) => {
-      const s = mrpSummary(row);
-      return s.label ? (
-        <span
-          className="tabular-nums text-[var(--color-foreground)]"
-          title={s.title}
-        >
-          {s.label}
-        </span>
-      ) : (
-        <span className="text-[var(--color-muted-foreground)]">—</span>
-      );
-    },
+    cell: (row) => (
+      <MrpCell
+        row={row}
+        canEdit={canCataloguingWrite}
+        onSave={(n) => changeMrp(row, n)}
+      />
+    ),
   };
 
   // Colour swatch + name — context column for the draft / all views.
@@ -1650,10 +1816,22 @@ export default function StylesInFlightTable({
           rowAccent={(row) => row.lifecycle === 'draft'}
         />
 
-        {/* Bottom pager — mirrors the top control so you can page without
-            scrolling back up after working a full page. */}
-        {pager && (
-          <div className="flex justify-end border-t border-[var(--color-border)] px-4 py-3">
+        {/* Bottom bar — "View all" (resets the date window to show every
+            product) on the left; the pager mirror on the right so you can page
+            without scrolling back up after working a full page. */}
+        {(onViewAll || pager) && (
+          <div className="flex items-center justify-between gap-3 border-t border-[var(--color-border)] px-4 py-3">
+            {onViewAll ? (
+              <button
+                type="button"
+                onClick={onViewAll}
+                className="text-[13px] font-medium text-[var(--color-primary)] transition-colors hover:underline"
+              >
+                {t('dashboard.table.viewAll', { defaultValue: 'View all' })}
+              </button>
+            ) : (
+              <span />
+            )}
             {pager}
           </div>
         )}
