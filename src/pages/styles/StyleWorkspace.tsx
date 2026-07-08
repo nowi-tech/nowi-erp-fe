@@ -1436,12 +1436,6 @@ function ChannelsCard({
                           defaultValue: l.state,
                         })}
                       </Badge>
-                      {/* Per-channel MRP — edited via the "Add listings" dialog. */}
-                      {l.mrp != null && (
-                        <span className="text-xs tabular-nums text-[var(--color-muted-foreground)]">
-                          {formatInr(l.mrp)}
-                        </span>
-                      )}
                     </div>
                     {/* Secondary line — mirrors the Stock row's hint slot. */}
                     <div className="mt-0.5">
