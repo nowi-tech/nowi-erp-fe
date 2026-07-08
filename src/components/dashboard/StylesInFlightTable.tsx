@@ -17,6 +17,7 @@ import {
   Link2,
   Pencil,
   Search,
+  X,
 } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { cn } from '@/lib/utils';
@@ -430,6 +431,11 @@ function formatInr(value: number): string {
   })}`;
 }
 
+// Only treat an absolute http(s) URL as a real link — a scheme-less/junk value
+// (e.g. "kk") would resolve relative to our origin and go nowhere.
+const isHttpUrl = (u?: string | null): u is string =>
+  !!u && /^https?:\/\//i.test(u);
+
 /**
  * Inline-editable price cell (cost or MRP). Writers click to edit (Enter/blur
  * saves, Escape cancels); an empty cell shows an "Add" affordance. Interactions
@@ -541,8 +547,22 @@ export default function StylesInFlightTable({
   const [searchParams, setSearchParams] = useSearchParams();
 
   const [tab, setTab] = useState<DashboardStyleTab>(initialTab);
-  const [searchText, setSearchText] = useState('');
+  // Seed from ?q= so a search survives navigating into a style and back.
+  const [searchText, setSearchText] = useState(
+    () => searchParams.get('q') ?? '',
+  );
   const debouncedSearch = useDebounced(searchText, 300);
+
+  // Mirror the (debounced) search into ?q= so back-navigation restores it.
+  useEffect(() => {
+    const params = new URLSearchParams(searchParams);
+    const q = debouncedSearch.trim();
+    if (q) params.set('q', q);
+    else params.delete('q');
+    if (params.toString() !== searchParams.toString()) {
+      setSearchParams(params, { replace: true });
+    }
+  }, [debouncedSearch, searchParams, setSearchParams]);
   // Multi-select status filter, scoped to the active tab. Cleared on any tab
   // switch (a previous tab's statuses wouldn't apply to the new bucket).
   const [statuses, setStatuses] = useState<DashboardStatusFilter[]>([]);
@@ -627,21 +647,26 @@ export default function StylesInFlightTable({
     onActionDone?.();
   };
 
-  // The Style detail route — matches StylesRegistry.tsx's row link. Stash the
-  // active tab as `from` so the workspace back button returns here, to this
-  // exact bucket, rather than the dashboard default.
-  const openStyle = (row: DashboardStyleRow) =>
-    navigate(`/styles/${row.styleId ?? row.id}`, {
-      state: { from: `/?tab=${tab}` },
-    });
+  // The Style detail route. Stash the active tab + search as `from` so the
+  // workspace back button returns to this exact bucket AND search, not the
+  // dashboard default.
+  const openStyle = (row: DashboardStyleRow) => {
+    const q = debouncedSearch.trim();
+    const from = `/?tab=${tab}${q ? `&q=${encodeURIComponent(q)}` : ''}`;
+    navigate(`/styles/${row.styleId ?? row.id}`, { state: { from } });
+  };
 
   // Mirror the active tab into ?tab= so a refresh or shared link reopens
   // the selected bucket (not the stale deep-linked one) — matches the
   // Sampling registry's behaviour.
   const selectTab = (next: DashboardStyleTab) => {
     setTab(next);
+    // Switching tabs clears the (global) search so the new bucket shows its own
+    // contents, not carried-over search results.
+    setSearchText('');
     const params = new URLSearchParams(searchParams);
     params.set('tab', next);
+    params.delete('q');
     setSearchParams(params, { replace: true });
   };
 
@@ -1188,17 +1213,36 @@ export default function StylesInFlightTable({
         );
       }
 
+      // Live rows show their listing link under the pill — but only on tabs
+      // that lack the Marketplace column (which already carries the links).
+      const tabHasMarketplace = tab === 'cataloguing' || tab === 'live';
+      const liveUrl = row.liveListings.find((l) => isHttpUrl(l.url))?.url ?? null;
+
       return (
-        <HoverTip content={detail}>
-          <div className="flex items-center gap-1">
-            <DotStatusPill label={label} tone={tone} />
-            {row.outOfStock && (
-              <Badge variant="destructive" className="text-[9px] uppercase">
-                {t('dashboard.table.outOfStockBadge', { defaultValue: 'OOS' })}
-              </Badge>
-            )}
-          </div>
-        </HoverTip>
+        <div className="flex flex-col gap-0.5">
+          <HoverTip content={detail}>
+            <div className="flex items-center gap-1">
+              <DotStatusPill label={label} tone={tone} />
+              {row.outOfStock && (
+                <Badge variant="destructive" className="text-[9px] uppercase">
+                  {t('dashboard.table.outOfStockBadge', { defaultValue: 'OOS' })}
+                </Badge>
+              )}
+            </div>
+          </HoverTip>
+          {row.lifecycle === 'live' && !tabHasMarketplace && liveUrl && (
+            <a
+              href={liveUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              onClick={(e) => e.stopPropagation()}
+              className="inline-flex items-center gap-1 text-[11px] text-[var(--color-primary)] hover:underline"
+            >
+              <ExternalLink size={11} aria-hidden />
+              {t('dashboard.table.viewNow', { defaultValue: 'View now' })}
+            </a>
+          )}
+        </div>
       );
     },
   };
@@ -1425,7 +1469,7 @@ export default function StylesInFlightTable({
                 <span className="font-medium text-[var(--color-foreground)]">
                   {label}
                 </span>
-                {listing.url && (
+                {isHttpUrl(listing.url) && (
                   <ExternalLink
                     size={13}
                     className="text-[var(--color-primary)]"
@@ -1434,7 +1478,7 @@ export default function StylesInFlightTable({
                 )}
               </>
             );
-            return listing.url ? (
+            return isHttpUrl(listing.url) ? (
               <a
                 key={listing.channel}
                 href={listing.url}
@@ -1581,17 +1625,27 @@ export default function StylesInFlightTable({
         {/* Search · date filter · pagination row. */}
         <div className="flex flex-wrap items-center justify-between gap-3 border-b border-[var(--color-border)] px-4 py-3">
           <div className="flex flex-1 flex-wrap items-center gap-2">
-            <div className="relative w-full max-w-xs">
+            <div className="relative w-full max-w-sm">
               <Search
-                size={15}
-                className="absolute left-3 top-1/2 -translate-y-1/2 text-[var(--color-muted-foreground)]"
+                size={16}
+                className="absolute left-3 top-1/2 -translate-y-1/2 text-[var(--color-primary)]"
               />
               <Input
-                className="h-9 text-[13px] pl-9"
+                className="h-9 text-[13px] pl-9 pr-9 border-[var(--color-primary)]/40 bg-[var(--color-primary-soft)]/30 focus-visible:border-[var(--color-primary)] focus-visible:ring-2 focus-visible:ring-[var(--color-primary)]/25"
                 placeholder={t('dashboard.table.searchPlaceholder')}
                 value={searchText}
                 onChange={(e) => setSearchText(e.target.value)}
               />
+              {searchText && (
+                <button
+                  type="button"
+                  onClick={() => setSearchText('')}
+                  aria-label={t('common.clear', { defaultValue: 'Clear' })}
+                  className="absolute right-2.5 top-1/2 -translate-y-1/2 text-[var(--color-muted-foreground)] hover:text-[var(--color-foreground)]"
+                >
+                  <X size={15} />
+                </button>
+              )}
             </div>
             {/* In-card activity-window filter (the old "List" picker). */}
             {onDateApply && from && to && (
