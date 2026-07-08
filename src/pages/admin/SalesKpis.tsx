@@ -395,14 +395,22 @@ export default function SalesKpis({
   );
 }
 
-/** ⓘ affordance next to a card label — native-title tooltip of the metric's
- *  meaning. ponytail: native `title` (zero-dep, keyboard-focusable); hover-only,
- *  so it won't surface on touch — swap for a Radix tooltip if the APK needs it. */
+/** ⓘ next to a card label — styled hover/focus tooltip of the metric's meaning. */
 function InfoDot({ text }: { text?: string }): ReactNode {
   if (!text) return null;
   return (
-    <span title={text} tabIndex={0} className="flex-none cursor-help text-neutral-300 hover:text-neutral-500" aria-label={text}>
+    <span
+      tabIndex={0}
+      aria-label={text}
+      className="group relative flex-none cursor-default text-neutral-300 hover:text-neutral-500 focus:outline-none"
+    >
       <Info size={13} />
+      <span
+        role="tooltip"
+        className="pointer-events-none absolute bottom-full left-1/2 z-30 mb-1.5 w-max max-w-[15rem] -translate-x-1/2 rounded-md bg-[#11151f] px-2.5 py-1.5 text-left text-[11px] font-medium normal-case leading-snug tracking-normal text-white opacity-0 shadow-lg transition-opacity duration-150 group-hover:opacity-100 group-focus:opacity-100"
+      >
+        {text}
+      </span>
     </span>
   );
 }
