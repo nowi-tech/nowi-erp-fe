@@ -135,21 +135,6 @@ const safeHref = (raw: string): string | null => {
 const formatInr = (value: number | string): string =>
   `₹${Number(value).toLocaleString('en-IN', { maximumFractionDigits: 2 })}`;
 
-// Summarise per-channel MRPs (active channels only) into one label: a single
-// value when the priced channels agree, a ₹min–₹max range when they differ,
-// null when none is priced.
-const mrpRangeLabel = (
-  listings: { mrp?: number | null; state: string }[],
-): string | null => {
-  const vals = listings
-    .filter((l) => l.state !== 'off' && l.mrp != null)
-    .map((l) => Number(l.mrp));
-  if (vals.length === 0) return null;
-  const min = Math.min(...vals);
-  const max = Math.max(...vals);
-  return min === max ? formatInr(min) : `${formatInr(min)}–${formatInr(max)}`;
-};
-
 // Snapshot field → English label, for describing WHAT an audit entry
 // changed (mirrors StylesService.diffSnapshot on the BE). Admin-facing
 // only → English-only by design (no Hindi).
@@ -665,25 +650,19 @@ export default function StyleWorkspace() {
               )
             }
           />
-          {/* MRP — per-channel selling price, summarised (range across channels).
-              Always shown for parity with Cost; "—" until a channel is priced.
-              Edit per channel via the core-specs pencil. Final row. */}
-          {(() => {
-            const label = mrpRangeLabel(style.channelListings ?? []);
-            return (
-              <SpecRow
-                label="MRP"
-                value={
-                  label ?? (
-                    <span className="text-[var(--color-muted-foreground)]">
-                      —
-                    </span>
-                  )
-                }
-                last
-              />
-            );
-          })()}
+          {/* MRP — per-style selling price (em-dash when unset, editable via the
+              core-specs pencil). Final row. */}
+          <SpecRow
+            label="MRP"
+            value={
+              style.mrp != null ? (
+                formatInr(style.mrp)
+              ) : (
+                <span className="text-[var(--color-muted-foreground)]">—</span>
+              )
+            }
+            last
+          />
         </dl>
       </div>
       {/* Production layout footers the card with the sample sign-off
@@ -1163,7 +1142,6 @@ export default function StyleWorkspace() {
         open={listingsOpen}
         busy={busy !== null}
         existing={style.channelListings ?? []}
-        costPrice={style.costPrice}
         onClose={() => setListingsOpen(false)}
         onConfirm={(channels) => {
           setListingsOpen(false);
@@ -1175,7 +1153,6 @@ export default function StyleWorkspace() {
                 channel: ch.channel,
                 listed: true,
                 listingUrl: ch.listingUrl,
-                mrp: ch.mrp,
               });
             }
             return updated;
@@ -1459,12 +1436,6 @@ function ChannelsCard({
                           defaultValue: l.state,
                         })}
                       </Badge>
-                      {/* Per-channel MRP — edited via the "Add listings" dialog. */}
-                      {l.mrp != null && (
-                        <span className="text-xs tabular-nums text-[var(--color-muted-foreground)]">
-                          {formatInr(l.mrp)}
-                        </span>
-                      )}
                     </div>
                     {/* Secondary line — mirrors the Stock row's hint slot. */}
                     <div className="mt-0.5">

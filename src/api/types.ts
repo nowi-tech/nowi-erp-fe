@@ -65,6 +65,7 @@ export interface Sku {
   category?: string | null;
   originVendorId?: string | null;
   costPrice?: number | null;
+  mrp?: number | null;
   sellingPrice?: number | null;
 }
 
@@ -567,9 +568,9 @@ export interface Style {
   sampleApprovedBy: number | null;
   sampleApprovedAt: string | null;
 
-  /** Per-style manufacturing cost (captured at sample sign-off; editable for
-   *  backfill). Per-channel MRP lives on `channelListings[].mrp`. */
+  /** Per-style manufacturing cost + selling price (MRP). Both editable. */
   costPrice?: number | null;
+  mrp?: number | null;
 
   // Production (v2)
   productionStatus: string | null;
