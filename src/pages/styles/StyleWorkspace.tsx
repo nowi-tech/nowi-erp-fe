@@ -1163,7 +1163,6 @@ export default function StyleWorkspace() {
         open={listingsOpen}
         busy={busy !== null}
         existing={style.channelListings ?? []}
-        costPrice={style.costPrice}
         onClose={() => setListingsOpen(false)}
         onConfirm={(channels) => {
           setListingsOpen(false);
@@ -1175,7 +1174,6 @@ export default function StyleWorkspace() {
                 channel: ch.channel,
                 listed: true,
                 listingUrl: ch.listingUrl,
-                mrp: ch.mrp,
               });
             }
             return updated;

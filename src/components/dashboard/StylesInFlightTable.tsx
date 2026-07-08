@@ -431,45 +431,23 @@ function formatInr(value: number): string {
 }
 
 /**
- * Summarise a style's per-channel MRPs into one cell. MRP is per channel, so a
- * style can carry several — show a single value when they agree, a min–max
- * range when they differ, and "—" when nothing is priced. `title` lists the
- * per-channel breakdown on hover.
+ * Inline-editable price cell (cost or MRP). Writers click to edit (Enter/blur
+ * saves, Escape cancels); an empty cell shows an "Add" affordance. Interactions
+ * stop row-click propagation so editing never navigates into the style.
  */
-function mrpSummary(row: DashboardStyleRow): {
-  label: string | null;
-  title?: string;
-} {
-  const priced = [...row.liveListings, ...row.preparedListings].flatMap((l) =>
-    l.mrp != null ? [{ channel: l.channel, mrp: l.mrp }] : [],
-  );
-  if (priced.length === 0) return { label: null };
-  const vals = priced.map((p) => p.mrp);
-  const min = Math.min(...vals);
-  const max = Math.max(...vals);
-  return {
-    label: min === max ? formatInr(min) : `${formatInr(min)}–${formatInr(max)}`,
-    title: priced.map((p) => `${p.channel}: ${formatInr(p.mrp)}`).join(' · '),
-  };
-}
-
-/**
- * Inline-editable cost-price cell. Writers click to edit (Enter/blur saves,
- * Escape cancels); an empty cell shows an "Add" affordance — this is the
- * backfill path for styles approved before pricing existed. Non-writers see a
- * static value or "—". All interactions stop row-click propagation so editing
- * never navigates into the style.
- */
-function CostCell({
+function PriceCell({
   value,
   canEdit,
+  editTitle,
+  addLabel,
   onSave,
 }: {
   value: number | null;
   canEdit: boolean;
+  editTitle: string;
+  addLabel: string;
   onSave: (next: number) => void;
 }) {
-  const { t } = useTranslation();
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState('');
 
@@ -530,7 +508,7 @@ function CostCell({
       type="button"
       onClick={start}
       className="inline-flex items-center gap-1 rounded-[var(--radius-sm)] px-1.5 py-0.5 text-[13px] tabular-nums transition-colors hover:bg-[var(--color-surface-2)]"
-      title={t('dashboard.table.editCost', { defaultValue: 'Edit cost price' })}
+      title={editTitle}
     >
       {value != null ? (
         <span className="text-[var(--color-foreground)]">
@@ -539,118 +517,13 @@ function CostCell({
       ) : (
         <span className="inline-flex items-center gap-1 text-[var(--color-primary)]">
           <Pencil size={12} aria-hidden />
-          {t('dashboard.table.addCost', { defaultValue: 'Add' })}
+          {addLabel}
         </span>
       )}
     </button>
   );
 }
 
-/**
- * Inline-editable MRP cell — the CostCell twin, but MRP has no style-level
- * column: it lives per-channel on the listings. Under the "single MRP" model we
- * edit ONE value and write it to every channel listing (see `changeMrp`), so a
- * single-channel style just updates its one price. Editable only where a listed
- * channel exists (Cataloguing/Live) — pre-listing there's no channel to price,
- * so it falls back to the read-only min–max summary. The read state keeps the
- * per-channel range so a multi-channel style still reads correctly.
- */
-function MrpCell({
-  row,
-  canEdit,
-  onSave,
-}: {
-  row: DashboardStyleRow;
-  canEdit: boolean;
-  onSave: (next: number) => void;
-}) {
-  const { t } = useTranslation();
-  const [editing, setEditing] = useState(false);
-  const [draft, setDraft] = useState('');
-
-  const summary = mrpSummary(row);
-  // Listings carrying a public link — the write path needs the URL echoed back
-  // (setMarketplaceListing requires it to keep a channel listed).
-  const linked = [...row.liveListings, ...row.preparedListings].filter(
-    (l) => l.url,
-  );
-  // The single value the editor seeds from + writes: the first priced channel.
-  const single = linked.find((l) => l.mrp != null)?.mrp ?? null;
-  const editable = canEdit && linked.length > 0;
-
-  const start = (e: MouseEvent) => {
-    e.stopPropagation();
-    setDraft(single != null ? String(single) : '');
-    setEditing(true);
-  };
-  const commit = () => {
-    const n = draft.trim() ? Number(draft) : NaN;
-    setEditing(false);
-    if (Number.isFinite(n) && n >= 0 && n !== single) onSave(n);
-  };
-
-  if (editing) {
-    return (
-      <div className="relative w-24" onClick={(e) => e.stopPropagation()}>
-        <span className="pointer-events-none absolute left-2 top-1/2 -translate-y-1/2 text-[12px] text-[var(--color-muted-foreground)]">
-          ₹
-        </span>
-        <input
-          autoFocus
-          type="number"
-          min={0}
-          step="0.01"
-          inputMode="decimal"
-          value={draft}
-          onChange={(e) => setDraft(e.target.value)}
-          onKeyDown={(e) => {
-            if (e.key === 'Enter') {
-              e.preventDefault();
-              commit();
-            } else if (e.key === 'Escape') {
-              setEditing(false);
-            }
-          }}
-          onBlur={commit}
-          className="h-8 w-full rounded-md border border-[var(--color-input)] bg-[var(--color-surface)] pl-5 pr-2 text-[12px] tabular-nums text-[var(--color-foreground)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-ring)]"
-        />
-      </div>
-    );
-  }
-
-  if (!editable) {
-    return summary.label ? (
-      <span
-        className="tabular-nums text-[var(--color-foreground)]"
-        title={summary.title}
-      >
-        {summary.label}
-      </span>
-    ) : (
-      <span className="text-[var(--color-muted-foreground)]">—</span>
-    );
-  }
-
-  return (
-    <button
-      type="button"
-      onClick={start}
-      className="inline-flex items-center gap-1 rounded-[var(--radius-sm)] px-1.5 py-0.5 text-[13px] tabular-nums transition-colors hover:bg-[var(--color-surface-2)]"
-      title={t('dashboard.table.editMrp', { defaultValue: 'Edit MRP' })}
-    >
-      {summary.label ? (
-        <span className="text-[var(--color-foreground)]" title={summary.title}>
-          {summary.label}
-        </span>
-      ) : (
-        <span className="inline-flex items-center gap-1 text-[var(--color-primary)]">
-          <Pencil size={12} aria-hidden />
-          {t('dashboard.table.addMrp', { defaultValue: 'Add' })}
-        </span>
-      )}
-    </button>
-  );
-}
 
 export default function StylesInFlightTable({
   initialTab = 'all',
@@ -892,7 +765,6 @@ export default function StylesInFlightTable({
           channel: ch.channel,
           listed: true,
           listingUrl: ch.listingUrl,
-          mrp: ch.mrp,
         }),
       ),
     )
@@ -982,42 +854,14 @@ export default function StylesInFlightTable({
       });
   };
 
-  // Inline MRP edit — "single MRP" model: write ONE price to EVERY linked
-  // channel (one call for a single-channel style, all channels kept in sync for
-  // a multi-channel one). Reuses setMarketplaceListing, echoing back each
-  // channel's existing URL (the BE requires it to keep the channel listed).
-  // Optimistic across all listings; revert the whole row on error.
+  // Inline MRP edit — single per-style value, editable any stage. Same optimistic
+  // PATCH pattern as costPrice.
   const changeMrp = (row: DashboardStyleRow, next: number) => {
-    const linked = [...row.liveListings, ...row.preparedListings].filter(
-      (l) => l.url,
-    );
-    if (!linked.length) return;
-    const prevLive = row.liveListings;
-    const prevPrepared = row.preparedListings;
+    const prev = row.mrp;
     setRows((rs) =>
-      rs.map((r) =>
-        r.id === row.id
-          ? {
-              ...r,
-              liveListings: r.liveListings.map((l) => ({ ...l, mrp: next })),
-              preparedListings: r.preparedListings.map((l) => ({
-                ...l,
-                mrp: next,
-              })),
-            }
-          : r,
-      ),
+      rs.map((r) => (r.id === row.id ? { ...r, mrp: next } : r)),
     );
-    Promise.all(
-      linked.map((l) =>
-        setMarketplaceListing(row.id, {
-          channel: l.channel as GoLiveChannel['channel'],
-          listed: true,
-          listingUrl: l.url ?? undefined,
-          mrp: next,
-        }),
-      ),
-    )
+    patchStyle(row.id, { mrp: next })
       .then(() => {
         toast.show(
           t('dashboard.table.toast.mrpSaved', { defaultValue: 'MRP saved.' }),
@@ -1026,11 +870,7 @@ export default function StylesInFlightTable({
       })
       .catch(() => {
         setRows((rs) =>
-          rs.map((r) =>
-            r.id === row.id
-              ? { ...r, liveListings: prevLive, preparedListings: prevPrepared }
-              : r,
-          ),
+          rs.map((r) => (r.id === row.id ? { ...r, mrp: prev } : r)),
         );
         toast.show(
           t('dashboard.table.toast.mrpError', {
@@ -1481,24 +1321,30 @@ export default function StylesInFlightTable({
     header: t('dashboard.table.columns.cost', { defaultValue: 'Cost' }),
     width: '120px',
     cell: (row) => (
-      <CostCell
+      <PriceCell
         value={row.costPrice}
         canEdit={canWriteInline}
+        editTitle={t('dashboard.table.editCost', {
+          defaultValue: 'Edit cost price',
+        })}
+        addLabel={t('dashboard.table.addCost', { defaultValue: 'Add' })}
         onSave={(n) => changeCostPrice(row, n)}
       />
     ),
   };
 
-  // MRP — read-only summary of the per-channel selling prices (edited per
-  // channel in the "Add listings" dialog, not inline). Shown on every tab.
+  // MRP — single per-style selling price, inline-editable for PD writers at any
+  // stage (like cost). Shown on every tab.
   const mrpColumn: QueueColumn<DashboardStyleRow> = {
     key: 'mrp',
     header: t('dashboard.table.columns.mrp', { defaultValue: 'MRP' }),
     width: '110px',
     cell: (row) => (
-      <MrpCell
-        row={row}
-        canEdit={canCataloguingWrite}
+      <PriceCell
+        value={row.mrp}
+        canEdit={canWriteInline}
+        editTitle={t('dashboard.table.editMrp', { defaultValue: 'Edit MRP' })}
+        addLabel={t('dashboard.table.addMrp', { defaultValue: 'Add' })}
         onSave={(n) => changeMrp(row, n)}
       />
     ),
@@ -1896,16 +1742,14 @@ export default function StylesInFlightTable({
       <GoLiveDialog
         open={listTarget !== null}
         busy={listBusy}
-        costPrice={listTarget?.costPrice ?? null}
         existing={
-          ([
+          [
             ...(listTarget?.liveListings ?? []),
             ...(listTarget?.preparedListings ?? []),
           ].map((l) => ({
             channel: l.channel,
             listingUrl: l.url,
-            mrp: l.mrp,
-          })) ?? []) as StyleChannelListing[]
+          })) as StyleChannelListing[]
         }
         onClose={() => (listBusy ? undefined : setListTarget(null))}
         onConfirm={confirmListings}

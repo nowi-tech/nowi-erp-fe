@@ -366,8 +366,6 @@ export async function setMarketplaceListing(
     channel: ChannelName;
     listed: boolean;
     listingUrl?: string;
-    /** Per-channel MRP (selling price). Captured alongside the listing URL. */
-    mrp?: number;
     /** Reason for taking the channel offline (when listed=false). */
     reason?: string;
   },
@@ -404,8 +402,6 @@ export async function markOutOfStock(
 export interface GoLiveChannel {
   channel: ChannelName;
   listingUrl?: string;
-  /** Per-channel MRP (selling price). */
-  mrp?: number;
 }
 
 // ─── Variants ─────────────────────────────────────────────────────────
