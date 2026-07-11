@@ -343,7 +343,51 @@
       },
       "production": "Production",
       "analyticsLiveInventory": "Live & Inventory",
-      "analyticsFulfilment": "Fulfilment"
+      "analyticsFulfilment": "Fulfilment",
+      "inventoryHealth": "Inventory Health"
+    },
+    "inventoryHealth": {
+      "title": "Inventory Health",
+      "subtitle": "Per-size stockout forecast and what to make next, grouped by style.",
+      "refresh": "Refresh",
+      "syncing": "Syncing…",
+      "refreshed": "Inventory health refreshed.",
+      "refreshFailed": "Refresh failed. Please try again.",
+      "loading": "Loading…",
+      "synced": "As of {{when}}",
+      "neverSynced": "Not synced yet",
+      "mock": "Preview data — the inventory-health service isn’t connected yet.",
+      "failed": "Could not load inventory health.",
+      "retry": "Retry",
+      "empty": "Nothing matches this filter.",
+      "toMake": "To make",
+      "daysLeft": "{{n}} days left",
+      "perDay": "/d",
+      "lowData": "low data",
+      "pipelineTip": "production data not yet connected",
+      "search": "Search style, name or marketplace ID…",
+      "window": "Window",
+      "windowActive": "Window: {{from}} – {{to}}",
+      "windowClear": "Reset to default window",
+      "openStyle": "Open style workspace",
+      "headlineMake": "Make",
+      "headlineUnits": "units",
+      "headlineNeed": "SKUs need action now",
+      "chip": {
+        "out": "out",
+        "critical": "critical",
+        "watch": "watch",
+        "healthy": "healthy",
+        "clear": "clear"
+      },
+      "col": {
+        "size": "Style",
+        "cover": "Cover",
+        "drr": "DRR · /d",
+        "stock": "Stock",
+        "pipeline": "Pipeline",
+        "make": "Make"
+      }
     },
     "home": {
       "approvalCta": {
@@ -574,6 +618,7 @@
         "startProduction": "Start production",
         "startCataloguing": "Start cataloguing",
         "addListings": "Add listings",
+        "inventoryHealth": "Inventory health",
         "back": "Back",
         "liveStage": "Live",
         "easyecomTitle": "EasyEcom catalog",

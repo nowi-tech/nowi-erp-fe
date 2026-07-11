@@ -176,7 +176,18 @@ const CHANNEL_BRAND: Record<string, { bg: string; fg: string; ch: string }> = {
  * portalled to <body> so the table's `overflow-x-auto` can't clip it, and
  * positioned to the right of the cell (flipping left near the viewport edge).
  */
-function HoverThumbnail({ src, alt }: { src: string | null; alt: string }) {
+export function HoverThumbnail({
+  src,
+  alt,
+  size = 80,
+  radius = 'var(--radius-sm)',
+}: {
+  src: string | null;
+  alt: string;
+  /** Thumbnail edge in px (default 80). Hover preview stays 240px. */
+  size?: number;
+  radius?: string;
+}) {
   const [broken, setBroken] = useState(false);
   const [hover, setHover] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
@@ -213,19 +224,21 @@ function HoverThumbnail({ src, alt }: { src: string | null; alt: string }) {
         <img
           src={src}
           alt={alt}
-          width={80}
-          height={80}
+          width={size}
+          height={size}
           loading="lazy"
           decoding="async"
           onError={() => setBroken(true)}
-          className="h-20 w-20 shrink-0 cursor-zoom-in rounded-[var(--radius-sm)] border border-[var(--color-border)] object-cover transition-transform"
+          style={{ width: size, height: size, borderRadius: radius }}
+          className="shrink-0 cursor-zoom-in border border-[var(--color-border)] object-cover transition-transform"
         />
       ) : (
         <span
           aria-hidden
-          className="flex h-20 w-20 shrink-0 items-center justify-center rounded-[var(--radius-sm)] border border-[var(--color-border)] bg-[var(--color-surface-2)] text-[var(--color-muted-foreground)]"
+          style={{ width: size, height: size, borderRadius: radius }}
+          className="flex shrink-0 items-center justify-center border border-[var(--color-border)] bg-[var(--color-surface-2)] text-[var(--color-muted-foreground)]"
         >
-          <ImageOff size={26} />
+          <ImageOff size={Math.round(size * 0.33)} />
         </span>
       )}
       {hover &&

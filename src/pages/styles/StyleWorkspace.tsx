@@ -13,6 +13,7 @@ import {
   PackageCheck,
   PackageX,
   Store,
+  HeartPulse,
 } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -814,6 +815,27 @@ export default function StyleWorkspace() {
             in_sampling → Park · Send back for corrections · Approve sample
             sample_approved+ → Park · Start production · Add colour */}
         <div className="flex flex-wrap items-center gap-2 md:justify-end shrink-0">
+          {/* Jump to this style's inventory health (admins/viewers only —
+              the IH route is gated to those roles). Deep-links via ?q=code. */}
+          {style.styleId &&
+            userAllRoles(user).some((r) => r === 'admin' || r === 'viewer') && (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() =>
+                  navigate(
+                    `/admin/analytics/inventory-health?q=${encodeURIComponent(style.styleId!)}`,
+                  )
+                }
+              >
+                <HeartPulse size={16} />
+                <span className="ml-1">
+                  {t('admin.styles.workspace.inventoryHealth', {
+                    defaultValue: 'Inventory health',
+                  })}
+                </span>
+              </Button>
+            )}
           {canPark && (
             <Button
               variant="outline"
