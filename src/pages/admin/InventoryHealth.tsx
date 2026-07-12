@@ -138,76 +138,6 @@ function absTime(iso: string | null | undefined): string | null {
   return `${date}, ${time}`;
 }
 
-/** Standalone mock so the page renders without the backend (shaped to the contract). */
-const MOCK: InventoryHealthResponse = {
-  syncedAt: new Date(Date.now() - 42 * 60_000).toISOString(),
-  syncing: false,
-  kpis: { unitsToMake: 1840, needsAction: 7, outOfStock: 3, critical: 4, watch: 5, healthy: 12, totalStyles: 21, totalSkus: 96 },
-  styles: [
-    {
-      // Highest ₹/day at risk → row 1, even though NW-1042 is more OUT.
-      styleKey: 'NW-0987',
-      name: 'Oversized Poplin Shirt',
-      category: 'Shirt',
-      imageUrl: null,
-      linkedStyleId: null,
-      marketplaceIds: ['MYN-POP-SHRT-9821'],
-      marketplaceLinks: [],
-      worstUrgency: 'critical',
-      makeTotal: 380,
-      atRiskUnitsPerDay: 3.3,
-      atRiskRevenuePerDay: 3627,
-      abcClass: 'A',
-      lowVolume: false,
-      sizes: [
-        { size: 'S', sku: 'NW-0987-S', urgency: 'critical', coverDays: 4, drr: 3.3, sold2d: 7, sold7d: 23, sold30d: 99, confidence: 'high', currentStock: 14, pipelineQty: 0, makeQty: 120, avgPrice: 1099, atRiskUnitsPerDay: 2.4, atRiskRevenuePerDay: 2638 },
-        { size: 'M', sku: 'NW-0987-M', urgency: 'watch', coverDays: 9, drr: 5.0, sold2d: 10, sold7d: 35, sold30d: 150, confidence: 'high', currentStock: 46, pipelineQty: 0, makeQty: 140, avgPrice: 1099, atRiskUnitsPerDay: 0.9, atRiskRevenuePerDay: 989 },
-        { size: 'L', sku: 'NW-0987-L', urgency: 'watch', coverDays: 13, drr: 2.8, sold2d: 5, sold7d: 20, sold30d: 84, confidence: 'low', currentStock: 38, pipelineQty: 0, makeQty: 120, avgPrice: 1099, atRiskUnitsPerDay: 0, atRiskRevenuePerDay: 0 },
-      ],
-    },
-    {
-      styleKey: 'NW-1042',
-      name: 'Ribbed Knit Co-ord',
-      category: 'Co-ord',
-      imageUrl: null,
-      linkedStyleId: 1042,
-      marketplaceIds: ['MYN-RIB-CO-771', 'NW1042'],
-      marketplaceLinks: [{ channel: 'Myntra', url: 'https://www.myntra.com/32168842/buy' }],
-      worstUrgency: 'out',
-      makeTotal: 640,
-      atRiskUnitsPerDay: 3.1,
-      atRiskRevenuePerDay: 2477,
-      abcClass: 'A',
-      lowVolume: false,
-      sizes: [
-        { size: 'S', sku: 'NW-1042-S', urgency: 'out', coverDays: 0, drr: 6.2, sold2d: 13, sold7d: 44, sold30d: 186, confidence: 'high', currentStock: 0, pipelineQty: 0, makeQty: 220, avgPrice: 799, atRiskUnitsPerDay: 2.0, atRiskRevenuePerDay: 1598 },
-        { size: 'M', sku: 'NW-1042-M', urgency: 'critical', coverDays: 3, drr: 8.1, sold2d: 17, sold7d: 57, sold30d: 243, confidence: 'high', currentStock: 24, pipelineQty: 0, makeQty: 260, avgPrice: 799, atRiskUnitsPerDay: 1.1, atRiskRevenuePerDay: 879 },
-        { size: 'L', sku: 'NW-1042-L', urgency: 'watch', coverDays: 11, drr: 4.4, sold2d: 9, sold7d: 31, sold30d: 132, confidence: 'high', currentStock: 48, pipelineQty: 0, makeQty: 160, avgPrice: 799, atRiskUnitsPerDay: 0, atRiskRevenuePerDay: 0 },
-        { size: 'XL', sku: 'NW-1042-XL', urgency: 'healthy', coverDays: 34, drr: 1.9, sold2d: 2, sold7d: 8, sold30d: 41, confidence: 'low', currentStock: 65, pipelineQty: 0, makeQty: 0, avgPrice: 799, atRiskUnitsPerDay: 0, atRiskRevenuePerDay: 0 },
-      ],
-    },
-    {
-      // Not at risk (₹0/day) → sinks below the bleeders; C-tier long tail.
-      styleKey: 'NW-0771',
-      name: 'Linen Wide-leg Trouser',
-      category: 'Bottom',
-      imageUrl: null,
-      linkedStyleId: 771,
-      marketplaceIds: ['MYN-LIN-TRSR-4410', 'NW0771'],
-      marketplaceLinks: [],
-      worstUrgency: 'watch',
-      makeTotal: 0,
-      atRiskUnitsPerDay: 0,
-      atRiskRevenuePerDay: 0,
-      abcClass: 'C',
-      lowVolume: true,
-      sizes: [
-        { size: 'M', sku: 'NW-0771-M', urgency: 'watch', coverDays: 16, drr: 2.1, sold2d: 4, sold7d: 15, sold30d: 63, confidence: 'high', currentStock: 34, pipelineQty: 0, makeQty: 0, avgPrice: 649, atRiskUnitsPerDay: 0, atRiskRevenuePerDay: 0 },
-        { size: 'L', sku: 'NW-0771-L', urgency: 'healthy', coverDays: 40, drr: 1.2, sold2d: 2, sold7d: 8, sold30d: 36, confidence: 'high', currentStock: 48, pipelineQty: 0, makeQty: 0, avgPrice: 649, atRiskUnitsPerDay: 0, atRiskRevenuePerDay: 0 },
-      ],
-    },
-  ],
-};
 
 export default function InventoryHealth(): ReactNode {
   const { t } = useTranslation();
@@ -218,7 +148,8 @@ export default function InventoryHealth(): ReactNode {
 
   const [data, setData] = useState<InventoryHealthResponse | null>(null);
   const [loading, setLoading] = useState(true);
-  const [usingMock, setUsingMock] = useState(false);
+  const [error, setError] = useState(false);
+  const [reloadTick, setReloadTick] = useState(0);
   const [refreshing, setRefreshing] = useState(false);
   const [filter, setFilter] = useState<FilterKey>('all');
   // null sortKey = priority (soonest-out-first) default; a column sets asc/desc.
@@ -259,13 +190,12 @@ export default function InventoryHealth(): ReactNode {
       .then((d) => {
         if (cancelled) return;
         setData(d);
-        setUsingMock(false);
+        setError(false);
       })
       .catch(() => {
         if (cancelled) return;
-        // Backend not up → render from the local mock so the page works standalone.
-        setData(MOCK);
-        setUsingMock(true);
+        // Surface the failure instead of masking it with fake data.
+        setError(true);
       })
       .finally(() => {
         if (!cancelled) setLoading(false);
@@ -274,7 +204,7 @@ export default function InventoryHealth(): ReactNode {
       cancelled = true;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [windowActive, dateFrom, dateTo]);
+  }, [windowActive, dateFrom, dateTo, reloadTick]);
 
   // Expand needs-action styles on first data arrival; healthy ones stay collapsed.
   useEffect(() => {
@@ -303,7 +233,7 @@ export default function InventoryHealth(): ReactNode {
         }
       }
       setData(d);
-      setUsingMock(false);
+      setError(false);
       if (d.syncing) {
         // Polling timed out before the recompute finished — this is the last
         // available data, not a confirmed-fresh one; don't claim success.
@@ -441,16 +371,14 @@ export default function InventoryHealth(): ReactNode {
         <div className="mb-4 flex items-center gap-2 text-xs">
           <span
             className={`inline-block h-2 w-2 rounded-full ${
-              loading ? 'animate-pulse bg-amber-400' : usingMock ? 'bg-amber-400' : 'bg-emerald-500'
+              loading ? 'animate-pulse bg-amber-400' : error ? 'bg-red-500' : 'bg-emerald-500'
             }`}
           />
-          <span className={usingMock ? 'font-medium text-amber-600' : 'text-neutral-500'}>
+          <span className={error ? 'font-medium text-red-600' : 'text-neutral-500'}>
             {loading
               ? t('admin.inventoryHealth.loading', { defaultValue: 'Loading…' })
-              : usingMock
-                ? t('admin.inventoryHealth.mock', {
-                    defaultValue: 'Preview data — the inventory-health service isn’t connected yet.',
-                  })
+              : error
+                ? t('admin.inventoryHealth.loadError', { defaultValue: 'Couldn’t load inventory health.' })
                 : synced
                   ? t('admin.inventoryHealth.synced', { defaultValue: 'As of {{when}}', when: synced })
                   : t('admin.inventoryHealth.neverSynced', { defaultValue: 'Not synced yet' })}
@@ -579,6 +507,19 @@ export default function InventoryHealth(): ReactNode {
               </div>
             )}
           </>
+        ) : error ? (
+          <div style={CARD_SHELL} className="flex flex-col items-center gap-3 py-12 text-center">
+            <p className="text-sm text-neutral-600">
+              {t('admin.inventoryHealth.loadError', { defaultValue: 'Couldn’t load inventory health.' })}
+            </p>
+            <button
+              type="button"
+              onClick={() => setReloadTick((n) => n + 1)}
+              className="rounded-lg border border-neutral-200 bg-white px-4 py-2 text-sm font-medium text-neutral-700 shadow-sm hover:bg-neutral-50"
+            >
+              {t('admin.inventoryHealth.retry', { defaultValue: 'Retry' })}
+            </button>
+          </div>
         ) : null}
       </div>
     </div>

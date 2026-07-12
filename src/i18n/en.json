@@ -356,7 +356,6 @@
       "loading": "Loading…",
       "synced": "As of {{when}}",
       "neverSynced": "Not synced yet",
-      "mock": "Preview data — the inventory-health service isn’t connected yet.",
       "failed": "Could not load inventory health.",
       "retry": "Retry",
       "empty": "Nothing matches this filter.",
@@ -394,7 +393,8 @@
         "stock": "Stock",
         "pipeline": "Pipeline",
         "make": "Make"
-      }
+      },
+      "loadError": "Couldn’t load inventory health."
     },
     "home": {
       "approvalCta": {
