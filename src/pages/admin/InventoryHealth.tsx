@@ -1,7 +1,7 @@
-import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useLocation, useNavigate, useSearchParams } from 'react-router-dom';
-import { RefreshCw, ChevronRight, ChevronLeft, ChevronDown, Search, ArrowUpDown, ArrowUp, ArrowDown, ArrowUpRight, X } from 'lucide-react';
+import { RefreshCw, ChevronRight, ChevronDown, Search, ArrowUpDown, ArrowUp, ArrowDown, ArrowUpRight, X } from 'lucide-react';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useToast } from '@/components/ui/toast';
 import { DateRangePicker } from '@/components/ui/DateRangePicker';
@@ -153,7 +153,22 @@ export default function InventoryHealth(): ReactNode {
   // null sortKey = priority (soonest-out-first) default; a column sets asc/desc.
   const [sortKey, setSortKey] = useState<SortKey | null>(null);
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('asc');
-  const [skip, setSkip] = useState(0);
+  const [visibleCount, setVisibleCount] = useState(PAGE_SIZE);
+  const observerRef = useRef<IntersectionObserver | null>(null);
+  // Callback ref → re-attaches on every sentinel (re)mount, so a filter/sort
+  // that leaves `total` unchanged can't strand the observer on a detached node.
+  const sentinelRef = useCallback((node: HTMLDivElement | null) => {
+    observerRef.current?.disconnect();
+    if (!node) return;
+    const io = new IntersectionObserver(
+      (entries) => {
+        if (entries[0]?.isIntersecting) setVisibleCount((n) => n + PAGE_SIZE);
+      },
+      { rootMargin: '400px' },
+    );
+    io.observe(node);
+    observerRef.current = io;
+  }, []);
   // Optional DRR/cover window. Empty = precomputed default (no from/to sent).
   const [dateFrom, setDateFrom] = useState('');
   const [dateTo, setDateTo] = useState('');
@@ -268,8 +283,10 @@ export default function InventoryHealth(): ReactNode {
         (s) =>
           !q ||
           s.styleKey.toLowerCase().includes(q) ||
-          s.name.toLowerCase().includes(q) ||
-          s.marketplaceIds.some((m) => m.toLowerCase().includes(q)),
+          (s.name ?? '').toLowerCase().includes(q) ||
+          s.marketplaceIds.some((m) => m.toLowerCase().includes(q)) ||
+          // Myntra/marketplace numeric ID lives in the listing URL, not the SKU.
+          s.marketplaceLinks.some((l) => l.url.toLowerCase().includes(q)),
       );
 
     if (sortKey == null) {
@@ -295,15 +312,14 @@ export default function InventoryHealth(): ReactNode {
     });
   }, [data, filter, debouncedSearch, sortKey, sortDir]);
 
-  // Reset to page 1 whenever the result set / order changes — incl. a new `data`
-  // payload (Refresh/window change), so a shrunk dataset can't strand `skip` past
-  // the end and render a blank page.
+  // Collapse the infinite-scroll window back to the first page whenever the
+  // result set / order changes (filter / search / sort / new data payload).
   useEffect(() => {
-    setSkip(0);
+    setVisibleCount(PAGE_SIZE);
   }, [filter, debouncedSearch, sortKey, sortDir, data]);
 
   const total = filteredStyles.length;
-  const pageStyles = filteredStyles.slice(skip, skip + PAGE_SIZE);
+  const pageStyles = filteredStyles.slice(0, visibleCount);
 
   // Click a column header: toggle dir if it's the active one, else switch to it (asc).
   const onSort = (key: SortKey): void => {
@@ -458,7 +474,9 @@ export default function InventoryHealth(): ReactNode {
                   className="w-full rounded-lg border border-neutral-200 bg-white py-2 pl-9 pr-3 text-sm text-neutral-700 shadow-sm outline-none focus:border-neutral-300"
                 />
               </div>
-              <Pager skip={skip} total={total} onPrev={() => setSkip((s) => Math.max(0, s - PAGE_SIZE))} onNext={() => setSkip((s) => s + PAGE_SIZE)} t={t} />
+              <span className="shrink-0 text-xs text-neutral-400 tabular-nums">
+                {t('admin.inventoryHealth.styleCount', { defaultValue: '{{n}} styles', n: total })}
+              </span>
             </div>
 
             {/* Grouped table */}
@@ -498,10 +516,14 @@ export default function InventoryHealth(): ReactNode {
               )}
             </div>
 
-            {/* Bottom pager mirror — saves a scroll back up after a full page. */}
-            {total > PAGE_SIZE && (
-              <div className="mt-4 flex justify-end">
-                <Pager skip={skip} total={total} onPrev={() => setSkip((s) => Math.max(0, s - PAGE_SIZE))} onNext={() => setSkip((s) => s + PAGE_SIZE)} t={t} />
+            {/* Infinite-scroll sentinel: entering the viewport loads the next slice. */}
+            {visibleCount < total && (
+              <div ref={sentinelRef} className="mt-4 py-4 text-center text-xs text-neutral-400">
+                {t('admin.inventoryHealth.loadingMore', {
+                  defaultValue: 'Loading more… ({{shown}} of {{total}})',
+                  shown: pageStyles.length,
+                  total,
+                })}
               </div>
             )}
           </>
@@ -588,56 +610,6 @@ function SortHeader({
   );
 }
 
-/** "Showing X–Y of Z" + prev/next — mirrors the sampling table's pager. */
-function Pager({
-  skip,
-  total,
-  onPrev,
-  onNext,
-  t,
-}: {
-  skip: number;
-  total: number;
-  onPrev: () => void;
-  onNext: () => void;
-  t: ReturnType<typeof useTranslation>['t'];
-}): ReactNode {
-  if (total === 0) return null;
-  const to = Math.min(skip + PAGE_SIZE, total);
-  return (
-    <div className="flex items-center gap-3">
-      <span className="text-[12px] tabular-nums text-neutral-500">
-        {t('dashboard.table.showing', {
-          from: skip + 1,
-          to,
-          total,
-          defaultValue: `Showing ${skip + 1}–${to} of ${total}`,
-        })}
-      </span>
-      <div className="flex items-center gap-1">
-        <button
-          type="button"
-          aria-label={t('dashboard.table.prevPage', { defaultValue: 'Previous page' })}
-          disabled={skip === 0}
-          onClick={onPrev}
-          className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-neutral-200 text-neutral-700 transition hover:bg-neutral-50 disabled:pointer-events-none disabled:opacity-40"
-        >
-          <ChevronLeft size={16} />
-        </button>
-        <button
-          type="button"
-          aria-label={t('dashboard.table.nextPage', { defaultValue: 'Next page' })}
-          disabled={skip + PAGE_SIZE >= total}
-          onClick={onNext}
-          className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-neutral-200 text-neutral-700 transition hover:bg-neutral-50 disabled:pointer-events-none disabled:opacity-40"
-        >
-          <ChevronRight size={16} />
-        </button>
-      </div>
-    </div>
-  );
-}
-
 /** Revenue-tier chip A/B/C — subtle outlined; A slightly emphasised (the
  *  "critical few"). Neutral by design so it doesn't compete with urgency. */
 function AbcChip({ cls }: { cls: 'A' | 'B' | 'C' }): ReactNode {
@@ -714,6 +686,14 @@ function StyleGroup({
   const Chevron = open ? ChevronDown : ChevronRight;
   // Low-volume tiny sellers read as low priority: muted code + a subtle chip.
   const codeColor = style.lowVolume ? 'text-neutral-500' : 'text-neutral-900';
+  // EasyEcom's "name" is often just the size-SKU string, which dupes the code
+  // shown as the title. Only render it as a subtitle when it's a real name.
+  // Hide the name only when it IS a SKU string (the styleKey or a size SKU),
+  // not a real name that merely leads with the code token.
+  const norm = (s: string): string => s.toUpperCase().replace(/[^A-Z0-9]/g, '');
+  const normName = norm(style.name ?? '');
+  const showName =
+    !!normName && normName !== norm(style.styleKey) && !style.sizes.some((z) => norm(z.sku) === normName);
   // Sizes shown soonest-to-run-out first (coverDays asc; null = never = last).
   const cover = (z: InventorySize): number => z.coverDays ?? Number.POSITIVE_INFINITY;
   const sizes = [...style.sizes].sort((a, b) => cover(a) - cover(b));
@@ -739,7 +719,7 @@ function StyleGroup({
         onMouseLeave={(e) => (e.currentTarget.style.background = '#FBFAF9')}
       >
         <Chevron size={18} className="shrink-0 text-neutral-400" />
-        <HoverThumbnail src={imageUrl} alt={style.name} size={52} radius="11px" />
+        <HoverThumbnail src={imageUrl} alt={style.name ?? style.styleKey} size={52} radius="11px" />
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-2">
             {linked ? (
@@ -767,12 +747,16 @@ function StyleGroup({
             )}
             <UrgencyPill urgency={style.worstUrgency} />
           </div>
-          <div className="mt-0.5 flex min-w-0 items-center gap-2">
-            <span className="truncate font-mono text-xs" style={{ color: NEUTRAL_DOT }}>
-              {style.name}
-            </span>
-            <ChannelChips links={style.marketplaceLinks} />
-          </div>
+          {(showName || style.marketplaceLinks.length > 0) && (
+            <div className="mt-0.5 flex min-w-0 items-center gap-2">
+              {showName && (
+                <span className="truncate font-mono text-xs" style={{ color: NEUTRAL_DOT }}>
+                  {style.name}
+                </span>
+              )}
+              <ChannelChips links={style.marketplaceLinks} />
+            </div>
+          )}
         </div>
         {/* Sales-at-risk ₹/DAY — WHY this style ranks where it does. Labelled
             per-day + tooltip so it can't be misread as the item price. */}

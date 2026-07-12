@@ -35,7 +35,7 @@ export interface InventorySize {
 
 export interface InventoryStyle {
   styleKey: string;
-  name: string;
+  name: string | null;
   category: string;
   /** Signed URL or GCS object path or null. */
   imageUrl: string | null;
