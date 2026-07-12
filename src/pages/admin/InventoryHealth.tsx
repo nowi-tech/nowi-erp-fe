@@ -304,7 +304,18 @@ export default function InventoryHealth(): ReactNode {
       }
       setData(d);
       setUsingMock(false);
-      toast.show(t('admin.inventoryHealth.refreshed', { defaultValue: 'Inventory health refreshed.' }), 'success');
+      if (d.syncing) {
+        // Polling timed out before the recompute finished — this is the last
+        // available data, not a confirmed-fresh one; don't claim success.
+        toast.show(
+          t('admin.inventoryHealth.refreshTimeout', {
+            defaultValue: 'Still refreshing in the background — showing the latest available data.',
+          }),
+          'error',
+        );
+      } else {
+        toast.show(t('admin.inventoryHealth.refreshed', { defaultValue: 'Inventory health refreshed.' }), 'success');
+      }
     } catch {
       toast.show(t('admin.inventoryHealth.refreshFailed', { defaultValue: 'Refresh failed. Please try again.' }), 'error');
     } finally {
@@ -356,10 +367,12 @@ export default function InventoryHealth(): ReactNode {
     });
   }, [data, filter, debouncedSearch, sortKey, sortDir]);
 
-  // Reset to page 1 whenever the result set / order changes.
+  // Reset to page 1 whenever the result set / order changes — incl. a new `data`
+  // payload (Refresh/window change), so a shrunk dataset can't strand `skip` past
+  // the end and render a blank page.
   useEffect(() => {
     setSkip(0);
-  }, [filter, debouncedSearch, sortKey, sortDir]);
+  }, [filter, debouncedSearch, sortKey, sortDir, data]);
 
   const total = filteredStyles.length;
   const pageStyles = filteredStyles.slice(skip, skip + PAGE_SIZE);
