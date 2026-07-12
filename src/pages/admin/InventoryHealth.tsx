@@ -23,8 +23,6 @@ import {
 const REFRESH_POLL_MS = 5_000;
 const REFRESH_MAX_WAIT_MS = 3 * 60_000;
 
-const NEEDS_ACTION: Urgency[] = ['out', 'critical'];
-
 // ── Neutral palette: colour = meaning only ───────────────────────────────
 // Red = act now (out/critical), amber = watch, everything else neutral grey.
 const RED = '#DC2626';
@@ -206,12 +204,12 @@ export default function InventoryHealth(): ReactNode {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [windowActive, dateFrom, dateTo, reloadTick]);
 
-  // Expand needs-action styles on first data arrival; healthy ones stay collapsed.
+  // Expand every style's size rows on first data arrival (collapse stays manual).
   useEffect(() => {
     if (!data || initExpanded.current) return;
     initExpanded.current = true;
     const init: Record<string, boolean> = {};
-    for (const s of data.styles) if (NEEDS_ACTION.includes(s.worstUrgency)) init[s.styleKey] = true;
+    for (const s of data.styles) init[s.styleKey] = true;
     setExpanded(init);
   }, [data]);
 
