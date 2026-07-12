@@ -218,10 +218,8 @@ export default function InventoryHealth(): ReactNode {
 
   const [data, setData] = useState<InventoryHealthResponse | null>(null);
   const [loading, setLoading] = useState(true);
-  const [failed, setFailed] = useState(false);
   const [usingMock, setUsingMock] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
-  const [tick, setTick] = useState(0);
   const [filter, setFilter] = useState<FilterKey>('all');
   // null sortKey = priority (soonest-out-first) default; a column sets asc/desc.
   const [sortKey, setSortKey] = useState<SortKey | null>(null);
@@ -239,20 +237,24 @@ export default function InventoryHealth(): ReactNode {
 
   // Mirror the (debounced) search into ?q= so back-navigation restores it.
   useEffect(() => {
-    const params = new URLSearchParams(searchParams);
     const q = debouncedSearch.trim();
-    if (q) params.set('q', q);
-    else params.delete('q');
-    if (params.toString() !== searchParams.toString()) {
-      setSearchParams(params, { replace: true });
-    }
+    // Functional update reads the LATEST params (not a stale closure); return the
+    // previous instance unchanged so an identical q doesn't cause a redundant nav.
+    setSearchParams(
+      (prev) => {
+        const params = new URLSearchParams(prev);
+        if (q) params.set('q', q);
+        else params.delete('q');
+        return params.toString() === prev.toString() ? prev : params;
+      },
+      { replace: true },
+    );
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [debouncedSearch]);
 
   useEffect(() => {
     let cancelled = false;
     setLoading(true);
-    setFailed(false);
     getInventoryHealth(windowActive ? dateFrom : undefined, windowActive ? dateTo : undefined)
       .then((d) => {
         if (cancelled) return;
@@ -272,7 +274,7 @@ export default function InventoryHealth(): ReactNode {
       cancelled = true;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [tick, windowActive, dateFrom, dateTo]);
+  }, [windowActive, dateFrom, dateTo]);
 
   // Expand needs-action styles on first data arrival; healthy ones stay collapsed.
   useEffect(() => {
@@ -302,7 +304,6 @@ export default function InventoryHealth(): ReactNode {
       }
       setData(d);
       setUsingMock(false);
-      setFailed(false);
       toast.show(t('admin.inventoryHealth.refreshed', { defaultValue: 'Inventory health refreshed.' }), 'success');
     } catch {
       toast.show(t('admin.inventoryHealth.refreshFailed', { defaultValue: 'Refresh failed. Please try again.' }), 'error');
@@ -474,13 +475,6 @@ export default function InventoryHealth(): ReactNode {
               <Skeleton className="h-40 w-full rounded-md" />
             </div>
           </>
-        ) : failed && !data ? (
-          <div style={CARD_SHELL} className="text-center text-sm text-amber-800">
-            {t('admin.inventoryHealth.failed', { defaultValue: 'Could not load inventory health.' })}{' '}
-            <button className="font-medium underline" onClick={() => setTick((x) => x + 1)}>
-              {t('admin.inventoryHealth.retry', { defaultValue: 'Retry' })}
-            </button>
-          </div>
         ) : kpis ? (
           <>
             {/* Consolidated header: headline + clickable health chips */}
