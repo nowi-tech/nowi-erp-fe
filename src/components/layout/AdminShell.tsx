@@ -8,6 +8,7 @@ import {
   BarChart3,
   TrendingUp,
   LineChart,
+  HeartPulse,
   LogOut,
   FlaskConical,
   Inbox,
@@ -106,6 +107,7 @@ const NAV_SECTIONS: NavSection[] = [
       { to: '/admin/sales-kpis', icon: <TrendingUp size={18} />, labelKey: 'admin.nav.salesKpis', roles: ['admin', 'viewer'] },
       { to: '/admin/analytics/live-inventory', icon: <Boxes size={18} />, labelKey: 'admin.nav.analyticsLiveInventory', roles: ['admin', 'viewer'] },
       { to: '/admin/analytics/fulfilment', icon: <LineChart size={18} />, labelKey: 'admin.nav.analyticsFulfilment', roles: ['admin', 'viewer'] },
+      { to: '/admin/analytics/inventory-health', icon: <HeartPulse size={18} />, labelKey: 'admin.nav.inventoryHealth', roles: ['admin', 'viewer'] },
     ],
   },
   {

@@ -26,6 +26,7 @@ const DispatchDetail = lazy(() => import('./pages/admin/DispatchDetail'));
 const Warehouses = lazy(() => import('./pages/admin/Warehouses'));
 const ProductionKpis = lazy(() => import('./pages/admin/ProductionKpis'));
 const SalesKpis = lazy(() => import('./pages/admin/SalesKpis'));
+const InventoryHealth = lazy(() => import('./pages/admin/InventoryHealth'));
 const StitchingHome = lazy(() => import('./pages/stitching/StitchingHome'));
 const StitchingReceiveLot = lazy(
   () => import('./pages/stitching/StitchingReceiveLot'),
@@ -258,6 +259,16 @@ function App() {
                         titleDefault="Live & Inventory"
                         subtitleDefault="Catalogue go-live, stock in & closing across warehouses."
                       />
+                    </S>
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="analytics/inventory-health"
+                element={
+                  <ProtectedRoute allowedRoles={['admin', 'viewer']}>
+                    <S>
+                      <InventoryHealth />
                     </S>
                   </ProtectedRoute>
                 }
