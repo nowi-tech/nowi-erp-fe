@@ -72,16 +72,40 @@ export interface InventoryHealthResponse {
   syncedAt: string | null;
   /** True while a background refresh is still running. Poll until false. */
   syncing: boolean;
+  /** True when the last successful sync is older than a nightly cycle (~26h). */
+  stale: boolean;
   kpis: InventoryKpis;
+  /** Match count AFTER filter+search, BEFORE the page slice (drives scroll). */
+  total: number;
+  /** One page of styles (server-side filtered/searched/sorted/sliced). */
   styles: InventoryStyle[];
 }
 
-/** GET /api/inventory-health — per-size stockout forecast grouped by style.
- *  Optional `from`/`to` (LOCAL YYYY-MM-DD) scope the DRR/cover/sold window;
- *  omit both for the precomputed default view. */
-export function getInventoryHealth(from?: string, to?: string): Promise<InventoryHealthResponse> {
-  const params = from && to ? { from, to } : undefined;
-  return apiClient.get<InventoryHealthResponse>('/api/inventory-health', { params }).then((r) => r.data);
+export interface InventoryHealthParams {
+  /** LOCAL YYYY-MM-DD window; both or neither. Omit for the precomputed view. */
+  from?: string;
+  to?: string;
+  skip?: number;
+  limit?: number;
+  filter?: string;
+  search?: string;
+  sortKey?: string | null;
+  sortDir?: 'asc' | 'desc';
+}
+
+/** GET /api/inventory-health — one page of the per-size stockout forecast.
+ *  The server filters/searches/sorts the full set and returns a page + total. */
+export function getInventoryHealth(params: InventoryHealthParams = {}): Promise<InventoryHealthResponse> {
+  const q: Record<string, string> = {};
+  if (params.from) q.from = params.from;
+  if (params.to) q.to = params.to;
+  if (params.skip != null) q.skip = String(params.skip);
+  if (params.limit != null) q.limit = String(params.limit);
+  if (params.filter && params.filter !== 'all') q.filter = params.filter;
+  if (params.search) q.search = params.search;
+  if (params.sortKey) q.sortKey = params.sortKey;
+  if (params.sortDir) q.sortDir = params.sortDir;
+  return apiClient.get<InventoryHealthResponse>('/api/inventory-health', { params: q }).then((r) => r.data);
 }
 
 /** POST /api/inventory-health/refresh — kicks off a background recompute and

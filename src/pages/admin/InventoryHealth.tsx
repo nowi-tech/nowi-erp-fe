@@ -14,6 +14,7 @@ import {
   getInventoryHealth,
   refreshInventoryHealth,
   type InventoryHealthResponse,
+  type InventoryKpis,
   type InventorySize,
   type InventoryStyle,
   type Urgency,
@@ -44,17 +45,9 @@ const URG: Record<Urgency, { label: string; color: string; dot: string }> = {
 // SIZE · COVER · DRR · AT RISK · STOCK · PIPELINE · MAKE
 const GRID = 'minmax(0,1.6fr) 0.85fr 0.7fr 1fr 0.75fr 0.85fr 0.85fr';
 
-/** Which style filter is active. Chips map to these; `all` clears the filter. */
+/** Which style filter is active. Chips map to these; `all` clears the filter.
+ *  Filter/search/sort now run server-side (see the BE getHealth query). */
 type FilterKey = 'all' | 'out' | 'critical' | 'watch' | 'healthy';
-
-/** The urgencies a filter keeps; `all` keeps every style. */
-const FILTER_URGENCIES: Record<FilterKey, Urgency[]> = {
-  all: ['out', 'critical', 'watch', 'healthy'],
-  out: ['out'],
-  critical: ['critical'],
-  watch: ['watch'],
-  healthy: ['healthy'],
-};
 
 const PAGE_SIZE = 50;
 
@@ -64,40 +57,6 @@ const AT_RISK_MIN = 50;
 
 /** Sortable columns. `null` sortKey = the revenue-at-risk default order. */
 type SortKey = 'style' | 'cover' | 'drr' | 'atrisk' | 'stock' | 'pipeline' | 'make';
-
-/** Min coverDays over high-confidence sizes (null cover → +∞) — the "closest to
- *  becoming at-risk next" tie-break among styles that aren't bleeding yet. */
-function minCover(s: InventoryStyle): number {
-  let min = Number.POSITIVE_INFINITY;
-  for (const z of s.sizes) {
-    if (z.confidence !== 'high' || z.coverDays == null) continue;
-    if (z.coverDays < min) min = z.coverDays;
-  }
-  return min;
-}
-
-/** Per-style aggregate for a sort column (see the coordinator's spec). */
-function styleMetric(s: InventoryStyle, key: SortKey): number | string {
-  switch (key) {
-    case 'style':
-      return s.styleKey.toLowerCase();
-    case 'cover': {
-      // min coverDays across sizes; null (no velocity) = never runs out = last.
-      const vals = s.sizes.map((z) => z.coverDays).filter((v): v is number => v != null);
-      return vals.length ? Math.min(...vals) : Number.POSITIVE_INFINITY;
-    }
-    case 'drr':
-      return s.sizes.reduce((a, z) => a + z.drr, 0);
-    case 'atrisk':
-      return s.atRiskRevenuePerDay;
-    case 'stock':
-      return s.sizes.reduce((a, z) => a + z.currentStock, 0);
-    case 'pipeline':
-      return s.sizes.reduce((a, z) => a + z.pipelineQty, 0);
-    case 'make':
-      return s.makeTotal;
-  }
-}
 
 function fmtRupee(n: number): string {
   return `₹${n.toLocaleString('en-IN', { maximumFractionDigits: 0 })}`;
@@ -136,6 +95,36 @@ function absTime(iso: string | null | undefined): string | null {
   return `${date}, ${time}`;
 }
 
+/** "5 min ago" relative label — mirrors SalesKpis relativeTime(). */
+function relativeTime(iso: string | null | undefined): string | null {
+  if (!iso) return null;
+  const then = new Date(iso).getTime();
+  if (Number.isNaN(then)) return null;
+  const secs = Math.max(0, Math.round((Date.now() - then) / 1000));
+  if (secs < 60) return 'just now';
+  const mins = Math.round(secs / 60);
+  if (mins < 60) return `${mins} min ago`;
+  const hrs = Math.round(mins / 60);
+  if (hrs < 24) return `${hrs}h ago`;
+  return `${Math.round(hrs / 24)}d ago`;
+}
+
+
+/** Amber banner shown while a manual/background sync runs — an EasyEcom report
+ *  takes a few minutes, so reassure the user it's working. Mirrors SalesKpis. */
+function FetchingBanner({ t }: { t: ReturnType<typeof useTranslation>['t'] }): ReactNode {
+  return (
+    <div className="mb-4 flex items-center gap-3 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+      <RefreshCw size={16} className="shrink-0 animate-spin" />
+      <span>
+        {t('admin.inventoryHealth.fetchingReport', {
+          defaultValue:
+            'Fetching the latest report from EasyEcom — this can take a few minutes. It runs in the background, so you can keep working.',
+        })}
+      </span>
+    </div>
+  );
+}
 
 export default function InventoryHealth(): ReactNode {
   const { t } = useTranslation();
@@ -144,8 +133,15 @@ export default function InventoryHealth(): ReactNode {
   const location = useLocation();
   const [searchParams, setSearchParams] = useSearchParams();
 
-  const [data, setData] = useState<InventoryHealthResponse | null>(null);
+  // Server-paginated: `styles` accumulates pages; the server does filter/sort/slice.
+  const [styles, setStyles] = useState<InventoryStyle[]>([]);
+  const [total, setTotal] = useState(0);
+  const [kpis, setKpis] = useState<InventoryKpis | null>(null);
+  const [syncedAt, setSyncedAt] = useState<string | null>(null);
+  const [syncing, setSyncing] = useState(false);
+  const [stale, setStale] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [loadMoreError, setLoadMoreError] = useState(false);
   const [error, setError] = useState(false);
   const [reloadTick, setReloadTick] = useState(0);
   const [refreshing, setRefreshing] = useState(false);
@@ -153,22 +149,6 @@ export default function InventoryHealth(): ReactNode {
   // null sortKey = priority (soonest-out-first) default; a column sets asc/desc.
   const [sortKey, setSortKey] = useState<SortKey | null>(null);
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('asc');
-  const [visibleCount, setVisibleCount] = useState(PAGE_SIZE);
-  const observerRef = useRef<IntersectionObserver | null>(null);
-  // Callback ref → re-attaches on every sentinel (re)mount, so a filter/sort
-  // that leaves `total` unchanged can't strand the observer on a detached node.
-  const sentinelRef = useCallback((node: HTMLDivElement | null) => {
-    observerRef.current?.disconnect();
-    if (!node) return;
-    const io = new IntersectionObserver(
-      (entries) => {
-        if (entries[0]?.isIntersecting) setVisibleCount((n) => n + PAGE_SIZE);
-      },
-      { rootMargin: '400px' },
-    );
-    io.observe(node);
-    observerRef.current = io;
-  }, []);
   // Optional DRR/cover window. Empty = precomputed default (no from/to sent).
   const [dateFrom, setDateFrom] = useState('');
   const [dateTo, setDateTo] = useState('');
@@ -177,7 +157,43 @@ export default function InventoryHealth(): ReactNode {
   const [searchText, setSearchText] = useState(() => searchParams.get('q') ?? '');
   const debouncedSearch = useDebounced(searchText, 300);
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
-  const initExpanded = useRef(false);
+
+  // Fetch one server page for the current query (server filters/sorts/slices).
+  const load = useCallback(
+    (skip: number): Promise<InventoryHealthResponse> =>
+      getInventoryHealth({
+        from: windowActive ? dateFrom : undefined,
+        to: windowActive ? dateTo : undefined,
+        skip,
+        limit: PAGE_SIZE,
+        filter,
+        search: debouncedSearch.trim() || undefined,
+        sortKey: sortKey ?? undefined,
+        sortDir,
+      }),
+    [windowActive, dateFrom, dateTo, filter, debouncedSearch, sortKey, sortDir],
+  );
+
+  // Discard out-of-order responses when the query changes mid-flight.
+  const reqRef = useRef(0);
+  // Synchronous append guard (state lags a same-commit double observer fire).
+  const loadingMoreRef = useRef(false);
+  // The IntersectionObserver calls the freshest loadMore via a ref (its own
+  // callback ref is stable) and re-attaches on every sentinel (re)mount.
+  const loadMoreRef = useRef<() => void>(() => {});
+  const observerRef = useRef<IntersectionObserver | null>(null);
+  const sentinelRef = useCallback((node: HTMLDivElement | null) => {
+    observerRef.current?.disconnect();
+    if (!node) return;
+    const io = new IntersectionObserver(
+      (entries) => {
+        if (entries[0]?.isIntersecting) loadMoreRef.current();
+      },
+      { rootMargin: '400px' },
+    );
+    io.observe(node);
+    observerRef.current = io;
+  }, []);
 
   // Mirror the (debounced) search into ?q= so back-navigation restores it.
   useEffect(() => {
@@ -196,63 +212,134 @@ export default function InventoryHealth(): ReactNode {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [debouncedSearch]);
 
+  // Replace-load page 0 whenever the query (via `load`) or a manual reload changes.
   useEffect(() => {
-    let cancelled = false;
+    const my = ++reqRef.current;
     setLoading(true);
-    getInventoryHealth(windowActive ? dateFrom : undefined, windowActive ? dateTo : undefined)
+    setError(false);
+    setLoadMoreError(false);
+    loadingMoreRef.current = false;
+    load(0)
       .then((d) => {
-        if (cancelled) return;
-        setData(d);
-        setError(false);
+        if (reqRef.current !== my) return;
+        setStyles(d.styles);
+        setTotal(d.total);
+        setKpis(d.kpis);
+        setSyncedAt(d.syncedAt);
+        setSyncing(d.syncing);
+        setStale(d.stale);
       })
       .catch(() => {
-        if (cancelled) return;
-        // Surface the failure instead of masking it with fake data.
-        setError(true);
+        if (reqRef.current === my) setError(true);
       })
       .finally(() => {
-        if (!cancelled) setLoading(false);
+        if (reqRef.current === my) setLoading(false);
       });
+  }, [load, reloadTick]);
+
+  // Append the next page when the sentinel scrolls into view.
+  const loadMore = useCallback(() => {
+    // Synchronous ref guard: two observer fires in one commit window read the
+    // same stale `loadingMore` state, so gate on a ref that flips immediately.
+    // Also blocked during a refresh so onRefresh's page-0 reload can't collide.
+    if (loading || refreshing || loadingMoreRef.current || styles.length >= total) return;
+    loadingMoreRef.current = true;
+    const my = reqRef.current;
+    setLoadMoreError(false);
+    load(styles.length)
+      .then((d) => {
+        if (reqRef.current !== my) return; // query changed mid-flight → drop this page
+        setStyles((prev) => [...prev, ...d.styles]);
+        setTotal(d.total);
+      })
+      .catch(() => {
+        // Don't swallow — the sentinel stays intersecting, so the observer won't
+        // auto-retry; surface a Retry affordance instead of stalling forever.
+        if (reqRef.current === my) setLoadMoreError(true);
+      })
+      .finally(() => {
+        loadingMoreRef.current = false;
+      });
+  }, [load, loading, refreshing, styles.length, total]);
+  useEffect(() => {
+    loadMoreRef.current = loadMore;
+  }, [loadMore]);
+
+  // Passive watcher: if a sync (nightly cron / another admin) is already running
+  // when we load, poll its status and do ONE race-safe reload when it finishes —
+  // without the user clicking Refresh. Deliberately touches no pagination state.
+  useEffect(() => {
+    if (!syncing || refreshing) return;
+    let cancelled = false;
+    let elapsed = 0;
+    const id = setInterval(async () => {
+      elapsed += REFRESH_POLL_MS;
+      let completed = false;
+      try {
+        const d = await load(0);
+        completed = !d.syncing;
+      } catch {
+        /* transient — keep polling until the cap */
+      }
+      if (cancelled) return;
+      if (completed) {
+        clearInterval(id);
+        setSyncing(false);
+        setReloadTick((n) => n + 1); // pull the fresh data race-safely
+      } else if (elapsed >= REFRESH_MAX_WAIT_MS) {
+        // Give up watching WITHOUT reloading — a reload would re-read syncing=true
+        // and restart this interval forever. The banner clears; manual Refresh stays.
+        clearInterval(id);
+        setSyncing(false);
+      }
+    }, REFRESH_POLL_MS);
     return () => {
       cancelled = true;
+      clearInterval(id);
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [windowActive, dateFrom, dateTo, reloadTick]);
-
-  // Expand every style's size rows on first data arrival (collapse stays manual).
-  useEffect(() => {
-    if (!data || initExpanded.current) return;
-    initExpanded.current = true;
-    const init: Record<string, boolean> = {};
-    for (const s of data.styles) init[s.styleKey] = true;
-    setExpanded(init);
-  }, [data]);
+  }, [syncing, refreshing, load]);
 
   const onRefresh = async (): Promise<void> => {
     if (refreshing) return;
     setRefreshing(true);
     try {
-      const wf = windowActive ? dateFrom : undefined;
-      const wt = windowActive ? dateTo : undefined;
       await refreshInventoryHealth();
+      const my = ++reqRef.current;
       const startAt = Date.now();
-      let d = await getInventoryHealth(wf, wt);
+      let d = await load(0);
       while (d.syncing && Date.now() - startAt < REFRESH_MAX_WAIT_MS) {
         await new Promise((r) => setTimeout(r, REFRESH_POLL_MS));
         try {
-          d = await getInventoryHealth(wf, wt);
+          d = await load(0);
         } catch {
           continue;
         }
       }
-      setData(d);
-      setError(false);
+      if (reqRef.current === my) {
+        setStyles(d.styles);
+        setTotal(d.total);
+        setKpis(d.kpis);
+        setSyncedAt(d.syncedAt);
+        setSyncing(d.syncing);
+        setStale(d.stale);
+        setLoadMoreError(false);
+        loadingMoreRef.current = false;
+        setError(false);
+      }
       if (d.syncing) {
         // Polling timed out before the recompute finished — this is the last
         // available data, not a confirmed-fresh one; don't claim success.
         toast.show(
           t('admin.inventoryHealth.refreshTimeout', {
             defaultValue: 'Still refreshing in the background — showing the latest available data.',
+          }),
+          'error',
+        );
+      } else if (d.stale) {
+        // Sync finished but the data didn't advance (EasyEcom fetch failed).
+        toast.show(
+          t('admin.inventoryHealth.refreshedStale', {
+            defaultValue: 'Couldn’t fetch new data from EasyEcom — showing the latest available.',
           }),
           'error',
         );
@@ -267,59 +354,8 @@ export default function InventoryHealth(): ReactNode {
   };
 
   // Sign any GCS object paths (v1 imageUrl is usually null → ImageOff fallback).
-  const imagePaths = useMemo(() => (data?.styles ?? []).map((s) => s.imageUrl), [data]);
+  const imagePaths = useMemo(() => styles.map((s) => s.imageUrl), [styles]);
   const signed = useSignedUrls(imagePaths);
-
-  // Keep a style if ANY of its sizes matches the active filter (but keep ALL its
-  // sizes so an expanded style shows the full distribution), then rank: an
-  // explicit column sort, else the priority (soonest-out-first) default.
-  const filteredStyles = useMemo(() => {
-    if (!data) return [];
-    const q = debouncedSearch.trim().toLowerCase();
-    const wanted = FILTER_URGENCIES[filter];
-    const rows = data.styles
-      .filter((s) => s.sizes.some((sz) => wanted.includes(sz.urgency)))
-      .filter(
-        (s) =>
-          !q ||
-          s.styleKey.toLowerCase().includes(q) ||
-          (s.name ?? '').toLowerCase().includes(q) ||
-          s.marketplaceIds.some((m) => m.toLowerCase().includes(q)) ||
-          // Myntra/marketplace numeric ID lives in the listing URL, not the SKU.
-          s.marketplaceLinks.some((l) => l.url.toLowerCase().includes(q)),
-      );
-
-    if (sortKey == null) {
-      // Default: biggest money-bleeder first (₹/day at risk desc). Ties → more
-      // at-risk units, then closest-to-at-risk (minCover asc) so the ₹0 styles
-      // sink to the bottom ordered by soonest to become at-risk, then A→Z.
-      return rows.sort(
-        (a, b) =>
-          b.atRiskRevenuePerDay - a.atRiskRevenuePerDay ||
-          b.atRiskUnitsPerDay - a.atRiskUnitsPerDay ||
-          minCover(a) - minCover(b) ||
-          a.styleKey.localeCompare(b.styleKey),
-      );
-    }
-    const dir = sortDir === 'asc' ? 1 : -1;
-    return rows.sort((a, b) => {
-      const av = styleMetric(a, sortKey);
-      const bv = styleMetric(b, sortKey);
-      if (typeof av === 'string' || typeof bv === 'string') {
-        return dir * String(av).localeCompare(String(bv));
-      }
-      return dir * (av - bv);
-    });
-  }, [data, filter, debouncedSearch, sortKey, sortDir]);
-
-  // Collapse the infinite-scroll window back to the first page whenever the
-  // result set / order changes (filter / search / sort / new data payload).
-  useEffect(() => {
-    setVisibleCount(PAGE_SIZE);
-  }, [filter, debouncedSearch, sortKey, sortDir, data]);
-
-  const total = filteredStyles.length;
-  const pageStyles = filteredStyles.slice(0, visibleCount);
 
   // Click a column header: toggle dir if it's the active one, else switch to it (asc).
   const onSort = (key: SortKey): void => {
@@ -330,8 +366,10 @@ export default function InventoryHealth(): ReactNode {
     }
   };
 
-  const kpis = data?.kpis;
-  const synced = absTime(data?.syncedAt);
+  // Absolute IST clock + "· 5 min ago" relative, mirroring the Sales KPI line.
+  const syncedAbs = absTime(syncedAt);
+  const syncedAgo = relativeTime(syncedAt);
+  const synced = syncedAbs ? (syncedAgo ? `${syncedAbs} · ${syncedAgo}` : syncedAbs) : null;
   // Back-target for the style workspace, restoring this page + search.
   const from = `${location.pathname}${location.search}`;
 
@@ -385,17 +423,22 @@ export default function InventoryHealth(): ReactNode {
         <div className="mb-4 flex items-center gap-2 text-xs">
           <span
             className={`inline-block h-2 w-2 rounded-full ${
-              loading ? 'animate-pulse bg-amber-400' : error ? 'bg-red-500' : 'bg-emerald-500'
+              loading ? 'animate-pulse bg-amber-400' : error ? 'bg-red-500' : stale ? 'bg-amber-400' : 'bg-emerald-500'
             }`}
           />
-          <span className={error ? 'font-medium text-red-600' : 'text-neutral-500'}>
+          <span className={error ? 'font-medium text-red-600' : stale ? 'font-medium text-amber-600' : 'text-neutral-500'}>
             {loading
               ? t('admin.inventoryHealth.loading', { defaultValue: 'Loading…' })
               : error
                 ? t('admin.inventoryHealth.loadError', { defaultValue: 'Couldn’t load inventory health.' })
-                : synced
-                  ? t('admin.inventoryHealth.synced', { defaultValue: 'As of {{when}}', when: synced })
-                  : t('admin.inventoryHealth.neverSynced', { defaultValue: 'Not synced yet' })}
+                : stale && synced
+                  ? t('admin.inventoryHealth.stale', {
+                      defaultValue: 'Showing data from {{when}} — couldn’t fetch the latest from EasyEcom.',
+                      when: synced,
+                    })
+                  : synced
+                    ? t('admin.inventoryHealth.synced', { defaultValue: 'As of {{when}}', when: synced })
+                    : t('admin.inventoryHealth.neverSynced', { defaultValue: 'Not synced yet' })}
           </span>
           {windowActive && (
             <span className="inline-flex items-center gap-1 rounded-full bg-neutral-100 px-2 py-0.5 text-[11px] font-medium text-neutral-600">
@@ -419,8 +462,11 @@ export default function InventoryHealth(): ReactNode {
           )}
         </div>
 
+        {/* Persistent banner while a manual/background sync is running. */}
+        {(refreshing || syncing) && !loading && <FetchingBanner t={t} />}
+
         {/* Body */}
-        {loading && !data ? (
+        {loading && !styles.length ? (
           <>
             <div style={CARD_SHELL} className="mb-4">
               <Skeleton className="h-6 w-80 rounded-md" />
@@ -500,14 +546,14 @@ export default function InventoryHealth(): ReactNode {
                   {t('admin.inventoryHealth.empty', { defaultValue: 'Nothing matches this filter.' })}
                 </div>
               ) : (
-                pageStyles.map((style) => (
+                styles.map((style) => (
                   <StyleGroup
                     key={style.styleKey}
                     style={style}
                     imageUrl={(style.imageUrl && signed[style.imageUrl]) || null}
-                    open={expanded[style.styleKey] ?? false}
+                    open={expanded[style.styleKey] ?? true}
                     onToggle={() =>
-                      setExpanded((e) => ({ ...e, [style.styleKey]: !(e[style.styleKey] ?? false) }))
+                      setExpanded((e) => ({ ...e, [style.styleKey]: !(e[style.styleKey] ?? true) }))
                     }
                     onOpenStyle={() => openStyle(style)}
                     t={t}
@@ -516,14 +562,28 @@ export default function InventoryHealth(): ReactNode {
               )}
             </div>
 
-            {/* Infinite-scroll sentinel: entering the viewport loads the next slice. */}
-            {visibleCount < total && (
+            {/* Infinite-scroll sentinel: entering the viewport fetches the next page.
+                On a fetch error the observer can't self-retry (sentinel stays in
+                view), so show a manual Retry instead of stalling silently. */}
+            {styles.length < total && (
               <div ref={sentinelRef} className="mt-4 py-4 text-center text-xs text-neutral-400">
-                {t('admin.inventoryHealth.loadingMore', {
-                  defaultValue: 'Loading more… ({{shown}} of {{total}})',
-                  shown: pageStyles.length,
-                  total,
-                })}
+                {loadMoreError ? (
+                  <button
+                    type="button"
+                    onClick={() => loadMore()}
+                    className="font-medium text-neutral-600 underline underline-offset-2 hover:text-neutral-900"
+                  >
+                    {t('admin.inventoryHealth.loadMoreRetry', {
+                      defaultValue: 'Couldn’t load more — retry',
+                    })}
+                  </button>
+                ) : (
+                  t('admin.inventoryHealth.loadingMore', {
+                    defaultValue: 'Loading more… ({{shown}} of {{total}})',
+                    shown: styles.length,
+                    total,
+                  })
+                )}
               </div>
             )}
           </>
