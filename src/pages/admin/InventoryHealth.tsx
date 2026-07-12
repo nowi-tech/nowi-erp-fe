@@ -43,8 +43,8 @@ const URG: Record<Urgency, { label: string; color: string; dot: string }> = {
 };
 
 // One grid template shared by the column header + every size row so they align.
-// SIZE · COVER · DRR · STOCK · PIPELINE · MAKE
-const GRID = 'minmax(0,1.7fr) 0.9fr 0.8fr 0.8fr 0.9fr 0.9fr';
+// SIZE · COVER · DRR · AT RISK · STOCK · PIPELINE · MAKE
+const GRID = 'minmax(0,1.6fr) 0.85fr 0.7fr 1fr 0.75fr 0.85fr 0.85fr';
 
 /** Which style filter is active. Chips map to these; `all` clears the filter. */
 type FilterKey = 'all' | 'out' | 'critical' | 'watch' | 'healthy';
@@ -60,23 +60,22 @@ const FILTER_URGENCIES: Record<FilterKey, Urgency[]> = {
 
 const PAGE_SIZE = 50;
 
-/** Sortable columns. `null` sortKey = the priority (soonest-out-first) default. */
-type SortKey = 'style' | 'cover' | 'drr' | 'stock' | 'pipeline' | 'make';
+/** Below this ₹/day, show "—" not a confusing tiny number (slow-tail noise).
+ *  Ranking still uses the raw value — this only affects DISPLAY. */
+const AT_RISK_MIN = 50;
 
-/** Default-rank priority: soonest-to-run-out among CONFIDENT sellers first.
- *  = min coverDays over high-confidence sizes (null cover → +∞). A style with
- *  no high-confidence size → +∞, so low-data styles sink to the bottom. */
-function stylePriority(s: InventoryStyle): number {
+/** Sortable columns. `null` sortKey = the revenue-at-risk default order. */
+type SortKey = 'style' | 'cover' | 'drr' | 'atrisk' | 'stock' | 'pipeline' | 'make';
+
+/** Min coverDays over high-confidence sizes (null cover → +∞) — the "closest to
+ *  becoming at-risk next" tie-break among styles that aren't bleeding yet. */
+function minCover(s: InventoryStyle): number {
   let min = Number.POSITIVE_INFINITY;
   for (const z of s.sizes) {
     if (z.confidence !== 'high' || z.coverDays == null) continue;
     if (z.coverDays < min) min = z.coverDays;
   }
   return min;
-}
-
-function totalDrr(s: InventoryStyle): number {
-  return s.sizes.reduce((a, z) => a + z.drr, 0);
 }
 
 /** Per-style aggregate for a sort column (see the coordinator's spec). */
@@ -91,6 +90,8 @@ function styleMetric(s: InventoryStyle, key: SortKey): number | string {
     }
     case 'drr':
       return s.sizes.reduce((a, z) => a + z.drr, 0);
+    case 'atrisk':
+      return s.atRiskRevenuePerDay;
     case 'stock':
       return s.sizes.reduce((a, z) => a + z.currentStock, 0);
     case 'pipeline':
@@ -98,6 +99,10 @@ function styleMetric(s: InventoryStyle, key: SortKey): number | string {
     case 'make':
       return s.makeTotal;
   }
+}
+
+function fmtRupee(n: number): string {
+  return `₹${n.toLocaleString('en-IN', { maximumFractionDigits: 0 })}`;
 }
 
 function fmtN(n: number): string {
@@ -140,48 +145,65 @@ const MOCK: InventoryHealthResponse = {
   kpis: { unitsToMake: 1840, needsAction: 7, outOfStock: 3, critical: 4, watch: 5, healthy: 12, totalStyles: 21, totalSkus: 96 },
   styles: [
     {
-      styleKey: 'NW-1042',
-      name: 'Ribbed Knit Co-ord',
-      category: 'Co-ord',
-      imageUrl: null,
-      linkedStyleId: 1042,
-      marketplaceIds: ['MYN-RIB-CO-771', 'NW1042'],
-      worstUrgency: 'out',
-      makeTotal: 640,
-      sizes: [
-        { size: 'S', sku: 'NW-1042-S', urgency: 'out', coverDays: 0, drr: 6.2, sold2d: 13, sold7d: 44, sold30d: 186, confidence: 'high', currentStock: 0, pipelineQty: 0, makeQty: 220 },
-        { size: 'M', sku: 'NW-1042-M', urgency: 'critical', coverDays: 3, drr: 8.1, sold2d: 17, sold7d: 57, sold30d: 243, confidence: 'high', currentStock: 24, pipelineQty: 0, makeQty: 260 },
-        { size: 'L', sku: 'NW-1042-L', urgency: 'watch', coverDays: 11, drr: 4.4, sold2d: 9, sold7d: 31, sold30d: 132, confidence: 'high', currentStock: 48, pipelineQty: 0, makeQty: 160 },
-        { size: 'XL', sku: 'NW-1042-XL', urgency: 'healthy', coverDays: 34, drr: 1.9, sold2d: 2, sold7d: 8, sold30d: 41, confidence: 'low', currentStock: 65, pipelineQty: 0, makeQty: 0 },
-      ],
-    },
-    {
+      // Highest ₹/day at risk → row 1, even though NW-1042 is more OUT.
       styleKey: 'NW-0987',
       name: 'Oversized Poplin Shirt',
       category: 'Shirt',
       imageUrl: null,
       linkedStyleId: null,
       marketplaceIds: ['MYN-POP-SHRT-9821'],
+      marketplaceLinks: [],
       worstUrgency: 'critical',
       makeTotal: 380,
+      atRiskUnitsPerDay: 3.3,
+      atRiskRevenuePerDay: 3627,
+      abcClass: 'A',
+      lowVolume: false,
       sizes: [
-        { size: 'S', sku: 'NW-0987-S', urgency: 'critical', coverDays: 4, drr: 3.3, sold2d: 7, sold7d: 23, sold30d: 99, confidence: 'high', currentStock: 14, pipelineQty: 0, makeQty: 120 },
-        { size: 'M', sku: 'NW-0987-M', urgency: 'watch', coverDays: 9, drr: 5.0, sold2d: 10, sold7d: 35, sold30d: 150, confidence: 'high', currentStock: 46, pipelineQty: 0, makeQty: 140 },
-        { size: 'L', sku: 'NW-0987-L', urgency: 'watch', coverDays: 13, drr: 2.8, sold2d: 5, sold7d: 20, sold30d: 84, confidence: 'low', currentStock: 38, pipelineQty: 0, makeQty: 120 },
+        { size: 'S', sku: 'NW-0987-S', urgency: 'critical', coverDays: 4, drr: 3.3, sold2d: 7, sold7d: 23, sold30d: 99, confidence: 'high', currentStock: 14, pipelineQty: 0, makeQty: 120, avgPrice: 1099, atRiskUnitsPerDay: 2.4, atRiskRevenuePerDay: 2638 },
+        { size: 'M', sku: 'NW-0987-M', urgency: 'watch', coverDays: 9, drr: 5.0, sold2d: 10, sold7d: 35, sold30d: 150, confidence: 'high', currentStock: 46, pipelineQty: 0, makeQty: 140, avgPrice: 1099, atRiskUnitsPerDay: 0.9, atRiskRevenuePerDay: 989 },
+        { size: 'L', sku: 'NW-0987-L', urgency: 'watch', coverDays: 13, drr: 2.8, sold2d: 5, sold7d: 20, sold30d: 84, confidence: 'low', currentStock: 38, pipelineQty: 0, makeQty: 120, avgPrice: 1099, atRiskUnitsPerDay: 0, atRiskRevenuePerDay: 0 },
       ],
     },
     {
+      styleKey: 'NW-1042',
+      name: 'Ribbed Knit Co-ord',
+      category: 'Co-ord',
+      imageUrl: null,
+      linkedStyleId: 1042,
+      marketplaceIds: ['MYN-RIB-CO-771', 'NW1042'],
+      marketplaceLinks: [{ channel: 'Myntra', url: 'https://www.myntra.com/32168842/buy' }],
+      worstUrgency: 'out',
+      makeTotal: 640,
+      atRiskUnitsPerDay: 3.1,
+      atRiskRevenuePerDay: 2477,
+      abcClass: 'A',
+      lowVolume: false,
+      sizes: [
+        { size: 'S', sku: 'NW-1042-S', urgency: 'out', coverDays: 0, drr: 6.2, sold2d: 13, sold7d: 44, sold30d: 186, confidence: 'high', currentStock: 0, pipelineQty: 0, makeQty: 220, avgPrice: 799, atRiskUnitsPerDay: 2.0, atRiskRevenuePerDay: 1598 },
+        { size: 'M', sku: 'NW-1042-M', urgency: 'critical', coverDays: 3, drr: 8.1, sold2d: 17, sold7d: 57, sold30d: 243, confidence: 'high', currentStock: 24, pipelineQty: 0, makeQty: 260, avgPrice: 799, atRiskUnitsPerDay: 1.1, atRiskRevenuePerDay: 879 },
+        { size: 'L', sku: 'NW-1042-L', urgency: 'watch', coverDays: 11, drr: 4.4, sold2d: 9, sold7d: 31, sold30d: 132, confidence: 'high', currentStock: 48, pipelineQty: 0, makeQty: 160, avgPrice: 799, atRiskUnitsPerDay: 0, atRiskRevenuePerDay: 0 },
+        { size: 'XL', sku: 'NW-1042-XL', urgency: 'healthy', coverDays: 34, drr: 1.9, sold2d: 2, sold7d: 8, sold30d: 41, confidence: 'low', currentStock: 65, pipelineQty: 0, makeQty: 0, avgPrice: 799, atRiskUnitsPerDay: 0, atRiskRevenuePerDay: 0 },
+      ],
+    },
+    {
+      // Not at risk (₹0/day) → sinks below the bleeders; C-tier long tail.
       styleKey: 'NW-0771',
       name: 'Linen Wide-leg Trouser',
       category: 'Bottom',
       imageUrl: null,
       linkedStyleId: 771,
       marketplaceIds: ['MYN-LIN-TRSR-4410', 'NW0771'],
+      marketplaceLinks: [],
       worstUrgency: 'watch',
       makeTotal: 0,
+      atRiskUnitsPerDay: 0,
+      atRiskRevenuePerDay: 0,
+      abcClass: 'C',
+      lowVolume: true,
       sizes: [
-        { size: 'M', sku: 'NW-0771-M', urgency: 'watch', coverDays: 16, drr: 2.1, sold2d: 4, sold7d: 15, sold30d: 63, confidence: 'high', currentStock: 34, pipelineQty: 0, makeQty: 0 },
-        { size: 'L', sku: 'NW-0771-L', urgency: 'healthy', coverDays: 40, drr: 1.2, sold2d: 2, sold7d: 8, sold30d: 36, confidence: 'high', currentStock: 48, pipelineQty: 0, makeQty: 0 },
+        { size: 'M', sku: 'NW-0771-M', urgency: 'watch', coverDays: 16, drr: 2.1, sold2d: 4, sold7d: 15, sold30d: 63, confidence: 'high', currentStock: 34, pipelineQty: 0, makeQty: 0, avgPrice: 649, atRiskUnitsPerDay: 0, atRiskRevenuePerDay: 0 },
+        { size: 'L', sku: 'NW-0771-L', urgency: 'healthy', coverDays: 40, drr: 1.2, sold2d: 2, sold7d: 8, sold30d: 36, confidence: 'high', currentStock: 48, pipelineQty: 0, makeQty: 0, avgPrice: 649, atRiskUnitsPerDay: 0, atRiskRevenuePerDay: 0 },
       ],
     },
   ],
@@ -311,13 +333,14 @@ export default function InventoryHealth(): ReactNode {
       );
 
     if (sortKey == null) {
-      // Default: confident sellers soonest to run out first (cover 0/out at the
-      // very top); low-data styles have priority +∞ so they sink to the bottom.
-      // Tie-break: higher total DRR, then A→Z.
+      // Default: biggest money-bleeder first (₹/day at risk desc). Ties → more
+      // at-risk units, then closest-to-at-risk (minCover asc) so the ₹0 styles
+      // sink to the bottom ordered by soonest to become at-risk, then A→Z.
       return rows.sort(
         (a, b) =>
-          stylePriority(a) - stylePriority(b) ||
-          totalDrr(b) - totalDrr(a) ||
+          b.atRiskRevenuePerDay - a.atRiskRevenuePerDay ||
+          b.atRiskUnitsPerDay - a.atRiskUnitsPerDay ||
+          minCover(a) - minCover(b) ||
           a.styleKey.localeCompare(b.styleKey),
       );
     }
@@ -515,6 +538,7 @@ export default function InventoryHealth(): ReactNode {
                 <SortHeader label={t('admin.inventoryHealth.col.size', { defaultValue: 'Style' })} col="style" sortKey={sortKey} sortDir={sortDir} onSort={onSort} />
                 <SortHeader label={t('admin.inventoryHealth.col.cover', { defaultValue: 'Cover' })} col="cover" sortKey={sortKey} sortDir={sortDir} onSort={onSort} />
                 <SortHeader label={t('admin.inventoryHealth.col.drr', { defaultValue: 'DRR · /d' })} col="drr" sortKey={sortKey} sortDir={sortDir} onSort={onSort} />
+                <SortHeader label={t('admin.inventoryHealth.col.atRisk', { defaultValue: 'Sales at risk · ₹/day' })} col="atrisk" sortKey={sortKey} sortDir={sortDir} onSort={onSort} align="right" />
                 <SortHeader label={t('admin.inventoryHealth.col.stock', { defaultValue: 'Stock' })} col="stock" sortKey={sortKey} sortDir={sortDir} onSort={onSort} align="right" />
                 <SortHeader label={t('admin.inventoryHealth.col.pipeline', { defaultValue: 'Pipeline' })} col="pipeline" sortKey={sortKey} sortDir={sortDir} onSort={onSort} align="right" />
                 <SortHeader label={t('admin.inventoryHealth.col.make', { defaultValue: 'Make' })} col="make" sortKey={sortKey} sortDir={sortDir} onSort={onSort} align="right" />
@@ -668,6 +692,50 @@ function Pager({
   );
 }
 
+/** Revenue-tier chip A/B/C — subtle outlined; A slightly emphasised (the
+ *  "critical few"). Neutral by design so it doesn't compete with urgency. */
+function AbcChip({ cls }: { cls: 'A' | 'B' | 'C' }): ReactNode {
+  const strong = cls === 'A';
+  return (
+    <span
+      title={`Revenue tier ${cls}`}
+      className={`inline-flex h-4 w-4 items-center justify-center rounded border text-[10px] font-bold ${
+        strong ? 'border-neutral-400 bg-neutral-100 text-neutral-800' : 'border-neutral-200 text-neutral-400'
+      }`}
+    >
+      {cls}
+    </span>
+  );
+}
+
+/** Per-channel listing chips on the style header. Myntra links out (confirmed
+ *  pattern: the path acts as a search that lands on the listing); Shopify /
+ *  Only channels with a real ERP listing URL (StyleChannelListing.listingUrl via
+ *  linkedStyleId) are shown; a style with no real link shows nothing. */
+function ChannelChips({ links }: { links: { channel: string; url: string }[] }): ReactNode {
+  if (!links.length) return null;
+  const base =
+    'inline-flex items-center gap-1 rounded border border-neutral-300 px-1.5 py-0.5 text-[10px] font-semibold text-neutral-700 hover:bg-neutral-100';
+  return (
+    <span className="flex shrink-0 items-center gap-1">
+      {links.map((l) => (
+        <a
+          key={l.channel}
+          href={l.url}
+          target="_blank"
+          rel="noopener noreferrer"
+          onClick={(e) => e.stopPropagation()}
+          title={`Open on ${l.channel}`}
+          className={base}
+        >
+          {l.channel}
+          <ArrowUpRight size={10} className="text-neutral-400" />
+        </a>
+      ))}
+    </span>
+  );
+}
+
 function UrgencyPill({ urgency }: { urgency: Urgency }): ReactNode {
   const u = URG[urgency];
   // Neutral chrome; the dot carries the meaning-colour (red/amber/grey).
@@ -698,6 +766,8 @@ function StyleGroup({
 }): ReactNode {
   const linked = style.linkedStyleId != null;
   const Chevron = open ? ChevronDown : ChevronRight;
+  // Low-volume tiny sellers read as low priority: muted code + a subtle chip.
+  const codeColor = style.lowVolume ? 'text-neutral-500' : 'text-neutral-900';
   // Sizes shown soonest-to-run-out first (coverDays asc; null = never = last).
   const cover = (z: InventorySize): number => z.coverDays ?? Number.POSITIVE_INFINITY;
   const sizes = [...style.sizes].sort((a, b) => cover(a) - cover(b));
@@ -735,19 +805,57 @@ function StyleGroup({
                   onOpenStyle();
                 }}
                 title={t('admin.inventoryHealth.openStyle', { defaultValue: 'Open style workspace' })}
-                className="inline-flex min-w-0 items-center gap-1 text-[16px] font-semibold text-neutral-900 underline decoration-dotted underline-offset-4 hover:decoration-solid"
+                className={`inline-flex min-w-0 items-center gap-1 text-[16px] font-semibold ${codeColor} underline decoration-dotted underline-offset-4 hover:decoration-solid`}
               >
                 <span className="truncate">{style.styleKey}</span>
                 <ArrowUpRight size={14} className="shrink-0 text-neutral-400" />
               </button>
             ) : (
-              <span className="truncate text-[16px] font-semibold text-neutral-900">{style.styleKey}</span>
+              <span className={`truncate text-[16px] font-semibold ${codeColor}`}>{style.styleKey}</span>
+            )}
+            <AbcChip cls={style.abcClass} />
+            {style.lowVolume && (
+              <span className="inline-flex items-center rounded border border-neutral-200 px-1.5 py-0.5 text-[10px] font-semibold text-neutral-400">
+                {t('admin.inventoryHealth.lowVolume', { defaultValue: 'low volume' })}
+              </span>
             )}
             <UrgencyPill urgency={style.worstUrgency} />
           </div>
-          <div className="truncate font-mono text-xs" style={{ color: NEUTRAL_DOT }}>
-            {style.name}
+          <div className="mt-0.5 flex min-w-0 items-center gap-2">
+            <span className="truncate font-mono text-xs" style={{ color: NEUTRAL_DOT }}>
+              {style.name}
+            </span>
+            <ChannelChips links={style.marketplaceLinks} />
           </div>
+        </div>
+        {/* Sales-at-risk ₹/DAY — WHY this style ranks where it does. Labelled
+            per-day + tooltip so it can't be misread as the item price. */}
+        <div
+          className="hidden shrink-0 text-right sm:block"
+          title={t('admin.inventoryHealth.atRiskTip', {
+            defaultValue: 'Sales revenue lost per day this is out of stock — not the item price.',
+          })}
+        >
+          {style.atRiskRevenuePerDay >= AT_RISK_MIN ? (
+            <>
+              <div className="tabular-nums leading-none" style={{ color: INK, fontSize: 18, fontWeight: 700 }}>
+                {t('admin.inventoryHealth.atRiskValue', {
+                  defaultValue: '{{amt}}/day at risk',
+                  amt: fmtRupee(style.atRiskRevenuePerDay),
+                })}
+              </div>
+              <div className="mt-1 text-[11px]" style={{ color: LABEL_GREY }}>
+                {t('admin.inventoryHealth.atRiskUnits', {
+                  defaultValue: '(~{{n}} units/day)',
+                  n: fmtN(style.atRiskUnitsPerDay),
+                })}
+              </div>
+            </>
+          ) : (
+            <div className="text-[12px]" style={{ color: MUTED }}>
+              {t('admin.inventoryHealth.notAtRisk', { defaultValue: '— not at risk' })}
+            </div>
+          )}
         </div>
         <div className="shrink-0 text-right">
           <div style={{ color: INK, fontSize: 22, fontWeight: 700 }} className="tabular-nums leading-none">
@@ -810,6 +918,22 @@ function SizeRow({ size, t }: { size: InventorySize; t: ReturnType<typeof useTra
             {t('admin.inventoryHealth.lowData', { defaultValue: 'low data' })}
           </span>
         )}
+      </Cell>
+
+      {/* At risk (right) — ₹/day this size bleeds while out; "—" below threshold.
+          Tooltip disambiguates it from the item price. */}
+      <Cell label={t('admin.inventoryHealth.col.atRisk', { defaultValue: 'Sales at risk · ₹/day' })} align="right">
+        <span
+          className="tabular-nums"
+          style={{ color: size.atRiskRevenuePerDay >= AT_RISK_MIN ? INK : MUTED }}
+          title={t('admin.inventoryHealth.atRiskTip', {
+            defaultValue: 'Sales revenue lost per day this is out of stock — not the item price.',
+          })}
+        >
+          {size.atRiskRevenuePerDay >= AT_RISK_MIN
+            ? t('admin.inventoryHealth.atRiskPerDay', { defaultValue: '{{amt}}/day', amt: fmtRupee(size.atRiskRevenuePerDay) })
+            : '—'}
+        </span>
       </Cell>
 
       {/* Stock (right) */}

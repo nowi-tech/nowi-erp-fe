@@ -25,6 +25,12 @@ export interface InventorySize {
   pipelineQty: number;
   /** Suggested units to make to restore healthy cover. */
   makeQty: number;
+  /** Demand this size can't fill (units/day) once it's below target cover. */
+  atRiskUnitsPerDay: number;
+  /** Revenue bleeding per day from that unmet demand (₹/day). */
+  atRiskRevenuePerDay: number;
+  /** Selling price per unit (₹). */
+  avgPrice: number;
 }
 
 export interface InventoryStyle {
@@ -36,8 +42,17 @@ export interface InventoryStyle {
   linkedStyleId: number | null;
   /** Marketplace/listing SKUs (Myntra etc.) — also matched by the search box. */
   marketplaceIds: string[];
+  /** Real ERP listing URLs — one clickable channel chip each (usually empty). */
+  marketplaceLinks: { channel: string; url: string }[];
   worstUrgency: Urgency;
   makeTotal: number;
+  /** Style-level at-risk rollup (sum over sizes). Drives the default ranking. */
+  atRiskUnitsPerDay: number;
+  atRiskRevenuePerDay: number;
+  /** Revenue tier — A = the critical few, C = the long tail. */
+  abcClass: 'A' | 'B' | 'C';
+  /** Tiny seller — de-emphasised in the list (shown, not hidden). */
+  lowVolume: boolean;
   sizes: InventorySize[];
 }
 
