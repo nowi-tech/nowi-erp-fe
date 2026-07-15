@@ -633,9 +633,10 @@ const StyleIntakeForm = forwardRef<StyleIntakeFormHandle, StyleIntakeFormProps>(
       forkMode === 'colour'
         ? forkTarget?.style != null && form.primaryColour.trim().length > 0
         : forkMode === 'relive'
-          ? // Relive must resolve to an approved source (carrying a minted
-            // Style #) — the new code is derived from it.
-            forkTarget?.style?.styleId != null
+          ? // Relive accepts either an approved in-system source (from whose
+            // code the new one is derived) OR a typed legacy code (kept verbatim
+            // as the Style # — reviving old/live work under its original code).
+            forkTarget?.style?.styleId != null || forkTarget?.code != null
           : forkTarget != null;
     // 3rd-party uses its own free-typed code input, not the style-ref picker.
     const isThirdParty = showFork && forkMode === 'third_party';
@@ -726,12 +727,11 @@ const StyleIntakeForm = forwardRef<StyleIntakeFormHandle, StyleIntakeFormProps>(
         }
       }
 
-      // Relive: send the approved source's minted Style #. The picker is
-      // approved-only with no free-text, so a resolved row carrying a styleId
-      // is guaranteed; the BE resolves it to relivedFromStyleId and derives the
-      // new code as `{source}-{n}`.
-      if (showFork && forkMode === 'relive' && forkTarget?.style?.styleId) {
-        samplingBody.oldStyleId = forkTarget.style.styleId;
+      // Relive: send the old Style # — either the approved source's minted code
+      // (BE resolves it to relivedFromStyleId and derives `{source}-{n}`) or a
+      // typed legacy code (BE keeps it verbatim as this style's Style #).
+      if (showFork && forkMode === 'relive' && forkTarget) {
+        samplingBody.oldStyleId = forkTarget.style?.styleId ?? forkTarget.code;
       }
 
       // 3rd party: override the source — the partner's code becomes the Style #
@@ -878,7 +878,7 @@ const StyleIntakeForm = forwardRef<StyleIntakeFormHandle, StyleIntakeFormProps>(
                     // the system). Relive must resolve to an existing APPROVED
                     // style — its new code is derived from the source's, so the
                     // source needs a minted Style #: no free-text, approved-only.
-                    allowCode={forkMode === 'based_on'}
+                    allowCode={forkMode === 'based_on' || forkMode === 'relive'}
                     approvedOnly={forkMode === 'relive'}
                     placeholder={t('admin.styles.intake.fork.pickPlaceholder')}
                     emptyLabel={t('admin.styles.intake.fork.pickEmpty')}
