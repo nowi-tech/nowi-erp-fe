@@ -107,12 +107,3 @@ export function getInventoryHealth(params: InventoryHealthParams = {}): Promise<
   if (params.sortDir) q.sortDir = params.sortDir;
   return apiClient.get<InventoryHealthResponse>('/api/inventory-health', { params: q }).then((r) => r.data);
 }
-
-/** POST /api/inventory-health/refresh — kicks off a background recompute and
- *  returns immediately. Poll {@link getInventoryHealth} until `syncing` clears. */
-export function refreshInventoryHealth(): Promise<{ syncing: boolean }> {
-  // Body `{}` not null — apiClient forces application/json (see salesKpis.ts).
-  return apiClient
-    .post<{ syncing: boolean }>('/api/inventory-health/refresh', {})
-    .then((r) => r.data);
-}

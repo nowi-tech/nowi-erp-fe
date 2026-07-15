@@ -12,13 +12,13 @@ import { HoverThumbnail } from '@/components/dashboard/StylesInFlightTable';
 import { CARD_SHELL } from '@/components/admin/kpiPrimitives';
 import {
   getInventoryHealth,
-  refreshInventoryHealth,
   type InventoryHealthResponse,
   type InventoryKpis,
   type InventorySize,
   type InventoryStyle,
   type Urgency,
 } from '@/api/inventoryHealth';
+import { refreshAllEasyEcom } from '@/api/salesKpis';
 
 /** Refresh POSTs a background recompute, then polls GET until `syncing` clears. */
 const REFRESH_POLL_MS = 5_000;
@@ -303,7 +303,9 @@ export default function InventoryHealth(): ReactNode {
     if (refreshing) return;
     setRefreshing(true);
     try {
-      await refreshInventoryHealth();
+      // ONE pull refreshes EVERY EasyEcom read model (Inventory Health + Sales KPI),
+      // stamped with a single shared timestamp so every screen's "as of" matches.
+      await refreshAllEasyEcom();
       const my = ++reqRef.current;
       const startAt = Date.now();
       let d = await load(0);
@@ -346,7 +348,18 @@ export default function InventoryHealth(): ReactNode {
       } else {
         toast.show(t('admin.inventoryHealth.refreshed', { defaultValue: 'Inventory health refreshed.' }), 'success');
       }
-    } catch {
+    } catch (err: unknown) {
+      const res = (err as { response?: { status?: number; data?: { message?: string } } }).response;
+      if (res?.status === 429) {
+        // Shared cooldown with the Sales KPI refresh (refresh-all throttles non-admins
+        // to one pull / 10 min) — data is still valid, not a failure. Mirror SalesKpis.
+        toast.show(
+          res.data?.message ??
+            t('admin.inventoryHealth.refreshCooldown', { defaultValue: 'Refreshed recently — please try again soon.' }),
+          'info',
+        );
+        return;
+      }
       toast.show(t('admin.inventoryHealth.refreshFailed', { defaultValue: 'Refresh failed. Please try again.' }), 'error');
     } finally {
       setRefreshing(false);

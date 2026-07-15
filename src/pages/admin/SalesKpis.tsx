@@ -8,7 +8,7 @@ import { todayISO } from '@/lib/date';
 import { CARD_SHELL, DISPLAY, SANS, Sparkline } from '@/components/admin/kpiPrimitives';
 import {
   getSalesKpis,
-  refreshSalesKpis,
+  refreshAllEasyEcom,
   type SalesBucket,
   type SalesFormat,
   type SalesKpisResponse,
@@ -24,8 +24,6 @@ const REFRESH_MAX_WAIT_MS = 5 * 60_000;
 /** Per-bucket accent — cards in a bucket share a colour so groups read at a glance. */
 const BUCKET_ACCENT: Record<SalesBucket, string> = {
   sales: '#3b5bdb',
-  live: '#0ca678',
-  inventory: '#7048e8',
   fulfilment: '#e8590c',
 };
 
@@ -197,13 +195,14 @@ export default function SalesKpis({
       return;
     }
     setRefreshing(true);
-    // Async refresh: the POST kicks off a BACKGROUND sync and returns fast with
-    // `syncing: true` (generating fresh reports can take minutes). Poll GET until
-    // `syncing` clears, keeping the current data + FetchingBanner on screen. No
-    // "started" toast — the banner covers the in-progress state; one toast on the
-    // result. Scope to this page's buckets so we don't pull every report.
+    // ONE pull refreshes EVERY EasyEcom read model (Sales KPI + Inventory Health),
+    // stamped with a single shared timestamp so every screen's "as of" matches.
+    // The POST returns fast; poll GET until `syncing` clears, keeping the current
+    // data + FetchingBanner on screen. No "started" toast — the banner covers the
+    // in-progress state; one toast on the result.
     try {
-      let d = await refreshSalesKpis(sendAsOf, buckets);
+      await refreshAllEasyEcom();
+      let d = await getSalesKpis(sendAsOf);
       const startAt = Date.now();
       while (pageSyncing(d) && Date.now() - startAt < REFRESH_MAX_WAIT_MS) {
         await new Promise((r) => setTimeout(r, REFRESH_POLL_MS));

@@ -249,21 +249,6 @@ function App() {
                 }
               />
               <Route
-                path="analytics/live-inventory"
-                element={
-                  <ProtectedRoute allowedRoles={['admin', 'viewer']}>
-                    <S>
-                      <SalesKpis
-                        buckets={['live', 'inventory']}
-                        titleKey="admin.nav.analyticsLiveInventory"
-                        titleDefault="Live & Inventory"
-                        subtitleDefault="Catalogue go-live, stock in & closing across warehouses."
-                      />
-                    </S>
-                  </ProtectedRoute>
-                }
-              />
-              <Route
                 path="analytics/inventory-health"
                 element={
                   <ProtectedRoute allowedRoles={['admin', 'viewer']}>
