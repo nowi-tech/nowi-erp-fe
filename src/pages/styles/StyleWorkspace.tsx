@@ -387,6 +387,9 @@ export default function StyleWorkspace() {
   // in_sampling stage, so no stepper band and no Approval #2.
   const skipsSampling =
     isFinishedGoodsSource ||
+    // Manufactured by a 3rd party: minted Style # (so not a finished-goods
+    // partner code), but still skips the sampling phase like the BE does.
+    style.source === 'third_party_manufactured' ||
     style.familyCode != null ||
     style.basedOnStyleId != null ||
     style.oldStyleId != null;

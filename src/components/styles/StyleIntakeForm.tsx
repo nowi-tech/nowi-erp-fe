@@ -59,9 +59,14 @@ import type {
  *                   matches an in-system Style). Skips sampling like based-on,
  *                   but — unlike based-on — the old code may NOT be in the
  *                   system (legacy codes), so a miss is fine, not an error.
- *   - `third_party` — finished goods from a partner. Overrides the emitted
- *                   `source` to `third_party`; the typed partner code becomes
- *                   the Style # verbatim (no NOWI minting). Skips sampling.
+ *   - `third_party` — finished goods from a partner ("Kotty"). Overrides the
+ *                   emitted `source` to `third_party`; the typed partner code
+ *                   becomes the Style # verbatim (no NOWI minting). Skips
+ *                   sampling.
+ *   - `third_party_manufactured` — manufactured by a 3rd party to our spec.
+ *                   Like `third_party` it skips sampling and lands in
+ *                   cataloguing, but the system MINTS the Style # at Approval #1
+ *                   (NOWI prefix) — no code is typed.
  *
  * The fork only exists in create mode; edit never re-forks a style.
  */
@@ -70,7 +75,8 @@ export type SubmissionForkMode =
   | 'colour'
   | 'based_on'
   | 'relive'
-  | 'third_party';
+  | 'third_party'
+  | 'third_party_manufactured';
 
 /**
  * Shared intake / edit form for the Product Development module.
@@ -635,9 +641,13 @@ const StyleIntakeForm = forwardRef<StyleIntakeFormHandle, StyleIntakeFormProps>(
     const isThirdParty = showFork && forkMode === 'third_party';
     const thirdPartyOk = !isThirdParty || thirdPartyCode.trim().length > 0;
     // The style-ref picker is needed by the linking branches (colour / based-on
-    // / relive) but NOT by net-new or 3rd-party.
+    // / relive) but NOT by net-new or either 3rd-party path (Kotty types a code;
+    // manufactured mints one — neither links to an existing style).
     const needsForkTarget =
-      showFork && forkMode !== 'new' && forkMode !== 'third_party';
+      showFork &&
+      forkMode !== 'new' &&
+      forkMode !== 'third_party' &&
+      forkMode !== 'third_party_manufactured';
     // Collection is required at submission on every path EXCEPT the colour
     // fork — a colour variant inherits its parent's collection server-side
     // (spawnColourVariant), so the picker isn't shown there.
@@ -732,6 +742,13 @@ const StyleIntakeForm = forwardRef<StyleIntakeFormHandle, StyleIntakeFormProps>(
         samplingBody.thirdPartyStyleId = thirdPartyCode.trim();
       }
 
+      // Manufactured by a 3rd party: just flip the source. No code is typed —
+      // the BE mints the Style # at Approval #1 (NOWI). Sampling fields ride
+      // along as nulls and are ignored for this source.
+      if (showFork && forkMode === 'third_party_manufactured') {
+        samplingBody.source = 'third_party_manufactured';
+      }
+
       return samplingBody;
     };
 
@@ -823,6 +840,9 @@ const StyleIntakeForm = forwardRef<StyleIntakeFormHandle, StyleIntakeFormProps>(
                   <option value="third_party">
                     {t('admin.styles.intake.fork.thirdPartyTitle')}
                   </option>
+                  <option value="third_party_manufactured">
+                    {t('admin.styles.intake.fork.thirdPartyMfgTitle')}
+                  </option>
                 </Select>
                 {/* Describe the chosen path — the dropdown only shows titles. */}
                 <p className="mt-1.5 text-[12px] text-[var(--color-muted-foreground)]">
@@ -834,7 +854,9 @@ const StyleIntakeForm = forwardRef<StyleIntakeFormHandle, StyleIntakeFormProps>(
                         ? t('admin.styles.intake.fork.basedOnDesc')
                         : forkMode === 'relive'
                           ? t('admin.styles.intake.fork.reliveDesc')
-                          : t('admin.styles.intake.fork.thirdPartyDesc')}
+                          : forkMode === 'third_party'
+                            ? t('admin.styles.intake.fork.thirdPartyDesc')
+                            : t('admin.styles.intake.fork.thirdPartyMfgDesc')}
                 </p>
               </div>
 

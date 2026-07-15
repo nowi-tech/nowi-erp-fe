@@ -205,7 +205,11 @@ export type StyleSource =
   | 'legacy_floor_intake'
   // 3rd-party finished goods — the partner's own style code is typed at intake
   // and stored verbatim as the Style # (no NOWI minting). Skips sampling.
-  | 'third_party';
+  | 'third_party'
+  // Manufactured by a 3rd party to our spec — the system mints the Style #
+  // (NOWI prefix) at Approval #1, like sampling. Skips sampling, goes to
+  // cataloguing like china_import.
+  | 'third_party_manufactured';
 
 export type StyleLifecycle =
   | 'draft'
