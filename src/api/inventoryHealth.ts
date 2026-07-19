@@ -5,8 +5,18 @@ import { apiClient } from './apiClient';
 /** 4 tiers only. `needsAction` = out + critical. */
 export type Urgency = 'out' | 'critical' | 'watch' | 'healthy';
 
-/** One size row of a style: its stockout forecast. */
-export interface InventorySize {
+/** One flat SKU row — each size its own row, carrying its style's display meta
+ *  so the list is ungrouped with the product image on every row. */
+export interface InventorySkuRow {
+  styleKey: string;
+  name: string | null;
+  /** Signed URL or GCS object path or null (the style's image, shown per row). */
+  imageUrl: string | null;
+  linkedStyleId: number | null;
+  /** Real ERP listing URLs — one clickable channel chip each (usually empty). */
+  marketplaceLinks: { channel: string; url: string }[];
+  /** Tiny seller — de-emphasised in the list (shown, not hidden). */
+  lowVolume: boolean;
   size: string;
   sku: string;
   urgency: Urgency;
@@ -14,46 +24,17 @@ export interface InventorySize {
   coverDays: number | null;
   /** Daily run rate — units sold per day. */
   drr: number;
-  /** Units sold in the trailing 2 / 7 / 30 days. */
-  sold2d: number;
-  sold7d: number;
-  sold30d: number;
   /** 'low' = too little sales history to trust the DRR/cover. */
   confidence: 'high' | 'low';
   currentStock: number;
-  /** In-production units. 0 for now — production data not yet connected. */
-  pipelineQty: number;
   /** Suggested units to make to restore healthy cover. */
   makeQty: number;
-  /** Demand this size can't fill (units/day) once it's below target cover. */
+  /** Unmet demand per day once below target cover (units/day) — "stock at risk
+   *  per day". No rupees. */
   atRiskUnitsPerDay: number;
-  /** Revenue bleeding per day from that unmet demand (₹/day). */
-  atRiskRevenuePerDay: number;
-  /** Selling price per unit (₹). */
-  avgPrice: number;
-}
-
-export interface InventoryStyle {
-  styleKey: string;
-  name: string | null;
-  category: string;
-  /** Signed URL or GCS object path or null. */
-  imageUrl: string | null;
-  linkedStyleId: number | null;
-  /** Marketplace/listing SKUs (Myntra etc.) — also matched by the search box. */
-  marketplaceIds: string[];
-  /** Real ERP listing URLs — one clickable channel chip each (usually empty). */
-  marketplaceLinks: { channel: string; url: string }[];
-  worstUrgency: Urgency;
-  makeTotal: number;
-  /** Style-level at-risk rollup (sum over sizes). Drives the default ranking. */
-  atRiskUnitsPerDay: number;
-  atRiskRevenuePerDay: number;
-  /** Revenue tier — A = the critical few, C = the long tail. */
-  abcClass: 'A' | 'B' | 'C';
-  /** Tiny seller — de-emphasised in the list (shown, not hidden). */
-  lowVolume: boolean;
-  sizes: InventorySize[];
+  /** Raw daily units over the response window (aligned to response `trendDates`).
+   *  Drives the per-row interactive trend sparkline. */
+  trend: number[];
 }
 
 export interface InventoryKpis {
@@ -77,8 +58,10 @@ export interface InventoryHealthResponse {
   kpis: InventoryKpis;
   /** Match count AFTER filter+search, BEFORE the page slice (drives scroll). */
   total: number;
-  /** One page of styles (server-side filtered/searched/sorted/sliced). */
-  styles: InventoryStyle[];
+  /** Day keys (YYYY-MM-DD) the per-row `trend` arrays align to. */
+  trendDates: string[];
+  /** One page of flat SKU rows (server-side filtered/searched/sorted/sliced). */
+  rows: InventorySkuRow[];
 }
 
 export interface InventoryHealthParams {

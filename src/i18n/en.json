@@ -347,7 +347,7 @@
     },
     "inventoryHealth": {
       "title": "Inventory Health",
-      "subtitle": "Per-size stockout forecast and what to make next, grouped by style.",
+      "subtitle": "Sizes running low or out — grouped by style, with each size’s trend and what to make next.",
       "refresh": "Refresh",
       "syncing": "Syncing…",
       "refreshed": "Inventory health refreshed.",
@@ -374,23 +374,22 @@
       "atRiskTip": "Sales revenue lost per day this is out of stock — not the item price.",
       "notAtRisk": "— not at risk",
       "lowVolume": "low volume",
-      "headlineMake": "Make",
       "headlineUnits": "units",
-      "headlineNeed": "SKUs need action now",
+      "filtering": "filtering · click to clear",
+      "trendTitle": "Daily units — hover a day for its value",
+      "skuCount": "{{n}} sizes",
       "chip": {
-        "out": "out",
-        "critical": "critical",
-        "watch": "watch",
-        "healthy": "healthy",
-        "clear": "clear"
+        "out": "Out of stock",
+        "critical": "Critical",
+        "watch": "Watch"
       },
       "col": {
-        "size": "Style",
+        "item": "Item",
         "cover": "Cover",
         "drr": "DRR · /d",
-        "atRisk": "Sales at risk · ₹/day",
+        "trend": "Trend · /d",
         "stock": "Stock",
-        "pipeline": "Pipeline",
+        "atRisk": "At risk · /d",
         "make": "Make"
       },
       "loadError": "Couldn’t load inventory health."

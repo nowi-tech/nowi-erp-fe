@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useLocation, useNavigate, useSearchParams } from 'react-router-dom';
-import { RefreshCw, ChevronRight, ChevronDown, Search, ArrowUpDown, ArrowUp, ArrowDown, ArrowUpRight, X } from 'lucide-react';
+import { RefreshCw, Search, ArrowUpDown, ArrowUp, ArrowDown, ArrowUpRight, Minus, X } from 'lucide-react';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useToast } from '@/components/ui/toast';
 import { DateRangePicker } from '@/components/ui/DateRangePicker';
@@ -9,13 +9,12 @@ import { todayISO } from '@/lib/date';
 import { useDebounced } from '@/lib/useDebounced';
 import { useSignedUrls } from '@/hooks/useSignedUrls';
 import { HoverThumbnail } from '@/components/dashboard/StylesInFlightTable';
-import { CARD_SHELL } from '@/components/admin/kpiPrimitives';
+import { CARD_SHELL, Sparkline as TrendChart } from '@/components/admin/kpiPrimitives';
 import {
   getInventoryHealth,
   type InventoryHealthResponse,
   type InventoryKpis,
-  type InventorySize,
-  type InventoryStyle,
+  type InventorySkuRow,
   type Urgency,
 } from '@/api/inventoryHealth';
 import { refreshAllEasyEcom } from '@/api/salesKpis';
@@ -32,6 +31,9 @@ const INK = '#18181B'; // near-black for emphasis
 const LABEL_GREY = '#B0AFAE';
 const MUTED = '#C4C4C8';
 const NEUTRAL_DOT = '#A1A1AA';
+// Trend direction colours: velocity rising = green, falling = red, flat = grey.
+const TREND_UP = '#059669';
+const TREND_DOWN = '#DC2626';
 
 /** Per-urgency: label + the meaning-colour (red/amber/neutral) for text + dot. */
 const URG: Record<Urgency, { label: string; color: string; dot: string }> = {
@@ -41,26 +43,18 @@ const URG: Record<Urgency, { label: string; color: string; dot: string }> = {
   healthy: { label: 'Healthy', color: '#52525B', dot: NEUTRAL_DOT },
 };
 
-// One grid template shared by the column header + every size row so they align.
-// SIZE · COVER · DRR · AT RISK · STOCK · PIPELINE · MAKE
-const GRID = 'minmax(0,1.6fr) 0.85fr 0.7fr 1fr 0.75fr 0.85fr 0.85fr';
+// One grid template shared by the column header + every SKU row so they align.
+// ITEM (image + code·size) · COVER · DRR · TREND · STOCK · AT-RISK · MAKE
+const GRID = 'minmax(0,2.2fr) 0.8fr 0.6fr 1.05fr 0.6fr 0.8fr 0.6fr';
 
-/** Which style filter is active. Chips map to these; `all` clears the filter.
- *  Filter/search/sort now run server-side (see the BE getHealth query). */
-type FilterKey = 'all' | 'out' | 'critical' | 'watch' | 'healthy';
+/** Which urgency filter is active. Cards map to these; re-clicking the active
+ *  card clears it. Healthy is never listed. Filter/search/sort run server-side. */
+type FilterKey = 'all' | 'out' | 'critical' | 'watch';
 
 const PAGE_SIZE = 50;
 
-/** Below this ₹/day, show "—" not a confusing tiny number (slow-tail noise).
- *  Ranking still uses the raw value — this only affects DISPLAY. */
-const AT_RISK_MIN = 50;
-
-/** Sortable columns. `null` sortKey = the revenue-at-risk default order. */
-type SortKey = 'style' | 'cover' | 'drr' | 'atrisk' | 'stock' | 'pipeline' | 'make';
-
-function fmtRupee(n: number): string {
-  return `₹${n.toLocaleString('en-IN', { maximumFractionDigits: 0 })}`;
-}
+/** Sortable columns. `null` sortKey = urgency-then-soonest-out default order. */
+type SortKey = 'style' | 'cover' | 'drr' | 'stock' | 'atrisk' | 'make';
 
 function fmtN(n: number): string {
   return n.toLocaleString('en-IN', { maximumFractionDigits: 0 });
@@ -133,10 +127,12 @@ export default function InventoryHealth(): ReactNode {
   const location = useLocation();
   const [searchParams, setSearchParams] = useSearchParams();
 
-  // Server-paginated: `styles` accumulates pages; the server does filter/sort/slice.
-  const [styles, setStyles] = useState<InventoryStyle[]>([]);
+  // Server-paginated: `rows` accumulates pages; the server does filter/sort/slice.
+  const [rows, setRows] = useState<InventorySkuRow[]>([]);
   const [total, setTotal] = useState(0);
   const [kpis, setKpis] = useState<InventoryKpis | null>(null);
+  // Day-key axis every visible row's trend sparkline aligns to (same for the page).
+  const [trendDates, setTrendDates] = useState<string[]>([]);
   const [syncedAt, setSyncedAt] = useState<string | null>(null);
   const [syncing, setSyncing] = useState(false);
   const [stale, setStale] = useState(false);
@@ -156,7 +152,6 @@ export default function InventoryHealth(): ReactNode {
   // Seed search from ?q= so it survives navigating into a style and back.
   const [searchText, setSearchText] = useState(() => searchParams.get('q') ?? '');
   const debouncedSearch = useDebounced(searchText, 300);
-  const [expanded, setExpanded] = useState<Record<string, boolean>>({});
 
   // Fetch one server page for the current query (server filters/sorts/slices).
   const load = useCallback(
@@ -222,9 +217,10 @@ export default function InventoryHealth(): ReactNode {
     load(0)
       .then((d) => {
         if (reqRef.current !== my) return;
-        setStyles(d.styles);
+        setRows(d.rows);
         setTotal(d.total);
         setKpis(d.kpis);
+        setTrendDates(d.trendDates);
         setSyncedAt(d.syncedAt);
         setSyncing(d.syncing);
         setStale(d.stale);
@@ -242,14 +238,14 @@ export default function InventoryHealth(): ReactNode {
     // Synchronous ref guard: two observer fires in one commit window read the
     // same stale `loadingMore` state, so gate on a ref that flips immediately.
     // Also blocked during a refresh so onRefresh's page-0 reload can't collide.
-    if (loading || refreshing || loadingMoreRef.current || styles.length >= total) return;
+    if (loading || refreshing || loadingMoreRef.current || rows.length >= total) return;
     loadingMoreRef.current = true;
     const my = reqRef.current;
     setLoadMoreError(false);
-    load(styles.length)
+    load(rows.length)
       .then((d) => {
         if (reqRef.current !== my) return; // query changed mid-flight → drop this page
-        setStyles((prev) => [...prev, ...d.styles]);
+        setRows((prev) => [...prev, ...d.rows]);
         setTotal(d.total);
       })
       .catch(() => {
@@ -260,7 +256,7 @@ export default function InventoryHealth(): ReactNode {
       .finally(() => {
         loadingMoreRef.current = false;
       });
-  }, [load, loading, refreshing, styles.length, total]);
+  }, [load, loading, refreshing, rows.length, total]);
   useEffect(() => {
     loadMoreRef.current = loadMore;
   }, [loadMore]);
@@ -318,9 +314,10 @@ export default function InventoryHealth(): ReactNode {
         }
       }
       if (reqRef.current === my) {
-        setStyles(d.styles);
+        setRows(d.rows);
         setTotal(d.total);
         setKpis(d.kpis);
+        setTrendDates(d.trendDates);
         setSyncedAt(d.syncedAt);
         setSyncing(d.syncing);
         setStale(d.stale);
@@ -367,7 +364,8 @@ export default function InventoryHealth(): ReactNode {
   };
 
   // Sign any GCS object paths (v1 imageUrl is usually null → ImageOff fallback).
-  const imagePaths = useMemo(() => styles.map((s) => s.imageUrl), [styles]);
+  // Many rows share a style image → dedupe before signing.
+  const imagePaths = useMemo(() => [...new Set(rows.map((r) => r.imageUrl))], [rows]);
   const signed = useSignedUrls(imagePaths);
 
   // Click a column header: toggle dir if it's the active one, else switch to it (asc).
@@ -386,9 +384,9 @@ export default function InventoryHealth(): ReactNode {
   // Back-target for the style workspace, restoring this page + search.
   const from = `${location.pathname}${location.search}`;
 
-  const openStyle = (style: InventoryStyle): void => {
-    if (style.linkedStyleId == null) return;
-    navigate(`/styles/${style.linkedStyleId}`, { state: { from } });
+  const openStyle = (linkedStyleId: number | null): void => {
+    if (linkedStyleId == null) return;
+    navigate(`/styles/${linkedStyleId}`, { state: { from } });
   };
 
   return (
@@ -402,7 +400,7 @@ export default function InventoryHealth(): ReactNode {
             </h1>
             <p className="mt-0.5 text-sm text-neutral-500">
               {t('admin.inventoryHealth.subtitle', {
-                defaultValue: 'Per-size stockout forecast and what to make next, grouped by style.',
+                defaultValue: 'Every size running low or out — its cover, trend, stock at risk, and what to make next.',
               })}
             </p>
           </div>
@@ -479,7 +477,7 @@ export default function InventoryHealth(): ReactNode {
         {(refreshing || syncing) && !loading && <FetchingBanner t={t} />}
 
         {/* Body */}
-        {loading && !styles.length ? (
+        {loading && !rows.length ? (
           <>
             <div style={CARD_SHELL} className="mb-4">
               <Skeleton className="h-6 w-80 rounded-md" />
@@ -491,35 +489,38 @@ export default function InventoryHealth(): ReactNode {
           </>
         ) : kpis ? (
           <>
-            {/* Consolidated header: headline + clickable health chips */}
-            <div style={{ ...CARD_SHELL, border: '1px solid #EFEDEB' }} className="mb-4">
-              <div className="text-[17px] leading-snug text-neutral-700">
-                {t('admin.inventoryHealth.headlineMake', { defaultValue: 'Make' })}{' '}
-                <span className="font-bold" style={{ color: INK }}>
-                  {fmtN(kpis.unitsToMake)}
-                </span>{' '}
-                {t('admin.inventoryHealth.headlineUnits', { defaultValue: 'units' })}
-                <span className="mx-2 text-neutral-300">·</span>
-                <span className="font-bold" style={{ color: RED }}>
-                  {fmtN(kpis.needsAction)}
-                </span>{' '}
-                {t('admin.inventoryHealth.headlineNeed', { defaultValue: 'SKUs need action now' })}
-              </div>
-              <div className="mt-3 flex flex-wrap items-center gap-1.5">
-                <HealthChip active={filter === 'out'} onClick={() => setFilter(filter === 'out' ? 'all' : 'out')} dot={RED} n={kpis.outOfStock} label={t('admin.inventoryHealth.chip.out', { defaultValue: 'out' })} />
-                <HealthChip active={filter === 'critical'} onClick={() => setFilter(filter === 'critical' ? 'all' : 'critical')} dot={RED} n={kpis.critical} label={t('admin.inventoryHealth.chip.critical', { defaultValue: 'critical' })} />
-                <HealthChip active={filter === 'watch'} onClick={() => setFilter(filter === 'watch' ? 'all' : 'watch')} dot={AMBER} n={kpis.watch} label={t('admin.inventoryHealth.chip.watch', { defaultValue: 'watch' })} />
-                <HealthChip active={filter === 'healthy'} onClick={() => setFilter(filter === 'healthy' ? 'all' : 'healthy')} dot={NEUTRAL_DOT} n={kpis.healthy} label={t('admin.inventoryHealth.chip.healthy', { defaultValue: 'healthy' })} />
-                {filter !== 'all' && (
-                  <button
-                    type="button"
-                    onClick={() => setFilter('all')}
-                    className="ml-1 text-[12px] font-medium text-neutral-400 underline underline-offset-2 hover:text-neutral-700"
-                  >
-                    {t('admin.inventoryHealth.chip.clear', { defaultValue: 'clear' })}
-                  </button>
-                )}
-              </div>
+            {/* KPI cards. The three urgency cards double as filters (re-click the
+                active one to clear); "To make" is the roll-up total. */}
+            <div className="mb-4 grid grid-cols-2 gap-3 sm:grid-cols-4">
+              <StatCard
+                label={t('admin.inventoryHealth.chip.out', { defaultValue: 'Out of stock' })}
+                value={kpis.outOfStock}
+                dot={RED}
+                active={filter === 'out'}
+                onClick={() => setFilter(filter === 'out' ? 'all' : 'out')}
+                t={t}
+              />
+              <StatCard
+                label={t('admin.inventoryHealth.chip.critical', { defaultValue: 'Critical' })}
+                value={kpis.critical}
+                dot={RED}
+                active={filter === 'critical'}
+                onClick={() => setFilter(filter === 'critical' ? 'all' : 'critical')}
+                t={t}
+              />
+              <StatCard
+                label={t('admin.inventoryHealth.chip.watch', { defaultValue: 'Watch' })}
+                value={kpis.watch}
+                dot={AMBER}
+                active={filter === 'watch'}
+                onClick={() => setFilter(filter === 'watch' ? 'all' : 'watch')}
+                t={t}
+              />
+              <StatCard
+                label={t('admin.inventoryHealth.toMake', { defaultValue: 'To make' })}
+                value={kpis.unitsToMake}
+                unit={t('admin.inventoryHealth.headlineUnits', { defaultValue: 'units' })}
+              />
             </div>
 
             {/* Search (left) + pager (right) */}
@@ -529,28 +530,31 @@ export default function InventoryHealth(): ReactNode {
                 <input
                   value={searchText}
                   onChange={(e) => setSearchText(e.target.value)}
-                  placeholder={t('admin.inventoryHealth.search', { defaultValue: 'Search style or name…' })}
+                  placeholder={t('admin.inventoryHealth.search', { defaultValue: 'Search style, size or name…' })}
                   className="w-full rounded-lg border border-neutral-200 bg-white py-2 pl-9 pr-3 text-sm text-neutral-700 shadow-sm outline-none focus:border-neutral-300"
                 />
               </div>
               <span className="shrink-0 text-xs text-neutral-400 tabular-nums">
-                {t('admin.inventoryHealth.styleCount', { defaultValue: '{{n}} styles', n: total })}
+                {t('admin.inventoryHealth.skuCount', { defaultValue: '{{n}} sizes', n: total })}
               </span>
             </div>
 
-            {/* Grouped table */}
+            {/* Flat per-SKU table */}
             <div style={{ ...CARD_SHELL, padding: 0, overflow: 'hidden', border: '1px solid #EFEDEB' }}>
               {/* Sortable column header */}
               <div
                 className="hidden gap-3 px-4 py-2.5 text-[11px] uppercase lg:grid"
                 style={{ gridTemplateColumns: GRID, background: '#FCFCFB', letterSpacing: '0.08em', color: LABEL_GREY }}
               >
-                <SortHeader label={t('admin.inventoryHealth.col.size', { defaultValue: 'Style' })} col="style" sortKey={sortKey} sortDir={sortDir} onSort={onSort} />
+                <SortHeader label={t('admin.inventoryHealth.col.item', { defaultValue: 'Item' })} col="style" sortKey={sortKey} sortDir={sortDir} onSort={onSort} />
                 <SortHeader label={t('admin.inventoryHealth.col.cover', { defaultValue: 'Cover' })} col="cover" sortKey={sortKey} sortDir={sortDir} onSort={onSort} />
                 <SortHeader label={t('admin.inventoryHealth.col.drr', { defaultValue: 'DRR · /d' })} col="drr" sortKey={sortKey} sortDir={sortDir} onSort={onSort} />
-                <SortHeader label={t('admin.inventoryHealth.col.atRisk', { defaultValue: 'Sales at risk · ₹/day' })} col="atrisk" sortKey={sortKey} sortDir={sortDir} onSort={onSort} align="right" />
+                {/* Trend is a visual, not a sortable metric — plain right-aligned label. */}
+                <span className="flex items-center justify-end uppercase tracking-[inherit]">
+                  {t('admin.inventoryHealth.col.trend', { defaultValue: 'Trend · /d' })}
+                </span>
                 <SortHeader label={t('admin.inventoryHealth.col.stock', { defaultValue: 'Stock' })} col="stock" sortKey={sortKey} sortDir={sortDir} onSort={onSort} align="right" />
-                <SortHeader label={t('admin.inventoryHealth.col.pipeline', { defaultValue: 'Pipeline' })} col="pipeline" sortKey={sortKey} sortDir={sortDir} onSort={onSort} align="right" />
+                <SortHeader label={t('admin.inventoryHealth.col.atRisk', { defaultValue: 'At risk · /d' })} col="atrisk" sortKey={sortKey} sortDir={sortDir} onSort={onSort} align="right" />
                 <SortHeader label={t('admin.inventoryHealth.col.make', { defaultValue: 'Make' })} col="make" sortKey={sortKey} sortDir={sortDir} onSort={onSort} align="right" />
               </div>
 
@@ -559,16 +563,13 @@ export default function InventoryHealth(): ReactNode {
                   {t('admin.inventoryHealth.empty', { defaultValue: 'Nothing matches this filter.' })}
                 </div>
               ) : (
-                styles.map((style) => (
-                  <StyleGroup
-                    key={style.styleKey}
-                    style={style}
-                    imageUrl={(style.imageUrl && signed[style.imageUrl]) || null}
-                    open={expanded[style.styleKey] ?? true}
-                    onToggle={() =>
-                      setExpanded((e) => ({ ...e, [style.styleKey]: !(e[style.styleKey] ?? true) }))
-                    }
-                    onOpenStyle={() => openStyle(style)}
+                rows.map((row) => (
+                  <SkuRow
+                    key={row.sku}
+                    row={row}
+                    imageUrl={(row.imageUrl && signed[row.imageUrl]) || null}
+                    dates={trendDates}
+                    onOpen={() => openStyle(row.linkedStyleId)}
                     t={t}
                   />
                 ))
@@ -578,7 +579,7 @@ export default function InventoryHealth(): ReactNode {
             {/* Infinite-scroll sentinel: entering the viewport fetches the next page.
                 On a fetch error the observer can't self-retry (sentinel stays in
                 view), so show a manual Retry instead of stalling silently. */}
-            {styles.length < total && (
+            {rows.length < total && (
               <div ref={sentinelRef} className="mt-4 py-4 text-center text-xs text-neutral-400">
                 {loadMoreError ? (
                   <button
@@ -593,7 +594,7 @@ export default function InventoryHealth(): ReactNode {
                 ) : (
                   t('admin.inventoryHealth.loadingMore', {
                     defaultValue: 'Loading more… ({{shown}} of {{total}})',
-                    shown: styles.length,
+                    shown: rows.length,
                     total,
                   })
                 )}
@@ -619,33 +620,69 @@ export default function InventoryHealth(): ReactNode {
   );
 }
 
-/** Clickable health chip: coloured dot + count + label; highlighted when active. */
-function HealthChip({
+/** KPI card. The three urgency cards are clickable filters (active = ring +
+ *  emphasised border); the "to make" roll-up is informational (no onClick).
+ *  Uses the shared admin CARD_SHELL so it matches the other analytics screens. */
+function StatCard({
+  label,
+  value,
+  unit,
+  dot,
   active,
   onClick,
-  dot,
-  n,
-  label,
+  t,
 }: {
-  active: boolean;
-  onClick: () => void;
-  dot: string;
-  n: number;
   label: string;
+  value: number;
+  unit?: string;
+  dot?: string;
+  active?: boolean;
+  onClick?: () => void;
+  t?: ReturnType<typeof useTranslation>['t'];
 }): ReactNode {
+  const clickable = !!onClick;
   return (
-    <button
-      type="button"
-      onClick={onClick}
-      aria-pressed={active}
-      className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[12px] transition ${
-        active ? 'border-neutral-800 bg-neutral-900 text-white' : 'border-neutral-200 bg-white text-neutral-600 hover:bg-neutral-50'
-      }`}
+    <div
+      {...(clickable
+        ? {
+            role: 'button',
+            tabIndex: 0,
+            'aria-pressed': !!active,
+            onClick,
+            onKeyDown: (e: React.KeyboardEvent) => {
+              if (e.key === 'Enter' || e.key === ' ') {
+                e.preventDefault();
+                onClick();
+              }
+            },
+          }
+        : {})}
+      style={{ ...CARD_SHELL, padding: '14px 16px', borderColor: active ? INK : '#EFEDEB' }}
+      className={`flex flex-col transition ${
+        clickable ? 'cursor-pointer hover:border-neutral-400' : 'cursor-default'
+      } ${active ? 'ring-1 ring-neutral-900' : ''}`}
     >
-      <span style={{ width: 6, height: 6, borderRadius: 999, background: dot }} />
-      <span className="font-bold tabular-nums">{fmtN(n)}</span>
-      <span>{label}</span>
-    </button>
+      <span
+        className="flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wide"
+        style={{ color: LABEL_GREY }}
+      >
+        {dot && <span style={{ width: 7, height: 7, borderRadius: 999, background: dot }} />}
+        {label}
+      </span>
+      <span className="mt-2 tabular-nums" style={{ color: INK, fontSize: 30, fontWeight: 700, lineHeight: 1 }}>
+        {fmtN(value)}
+        {unit && (
+          <span className="ml-1 text-sm font-medium" style={{ color: MUTED }}>
+            {unit}
+          </span>
+        )}
+      </span>
+      {clickable && active && (
+        <span className="mt-1.5 text-[10px] font-medium" style={{ color: NEUTRAL_DOT }}>
+          {t?.('admin.inventoryHealth.filtering', { defaultValue: 'filtering · click to clear' })}
+        </span>
+      )}
+    </div>
   );
 }
 
@@ -680,22 +717,6 @@ function SortHeader({
       {label}
       <Icon size={12} style={{ color: activeSort ? INK : MUTED }} />
     </button>
-  );
-}
-
-/** Revenue-tier chip A/B/C — subtle outlined; A slightly emphasised (the
- *  "critical few"). Neutral by design so it doesn't compete with urgency. */
-function AbcChip({ cls }: { cls: 'A' | 'B' | 'C' }): ReactNode {
-  const strong = cls === 'A';
-  return (
-    <span
-      title={`Revenue tier ${cls}`}
-      className={`inline-flex h-4 w-4 items-center justify-center rounded border text-[10px] font-bold ${
-        strong ? 'border-neutral-400 bg-neutral-100 text-neutral-800' : 'border-neutral-200 text-neutral-400'
-      }`}
-    >
-      {cls}
-    </span>
   );
 }
 
@@ -740,181 +761,97 @@ function UrgencyPill({ urgency }: { urgency: Urgency }): ReactNode {
   );
 }
 
-function StyleGroup({
-  style,
+/** One flat SKU row: product image + code·size + urgency, then the metric
+ *  columns. Clicking the code opens the style workspace (when linked). */
+function SkuRow({
+  row,
   imageUrl,
-  open,
-  onToggle,
-  onOpenStyle,
+  dates,
+  onOpen,
   t,
 }: {
-  style: InventoryStyle;
+  row: InventorySkuRow;
   imageUrl: string | null;
-  open: boolean;
-  onToggle: () => void;
-  onOpenStyle: () => void;
+  dates: string[];
+  onOpen: () => void;
   t: ReturnType<typeof useTranslation>['t'];
 }): ReactNode {
-  const linked = style.linkedStyleId != null;
-  const Chevron = open ? ChevronDown : ChevronRight;
-  // Low-volume tiny sellers read as low priority: muted code + a subtle chip.
-  const codeColor = style.lowVolume ? 'text-neutral-500' : 'text-neutral-900';
-  // EasyEcom's "name" is often just the size-SKU string, which dupes the code
-  // shown as the title. Only render it as a subtitle when it's a real name.
-  // Hide the name only when it IS a SKU string (the styleKey or a size SKU),
-  // not a real name that merely leads with the code token.
+  const u = URG[row.urgency];
+  const low = row.confidence === 'low';
+  const linked = row.linkedStyleId != null;
+  // Low-volume tiny sellers read as low priority: muted code.
+  const codeColor = row.lowVolume ? 'text-neutral-500' : 'text-neutral-900';
+  // EasyEcom's "name" is often just the SKU string — only show it when it's a
+  // real name, not a dupe of the code·size or the SKU.
   const norm = (s: string): string => s.toUpperCase().replace(/[^A-Z0-9]/g, '');
-  const normName = norm(style.name ?? '');
-  const showName =
-    !!normName && normName !== norm(style.styleKey) && !style.sizes.some((z) => norm(z.sku) === normName);
-  // Sizes shown soonest-to-run-out first (coverDays asc; null = never = last).
-  const cover = (z: InventorySize): number => z.coverDays ?? Number.POSITIVE_INFINITY;
-  const sizes = [...style.sizes].sort((a, b) => cover(a) - cover(b));
+  const normName = norm(row.name ?? '');
+  const showName = !!normName && normName !== norm(row.sku) && normName !== norm(row.styleKey + row.size);
   return (
-    // 8px divider separates style groups for clear visual grouping.
-    <div style={{ borderBottom: '8px solid #F4F3F2' }} className="last:border-b-0">
-      {/* Header row — the whole row toggles expansion; clicking the code
-          navigates to the style workspace when linkedStyleId exists. */}
-      <div
-        role="button"
-        tabIndex={0}
-        aria-expanded={open}
-        onClick={onToggle}
-        onKeyDown={(e) => {
-          if (e.key === 'Enter' || e.key === ' ') {
-            e.preventDefault();
-            onToggle();
-          }
-        }}
-        className="flex cursor-pointer items-center gap-3 px-4 py-3 transition"
-        style={{ background: '#FBFAF9' }}
-        onMouseEnter={(e) => (e.currentTarget.style.background = '#F5F4F2')}
-        onMouseLeave={(e) => (e.currentTarget.style.background = '#FBFAF9')}
-      >
-        <Chevron size={18} className="shrink-0 text-neutral-400" />
-        <HoverThumbnail src={imageUrl} alt={style.name ?? style.styleKey} size={52} radius="11px" />
+    <div
+      className="grid grid-cols-2 items-center gap-y-1 gap-x-3 border-t border-neutral-100 px-4 py-3 text-sm transition first:border-t-0 hover:bg-neutral-50/60 lg:grid-cols-[var(--ih-grid)]"
+      style={{ ['--ih-grid' as string]: GRID }}
+    >
+      {/* Item: image + code·size + urgency pill + name/SKU/channel subtitle */}
+      <div className="col-span-2 flex min-w-0 items-center gap-3 lg:col-span-1">
+        <HoverThumbnail src={imageUrl} alt={row.name ?? row.sku} size={44} radius="9px" />
         <div className="min-w-0 flex-1">
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
             {linked ? (
               // Subtle "this opens the style" affordance: dotted underline + arrow.
               <button
                 type="button"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  onOpenStyle();
-                }}
+                onClick={onOpen}
                 title={t('admin.inventoryHealth.openStyle', { defaultValue: 'Open style workspace' })}
-                className={`inline-flex min-w-0 items-center gap-1 text-[16px] font-semibold ${codeColor} underline decoration-dotted underline-offset-4 hover:decoration-solid`}
+                className={`inline-flex min-w-0 items-center gap-1 text-[14px] font-semibold ${codeColor} underline decoration-dotted underline-offset-4 hover:decoration-solid`}
               >
-                <span className="truncate">{style.styleKey}</span>
-                <ArrowUpRight size={14} className="shrink-0 text-neutral-400" />
+                <span className="truncate">{row.styleKey}</span>
+                <span className="shrink-0 text-neutral-400">·</span>
+                <span className="shrink-0">{row.size}</span>
+                <ArrowUpRight size={13} className="shrink-0 text-neutral-400" />
               </button>
             ) : (
-              <span className={`truncate text-[16px] font-semibold ${codeColor}`}>{style.styleKey}</span>
+              <span className={`truncate text-[14px] font-semibold ${codeColor}`}>
+                {row.styleKey} <span className="text-neutral-400">· {row.size}</span>
+              </span>
             )}
-            <AbcChip cls={style.abcClass} />
-            {style.lowVolume && (
+            <UrgencyPill urgency={row.urgency} />
+            {row.lowVolume && (
               <span className="inline-flex items-center rounded border border-neutral-200 px-1.5 py-0.5 text-[10px] font-semibold text-neutral-400">
                 {t('admin.inventoryHealth.lowVolume', { defaultValue: 'low volume' })}
               </span>
             )}
-            <UrgencyPill urgency={style.worstUrgency} />
           </div>
-          {(showName || style.marketplaceLinks.length > 0) && (
-            <div className="mt-0.5 flex min-w-0 items-center gap-2">
-              {showName && (
-                <span className="truncate font-mono text-xs" style={{ color: NEUTRAL_DOT }}>
-                  {style.name}
-                </span>
-              )}
-              <ChannelChips links={style.marketplaceLinks} />
-            </div>
-          )}
-        </div>
-        {/* Sales-at-risk ₹/DAY — WHY this style ranks where it does. Labelled
-            per-day + tooltip so it can't be misread as the item price. */}
-        <div
-          className="hidden shrink-0 text-right sm:block"
-          title={t('admin.inventoryHealth.atRiskTip', {
-            defaultValue: 'Sales revenue lost per day this is out of stock — not the item price.',
-          })}
-        >
-          {style.atRiskRevenuePerDay >= AT_RISK_MIN ? (
-            <>
-              <div className="tabular-nums leading-none" style={{ color: INK, fontSize: 18, fontWeight: 700 }}>
-                {t('admin.inventoryHealth.atRiskValue', {
-                  defaultValue: '{{amt}}/day at risk',
-                  amt: fmtRupee(style.atRiskRevenuePerDay),
-                })}
-              </div>
-              <div className="mt-1 text-[11px]" style={{ color: LABEL_GREY }}>
-                {t('admin.inventoryHealth.atRiskUnits', {
-                  defaultValue: '(~{{n}} units/day)',
-                  n: fmtN(style.atRiskUnitsPerDay),
-                })}
-              </div>
-            </>
-          ) : (
-            <div className="text-[12px]" style={{ color: MUTED }}>
-              {t('admin.inventoryHealth.notAtRisk', { defaultValue: '— not at risk' })}
-            </div>
-          )}
-        </div>
-        <div className="shrink-0 text-right">
-          <div style={{ color: INK, fontSize: 22, fontWeight: 700 }} className="tabular-nums leading-none">
-            {fmtN(style.makeTotal)}
-          </div>
-          <div className="mt-1 text-[10px] font-semibold uppercase tracking-wider" style={{ color: LABEL_GREY }}>
-            {t('admin.inventoryHealth.toMake', { defaultValue: 'To make' })}
+          <div className="mt-0.5 flex min-w-0 items-center gap-2">
+            {showName && (
+              <span className="truncate font-mono text-[11px]" style={{ color: NEUTRAL_DOT }}>
+                {row.name}
+              </span>
+            )}
+            <span className="truncate font-mono text-[11px]" style={{ color: MUTED }}>
+              {row.sku}
+            </span>
+            <ChannelChips links={row.marketplaceLinks} />
           </div>
         </div>
       </div>
 
-      {/* Size rows — full per-size distribution, regardless of the active filter. */}
-      {open && (
-        <div className="bg-white">
-          {sizes.map((sz) => (
-            <SizeRow key={sz.sku} size={sz} t={t} />
-          ))}
-        </div>
-      )}
-    </div>
-  );
-}
-
-function SizeRow({ size, t }: { size: InventorySize; t: ReturnType<typeof useTranslation>['t'] }): ReactNode {
-  const u = URG[size.urgency];
-  const low = size.confidence === 'low';
-  return (
-    <div
-      className="grid grid-cols-2 items-center gap-y-1 gap-x-3 border-t border-neutral-100 px-4 py-[13px] text-sm transition first:border-t-0 hover:bg-neutral-50/60 lg:grid-cols-[var(--ih-grid)]"
-      style={{ ['--ih-grid' as string]: GRID }}
-    >
-      {/* Size + coloured urgency dot + SKU (mono) */}
-      <div className="flex items-center gap-2">
-        <span style={{ width: 8, height: 8, borderRadius: 999, background: u.dot }} className="shrink-0" />
-        <span className="text-[14px] font-semibold text-neutral-800">{size.size}</span>
-        <span className="truncate font-mono text-xs" style={{ color: MUTED }}>
-          {size.sku}
-        </span>
-      </div>
-
-      {/* Cover — text coloured by status (red out/critical, amber watch, neutral healthy) */}
+      {/* Cover — coloured by status (red out/critical, amber watch) */}
       <Cell label={t('admin.inventoryHealth.col.cover', { defaultValue: 'Cover' })}>
-        {size.coverDays == null ? (
+        {row.coverDays == null ? (
           <span className="font-semibold" style={{ color: MUTED }}>—</span>
         ) : (
           <span className="font-semibold" style={{ color: u.color }}>
-            {t('admin.inventoryHealth.daysLeft', { defaultValue: '{{n}} days left', n: fmtN(size.coverDays) })}
+            {t('admin.inventoryHealth.daysLeft', { defaultValue: '{{n}} days left', n: fmtN(row.coverDays) })}
           </span>
         )}
       </Cell>
 
-      {/* DRR — bare number (+ LOW DATA badge); "/d" lives in the header */}
+      {/* DRR — bare number (+ LOW DATA badge); "/d" lives in the header. Up to 2dp
+          so a genuine slow-mover (0.03/day) never rounds to a misleading "0". */}
       <Cell label={t('admin.inventoryHealth.col.drr', { defaultValue: 'DRR' })}>
         <span className="tabular-nums" style={{ color: low ? MUTED : INK }}>
           {low ? '~' : ''}
-          {size.drr.toLocaleString('en-IN', { maximumFractionDigits: 1 })}
+          {row.drr.toLocaleString('en-IN', { maximumFractionDigits: 2 })}
         </span>
         {low && (
           <span className="ml-1.5 rounded bg-neutral-200 px-1 py-0.5 text-[9px] font-bold uppercase tracking-wide text-neutral-500">
@@ -923,42 +860,29 @@ function SizeRow({ size, t }: { size: InventorySize; t: ReturnType<typeof useTra
         )}
       </Cell>
 
-      {/* At risk (right) — ₹/day this size bleeds while out; "—" below threshold.
-          Tooltip disambiguates it from the item price. */}
-      <Cell label={t('admin.inventoryHealth.col.atRisk', { defaultValue: 'Sales at risk · ₹/day' })} align="right">
-        <span
-          className="tabular-nums"
-          style={{ color: size.atRiskRevenuePerDay >= AT_RISK_MIN ? INK : MUTED }}
-          title={t('admin.inventoryHealth.atRiskTip', {
-            defaultValue: 'Sales revenue lost per day this is out of stock — not the item price.',
-          })}
-        >
-          {size.atRiskRevenuePerDay >= AT_RISK_MIN
-            ? t('admin.inventoryHealth.atRiskPerDay', { defaultValue: '{{amt}}/day', amt: fmtRupee(size.atRiskRevenuePerDay) })
-            : '—'}
-        </span>
+      {/* Trend — interactive sparkline: hover any day to read that day's units. */}
+      <Cell label={t('admin.inventoryHealth.col.trend', { defaultValue: 'Trend · /d' })} align="right">
+        <TrendCell data={row.trend ?? []} dates={dates} t={t} />
       </Cell>
 
       {/* Stock (right) */}
       <Cell label={t('admin.inventoryHealth.col.stock', { defaultValue: 'Stock' })} align="right">
-        <span className="tabular-nums text-neutral-700">{fmtN(size.currentStock)}</span>
+        <span className="tabular-nums text-neutral-700">{fmtN(row.currentStock)}</span>
       </Cell>
 
-      {/* Pipeline (right) — "—" for now; tooltip explains why */}
-      <Cell label={t('admin.inventoryHealth.col.pipeline', { defaultValue: 'Pipeline' })} align="right">
-        <span
-          className="cursor-help"
-          style={{ color: MUTED }}
-          title={t('admin.inventoryHealth.pipelineTip', { defaultValue: 'production data not yet connected' })}
-        >
-          —
+      {/* Stock at risk per day (units) — unmet demand while below cover; "—" ≈0 */}
+      <Cell label={t('admin.inventoryHealth.col.atRisk', { defaultValue: 'At risk · /d' })} align="right">
+        <span className="tabular-nums" style={{ color: row.atRiskUnitsPerDay >= 0.5 ? INK : MUTED }}>
+          {row.atRiskUnitsPerDay >= 0.5
+            ? `${row.atRiskUnitsPerDay.toLocaleString('en-IN', { maximumFractionDigits: 1 })}/d`
+            : '—'}
         </span>
       </Cell>
 
       {/* Make (right) — neutral bold when >0, muted grey at 0 */}
       <Cell label={t('admin.inventoryHealth.col.make', { defaultValue: 'Make' })} align="right">
-        <span className="font-bold tabular-nums" style={{ color: size.makeQty > 0 ? INK : MUTED }}>
-          {fmtN(size.makeQty)}
+        <span className="font-bold tabular-nums" style={{ color: row.makeQty > 0 ? INK : MUTED }}>
+          {fmtN(row.makeQty)}
         </span>
       </Cell>
     </div>
@@ -981,5 +905,56 @@ function Cell({
       <span className="text-[10px] font-bold uppercase tracking-wider text-neutral-400 lg:hidden">{label}</span>
       <span className="flex items-center">{children}</span>
     </div>
+  );
+}
+
+/** Up / down / flat from the first-third vs last-third mean, with a 10% deadband
+ *  so noise doesn't read as a trend (colours the sparkline + arrow). */
+function trendDir(data: number[]): 'up' | 'down' | 'flat' {
+  const n = data.length;
+  if (n < 4) return 'flat';
+  const k = Math.max(1, Math.floor(n / 3));
+  const mean = (a: number[]): number => (a.length ? a.reduce((s, v) => s + v, 0) / a.length : 0);
+  const first = mean(data.slice(0, k));
+  const last = mean(data.slice(n - k));
+  const delta = (last - first) / Math.max(first, 0.001);
+  if (delta > 0.1) return 'up';
+  if (delta < -0.1) return 'down';
+  return 'flat';
+}
+
+/** Inline INTERACTIVE trend sparkline: hover any day to read that day's units in
+ *  the built-in tooltip. Colour + arrow show whether velocity is rising or
+ *  falling. No enlarge/popover — the chart itself IS the interaction. */
+function TrendCell({
+  data,
+  dates,
+  t,
+}: {
+  data: number[];
+  dates: string[];
+  t: ReturnType<typeof useTranslation>['t'];
+}): ReactNode {
+  const dir = useMemo(() => trendDir(data), [data]);
+  const hasData = data.some((v) => v > 0);
+  if (!hasData) return <span style={{ color: MUTED }}>—</span>;
+  const color = dir === 'up' ? TREND_UP : dir === 'down' ? TREND_DOWN : NEUTRAL_DOT;
+  const DirIcon = dir === 'up' ? ArrowUp : dir === 'down' ? ArrowDown : Minus;
+  return (
+    <span className="flex w-full items-center justify-end gap-1.5">
+      <span
+        className="inline-block w-[92px] shrink-0"
+        title={t('admin.inventoryHealth.trendTitle', { defaultValue: 'Daily units — hover a day for its value' })}
+      >
+        {/* Raw daily units → the built-in tooltip shows that day's actual value. */}
+        <TrendChart
+          data={data}
+          dates={dates}
+          accent={color}
+          unit={t('admin.inventoryHealth.perDay', { defaultValue: '/d' })}
+        />
+      </span>
+      <DirIcon size={13} style={{ color }} className="shrink-0" />
+    </span>
   );
 }
