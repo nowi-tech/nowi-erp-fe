@@ -475,7 +475,7 @@
         "sampling": "Sampling",
         "china_import": "China Import",
         "legacy_floor_intake": "Floor",
-        "third_party": "Kotty",
+        "third_party": "Kotty designs",
         "third_party_manufactured": "Manufactured by 3rd party"
       },
       "lifecycle": {
@@ -575,7 +575,7 @@
           "basedOnDesc": "A different design that reused an approved sample. Skips sampling.",
           "reliveTitle": "Relive an old style",
           "reliveDesc": "Re-release a past design. Skips sampling; keeps a link to the old style #.",
-          "thirdPartyTitle": "Kotty",
+          "thirdPartyTitle": "Kotty designs",
           "thirdPartyDesc": "Finished goods from Kotty. Their style code becomes the Style #. Skips sampling.",
           "thirdPartyMfgTitle": "Manufactured by 3rd party",
           "thirdPartyMfgDesc": "Made by a 3rd party to our spec. The system mints the Style #. Skips sampling, goes to cataloguing.",
