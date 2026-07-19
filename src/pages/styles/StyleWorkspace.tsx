@@ -374,6 +374,9 @@ export default function StyleWorkspace() {
   // 3rd-party finished goods — surface the source as a headline badge (like
   // China Import) so it's obvious the Style # is a partner code, not minted.
   const isThirdParty = style.source === 'third_party';
+  // Manufactured by a 3rd party — like China Import, the source IS the story
+  // (skips sampling, minted Style #), so surface it as a headline badge too.
+  const isThirdPartyMfg = style.source === 'third_party_manufactured';
   // Imported / partner *finished goods* — a single-approval flow with no
   // sampling phase (china = NW-minted, 3rd-party = verbatim partner code).
   // Used only for the sampling-skip below; colour fan-out is gated separately
@@ -387,6 +390,9 @@ export default function StyleWorkspace() {
   // in_sampling stage, so no stepper band and no Approval #2.
   const skipsSampling =
     isFinishedGoodsSource ||
+    // Manufactured by a 3rd party: minted Style # (so not a finished-goods
+    // partner code), but still skips the sampling phase like the BE does.
+    style.source === 'third_party_manufactured' ||
     style.familyCode != null ||
     style.basedOnStyleId != null ||
     style.oldStyleId != null;
@@ -787,7 +793,7 @@ export default function StyleWorkspace() {
             {/* For China Import styles the source IS the story — surface it.
                 For sampling styles the NOWI prefix already implies source,
                 so the source chip is redundant and we omit it. */}
-            {(isChinaImport || isThirdParty) && (
+            {(isChinaImport || isThirdParty || isThirdPartyMfg) && (
               <Badge variant="stitch">{sourceLabel}</Badge>
             )}
             <Badge variant={isProductionLayout ? 'ready' : 'secondary'}>

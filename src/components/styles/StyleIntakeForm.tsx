@@ -23,6 +23,8 @@ import CollectionPicker from '@/components/styles/intake/CollectionPicker';
 import FabricPicker from '@/components/styles/intake/FabricPicker';
 import ColourPicker from '@/components/styles/intake/ColourPicker';
 import ReferenceImageGrid from '@/components/styles/intake/ReferenceImageGrid';
+import { Thumbnail } from '@/components/styles/StyleQueueTable';
+import { useSignedUrls } from '@/hooks/useSignedUrls';
 import {
   GENDER_CATEGORIES,
   deriveArticleCategory,
@@ -52,25 +54,27 @@ import type {
  *   - `new`       — net-new design → full sampling.
  *   - `colour`    — a colour of an existing style → spawned as a colour
  *                   variant (skips sampling, inherits the family).
- *   - `based_on`  — a *different* design that reused an existing approved
- *                   sample to skip sampling → carries `basedOnStyleId`.
  *   - `relive`    — re-releasing an OLD design → carries the typed old code
  *                   in `oldStyleId` (resolved to `relivedFromStyleId` when it
- *                   matches an in-system Style). Skips sampling like based-on,
- *                   but — unlike based-on — the old code may NOT be in the
- *                   system (legacy codes), so a miss is fine, not an error.
- *   - `third_party` — finished goods from a partner. Overrides the emitted
- *                   `source` to `third_party`; the typed partner code becomes
- *                   the Style # verbatim (no NOWI minting). Skips sampling.
+ *                   matches an in-system Style). Skips sampling; the old code
+ *                   may NOT be in the system (legacy codes), so a miss is fine.
+ *   - `third_party` — finished goods from a partner ("Kotty"). Overrides the
+ *                   emitted `source` to `third_party`; the typed partner code
+ *                   becomes the Style # verbatim (no NOWI minting). Skips
+ *                   sampling.
+ *   - `third_party_manufactured` — manufactured by a 3rd party to our spec.
+ *                   Like `third_party` it skips sampling and lands in
+ *                   cataloguing, but the system MINTS the Style # at Approval #1
+ *                   (NOWI prefix) — no code is typed.
  *
  * The fork only exists in create mode; edit never re-forks a style.
  */
 export type SubmissionForkMode =
   | 'new'
   | 'colour'
-  | 'based_on'
   | 'relive'
-  | 'third_party';
+  | 'third_party'
+  | 'third_party_manufactured';
 
 /**
  * Shared intake / edit form for the Product Development module.
@@ -131,7 +135,7 @@ export interface StyleIntakeFormProps {
    *  that surface a gender-dependent label. */
   onGenderChange?: (next: Gender) => void;
   /** Notified when the user switches the submission fork (new / colour /
-   *  based-on) so the page can adapt its copy. Create mode only. */
+   *  relive / 3rd-party) so the page can adapt its copy. Create mode only. */
   onForkModeChange?: (next: SubmissionForkMode) => void;
   /** Callback the imperative `submit` calls on success. */
   onSaved: (style: Style) => Promise<void> | void;
@@ -287,10 +291,10 @@ function buildInitialForm(style: Style | null | undefined): FormState {
 const TYPED_CODE_ID = -1;
 
 /**
- * Picker for the colour / based-on fork. Loads one page of existing
+ * Picker for the colour / relive fork. Loads one page of existing
  * sampling products once (`listStyles({ source: "sampling", take: 100 })`)
  * and filters them client-side through the Combobox, OR — when `allowCode`
- * (the based-on branch) — lets the user type a free-text style code the BE
+ * (the relive branch) — lets the user type a free-text style code the BE
  * will resolve. The colour branch needs a real row (the spawn endpoint
  * addresses the parent by id), so it never enables the free-text path.
  */
@@ -340,26 +344,43 @@ function StyleRefPicker({
   const styleLabel = (s: Style) =>
     s.styleId ?? s.workingName ?? `D-${s.draftNo ?? s.id}`;
 
+  const thumbPath = (s: Style): string | null =>
+    s.referenceImages?.[0] ?? s.referenceImage ?? null;
+
+  // Resolve each row's primary reference image to a signed URL (one batched,
+  // cancellation-safe call) so the user sees what they're picking. Mirrors the
+  // Styles registry; absolute CDN URLs resolve to themselves.
+  const thumbUrls = useSignedUrls(results.map(thumbPath));
+
   const options = useMemo<ComboboxOption<number>[]>(() => {
     // Relive sources must be approved (carry a minted Style #); drop drafts.
     const rows = approvedOnly ? results.filter((r) => r.styleId) : [...results];
     const picked = pickedRef.current;
     if (picked && !rows.some((r) => r.id === picked.id)) rows.unshift(picked);
-    const mapped = rows.map<ComboboxOption<number>>((s) => ({
-      value: s.id,
-      label: styleLabel(s),
-      sublabel: [s.workingName, s.primaryColour].filter(Boolean).join(' · '),
-      searchText: [s.styleId, s.workingName, s.primaryColour]
-        .filter(Boolean)
-        .join(' '),
-    }));
-    // A typed-only code (based-on) shows as a synthetic selected option
+    const mapped = rows.map<ComboboxOption<number>>((s) => {
+      const path = thumbPath(s);
+      return {
+        value: s.id,
+        label: styleLabel(s),
+        leading: (
+          <Thumbnail
+            src={path ? (thumbUrls[path] ?? null) : null}
+            alt={styleLabel(s)}
+          />
+        ),
+        sublabel: [s.workingName, s.primaryColour].filter(Boolean).join(' · '),
+        searchText: [s.styleId, s.workingName, s.primaryColour]
+          .filter(Boolean)
+          .join(' '),
+      };
+    });
+    // A typed-only code (relive) shows as a synthetic selected option
     // so the closed trigger reflects the choice.
     if (value?.code != null && !value.style) {
       mapped.unshift({ value: TYPED_CODE_ID, label: value.code });
     }
     return mapped;
-  }, [results, value, approvedOnly]);
+  }, [results, value, approvedOnly, thumbUrls]);
 
   const comboValue: number | null = value?.style
     ? value.style.id
@@ -616,10 +637,10 @@ const StyleIntakeForm = forwardRef<StyleIntakeFormHandle, StyleIntakeFormProps>(
       // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [showFork]);
 
-    // Linking branches (colour / based-on) need a resolved target before
+    // Linking branches (colour / relive) need a resolved target before
     // they can submit. The net-new branch only needs a working name.
     // Colour MUST resolve to a real row (the spawn endpoint addresses the
-    // parent by id); based-on also accepts a typed code.
+    // parent by id); relive also accepts a typed (legacy) code.
     // The colour branch ALSO needs a non-empty primary colour — a colour
     // variant whose defining attribute is blank is meaningless, and the
     // spawn endpoint would otherwise persist an empty string.
@@ -627,17 +648,22 @@ const StyleIntakeForm = forwardRef<StyleIntakeFormHandle, StyleIntakeFormProps>(
       forkMode === 'colour'
         ? forkTarget?.style != null && form.primaryColour.trim().length > 0
         : forkMode === 'relive'
-          ? // Relive must resolve to an approved source (carrying a minted
-            // Style #) — the new code is derived from it.
-            forkTarget?.style?.styleId != null
+          ? // Relive accepts either an approved in-system source (from whose
+            // code the new one is derived) OR a typed legacy code (kept verbatim
+            // as the Style # — reviving old/live work under its original code).
+            forkTarget?.style?.styleId != null || forkTarget?.code != null
           : forkTarget != null;
     // 3rd-party uses its own free-typed code input, not the style-ref picker.
     const isThirdParty = showFork && forkMode === 'third_party';
     const thirdPartyOk = !isThirdParty || thirdPartyCode.trim().length > 0;
-    // The style-ref picker is needed by the linking branches (colour / based-on
-    // / relive) but NOT by net-new or 3rd-party.
+    // The style-ref picker is needed by the linking branches (colour / relive)
+    // but NOT by net-new or either 3rd-party path (Kotty types a code;
+    // manufactured mints one — neither links to an existing style).
     const needsForkTarget =
-      showFork && forkMode !== 'new' && forkMode !== 'third_party';
+      showFork &&
+      forkMode !== 'new' &&
+      forkMode !== 'third_party' &&
+      forkMode !== 'third_party_manufactured';
     // Collection is required at submission on every path EXCEPT the colour
     // fork — a colour variant inherits its parent's collection server-side
     // (spawnColourVariant), so the picker isn't shown there.
@@ -701,27 +727,11 @@ const StyleIntakeForm = forwardRef<StyleIntakeFormHandle, StyleIntakeFormProps>(
         patternCadPaths: form.patternCadPaths,
       };
 
-      // Fork hard-switch: emit EXACTLY ONE branch's link fields so a
-      // stale target from a different branch can never leak onto the
-      // payload. The `colour` branch never reaches createStyle() — it
-      // goes through spawnColourVariant() in submit() below — so only
-      // the `based_on` branch decorates the create payload, and it
-      // sends `basedOnStyleId` / `basedOnStyleCode` ONLY (never
-      // familyCode / parentStyleId; those belong to the colour path).
-      if (showFork && forkMode === 'based_on' && forkTarget) {
-        if (forkTarget.style) {
-          samplingBody.basedOnStyleId = forkTarget.style.id;
-        } else {
-          samplingBody.basedOnStyleCode = forkTarget.code;
-        }
-      }
-
-      // Relive: send the approved source's minted Style #. The picker is
-      // approved-only with no free-text, so a resolved row carrying a styleId
-      // is guaranteed; the BE resolves it to relivedFromStyleId and derives the
-      // new code as `{source}-{n}`.
-      if (showFork && forkMode === 'relive' && forkTarget?.style?.styleId) {
-        samplingBody.oldStyleId = forkTarget.style.styleId;
+      // Relive: send the old Style # — either the approved source's minted code
+      // (BE resolves it to relivedFromStyleId and derives `{source}-{n}`) or a
+      // typed legacy code (BE keeps it verbatim as this style's Style #).
+      if (showFork && forkMode === 'relive' && forkTarget) {
+        samplingBody.oldStyleId = forkTarget.style?.styleId ?? forkTarget.code;
       }
 
       // 3rd party: override the source — the partner's code becomes the Style #
@@ -730,6 +740,13 @@ const StyleIntakeForm = forwardRef<StyleIntakeFormHandle, StyleIntakeFormProps>(
       if (showFork && forkMode === 'third_party') {
         samplingBody.source = 'third_party';
         samplingBody.thirdPartyStyleId = thirdPartyCode.trim();
+      }
+
+      // Manufactured by a 3rd party: just flip the source. No code is typed —
+      // the BE mints the Style # at Approval #1 (NOWI). Sampling fields ride
+      // along as nulls and are ignored for this source.
+      if (showFork && forkMode === 'third_party_manufactured') {
+        samplingBody.source = 'third_party_manufactured';
       }
 
       return samplingBody;
@@ -758,8 +775,8 @@ const StyleIntakeForm = forwardRef<StyleIntakeFormHandle, StyleIntakeFormProps>(
             await onSaved(saved);
             return saved;
           }
-          // New design + Based-on both ride the normal create() path;
-          // buildPayload() decides whether basedOnStyleId/Code travels.
+          // New design + relive both ride the normal create() path;
+          // buildPayload() decides whether the relive `oldStyleId` travels.
           const saved = await apiCall(buildPayload());
           await onSaved(saved);
           return saved;
@@ -814,14 +831,14 @@ const StyleIntakeForm = forwardRef<StyleIntakeFormHandle, StyleIntakeFormProps>(
                   <option value="colour">
                     {t('admin.styles.intake.fork.colourTitle')}
                   </option>
-                  <option value="based_on">
-                    {t('admin.styles.intake.fork.basedOnTitle')}
-                  </option>
                   <option value="relive">
                     {t('admin.styles.intake.fork.reliveTitle')}
                   </option>
                   <option value="third_party">
                     {t('admin.styles.intake.fork.thirdPartyTitle')}
+                  </option>
+                  <option value="third_party_manufactured">
+                    {t('admin.styles.intake.fork.thirdPartyMfgTitle')}
                   </option>
                 </Select>
                 {/* Describe the chosen path — the dropdown only shows titles. */}
@@ -830,33 +847,30 @@ const StyleIntakeForm = forwardRef<StyleIntakeFormHandle, StyleIntakeFormProps>(
                     ? t('admin.styles.intake.fork.newDesc')
                     : forkMode === 'colour'
                       ? t('admin.styles.intake.fork.colourDesc')
-                      : forkMode === 'based_on'
-                        ? t('admin.styles.intake.fork.basedOnDesc')
-                        : forkMode === 'relive'
-                          ? t('admin.styles.intake.fork.reliveDesc')
-                          : t('admin.styles.intake.fork.thirdPartyDesc')}
+                      : forkMode === 'relive'
+                        ? t('admin.styles.intake.fork.reliveDesc')
+                        : forkMode === 'third_party'
+                          ? t('admin.styles.intake.fork.thirdPartyDesc')
+                          : t('admin.styles.intake.fork.thirdPartyMfgDesc')}
                 </p>
               </div>
 
-              {/* Linking branches (colour / based-on / relive) resolve against
-                  an existing style via the ref picker. */}
+              {/* Linking branches (colour / relive) resolve against an
+                  existing style via the ref picker. */}
               {needsForkTarget && (
                 <div className="mt-4">
                   <Label>
                     {forkMode === 'colour'
                       ? t('admin.styles.intake.fork.colourPickLabel')
-                      : forkMode === 'relive'
-                        ? t('admin.styles.intake.fork.relivePickLabel')
-                        : t('admin.styles.intake.fork.basedOnPickLabel')}
+                      : t('admin.styles.intake.fork.relivePickLabel')}
                   </Label>
                   <StyleRefPicker
                     value={forkTarget}
                     onChange={setForkTarget}
-                    // Based-on accepts a free-typed code (the design may predate
-                    // the system). Relive must resolve to an existing APPROVED
-                    // style — its new code is derived from the source's, so the
-                    // source needs a minted Style #: no free-text, approved-only.
-                    allowCode={forkMode === 'based_on'}
+                    // Relive accepts a free-typed code (the old design may predate
+                    // the system) and matches the searchable list to APPROVED
+                    // styles (the new code derives from the source's minted #).
+                    allowCode={forkMode === 'relive'}
                     approvedOnly={forkMode === 'relive'}
                     placeholder={t('admin.styles.intake.fork.pickPlaceholder')}
                     emptyLabel={t('admin.styles.intake.fork.pickEmpty')}
@@ -865,9 +879,7 @@ const StyleIntakeForm = forwardRef<StyleIntakeFormHandle, StyleIntakeFormProps>(
                   <p className="mt-1.5 text-[12px] text-[var(--color-muted-foreground)]">
                     {forkMode === 'colour'
                       ? t('admin.styles.intake.fork.colourHelp')
-                      : forkMode === 'relive'
-                        ? t('admin.styles.intake.fork.reliveHelp')
-                        : t('admin.styles.intake.fork.basedOnHelp')}
+                      : t('admin.styles.intake.fork.reliveHelp')}
                   </p>
                 </div>
               )}

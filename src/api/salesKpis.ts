@@ -2,7 +2,7 @@ import { apiClient } from './apiClient';
 
 // Types co-located with the caller (same convention as productionKpis.ts).
 
-export type SalesBucket = 'sales' | 'live' | 'inventory' | 'fulfilment';
+export type SalesBucket = 'sales' | 'fulfilment';
 export type SalesFormat = 'currency' | 'number' | 'percent';
 /** `snapshot` metrics (e.g. Total Design Live) show a single current value. */
 export type SalesKind = 'flow' | 'ratio' | 'snapshot';
@@ -64,19 +64,12 @@ export function getSalesKpis(asOf?: string): Promise<SalesKpisResponse> {
     .then((res) => res.data);
 }
 
-/** POST /api/sales-kpis/refresh — kicks off a BACKGROUND EasyEcom resync and
- *  returns immediately with `syncing: true` (generating reports can take a few
- *  minutes). Poll {@link getSalesKpis} until `syncing` is false for the result.
- *  `buckets` scopes the refresh to just that page's data sources. */
-export function refreshSalesKpis(asOf?: string, buckets?: SalesBucket[]): Promise<SalesKpisResponse> {
-  // Body is `{}`, not `null`: the API client forces `Content-Type: application/json`
-  // and Express's body-parser (strict mode) rejects a top-level `null`.
-  const params: Record<string, string> = {};
-  if (asOf) params.asOf = asOf;
-  if (buckets?.length) params.buckets = buckets.join(',');
+/** POST /api/sales-kpis/refresh-all — one pull refreshes EVERY EasyEcom-derived
+ *  read model (Sales KPI + Inventory Health) in the background, stamped with one
+ *  shared timestamp so every screen's "as of" matches. Returns immediately; poll
+ *  {@link getSalesKpis} / the inventory-health endpoint until `syncing` clears. */
+export function refreshAllEasyEcom(): Promise<{ syncing: boolean }> {
   return apiClient
-    .post<SalesKpisResponse>('/api/sales-kpis/refresh', {}, {
-      params: Object.keys(params).length ? params : undefined,
-    })
+    .post<{ syncing: boolean }>('/api/sales-kpis/refresh-all', {})
     .then((res) => res.data);
 }

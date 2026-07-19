@@ -16,6 +16,8 @@ export interface ComboboxOption<V extends string | number = string | number> {
   label: string;
   /** Optional sublabel rendered as small muted text below the label. */
   sublabel?: string;
+  /** Optional leading JSX (e.g. a thumbnail / avatar) shown before the label. */
+  leading?: ReactNode;
   /** Optional right-aligned pill / badge JSX. */
   trailing?: ReactNode;
   /** Optional extra haystack text for searching that isn't shown. */
@@ -351,6 +353,9 @@ export function Combobox<V extends string | number = string | number>({
                           : 'hover:bg-[var(--color-muted)]',
                       )}
                     >
+                      {o.leading && (
+                        <span className="shrink-0">{o.leading}</span>
+                      )}
                       <span className="min-w-0 flex-1">
                         <span className="block truncate text-[var(--color-foreground)]">
                           {o.label}

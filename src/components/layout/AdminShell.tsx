@@ -105,7 +105,6 @@ const NAV_SECTIONS: NavSection[] = [
       // the first 4 flattened items); Sales KPIs + the rest follow.
       { to: '/admin/production-kpis', icon: <BarChart3 size={18} />, labelKey: 'admin.nav.productionKpis', roles: ['admin', 'viewer', 'production_lead'] },
       { to: '/admin/sales-kpis', icon: <TrendingUp size={18} />, labelKey: 'admin.nav.salesKpis', roles: ['admin', 'viewer'] },
-      { to: '/admin/analytics/live-inventory', icon: <Boxes size={18} />, labelKey: 'admin.nav.analyticsLiveInventory', roles: ['admin', 'viewer'] },
       { to: '/admin/analytics/fulfilment', icon: <LineChart size={18} />, labelKey: 'admin.nav.analyticsFulfilment', roles: ['admin', 'viewer'] },
       { to: '/admin/analytics/inventory-health', icon: <HeartPulse size={18} />, labelKey: 'admin.nav.inventoryHealth', roles: ['admin', 'viewer'] },
     ],
