@@ -362,17 +362,11 @@
       "daysLeft": "{{n}} days left",
       "perDay": "/d",
       "lowData": "low data",
-      "pipelineTip": "production data not yet connected",
       "search": "Search style, name or marketplace ID…",
       "window": "Window",
       "windowActive": "Window: {{from}} – {{to}}",
       "windowClear": "Reset to default window",
       "openStyle": "Open style workspace",
-      "atRiskValue": "{{amt}}/day at risk",
-      "atRiskUnits": "(~{{n}} units/day)",
-      "atRiskPerDay": "{{amt}}/day",
-      "atRiskTip": "Sales revenue lost per day this is out of stock — not the item price.",
-      "notAtRisk": "— not at risk",
       "lowVolume": "low volume",
       "headlineUnits": "units",
       "filtering": "filtering · click to clear",
@@ -383,6 +377,11 @@
         "critical": "Critical",
         "watch": "Watch"
       },
+      "inv": {
+        "all": "All stock",
+        "real": "Real",
+        "virtual": "Virtual"
+      },
       "col": {
         "item": "Item",
         "cover": "Cover",
@@ -392,6 +391,18 @@
         "atRisk": "At risk · /d",
         "make": "Make"
       },
+      "discontinuedBadge": "discontinued",
+      "discontinue": "Mark product discontinued",
+      "restore": "Restore product",
+      "discontinueTitle": "Mark product discontinued?",
+      "restoreTitle": "Restore product?",
+      "discontinueMsg": "“{{style}}” and all its sizes will drop to the bottom of the list.",
+      "restoreMsg": "“{{style}}” will return to its normal position.",
+      "discontinueConfirm": "Discontinue",
+      "restoreConfirm": "Restore",
+      "discontinuedDone": "Product marked discontinued.",
+      "restoredDone": "Product restored.",
+      "discontinueFailed": "Couldn’t update. Please try again.",
       "loadError": "Couldn’t load inventory health."
     },
     "home": {

@@ -1,20 +1,25 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useLocation, useNavigate, useSearchParams } from 'react-router-dom';
-import { RefreshCw, Search, ArrowUpDown, ArrowUp, ArrowDown, ArrowUpRight, Minus, X } from 'lucide-react';
+import { RefreshCw, Search, ArrowUpDown, ArrowUp, ArrowDown, ArrowUpRight, Minus, Ban, RotateCcw, X } from 'lucide-react';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useToast } from '@/components/ui/toast';
+import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 import { DateRangePicker } from '@/components/ui/DateRangePicker';
 import { todayISO } from '@/lib/date';
 import { useDebounced } from '@/lib/useDebounced';
+import { useAuth } from '@/context/auth';
+import { hasAnyRole } from '@/lib/userRoles';
 import { useSignedUrls } from '@/hooks/useSignedUrls';
 import { HoverThumbnail } from '@/components/dashboard/StylesInFlightTable';
 import { CARD_SHELL, Sparkline as TrendChart } from '@/components/admin/kpiPrimitives';
 import {
   getInventoryHealth,
+  setStyleDiscontinued,
   type InventoryHealthResponse,
   type InventoryKpis,
   type InventorySkuRow,
+  type InventoryView,
   type Urgency,
 } from '@/api/inventoryHealth';
 import { refreshAllEasyEcom } from '@/api/salesKpis';
@@ -142,7 +147,9 @@ export default function InventoryHealth(): ReactNode {
   const [reloadTick, setReloadTick] = useState(0);
   const [refreshing, setRefreshing] = useState(false);
   const [filter, setFilter] = useState<FilterKey>('all');
-  // null sortKey = priority (soonest-out-first) default; a column sets asc/desc.
+  // Real / virtual inventory view (display-only filter; China stock = virtual).
+  const [inventory, setInventory] = useState<InventoryView>('all');
+  // null sortKey = priority (top-seller / DRR) default; a column sets asc/desc.
   const [sortKey, setSortKey] = useState<SortKey | null>(null);
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('asc');
   // Optional DRR/cover window. Empty = precomputed default (no from/to sent).
@@ -152,6 +159,11 @@ export default function InventoryHealth(): ReactNode {
   // Seed search from ?q= so it survives navigating into a style and back.
   const [searchText, setSearchText] = useState(() => searchParams.get('q') ?? '');
   const debouncedSearch = useDebounced(searchText, 300);
+  const { user } = useAuth();
+  // Discontinue/restore is a merchandising action — admins + sampling editors.
+  const canManage = hasAnyRole(user, ['admin', 'sampling_editor']);
+  // Pending discontinue/restore confirmation (per style).
+  const [confirmDisc, setConfirmDisc] = useState<{ styleKey: string; next: boolean } | null>(null);
 
   // Fetch one server page for the current query (server filters/sorts/slices).
   const load = useCallback(
@@ -162,11 +174,12 @@ export default function InventoryHealth(): ReactNode {
         skip,
         limit: PAGE_SIZE,
         filter,
+        inventory,
         search: debouncedSearch.trim() || undefined,
         sortKey: sortKey ?? undefined,
         sortDir,
       }),
-    [windowActive, dateFrom, dateTo, filter, debouncedSearch, sortKey, sortDir],
+    [windowActive, dateFrom, dateTo, filter, inventory, debouncedSearch, sortKey, sortDir],
   );
 
   // Discard out-of-order responses when the query changes mid-flight.
@@ -389,6 +402,28 @@ export default function InventoryHealth(): ReactNode {
     navigate(`/styles/${linkedStyleId}`, { state: { from } });
   };
 
+  // Confirm → mark/unmark the product discontinued, then race-safely reload page 0.
+  const onConfirmDiscontinue = async (): Promise<void> => {
+    if (!confirmDisc) return;
+    const { styleKey, next } = confirmDisc;
+    setConfirmDisc(null);
+    try {
+      await setStyleDiscontinued(styleKey, next);
+      toast.show(
+        next
+          ? t('admin.inventoryHealth.discontinuedDone', { defaultValue: 'Product marked discontinued.' })
+          : t('admin.inventoryHealth.restoredDone', { defaultValue: 'Product restored.' }),
+        'success',
+      );
+      setReloadTick((n) => n + 1);
+    } catch {
+      toast.show(
+        t('admin.inventoryHealth.discontinueFailed', { defaultValue: 'Couldn’t update. Please try again.' }),
+        'error',
+      );
+    }
+  };
+
   return (
     <div style={{ minHeight: '100%', background: '#f6f7f9' }} className="p-4 sm:p-6 lg:p-8">
       <div className="mx-auto max-w-6xl">
@@ -404,7 +439,25 @@ export default function InventoryHealth(): ReactNode {
               })}
             </p>
           </div>
-          <div className="flex items-center gap-2 self-start">
+          <div className="flex flex-wrap items-center gap-2 self-start">
+            {/* Real / virtual inventory view — China stock = virtual (display-only). */}
+            <div className="inline-flex overflow-hidden rounded-lg border border-neutral-200 bg-white shadow-sm">
+              {(['all', 'real', 'virtual'] as const).map((v) => (
+                <button
+                  key={v}
+                  type="button"
+                  onClick={() => setInventory(v)}
+                  aria-pressed={inventory === v}
+                  className={`px-3 py-2 text-sm font-medium transition ${
+                    inventory === v ? 'bg-neutral-900 text-white' : 'text-neutral-600 hover:bg-neutral-50'
+                  }`}
+                >
+                  {t(`admin.inventoryHealth.inv.${v}`, {
+                    defaultValue: v === 'all' ? 'All stock' : v === 'real' ? 'Real' : 'Virtual',
+                  })}
+                </button>
+              ))}
+            </div>
             {/* DRR/cover window — same control the sampling dashboard uses. */}
             <DateRangePicker
               from={windowActive ? dateFrom : daysAgoISO(29)}
@@ -570,6 +623,8 @@ export default function InventoryHealth(): ReactNode {
                     imageUrl={(row.imageUrl && signed[row.imageUrl]) || null}
                     dates={trendDates}
                     onOpen={() => openStyle(row.linkedStyleId)}
+                    canManage={canManage}
+                    onRequestDiscontinue={(styleKey, next) => setConfirmDisc({ styleKey, next })}
                     t={t}
                   />
                 ))
@@ -616,6 +671,35 @@ export default function InventoryHealth(): ReactNode {
           </div>
         ) : null}
       </div>
+
+      <ConfirmDialog
+        open={confirmDisc != null}
+        destructive={confirmDisc?.next === true}
+        title={
+          confirmDisc?.next
+            ? t('admin.inventoryHealth.discontinueTitle', { defaultValue: 'Mark product discontinued?' })
+            : t('admin.inventoryHealth.restoreTitle', { defaultValue: 'Restore product?' })
+        }
+        message={
+          confirmDisc?.next
+            ? t('admin.inventoryHealth.discontinueMsg', {
+                defaultValue: '“{{style}}” and all its sizes will drop to the bottom of the list.',
+                style: confirmDisc?.styleKey ?? '',
+              })
+            : t('admin.inventoryHealth.restoreMsg', {
+                defaultValue: '“{{style}}” will return to its normal position.',
+                style: confirmDisc?.styleKey ?? '',
+              })
+        }
+        confirmLabel={
+          confirmDisc?.next
+            ? t('admin.inventoryHealth.discontinueConfirm', { defaultValue: 'Discontinue' })
+            : t('admin.inventoryHealth.restoreConfirm', { defaultValue: 'Restore' })
+        }
+        cancelLabel={t('common.cancel', { defaultValue: 'Cancel' })}
+        onConfirm={onConfirmDiscontinue}
+        onCancel={() => setConfirmDisc(null)}
+      />
     </div>
   );
 }
@@ -768,12 +852,16 @@ function SkuRow({
   imageUrl,
   dates,
   onOpen,
+  canManage,
+  onRequestDiscontinue,
   t,
 }: {
   row: InventorySkuRow;
   imageUrl: string | null;
   dates: string[];
   onOpen: () => void;
+  canManage: boolean;
+  onRequestDiscontinue: (styleKey: string, next: boolean) => void;
   t: ReturnType<typeof useTranslation>['t'];
 }): ReactNode {
   const u = URG[row.urgency];
@@ -788,7 +876,9 @@ function SkuRow({
   const showName = !!normName && normName !== norm(row.sku) && normName !== norm(row.styleKey + row.size);
   return (
     <div
-      className="grid grid-cols-2 items-center gap-y-1 gap-x-3 border-t border-neutral-100 px-4 py-3 text-sm transition first:border-t-0 hover:bg-neutral-50/60 lg:grid-cols-[var(--ih-grid)]"
+      className={`grid grid-cols-2 items-center gap-y-1 gap-x-3 border-t border-neutral-100 px-4 py-3 text-sm transition first:border-t-0 hover:bg-neutral-50/60 lg:grid-cols-[var(--ih-grid)] ${
+        row.discontinued ? 'opacity-60' : ''
+      }`}
       style={{ ['--ih-grid' as string]: GRID }}
     >
       {/* Item: image + code·size + urgency pill + name/SKU/channel subtitle */}
@@ -815,6 +905,11 @@ function SkuRow({
               </span>
             )}
             <UrgencyPill urgency={row.urgency} />
+            {row.discontinued && (
+              <span className="inline-flex items-center rounded border border-neutral-300 bg-neutral-100 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-neutral-500">
+                {t('admin.inventoryHealth.discontinuedBadge', { defaultValue: 'discontinued' })}
+              </span>
+            )}
             {row.lowVolume && (
               <span className="inline-flex items-center rounded border border-neutral-200 px-1.5 py-0.5 text-[10px] font-semibold text-neutral-400">
                 {t('admin.inventoryHealth.lowVolume', { defaultValue: 'low volume' })}
@@ -833,6 +928,20 @@ function SkuRow({
             <ChannelChips links={row.marketplaceLinks} />
           </div>
         </div>
+        {canManage && (
+          <button
+            type="button"
+            onClick={() => onRequestDiscontinue(row.styleKey, !row.discontinued)}
+            title={
+              row.discontinued
+                ? t('admin.inventoryHealth.restore', { defaultValue: 'Restore product' })
+                : t('admin.inventoryHealth.discontinue', { defaultValue: 'Mark product discontinued' })
+            }
+            className="shrink-0 rounded-md p-1.5 text-neutral-400 transition hover:bg-neutral-100 hover:text-neutral-700"
+          >
+            {row.discontinued ? <RotateCcw size={15} /> : <Ban size={15} />}
+          </button>
+        )}
       </div>
 
       {/* Cover — coloured by status (red out/critical, amber watch) */}

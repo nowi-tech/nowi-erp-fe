@@ -17,6 +17,8 @@ export interface InventorySkuRow {
   marketplaceLinks: { channel: string; url: string }[];
   /** Tiny seller — de-emphasised in the list (shown, not hidden). */
   lowVolume: boolean;
+  /** Manually marked discontinued — still shown, but forced to the bottom. */
+  discontinued: boolean;
   size: string;
   sku: string;
   urgency: Urgency;
@@ -64,6 +66,9 @@ export interface InventoryHealthResponse {
   rows: InventorySkuRow[];
 }
 
+/** Real/virtual inventory view: virtual = has China-warehouse stock. */
+export type InventoryView = 'all' | 'real' | 'virtual';
+
 export interface InventoryHealthParams {
   /** LOCAL YYYY-MM-DD window; both or neither. Omit for the precomputed view. */
   from?: string;
@@ -71,6 +76,7 @@ export interface InventoryHealthParams {
   skip?: number;
   limit?: number;
   filter?: string;
+  inventory?: InventoryView;
   search?: string;
   sortKey?: string | null;
   sortDir?: 'asc' | 'desc';
@@ -85,8 +91,14 @@ export function getInventoryHealth(params: InventoryHealthParams = {}): Promise<
   if (params.skip != null) q.skip = String(params.skip);
   if (params.limit != null) q.limit = String(params.limit);
   if (params.filter && params.filter !== 'all') q.filter = params.filter;
+  if (params.inventory && params.inventory !== 'all') q.inventory = params.inventory;
   if (params.search) q.search = params.search;
   if (params.sortKey) q.sortKey = params.sortKey;
   if (params.sortDir) q.sortDir = params.sortDir;
   return apiClient.get<InventoryHealthResponse>('/api/inventory-health', { params: q }).then((r) => r.data);
+}
+
+/** Mark / unmark a product (by styleKey) discontinued — sinks it to the bottom. */
+export function setStyleDiscontinued(styleKey: string, discontinued: boolean): Promise<void> {
+  return apiClient.post('/api/inventory-health/discontinued', { styleKey, discontinued }).then(() => undefined);
 }
