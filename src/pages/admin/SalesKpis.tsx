@@ -4,7 +4,7 @@ import { RefreshCw, Info } from 'lucide-react';
 import { Skeleton } from '@/components/ui/skeleton';
 import { DatePicker } from '@/components/ui/DatePicker';
 import { useToast } from '@/components/ui/toast';
-import { todayISO } from '@/lib/date';
+import { localISO, todayISO } from '@/lib/date';
 import { CARD_SHELL, DISPLAY, SANS, Sparkline } from '@/components/admin/kpiPrimitives';
 import {
   getSalesKpis,
@@ -109,7 +109,7 @@ export default function SalesKpis({
   const yesterday = (() => {
     const d = new Date();
     d.setDate(d.getDate() - 1);
-    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+    return localISO(d);
   })();
   // undefined = default (BE anchors on today IST); a date = explicit pick.
   const [sendAsOf, setSendAsOf] = useState<string | undefined>(undefined);

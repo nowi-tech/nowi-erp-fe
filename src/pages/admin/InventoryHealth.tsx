@@ -748,7 +748,7 @@ function StatCard({
             onKeyDown: (e: React.KeyboardEvent) => {
               if (e.key === 'Enter' || e.key === ' ') {
                 e.preventDefault();
-                onClick();
+                onClick?.();
               }
             },
           }
@@ -1130,7 +1130,7 @@ function TrendCell({
   return (
     <span className="flex w-full items-center justify-end gap-1.5">
       <span
-        className="inline-block w-[92px] shrink-0"
+        className="-mt-3 inline-block w-[92px] shrink-0"
         title={t('admin.inventoryHealth.trendTitle', { defaultValue: 'Daily units — hover a day for its value' })}
       >
         {/* Raw daily units → the built-in tooltip shows that day's actual value. */}
