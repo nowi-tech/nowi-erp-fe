@@ -145,8 +145,9 @@ export default function InventoryHealth(): ReactNode {
   const [kpis, setKpis] = useState<InventoryKpis | null>(null);
   // Day-key axis every visible size's trend sparkline aligns to (same for the page).
   const [trendDates, setTrendDates] = useState<string[]>([]);
-  // Per-style expand state; default expanded (undefined ⇒ open).
-  const [collapsed, setCollapsed] = useState<Record<string, boolean>>({});
+  // Per-style expand override (true = open, false = collapsed). Absent ⇒ the
+  // default: only the FIRST style in the list is expanded, the rest collapsed.
+  const [openState, setOpenState] = useState<Record<string, boolean>>({});
   const [syncedAt, setSyncedAt] = useState<string | null>(null);
   const [syncing, setSyncing] = useState(false);
   const [stale, setStale] = useState(false);
@@ -605,20 +606,24 @@ export default function InventoryHealth(): ReactNode {
               </div>
             ) : (
               <div className="space-y-3">
-                {styles.map((style) => (
-                  <StyleGroup
-                    key={style.styleKey}
-                    style={style}
-                    imageUrl={(style.imageUrl && signed[style.imageUrl]) || null}
-                    dates={trendDates}
-                    open={!collapsed[style.styleKey]}
-                    onToggle={() => setCollapsed((c) => ({ ...c, [style.styleKey]: !c[style.styleKey] }))}
-                    onOpen={() => openStyle(style.linkedStyleId)}
-                    canManage={canManage}
-                    onRequestDiscontinue={(styleKey, next) => setConfirmDisc({ styleKey, next })}
-                    t={t}
-                  />
-                ))}
+                {styles.map((style, index) => {
+                  // Default: only the first style open; a manual toggle overrides.
+                  const isOpen = openState[style.styleKey] ?? index === 0;
+                  return (
+                    <StyleGroup
+                      key={style.styleKey}
+                      style={style}
+                      imageUrl={(style.imageUrl && signed[style.imageUrl]) || null}
+                      dates={trendDates}
+                      open={isOpen}
+                      onToggle={() => setOpenState((s) => ({ ...s, [style.styleKey]: !isOpen }))}
+                      onOpen={() => openStyle(style.linkedStyleId)}
+                      canManage={canManage}
+                      onRequestDiscontinue={(styleKey, next) => setConfirmDisc({ styleKey, next })}
+                      t={t}
+                    />
+                  );
+                })}
               </div>
             )}
 
