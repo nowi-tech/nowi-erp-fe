@@ -586,26 +586,26 @@ export default function InventoryHealth(): ReactNode {
               </span>
             </div>
 
-            {/* Grouped table — a style parent row over its at-risk size children */}
-            <div style={{ ...CARD_SHELL, padding: 0, overflow: 'hidden', border: '1px solid #EFEDEB' }}>
-              {/* Parent (style) column header */}
-              <div
-                className="hidden gap-3 border-b border-neutral-200 px-4 py-3.5 text-[13px] font-semibold lg:grid"
-                style={{ gridTemplateColumns: PARENT_GRID, background: HEADER_BG, color: HEADER_INK }}
-              >
-                <span className="pl-11">{t('admin.inventoryHealth.col.style', { defaultValue: 'Style' })}</span>
-                <span className="flex items-center justify-end">{t('admin.inventoryHealth.col.trend', { defaultValue: 'Trend · /d' })}</span>
-                <span className="flex items-center justify-end">{t('admin.inventoryHealth.col.sizesAtRisk', { defaultValue: 'Sizes at risk' })}</span>
-                <span className="flex items-center justify-end">{t('admin.inventoryHealth.toMake', { defaultValue: 'To make' })}</span>
-                <span />
-              </div>
+            {/* Column header (labels only) sitting above the style cards. */}
+            <div
+              className="mb-2 hidden gap-3 px-4 text-[12px] font-semibold uppercase tracking-wide lg:grid"
+              style={{ gridTemplateColumns: PARENT_GRID, color: LABEL_GREY, letterSpacing: '0.05em' }}
+            >
+              <span className="pl-11">{t('admin.inventoryHealth.col.style', { defaultValue: 'Style' })}</span>
+              <span className="flex items-center justify-end">{t('admin.inventoryHealth.col.trend', { defaultValue: 'Trend · /d' })}</span>
+              <span className="flex items-center justify-end">{t('admin.inventoryHealth.col.sizesAtRisk', { defaultValue: 'Sizes at risk' })}</span>
+              <span className="flex items-center justify-end">{t('admin.inventoryHealth.toMake', { defaultValue: 'To make' })}</span>
+              <span />
+            </div>
 
-              {total === 0 ? (
-                <div className="px-4 py-12 text-center text-sm text-neutral-400">
-                  {t('admin.inventoryHealth.empty', { defaultValue: 'Nothing matches this filter.' })}
-                </div>
-              ) : (
-                styles.map((style) => (
+            {/* Each style is its own card, separated by a gap. */}
+            {total === 0 ? (
+              <div style={CARD_SHELL} className="px-4 py-12 text-center text-sm text-neutral-400">
+                {t('admin.inventoryHealth.empty', { defaultValue: 'Nothing matches this filter.' })}
+              </div>
+            ) : (
+              <div className="space-y-3">
+                {styles.map((style) => (
                   <StyleGroup
                     key={style.styleKey}
                     style={style}
@@ -618,9 +618,9 @@ export default function InventoryHealth(): ReactNode {
                     onRequestDiscontinue={(styleKey, next) => setConfirmDisc({ styleKey, next })}
                     t={t}
                   />
-                ))
-              )}
-            </div>
+                ))}
+              </div>
+            )}
 
             {/* Infinite-scroll sentinel: entering the viewport fetches the next page.
                 On a fetch error the observer can't self-retry (sentinel stays in
@@ -846,8 +846,12 @@ function StyleGroup({
   const cover = (z: InventorySize): number => z.coverDays ?? Number.POSITIVE_INFINITY;
   const sizes = [...style.sizes].sort((a, b) => cover(a) - cover(b));
   return (
-    // Thin divider separates style groups; the whole row toggles expansion.
-    <div className={`border-b border-neutral-200 last:border-b-0 ${style.discontinued ? 'opacity-60' : ''}`}>
+    // Each style is its own card; the whole parent row toggles expansion.
+    <div
+      className={`overflow-hidden rounded-xl border border-neutral-200 bg-white shadow-sm transition ${
+        style.discontinued ? 'opacity-60' : ''
+      }`}
+    >
       {/* Parent summary row */}
       <div
         role="button"
