@@ -146,7 +146,7 @@ export default function InventoryHealth(): ReactNode {
   // Day-key axis every visible size's trend sparkline aligns to (same for the page).
   const [trendDates, setTrendDates] = useState<string[]>([]);
   // Per-style expand override (true = open, false = collapsed). Absent ⇒ the
-  // default: only the FIRST style in the list is expanded, the rest collapsed.
+  // default: out / critical styles open, Watch styles collapsed.
   const [openState, setOpenState] = useState<Record<string, boolean>>({});
   const [syncedAt, setSyncedAt] = useState<string | null>(null);
   const [syncing, setSyncing] = useState(false);
@@ -606,9 +606,12 @@ export default function InventoryHealth(): ReactNode {
               </div>
             ) : (
               <div className="space-y-3">
-                {styles.map((style, index) => {
-                  // Default: only the first style open; a manual toggle overrides.
-                  const isOpen = openState[style.styleKey] ?? index === 0;
+                {styles.map((style) => {
+                  // Default: auto-expand the act-now tiers (out / critical); the
+                  // less-urgent Watch styles stay collapsed. A manual toggle wins.
+                  const isOpen =
+                    openState[style.styleKey] ??
+                    (style.worstUrgency === 'out' || style.worstUrgency === 'critical');
                   return (
                     <StyleGroup
                       key={style.styleKey}
