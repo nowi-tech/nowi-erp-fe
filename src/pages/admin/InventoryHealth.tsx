@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useLocation, useNavigate, useSearchParams } from 'react-router-dom';
-import { RefreshCw, Search, Plus, ArrowUp, ArrowDown, ArrowUpRight, Minus, Ban, RotateCcw, X } from 'lucide-react';
+import { RefreshCw, Search, Plus, ArrowUp, ArrowDown, ArrowUpDown, ArrowUpRight, Minus, Ban, RotateCcw, X } from 'lucide-react';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useToast } from '@/components/ui/toast';
 import { ConfirmDialog } from '@/components/ui/confirm-dialog';
@@ -65,6 +65,11 @@ const PARENT_GRID = 'minmax(0,1fr) 1.1fr 0.9fr 0.9fr 104px';
  *  card clears it. Healthy is never listed. Filter/search run server-side;
  *  styles default to top-seller (DRR) order. */
 type FilterKey = 'all' | 'out' | 'critical' | 'watch';
+
+/** Sortable columns. `null` = the top-seller (DRR) default order. In the grouped
+ *  view a column sorts the STYLES by that metric aggregated over their sizes
+ *  (cover = soonest / drr,stock,atrisk = sum / make = total). */
+type SortKey = 'style' | 'cover' | 'drr' | 'stock' | 'atrisk' | 'make';
 
 const PAGE_SIZE = 50;
 
@@ -159,6 +164,9 @@ export default function InventoryHealth(): ReactNode {
   const [filter, setFilter] = useState<FilterKey>('all');
   // Real / virtual inventory view (display-only filter; China stock = virtual).
   const [inventory, setInventory] = useState<InventoryView>('all');
+  // Clickable column sort; null = top-seller (DRR) default.
+  const [sortKey, setSortKey] = useState<SortKey | null>(null);
+  const [sortDir, setSortDir] = useState<'asc' | 'desc'>('asc');
   // Optional DRR/cover window. Empty = precomputed default (no from/to sent).
   const [dateFrom, setDateFrom] = useState('');
   const [dateTo, setDateTo] = useState('');
@@ -183,8 +191,10 @@ export default function InventoryHealth(): ReactNode {
         filter,
         inventory,
         search: debouncedSearch.trim() || undefined,
+        sortKey: sortKey ?? undefined,
+        sortDir,
       }),
-    [windowActive, dateFrom, dateTo, filter, inventory, debouncedSearch],
+    [windowActive, dateFrom, dateTo, filter, inventory, debouncedSearch, sortKey, sortDir],
   );
 
   // Discard out-of-order responses when the query changes mid-flight.
@@ -384,6 +394,15 @@ export default function InventoryHealth(): ReactNode {
   // Sign any GCS object paths (v1 imageUrl is usually null → ImageOff fallback).
   const imagePaths = useMemo(() => [...new Set(styles.map((s) => s.imageUrl))], [styles]);
   const signed = useSignedUrls(imagePaths);
+
+  // Click a column header: toggle dir if it's the active one, else switch to it (asc).
+  const onSort = (key: SortKey): void => {
+    if (sortKey === key) setSortDir((d) => (d === 'asc' ? 'desc' : 'asc'));
+    else {
+      setSortKey(key);
+      setSortDir('asc');
+    }
+  };
 
   // Absolute IST clock + "· 5 min ago" relative, mirroring the Sales KPI line.
   const syncedAbs = absTime(syncedAt);
@@ -587,18 +606,8 @@ export default function InventoryHealth(): ReactNode {
               </span>
             </div>
 
-            {/* Column header (labels only) sitting above the style cards. */}
-            <div
-              className="mb-2 hidden gap-3 px-4 text-[12px] font-semibold uppercase tracking-wide lg:grid"
-              style={{ gridTemplateColumns: PARENT_GRID, color: LABEL_GREY, letterSpacing: '0.05em' }}
-            >
-              <span className="pl-11">{t('admin.inventoryHealth.col.style', { defaultValue: 'Style' })}</span>
-              <span className="flex items-center justify-end">{t('admin.inventoryHealth.col.trend', { defaultValue: 'Trend · /d' })}</span>
-              <span className="flex items-center justify-end">{t('admin.inventoryHealth.col.sizesAtRisk', { defaultValue: 'Sizes at risk' })}</span>
-              <span className="flex items-center justify-end">{t('admin.inventoryHealth.toMake', { defaultValue: 'To make' })}</span>
-              <span />
-            </div>
-
+            {/* No parent column header — each style card's summary row is
+                self-labeling; sorting lives on the child sub-header. */}
             {/* Each style is its own card, separated by a gap. */}
             {total === 0 ? (
               <div style={CARD_SHELL} className="px-4 py-12 text-center text-sm text-neutral-400">
@@ -623,6 +632,9 @@ export default function InventoryHealth(): ReactNode {
                       onOpen={() => openStyle(style.linkedStyleId)}
                       canManage={canManage}
                       onRequestDiscontinue={(styleKey, next) => setConfirmDisc({ styleKey, next })}
+                      sortKey={sortKey}
+                      sortDir={sortDir}
+                      onSort={onSort}
                       t={t}
                     />
                   );
@@ -769,6 +781,43 @@ function StatCard({
   );
 }
 
+/** Clickable column header. A faint ArrowUpDown means "sortable"; the active
+ *  column shows a solid ArrowUp/ArrowDown. Sorts the STYLES (server-side). */
+function SortHeader({
+  label,
+  col,
+  sortKey,
+  sortDir,
+  onSort,
+  align = 'left',
+}: {
+  label: string;
+  col: SortKey;
+  sortKey: SortKey | null;
+  sortDir: 'asc' | 'desc';
+  onSort: (k: SortKey) => void;
+  align?: 'left' | 'right';
+}): ReactNode {
+  const activeSort = sortKey === col;
+  const Icon = activeSort ? (sortDir === 'asc' ? ArrowUp : ArrowDown) : ArrowUpDown;
+  return (
+    <button
+      type="button"
+      onClick={(e) => {
+        e.stopPropagation();
+        onSort(col);
+      }}
+      className={`flex items-center gap-1 uppercase tracking-[inherit] transition hover:text-neutral-700 ${
+        align === 'right' ? 'justify-end' : 'justify-start'
+      }`}
+      style={{ color: activeSort ? INK : 'inherit', letterSpacing: 'inherit' }}
+    >
+      {label}
+      <Icon size={12} style={{ color: activeSort ? INK : MUTED }} />
+    </button>
+  );
+}
+
 /** Per-channel listing chips on the style header. Myntra links out (confirmed
  *  pattern: the path acts as a search that lands on the listing); Shopify /
  *  Only channels with a real ERP listing URL (StyleChannelListing.listingUrl via
@@ -821,6 +870,9 @@ function StyleGroup({
   onOpen,
   canManage,
   onRequestDiscontinue,
+  sortKey,
+  sortDir,
+  onSort,
   t,
 }: {
   style: InventoryStyle;
@@ -831,6 +883,9 @@ function StyleGroup({
   onOpen: () => void;
   canManage: boolean;
   onRequestDiscontinue: (styleKey: string, next: boolean) => void;
+  sortKey: SortKey | null;
+  sortDir: 'asc' | 'desc';
+  onSort: (k: SortKey) => void;
   t: ReturnType<typeof useTranslation>['t'];
 }): ReactNode {
   const linked = style.linkedStyleId != null;
@@ -930,10 +985,13 @@ function StyleGroup({
         <div className="hidden tabular-nums text-neutral-700 lg:flex lg:items-center lg:justify-end">
           {t('admin.inventoryHealth.sizesAtRiskN', { defaultValue: '{{n}} at risk', n: style.sizes.length })}
         </div>
-        {/* To make */}
-        <div className="hidden lg:flex lg:items-center lg:justify-end">
-          <span className="tabular-nums" style={{ color: INK, fontSize: 18, fontWeight: 700 }}>
+        {/* To make — self-labeled (no parent header) */}
+        <div className="hidden lg:flex lg:flex-col lg:items-end lg:justify-center">
+          <span className="tabular-nums leading-none" style={{ color: INK, fontSize: 18, fontWeight: 700 }}>
             {fmtN(style.makeTotal)}
+          </span>
+          <span className="mt-0.5 text-[10px] font-semibold uppercase tracking-wide" style={{ color: LABEL_GREY }}>
+            {t('admin.inventoryHealth.toMake', { defaultValue: 'To make' })}
           </span>
         </div>
         {/* Disable / enable action — red for disable. */}
@@ -975,12 +1033,12 @@ function StyleGroup({
             style={{ gridTemplateColumns: GRID, background: HEADER_BG, color: HEADER_INK }}
           >
             <span>{t('admin.inventoryHealth.col.size', { defaultValue: 'Size' })}</span>
-            <span>{t('admin.inventoryHealth.col.cover', { defaultValue: 'Cover' })}</span>
-            <span>{t('admin.inventoryHealth.col.drr', { defaultValue: 'DRR · /d' })}</span>
+            <SortHeader label={t('admin.inventoryHealth.col.cover', { defaultValue: 'Cover' })} col="cover" sortKey={sortKey} sortDir={sortDir} onSort={onSort} />
+            <SortHeader label={t('admin.inventoryHealth.col.drr', { defaultValue: 'DRR · /d' })} col="drr" sortKey={sortKey} sortDir={sortDir} onSort={onSort} />
             <span className="flex justify-end">{t('admin.inventoryHealth.col.trend', { defaultValue: 'Trend · /d' })}</span>
-            <span className="flex justify-end">{t('admin.inventoryHealth.col.stock', { defaultValue: 'Stock' })}</span>
-            <span className="flex justify-end">{t('admin.inventoryHealth.col.atRisk', { defaultValue: 'At risk · /d' })}</span>
-            <span className="flex justify-end">{t('admin.inventoryHealth.col.make', { defaultValue: 'Make' })}</span>
+            <SortHeader label={t('admin.inventoryHealth.col.stock', { defaultValue: 'Stock' })} col="stock" sortKey={sortKey} sortDir={sortDir} onSort={onSort} align="right" />
+            <SortHeader label={t('admin.inventoryHealth.col.atRisk', { defaultValue: 'At risk · /d' })} col="atrisk" sortKey={sortKey} sortDir={sortDir} onSort={onSort} align="right" />
+            <SortHeader label={t('admin.inventoryHealth.col.make', { defaultValue: 'Make' })} col="make" sortKey={sortKey} sortDir={sortDir} onSort={onSort} align="right" />
           </div>
           {sizes.map((sz) => (
             <SizeRow key={sz.sku} size={sz} imageUrl={imageUrl} dates={dates} t={t} />
