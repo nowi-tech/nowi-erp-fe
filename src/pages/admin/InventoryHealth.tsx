@@ -460,7 +460,7 @@ export default function InventoryHealth(): ReactNode {
                   type="button"
                   onClick={() => setInventory(v)}
                   aria-pressed={inventory === v}
-                  className={`rounded-lg px-4 py-1.5 text-sm font-semibold transition ${
+                  className={`rounded-lg px-4 py-1 text-sm font-semibold transition ${
                     inventory === v
                       ? 'bg-neutral-900 text-white shadow-sm'
                       : 'text-neutral-500 hover:bg-neutral-100 hover:text-neutral-700'
