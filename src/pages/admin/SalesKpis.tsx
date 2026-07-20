@@ -4,7 +4,7 @@ import { RefreshCw, Info } from 'lucide-react';
 import { Skeleton } from '@/components/ui/skeleton';
 import { DatePicker } from '@/components/ui/DatePicker';
 import { useToast } from '@/components/ui/toast';
-import { todayISO } from '@/lib/date';
+import { localISO, todayISO } from '@/lib/date';
 import { CARD_SHELL, DISPLAY, SANS, Sparkline } from '@/components/admin/kpiPrimitives';
 import {
   getSalesKpis,
@@ -104,6 +104,13 @@ export default function SalesKpis({
   const [failed, setFailed] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const today = todayISO();
+  // Calendar yesterday (local) — so a back-dated pick of yesterday reads the
+  // friendly word "Yesterday" (mirrors Production KPIs), not a raw date.
+  const yesterday = (() => {
+    const d = new Date();
+    d.setDate(d.getDate() - 1);
+    return localISO(d);
+  })();
   // undefined = default (BE anchors on today IST); a date = explicit pick.
   const [sendAsOf, setSendAsOf] = useState<string | undefined>(undefined);
   const [displayAsOf, setDisplayAsOf] = useState(today);
@@ -271,12 +278,16 @@ export default function SalesKpis({
       ? `${syncedAbs} · ${syncedRel}`
       : syncedAbs
     : syncedRel;
-  // Headline column label: "Today" only when the resolved as-of IS today;
-  // otherwise the actual picked date, so a back-dated view doesn't read "Today".
+  // Headline column label: "Today" / "Yesterday" when the resolved as-of IS the
+  // real today / yesterday; otherwise the actual picked date, so a back-dated
+  // view reads the friendly day word when it applies and a plain date otherwise.
+  const resolvedAsOf = data?.asOf ?? displayAsOf;
   const headlineLabel =
-    (data?.asOf ?? displayAsOf) === today
+    resolvedAsOf === today
       ? t('admin.salesKpis.today', { defaultValue: 'Today' })
-      : dayLabel(data?.asOf ?? displayAsOf);
+      : resolvedAsOf === yesterday
+        ? t('admin.salesKpis.yesterday', { defaultValue: 'Yesterday' })
+        : dayLabel(resolvedAsOf);
 
   return (
     <div style={{ minHeight: '100%', background: '#f6f7f9', fontFamily: SANS }} className="p-4 sm:p-6 lg:p-8">
