@@ -57,9 +57,6 @@ const URG: Record<Urgency, { label: string; color: string; dot: string }> = {
 // Child (size) grid — the sub-header + every size row align to it.
 // SIZE (thumb + size) · COVER · DRR · TREND · STOCK · AT-RISK · MAKE
 const GRID = 'minmax(0,1.5fr) 0.8fr 0.6fr 1.05fr 0.6fr 0.8fr 0.6fr';
-// Parent (style) grid — summary row + its header align to it.
-// STYLE (± + code + pill + chips) · TREND · SIZES AT RISK · TO MAKE · action
-const PARENT_GRID = 'minmax(0,1fr) 1.1fr 0.9fr 0.9fr 104px';
 
 /** Which urgency filter is active. Cards map to these; re-clicking the active
  *  card clears it. Healthy is never listed. Filter/search run server-side;
@@ -454,16 +451,19 @@ export default function InventoryHealth(): ReactNode {
             </p>
           </div>
           <div className="flex flex-wrap items-center gap-2 self-start">
-            {/* Real / virtual inventory view — China stock = virtual (display-only). */}
-            <div className="inline-flex overflow-hidden rounded-lg border border-neutral-200 bg-white shadow-sm">
+            {/* Real / virtual inventory view — China stock = virtual (display-only).
+                Pill-segmented control: padded container + a rounded active pill. */}
+            <div className="inline-flex items-center gap-1 rounded-xl border border-neutral-200 bg-white p-1 shadow-sm">
               {(['all', 'real', 'virtual'] as const).map((v) => (
                 <button
                   key={v}
                   type="button"
                   onClick={() => setInventory(v)}
                   aria-pressed={inventory === v}
-                  className={`px-3 py-2 text-sm font-medium transition ${
-                    inventory === v ? 'bg-neutral-900 text-white' : 'text-neutral-600 hover:bg-neutral-50'
+                  className={`rounded-lg px-4 py-1.5 text-sm font-semibold transition ${
+                    inventory === v
+                      ? 'bg-neutral-900 text-white shadow-sm'
+                      : 'text-neutral-500 hover:bg-neutral-100 hover:text-neutral-700'
                   }`}
                 >
                   {t(`admin.inventoryHealth.inv.${v}`, {
@@ -894,17 +894,6 @@ function StyleGroup({
   const normName = norm(style.name ?? '');
   const showName =
     !!normName && normName !== norm(style.styleKey) && !style.sizes.some((z) => norm(z.sku) === normName);
-  // Parent mini-trend = element-wise sum of the children's daily-units series.
-  const styleTrend = useMemo(() => {
-    const len = dates.length;
-    if (!len) return [];
-    const acc = new Array(len).fill(0);
-    for (const z of style.sizes) {
-      const tr = z.trend ?? [];
-      for (let i = 0; i < len; i++) acc[i] += tr[i] ?? 0;
-    }
-    return acc;
-  }, [style.sizes, dates.length]);
   // Sizes soonest-to-run-out first within the group.
   const cover = (z: InventorySize): number => z.coverDays ?? Number.POSITIVE_INFINITY;
   const sizes = [...style.sizes].sort((a, b) => cover(a) - cover(b));
@@ -927,10 +916,9 @@ function StyleGroup({
             onToggle();
           }
         }}
-        className="grid cursor-pointer grid-cols-2 items-center gap-x-3 gap-y-1 bg-white px-4 py-4 transition hover:bg-neutral-50/70 lg:grid-cols-[var(--ih-parent)]"
-        style={{ ['--ih-parent' as string]: PARENT_GRID }}
+        className="flex cursor-pointer items-center gap-3 bg-white px-4 py-4 transition hover:bg-neutral-50/70"
       >
-        <div className="col-span-2 flex min-w-0 items-center gap-3 lg:col-span-1">
+        <div className="flex min-w-0 flex-1 items-center gap-3">
           {/* Boxed ± toggle (matches the reference master–detail control). */}
           <span className="grid h-8 w-8 shrink-0 place-items-center rounded-lg border border-neutral-200 bg-white text-neutral-500 transition hover:border-neutral-300 hover:text-neutral-700">
             {open ? <Minus size={16} /> : <Plus size={16} />}
@@ -977,25 +965,8 @@ function StyleGroup({
             )}
           </div>
         </div>
-        {/* Mini-trend (style-level, summed over sizes) */}
-        <div className="hidden lg:flex lg:items-center lg:justify-end" onClick={(e) => e.stopPropagation()}>
-          <TrendCell data={styleTrend} dates={dates} t={t} />
-        </div>
-        {/* Sizes at risk */}
-        <div className="hidden tabular-nums text-neutral-700 lg:flex lg:items-center lg:justify-end">
-          {t('admin.inventoryHealth.sizesAtRiskN', { defaultValue: '{{n}} at risk', n: style.sizes.length })}
-        </div>
-        {/* To make — self-labeled (no parent header) */}
-        <div className="hidden lg:flex lg:flex-col lg:items-end lg:justify-center">
-          <span className="tabular-nums leading-none" style={{ color: INK, fontSize: 18, fontWeight: 700 }}>
-            {fmtN(style.makeTotal)}
-          </span>
-          <span className="mt-0.5 text-[10px] font-semibold uppercase tracking-wide" style={{ color: LABEL_GREY }}>
-            {t('admin.inventoryHealth.toMake', { defaultValue: 'To make' })}
-          </span>
-        </div>
         {/* Disable / enable action — red for disable. */}
-        <div className="flex items-center justify-end">
+        <div className="shrink-0">
           {canManage && (
             <button
               type="button"
