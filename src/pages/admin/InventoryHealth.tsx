@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useLocation, useNavigate, useSearchParams } from 'react-router-dom';
-import { RefreshCw, Search, ChevronDown, ChevronRight, ArrowUp, ArrowDown, ArrowUpRight, Minus, Ban, RotateCcw, X } from 'lucide-react';
+import { RefreshCw, Search, Plus, ArrowUp, ArrowDown, ArrowUpRight, Minus, Ban, RotateCcw, X } from 'lucide-react';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useToast } from '@/components/ui/toast';
 import { ConfirmDialog } from '@/components/ui/confirm-dialog';
@@ -40,6 +40,11 @@ const NEUTRAL_DOT = '#A1A1AA';
 // Trend direction colours: velocity rising = green, falling = red, flat = grey.
 const TREND_UP = '#059669';
 const TREND_DOWN = '#DC2626';
+// Table chrome — clean header bar + bold dark labels + a navy accent bar on the
+// expanded child section (matches the reference master–detail styling).
+const HEADER_BG = '#F6F7F9';
+const HEADER_INK = '#334155';
+const ACCENT_BAR = '#1F2A44';
 
 /** Per-urgency: label + the meaning-colour (red/amber/neutral) for text + dot. */
 const URG: Record<Urgency, { label: string; color: string; dot: string }> = {
@@ -53,8 +58,8 @@ const URG: Record<Urgency, { label: string; color: string; dot: string }> = {
 // SIZE (thumb + size) · COVER · DRR · TREND · STOCK · AT-RISK · MAKE
 const GRID = 'minmax(0,1.5fr) 0.8fr 0.6fr 1.05fr 0.6fr 0.8fr 0.6fr';
 // Parent (style) grid — summary row + its header align to it.
-// STYLE (chevron + code + pill + chips) · TREND · SIZES AT RISK · TO MAKE · action
-const PARENT_GRID = 'minmax(0,1fr) 1.1fr 0.9fr 0.9fr 40px';
+// STYLE (± + code + pill + chips) · TREND · SIZES AT RISK · TO MAKE · action
+const PARENT_GRID = 'minmax(0,1fr) 1.1fr 0.9fr 0.9fr 104px';
 
 /** Which urgency filter is active. Cards map to these; re-clicking the active
  *  card clears it. Healthy is never listed. Filter/search run server-side;
@@ -585,10 +590,10 @@ export default function InventoryHealth(): ReactNode {
             <div style={{ ...CARD_SHELL, padding: 0, overflow: 'hidden', border: '1px solid #EFEDEB' }}>
               {/* Parent (style) column header */}
               <div
-                className="hidden gap-3 px-4 py-2.5 text-[11px] uppercase lg:grid"
-                style={{ gridTemplateColumns: PARENT_GRID, background: '#FCFCFB', letterSpacing: '0.08em', color: LABEL_GREY }}
+                className="hidden gap-3 border-b border-neutral-200 px-4 py-3.5 text-[13px] font-semibold lg:grid"
+                style={{ gridTemplateColumns: PARENT_GRID, background: HEADER_BG, color: HEADER_INK }}
               >
-                <span>{t('admin.inventoryHealth.col.style', { defaultValue: 'Style' })}</span>
+                <span className="pl-11">{t('admin.inventoryHealth.col.style', { defaultValue: 'Style' })}</span>
                 <span className="flex items-center justify-end">{t('admin.inventoryHealth.col.trend', { defaultValue: 'Trend · /d' })}</span>
                 <span className="flex items-center justify-end">{t('admin.inventoryHealth.col.sizesAtRisk', { defaultValue: 'Sizes at risk' })}</span>
                 <span className="flex items-center justify-end">{t('admin.inventoryHealth.toMake', { defaultValue: 'To make' })}</span>
@@ -840,10 +845,9 @@ function StyleGroup({
   // Sizes soonest-to-run-out first within the group.
   const cover = (z: InventorySize): number => z.coverDays ?? Number.POSITIVE_INFINITY;
   const sizes = [...style.sizes].sort((a, b) => cover(a) - cover(b));
-  const Chevron = open ? ChevronDown : ChevronRight;
   return (
-    // 8px divider separates style groups for clear grouping.
-    <div style={{ borderBottom: '8px solid #F4F3F2' }} className={`last:border-b-0 ${style.discontinued ? 'opacity-60' : ''}`}>
+    // Thin divider separates style groups; the whole row toggles expansion.
+    <div className={`border-b border-neutral-200 last:border-b-0 ${style.discontinued ? 'opacity-60' : ''}`}>
       {/* Parent summary row */}
       <div
         role="button"
@@ -856,11 +860,14 @@ function StyleGroup({
             onToggle();
           }
         }}
-        className="grid cursor-pointer grid-cols-2 items-center gap-x-3 gap-y-1 px-4 py-3 transition hover:bg-neutral-50/60 lg:grid-cols-[var(--ih-parent)]"
-        style={{ ['--ih-parent' as string]: PARENT_GRID, background: '#FBFAF9' }}
+        className="grid cursor-pointer grid-cols-2 items-center gap-x-3 gap-y-1 bg-white px-4 py-4 transition hover:bg-neutral-50/70 lg:grid-cols-[var(--ih-parent)]"
+        style={{ ['--ih-parent' as string]: PARENT_GRID }}
       >
-        <div className="col-span-2 flex min-w-0 items-center gap-2 lg:col-span-1">
-          <Chevron size={18} className="shrink-0 text-neutral-400" />
+        <div className="col-span-2 flex min-w-0 items-center gap-3 lg:col-span-1">
+          {/* Boxed ± toggle (matches the reference master–detail control). */}
+          <span className="grid h-8 w-8 shrink-0 place-items-center rounded-lg border border-neutral-200 bg-white text-neutral-500 transition hover:border-neutral-300 hover:text-neutral-700">
+            {open ? <Minus size={16} /> : <Plus size={16} />}
+          </span>
           <div className="min-w-0 flex-1">
             <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
               {linked ? (
@@ -882,7 +889,7 @@ function StyleGroup({
               <UrgencyPill urgency={style.worstUrgency} />
               {style.discontinued && (
                 <span className="inline-flex items-center rounded border border-neutral-300 bg-neutral-100 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-neutral-500">
-                  {t('admin.inventoryHealth.discontinuedBadge', { defaultValue: 'discontinued' })}
+                  {t('admin.inventoryHealth.discontinuedBadge', { defaultValue: 'disabled' })}
                 </span>
               )}
               {style.lowVolume && (
@@ -917,7 +924,7 @@ function StyleGroup({
             {fmtN(style.makeTotal)}
           </span>
         </div>
-        {/* Discontinue action */}
+        {/* Disable / enable action — red for disable. */}
         <div className="flex items-center justify-end">
           {canManage && (
             <button
@@ -926,25 +933,34 @@ function StyleGroup({
                 e.stopPropagation();
                 onRequestDiscontinue(style.styleKey, !style.discontinued);
               }}
-              title={
+              className={`inline-flex shrink-0 items-center gap-1 rounded-md border px-2.5 py-1.5 text-xs font-semibold transition ${
                 style.discontinued
-                  ? t('admin.inventoryHealth.restore', { defaultValue: 'Restore product' })
-                  : t('admin.inventoryHealth.discontinue', { defaultValue: 'Mark product discontinued' })
-              }
-              className="shrink-0 rounded-md p-1.5 text-neutral-400 transition hover:bg-neutral-100 hover:text-neutral-700"
+                  ? 'border-neutral-200 text-neutral-600 hover:bg-neutral-50'
+                  : 'border-red-200 text-red-600 hover:bg-red-50'
+              }`}
             >
-              {style.discontinued ? <RotateCcw size={15} /> : <Ban size={15} />}
+              {style.discontinued ? (
+                <>
+                  <RotateCcw size={13} />
+                  {t('admin.inventoryHealth.enable', { defaultValue: 'Enable' })}
+                </>
+              ) : (
+                <>
+                  <Ban size={13} />
+                  {t('admin.inventoryHealth.disable', { defaultValue: 'Disable' })}
+                </>
+              )}
             </button>
           )}
         </div>
       </div>
 
-      {/* Children — sub-header + size rows, with a left accent bar for nesting. */}
+      {/* Children — a navy accent bar marks the nested detail section. */}
       {open && (
-        <div className="bg-white" style={{ borderLeft: '3px solid #C9CFDA' }}>
+        <div className="bg-white" style={{ borderLeft: `4px solid ${ACCENT_BAR}` }}>
           <div
-            className="hidden gap-3 border-t border-neutral-100 px-4 py-2 text-[10px] uppercase lg:grid"
-            style={{ gridTemplateColumns: GRID, letterSpacing: '0.08em', color: LABEL_GREY }}
+            className="hidden gap-3 border-y border-neutral-200 px-4 py-3 text-[12px] font-semibold lg:grid"
+            style={{ gridTemplateColumns: GRID, background: HEADER_BG, color: HEADER_INK }}
           >
             <span>{t('admin.inventoryHealth.col.size', { defaultValue: 'Size' })}</span>
             <span>{t('admin.inventoryHealth.col.cover', { defaultValue: 'Cover' })}</span>
@@ -979,12 +995,12 @@ function SizeRow({
   const low = size.confidence === 'low';
   return (
     <div
-      className="grid grid-cols-2 items-center gap-y-1 gap-x-3 border-t border-neutral-100 px-4 py-2.5 text-sm transition hover:bg-neutral-50/60 lg:grid-cols-[var(--ih-grid)]"
+      className="grid grid-cols-2 items-center gap-y-1 gap-x-3 border-t border-neutral-100 px-4 py-3.5 text-sm transition first:border-t-0 hover:bg-neutral-50/60 lg:grid-cols-[var(--ih-grid)]"
       style={{ ['--ih-grid' as string]: GRID }}
     >
       {/* Size: thumbnail + urgency dot + size + SKU */}
-      <div className="col-span-2 flex min-w-0 items-center gap-2.5 lg:col-span-1">
-        <HoverThumbnail src={imageUrl} alt={size.sku} size={34} radius="7px" />
+      <div className="col-span-2 flex min-w-0 items-center gap-3 lg:col-span-1">
+        <HoverThumbnail src={imageUrl} alt={size.sku} size={40} radius="8px" />
         <span style={{ width: 8, height: 8, borderRadius: 999, background: u.dot }} className="shrink-0" />
         <span className="text-[14px] font-semibold text-neutral-800">{size.size}</span>
         <span className="truncate font-mono text-[11px]" style={{ color: MUTED }}>
