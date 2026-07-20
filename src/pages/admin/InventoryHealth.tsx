@@ -44,7 +44,8 @@ const TREND_DOWN = '#DC2626';
 // expanded child section (matches the reference master–detail styling).
 const HEADER_BG = '#F6F7F9';
 const HEADER_INK = '#334155';
-const ACCENT_BAR = '#1F2A44';
+// Active-state accents use the app's theme blue.
+const PRIMARY = 'var(--color-primary)';
 
 /** Per-urgency: label + the meaning-colour (red/amber/neutral) for text + dot. */
 const URG: Record<Urgency, { label: string; color: string; dot: string }> = {
@@ -438,21 +439,13 @@ export default function InventoryHealth(): ReactNode {
   return (
     <div style={{ minHeight: '100%', background: '#f6f7f9' }} className="p-4 sm:p-6 lg:p-8">
       <div className="mx-auto max-w-6xl">
-        {/* Header */}
-        <div className="mb-5 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
-          <div>
-            <h1 className="text-2xl font-semibold text-neutral-900">
-              {t('admin.inventoryHealth.title', { defaultValue: 'Inventory Health' })}
-            </h1>
-            <p className="mt-0.5 text-sm text-neutral-500">
-              {t('admin.inventoryHealth.subtitle', {
-                defaultValue: 'Every size running low or out — its cover, trend, stock at risk, and what to make next.',
-              })}
-            </p>
-          </div>
-          <div className="flex flex-wrap items-center gap-2 self-start">
-            {/* Real / virtual inventory view — China stock = virtual (display-only).
-                Pill-segmented control: padded container + a rounded active pill. */}
+        {/* Header — title + all filters on one line (no subtitle, for the room). */}
+        <div className="mb-5 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <h1 className="text-2xl font-semibold text-neutral-900">
+            {t('admin.inventoryHealth.title', { defaultValue: 'Inventory Health' })}
+          </h1>
+          <div className="flex flex-wrap items-center justify-end gap-2">
+            {/* Real / virtual stock filter — pill-segmented, theme-blue active pill. */}
             <div className="inline-flex items-center gap-1 rounded-xl border border-neutral-200 bg-white p-1 shadow-sm">
               {(['all', 'real', 'virtual'] as const).map((v) => (
                 <button
@@ -462,8 +455,8 @@ export default function InventoryHealth(): ReactNode {
                   aria-pressed={inventory === v}
                   className={`rounded-lg px-4 py-1 text-sm font-semibold transition ${
                     inventory === v
-                      ? 'bg-neutral-900 text-white shadow-sm'
-                      : 'text-neutral-500 hover:bg-neutral-100 hover:text-neutral-700'
+                      ? 'bg-[var(--color-primary)] text-[var(--color-primary-foreground)] shadow-sm'
+                      : 'text-neutral-500 hover:bg-[var(--color-primary-soft)] hover:text-[var(--color-primary)]'
                   }`}
                 >
                   {t(`admin.inventoryHealth.inv.${v}`, {
@@ -590,7 +583,7 @@ export default function InventoryHealth(): ReactNode {
               />
             </div>
 
-            {/* Search (left) + pager (right) */}
+            {/* Search (left) · count (right) */}
             <div className="mb-4 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
               <div className="relative w-full sm:w-72">
                 <Search size={15} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-neutral-400" />
@@ -598,7 +591,7 @@ export default function InventoryHealth(): ReactNode {
                   value={searchText}
                   onChange={(e) => setSearchText(e.target.value)}
                   placeholder={t('admin.inventoryHealth.search', { defaultValue: 'Search style, size or name…' })}
-                  className="w-full rounded-lg border border-neutral-200 bg-white py-2 pl-9 pr-3 text-sm text-neutral-700 shadow-sm outline-none focus:border-neutral-300"
+                  className="w-full rounded-lg border border-neutral-200 bg-white py-2 pl-9 pr-3 text-sm text-neutral-700 shadow-sm outline-none focus:border-[var(--color-primary)]"
                 />
               </div>
               <span className="shrink-0 text-xs text-neutral-400 tabular-nums">
@@ -606,15 +599,26 @@ export default function InventoryHealth(): ReactNode {
               </span>
             </div>
 
-            {/* No parent column header — each style card's summary row is
-                self-labeling; sorting lives on the child sub-header. */}
-            {/* Each style is its own card, separated by a gap. */}
             {total === 0 ? (
               <div style={CARD_SHELL} className="px-4 py-12 text-center text-sm text-neutral-400">
                 {t('admin.inventoryHealth.empty', { defaultValue: 'Nothing matches this filter.' })}
               </div>
             ) : (
-              <div className="space-y-3">
+              // One enclosing panel: a single sortable column header over all the
+              // style groups, so sorting/filtering reads as global across every SKU.
+              <div style={{ ...CARD_SHELL, padding: 0, overflow: 'hidden' }}>
+                <div
+                  className="hidden gap-3 border-b border-neutral-200 px-4 py-3 text-[12px] font-semibold lg:grid"
+                  style={{ gridTemplateColumns: GRID, background: HEADER_BG, color: HEADER_INK }}
+                >
+                  <span>{t('admin.inventoryHealth.col.size', { defaultValue: 'Size' })}</span>
+                  <SortHeader label={t('admin.inventoryHealth.col.cover', { defaultValue: 'Cover' })} col="cover" sortKey={sortKey} sortDir={sortDir} onSort={onSort} />
+                  <SortHeader label={t('admin.inventoryHealth.col.drr', { defaultValue: 'DRR · /d' })} col="drr" sortKey={sortKey} sortDir={sortDir} onSort={onSort} />
+                  <span className="flex justify-end">{t('admin.inventoryHealth.col.trend', { defaultValue: 'Trend · /d' })}</span>
+                  <SortHeader label={t('admin.inventoryHealth.col.stock', { defaultValue: 'Stock' })} col="stock" sortKey={sortKey} sortDir={sortDir} onSort={onSort} align="right" />
+                  <SortHeader label={t('admin.inventoryHealth.col.atRisk', { defaultValue: 'At risk · /d' })} col="atrisk" sortKey={sortKey} sortDir={sortDir} onSort={onSort} align="right" />
+                  <SortHeader label={t('admin.inventoryHealth.col.make', { defaultValue: 'Make' })} col="make" sortKey={sortKey} sortDir={sortDir} onSort={onSort} align="right" />
+                </div>
                 {styles.map((style) => {
                   // Default: auto-expand the act-now tiers (out / critical); the
                   // less-urgent Watch styles stay collapsed. A manual toggle wins.
@@ -632,9 +636,6 @@ export default function InventoryHealth(): ReactNode {
                       onOpen={() => openStyle(style.linkedStyleId)}
                       canManage={canManage}
                       onRequestDiscontinue={(styleKey, next) => setConfirmDisc({ styleKey, next })}
-                      sortKey={sortKey}
-                      sortDir={sortDir}
-                      onSort={onSort}
                       t={t}
                     />
                   );
@@ -752,10 +753,10 @@ function StatCard({
             },
           }
         : {})}
-      style={{ ...CARD_SHELL, padding: '14px 16px', borderColor: active ? INK : '#EFEDEB' }}
+      style={{ ...CARD_SHELL, padding: '14px 16px', borderColor: active ? PRIMARY : '#EFEDEB' }}
       className={`flex flex-col transition ${
         clickable ? 'cursor-pointer hover:border-neutral-400' : 'cursor-default'
-      } ${active ? 'ring-1 ring-neutral-900' : ''}`}
+      } ${active ? 'ring-1 ring-[var(--color-primary)]' : ''}`}
     >
       <span
         className="flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wide"
@@ -810,10 +811,10 @@ function SortHeader({
       className={`flex items-center gap-1 uppercase tracking-[inherit] transition hover:text-neutral-700 ${
         align === 'right' ? 'justify-end' : 'justify-start'
       }`}
-      style={{ color: activeSort ? INK : 'inherit', letterSpacing: 'inherit' }}
+      style={{ color: activeSort ? PRIMARY : 'inherit', letterSpacing: 'inherit' }}
     >
       {label}
-      <Icon size={12} style={{ color: activeSort ? INK : MUTED }} />
+      <Icon size={12} style={{ color: activeSort ? PRIMARY : MUTED }} />
     </button>
   );
 }
@@ -870,9 +871,6 @@ function StyleGroup({
   onOpen,
   canManage,
   onRequestDiscontinue,
-  sortKey,
-  sortDir,
-  onSort,
   t,
 }: {
   style: InventoryStyle;
@@ -883,9 +881,6 @@ function StyleGroup({
   onOpen: () => void;
   canManage: boolean;
   onRequestDiscontinue: (styleKey: string, next: boolean) => void;
-  sortKey: SortKey | null;
-  sortDir: 'asc' | 'desc';
-  onSort: (k: SortKey) => void;
   t: ReturnType<typeof useTranslation>['t'];
 }): ReactNode {
   const linked = style.linkedStyleId != null;
@@ -898,13 +893,9 @@ function StyleGroup({
   const cover = (z: InventorySize): number => z.coverDays ?? Number.POSITIVE_INFINITY;
   const sizes = [...style.sizes].sort((a, b) => cover(a) - cover(b));
   return (
-    // Each style is its own card; the whole parent row toggles expansion.
-    <div
-      className={`overflow-hidden rounded-xl border border-neutral-200 bg-white shadow-sm transition ${
-        style.discontinued ? 'opacity-60' : ''
-      }`}
-    >
-      {/* Parent summary row */}
+    // A group section inside the enclosing table panel; divider separates groups.
+    <div className={`border-b border-neutral-200 last:border-b-0 ${style.discontinued ? 'opacity-60' : ''}`}>
+      {/* Parent summary row — subtle tint marks it as the group header. */}
       <div
         role="button"
         tabIndex={0}
@@ -916,7 +907,7 @@ function StyleGroup({
             onToggle();
           }
         }}
-        className="flex cursor-pointer items-center gap-3 bg-white px-4 py-4 transition hover:bg-neutral-50/70"
+        className="flex cursor-pointer items-center gap-3 bg-neutral-50 px-4 py-4 transition hover:bg-neutral-100/70"
       >
         <div className="flex min-w-0 flex-1 items-center gap-3">
           {/* Boxed ± toggle (matches the reference master–detail control). */}
@@ -933,10 +924,10 @@ function StyleGroup({
                     onOpen();
                   }}
                   title={t('admin.inventoryHealth.openStyle', { defaultValue: 'Open style workspace' })}
-                  className={`inline-flex min-w-0 items-center gap-1 text-[15px] font-semibold ${codeColor} underline decoration-dotted underline-offset-4 hover:decoration-solid`}
+                  className="inline-flex min-w-0 items-center gap-1 text-[15px] font-semibold text-[var(--color-primary)] underline decoration-dotted underline-offset-4 hover:decoration-solid"
                 >
                   <span className="truncate">{style.styleKey}</span>
-                  <ArrowUpRight size={14} className="shrink-0 text-neutral-400" />
+                  <ArrowUpRight size={14} className="shrink-0" style={{ color: PRIMARY }} />
                 </button>
               ) : (
                 <span className={`truncate text-[15px] font-semibold ${codeColor}`}>{style.styleKey}</span>
@@ -996,21 +987,9 @@ function StyleGroup({
         </div>
       </div>
 
-      {/* Children — a navy accent bar marks the nested detail section. */}
+      {/* Children — the size rows; columns align to the single top header. */}
       {open && (
-        <div className="bg-white" style={{ borderLeft: `4px solid ${ACCENT_BAR}` }}>
-          <div
-            className="hidden gap-3 border-y border-neutral-200 px-4 py-3 text-[12px] font-semibold lg:grid"
-            style={{ gridTemplateColumns: GRID, background: HEADER_BG, color: HEADER_INK }}
-          >
-            <span>{t('admin.inventoryHealth.col.size', { defaultValue: 'Size' })}</span>
-            <SortHeader label={t('admin.inventoryHealth.col.cover', { defaultValue: 'Cover' })} col="cover" sortKey={sortKey} sortDir={sortDir} onSort={onSort} />
-            <SortHeader label={t('admin.inventoryHealth.col.drr', { defaultValue: 'DRR · /d' })} col="drr" sortKey={sortKey} sortDir={sortDir} onSort={onSort} />
-            <span className="flex justify-end">{t('admin.inventoryHealth.col.trend', { defaultValue: 'Trend · /d' })}</span>
-            <SortHeader label={t('admin.inventoryHealth.col.stock', { defaultValue: 'Stock' })} col="stock" sortKey={sortKey} sortDir={sortDir} onSort={onSort} align="right" />
-            <SortHeader label={t('admin.inventoryHealth.col.atRisk', { defaultValue: 'At risk · /d' })} col="atrisk" sortKey={sortKey} sortDir={sortDir} onSort={onSort} align="right" />
-            <SortHeader label={t('admin.inventoryHealth.col.make', { defaultValue: 'Make' })} col="make" sortKey={sortKey} sortDir={sortDir} onSort={onSort} align="right" />
-          </div>
+        <div className="bg-white">
           {sizes.map((sz) => (
             <SizeRow key={sz.sku} size={sz} imageUrl={imageUrl} dates={dates} t={t} />
           ))}
