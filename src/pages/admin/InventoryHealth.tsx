@@ -408,30 +408,37 @@ export default function InventoryHealth(): ReactNode {
   }, [styles]);
 
   // Click a column header: toggle dir if it's the active one, else switch to it (asc).
-  const onSort = useCallback((key: SortKey): void => {
-    setSortKey((prev) => {
-      if (prev === key) {
-        setSortDir((d) => (d === 'asc' ? 'desc' : 'asc'));
-        return prev;
+  const onSort = useCallback(
+    (key: SortKey): void => {
+      // Update the two state pieces independently. Nesting setSortDir inside
+      // setSortKey's updater double-fires the toggle under StrictMode (dev
+      // double-invokes updaters) → the direction never flips locally.
+      if (sortKey === key) setSortDir((d) => (d === 'asc' ? 'desc' : 'asc'));
+      else {
+        setSortKey(key);
+        setSortDir('asc');
       }
-      setSortDir('asc');
-      return key;
-    });
-  }, []);
+    },
+    [sortKey],
+  );
 
   // Absolute IST clock + "· 5 min ago" relative, mirroring the Sales KPI line.
   const syncedAbs = absTime(syncedAt);
   const syncedAgo = relativeTime(syncedAt);
   const synced = syncedAbs ? (syncedAgo ? `${syncedAbs} · ${syncedAgo}` : syncedAbs) : null;
-  // Back-target for the style workspace, restoring this page + search.
+  // Back-target for the style workspace, restoring this page + search. Held in a
+  // ref so openStyle stays referentially stable — otherwise each search keystroke
+  // (which mutates ?q=) changes `from`, rebuilding the whole columns memo.
   const from = `${location.pathname}${location.search}`;
+  const fromRef = useRef(from);
+  fromRef.current = from;
 
   const openStyle = useCallback(
     (linkedStyleId: number | null): void => {
       if (linkedStyleId == null) return;
-      navigate(`/styles/${linkedStyleId}`, { state: { from } });
+      navigate(`/styles/${linkedStyleId}`, { state: { from: fromRef.current } });
     },
-    [navigate, from],
+    [navigate],
   );
 
   // Confirm → mark/unmark the product discontinued, then race-safely reload page 0.
