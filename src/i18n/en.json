@@ -362,7 +362,7 @@
       "daysLeft": "{{n}} days left",
       "perDay": "/d",
       "lowData": "low data",
-      "search": "Search style, name or marketplace ID…",
+      "search": "Search style, size, name or marketplace ID…",
       "window": "Window",
       "windowActive": "Window: {{from}} – {{to}}",
       "windowClear": "Reset to default window",
