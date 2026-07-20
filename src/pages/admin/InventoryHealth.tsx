@@ -987,9 +987,11 @@ function StyleGroup({
         </div>
       </div>
 
-      {/* Children — the size rows; columns align to the single top header. */}
+      {/* Children — the size rows; columns align to the single top header.
+          Inset blue bar (not a real border) ties them to the parent style
+          without shifting the grid off the header alignment. */}
       {open && (
-        <div className="bg-white">
+        <div className="bg-white shadow-[inset_2px_0_0_0_var(--color-primary)]">
           {sizes.map((sz) => (
             <SizeRow key={sz.sku} size={sz} imageUrl={imageUrl} dates={dates} t={t} />
           ))}
