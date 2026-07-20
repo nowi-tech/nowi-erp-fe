@@ -371,7 +371,8 @@
       "headlineUnits": "units",
       "filtering": "filtering · click to clear",
       "trendTitle": "Daily units — hover a day for its value",
-      "skuCount": "{{n}} sizes",
+      "styleCount": "{{n}} styles",
+      "sizesAtRiskN": "{{n}} at risk",
       "chip": {
         "out": "Out of stock",
         "critical": "Critical",
@@ -383,12 +384,14 @@
         "virtual": "Virtual"
       },
       "col": {
-        "item": "Item",
+        "style": "Style",
+        "size": "Size",
         "cover": "Cover",
         "drr": "DRR · /d",
         "trend": "Trend · /d",
         "stock": "Stock",
         "atRisk": "At risk · /d",
+        "sizesAtRisk": "Sizes at risk",
         "make": "Make"
       },
       "discontinuedBadge": "discontinued",

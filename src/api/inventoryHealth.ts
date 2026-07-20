@@ -5,20 +5,8 @@ import { apiClient } from './apiClient';
 /** 4 tiers only. `needsAction` = out + critical. */
 export type Urgency = 'out' | 'critical' | 'watch' | 'healthy';
 
-/** One flat SKU row — each size its own row, carrying its style's display meta
- *  so the list is ungrouped with the product image on every row. */
-export interface InventorySkuRow {
-  styleKey: string;
-  name: string | null;
-  /** Signed URL or GCS object path or null (the style's image, shown per row). */
-  imageUrl: string | null;
-  linkedStyleId: number | null;
-  /** Real ERP listing URLs — one clickable channel chip each (usually empty). */
-  marketplaceLinks: { channel: string; url: string }[];
-  /** Tiny seller — de-emphasised in the list (shown, not hidden). */
-  lowVolume: boolean;
-  /** Manually marked discontinued — still shown, but forced to the bottom. */
-  discontinued: boolean;
+/** One at-risk size — a child row under its style. */
+export interface InventorySize {
   size: string;
   sku: string;
   urgency: Urgency;
@@ -35,8 +23,28 @@ export interface InventorySkuRow {
    *  per day". No rupees. */
   atRiskUnitsPerDay: number;
   /** Raw daily units over the response window (aligned to response `trendDates`).
-   *  Drives the per-row interactive trend sparkline. */
+   *  Drives the per-size interactive trend sparkline. */
   trend: number[];
+}
+
+/** A style group — an expandable parent row (summary) over its at-risk `sizes`. */
+export interface InventoryStyle {
+  styleKey: string;
+  name: string | null;
+  /** Signed URL or GCS object path or null (shown on each size child row). */
+  imageUrl: string | null;
+  linkedStyleId: number | null;
+  /** Real ERP listing URLs — one clickable channel chip each (usually empty). */
+  marketplaceLinks: { channel: string; url: string }[];
+  /** Most-urgent tier across its sizes — drives the parent pill. */
+  worstUrgency: Urgency;
+  /** Suggested units to make across its sizes. */
+  makeTotal: number;
+  /** Tiny seller — de-emphasised in the list (shown, not hidden). */
+  lowVolume: boolean;
+  /** Manually marked discontinued — still shown, but forced to the bottom. */
+  discontinued: boolean;
+  sizes: InventorySize[];
 }
 
 export interface InventoryKpis {
@@ -58,12 +66,12 @@ export interface InventoryHealthResponse {
   /** True when the last successful sync is older than a nightly cycle (~26h). */
   stale: boolean;
   kpis: InventoryKpis;
-  /** Match count AFTER filter+search, BEFORE the page slice (drives scroll). */
+  /** Style count AFTER filter+search, BEFORE the page slice (drives scroll). */
   total: number;
-  /** Day keys (YYYY-MM-DD) the per-row `trend` arrays align to. */
+  /** Day keys (YYYY-MM-DD) the per-size `trend` arrays align to. */
   trendDates: string[];
-  /** One page of flat SKU rows (server-side filtered/searched/sorted/sliced). */
-  rows: InventorySkuRow[];
+  /** One page of style groups (server-side filtered/trimmed/sorted/sliced). */
+  styles: InventoryStyle[];
 }
 
 /** Real/virtual inventory view: virtual = has China-warehouse stock. */
