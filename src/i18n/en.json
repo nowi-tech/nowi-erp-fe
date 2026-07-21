@@ -419,7 +419,8 @@
       "discontinuedDone": "Product disabled.",
       "restoredDone": "Product enabled.",
       "discontinueFailed": "Couldn’t update. Please try again.",
-      "loadError": "Couldn’t load inventory health."
+      "loadError": "Couldn’t load inventory health.",
+      "copySku": "Copy SKU"
     },
     "home": {
       "approvalCta": {

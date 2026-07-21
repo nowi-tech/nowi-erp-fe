@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useLocation, useNavigate, useSearchParams } from 'react-router-dom';
-import { RefreshCw, Search, Plus, ArrowUp, ArrowDown, ArrowUpDown, ArrowUpRight, Minus, Ban, RotateCcw, X, Sparkles } from 'lucide-react';
+import { RefreshCw, Search, Plus, ArrowUp, ArrowDown, ArrowUpDown, ArrowUpRight, Minus, Ban, RotateCcw, X, Sparkles, Copy, Check } from 'lucide-react';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useToast } from '@/components/ui/toast';
 import { ConfirmDialog } from '@/components/ui/confirm-dialog';
@@ -464,14 +464,33 @@ export default function InventoryHealth(): ReactNode {
 
   return (
     <div style={{ minHeight: '100%', background: '#f6f7f9' }} className="p-4 sm:p-6 lg:p-8">
-      <div className="mx-auto max-w-6xl">
+      <div className="w-full">
         {/* Header — title + all filters on one line (no subtitle, for the room). */}
         <div className="mb-5 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <h1 className="text-2xl font-semibold text-neutral-900">
             {t('admin.inventoryHealth.title', { defaultValue: 'Inventory Health' })}
           </h1>
           <div className="flex flex-wrap items-center justify-end gap-2">
-            {/* Real/virtual stock view lives in the table panel now (next to search). */}
+            {/* Real / virtual stock filter — top-of-page, pill-segmented (matches live). */}
+            <div className="inline-flex items-center gap-1 rounded-xl border border-neutral-200 bg-white p-1 shadow-sm">
+              {(['all', 'real', 'virtual'] as const).map((v) => (
+                <button
+                  key={v}
+                  type="button"
+                  onClick={() => setInventory(v)}
+                  aria-pressed={inventory === v}
+                  className={`rounded-lg px-4 py-1 text-sm font-semibold transition ${
+                    inventory === v
+                      ? 'bg-[var(--color-primary)] text-[var(--color-primary-foreground)] shadow-sm'
+                      : 'text-neutral-500 hover:bg-[var(--color-primary-soft)] hover:text-[var(--color-primary)]'
+                  }`}
+                >
+                  {t(`admin.inventoryHealth.inv.${v}`, {
+                    defaultValue: v === 'all' ? 'All stock' : v === 'real' ? 'Real' : 'Virtual',
+                  })}
+                </button>
+              ))}
+            </div>
             {/* DRR/cover window — same control the sampling dashboard uses. */}
             <DateRangePicker
               from={windowActive ? dateFrom : daysAgoISO(29)}
@@ -565,7 +584,7 @@ export default function InventoryHealth(): ReactNode {
                 <QueueTabs tabs={lensTabs} active={filter} onSelect={setFilter} />
               </div>
 
-              {/* Search · real/virtual view · to-make + count. */}
+              {/* Search · to-make + count. */}
               <div className="flex flex-wrap items-center justify-between gap-3 border-b border-[var(--color-border)] px-4 py-3">
                 <div className="flex flex-1 flex-wrap items-center gap-2">
                   <div className="relative w-full max-w-sm">
@@ -576,26 +595,6 @@ export default function InventoryHealth(): ReactNode {
                       placeholder={t('admin.inventoryHealth.search', { defaultValue: 'Search style, size or name…' })}
                       className="h-9 w-full rounded-md border border-[var(--color-primary)]/40 bg-[var(--color-primary-soft)]/30 pl-9 pr-3 text-[13px] text-[var(--color-foreground)] outline-none focus-visible:border-[var(--color-primary)] focus-visible:ring-2 focus-visible:ring-[var(--color-primary)]/25"
                     />
-                  </div>
-                  {/* Real / virtual stock view — in-panel, mirroring Sampling's status chips. */}
-                  <div className="inline-flex items-center gap-1 rounded-[var(--radius-md)] border border-[var(--color-border)] bg-[var(--color-surface)] p-1">
-                    {(['all', 'real', 'virtual'] as const).map((v) => (
-                      <button
-                        key={v}
-                        type="button"
-                        onClick={() => setInventory(v)}
-                        aria-pressed={inventory === v}
-                        className={`rounded-[var(--radius-sm)] px-3 py-1 text-[12px] font-semibold transition ${
-                          inventory === v
-                            ? 'bg-[var(--color-primary)] text-[var(--color-primary-foreground)]'
-                            : 'text-[var(--color-muted-foreground)] hover:text-[var(--color-foreground)]'
-                        }`}
-                      >
-                        {t(`admin.inventoryHealth.inv.${v}`, {
-                          defaultValue: v === 'all' ? 'All stock' : v === 'real' ? 'Real' : 'Virtual',
-                        })}
-                      </button>
-                    ))}
                   </div>
                 </div>
                 <div className="flex shrink-0 items-center gap-3 text-[12px] tabular-nums text-[var(--color-muted-foreground)]">
@@ -927,9 +926,8 @@ function SizeRow({
         <HoverThumbnail src={imageUrl} alt={size.sku} size={40} radius="8px" />
         <span style={{ width: 8, height: 8, borderRadius: 999, background: u.dot }} className="shrink-0" />
         <span className="text-[14px] font-semibold text-neutral-800">{size.size}</span>
-        <span className="truncate font-mono text-[11px]" style={{ color: MUTED }}>
-          {size.sku}
-        </span>
+        <span className="truncate font-mono text-[11px] font-medium text-neutral-600">{size.sku}</span>
+        <CopyButton text={size.sku} label={t('admin.inventoryHealth.copySku', { defaultValue: 'Copy SKU' })} />
         {(size.aging === 'slow' || size.aging === 'dead') && <AgingPill aging={size.aging} />}
       </div>
 
@@ -978,6 +976,29 @@ function SizeRow({
         </span>
       </Cell>
     </div>
+  );
+}
+
+/** Copy-to-clipboard button for the SKU — the mono code is easy to mistype, so
+ *  a one-click copy sits beside it. Brief check-mark confirmation. */
+function CopyButton({ text, label }: { text: string; label: string }): ReactNode {
+  const [copied, setCopied] = useState(false);
+  return (
+    <button
+      type="button"
+      title={label}
+      aria-label={label}
+      onClick={(e) => {
+        e.stopPropagation();
+        void navigator.clipboard?.writeText(text).then(() => {
+          setCopied(true);
+          window.setTimeout(() => setCopied(false), 1200);
+        });
+      }}
+      className="shrink-0 rounded p-0.5 text-neutral-400 transition hover:bg-neutral-100 hover:text-neutral-700"
+    >
+      {copied ? <Check size={12} className="text-emerald-600" /> : <Copy size={12} />}
+    </button>
   );
 }
 
