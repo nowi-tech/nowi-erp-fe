@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useLocation, useNavigate, useSearchParams } from 'react-router-dom';
-import { RefreshCw, Search, ArrowUp, ArrowDown, ArrowUpDown, ArrowUpRight, Minus, Ban, RotateCcw, X, Sparkles } from 'lucide-react';
+import { RefreshCw, Search, Plus, ArrowUp, ArrowDown, ArrowUpDown, ArrowUpRight, Minus, Ban, RotateCcw, X, Sparkles } from 'lucide-react';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useToast } from '@/components/ui/toast';
 import { ConfirmDialog } from '@/components/ui/confirm-dialog';
@@ -13,7 +13,7 @@ import { hasAnyRole } from '@/lib/userRoles';
 import { useSignedUrls } from '@/hooks/useSignedUrls';
 import { HoverThumbnail } from '@/components/dashboard/StylesInFlightTable';
 import { CARD_SHELL, Sparkline as TrendChart } from '@/components/admin/kpiPrimitives';
-import { StyleQueueTable, QueueTabs, type QueueColumn, type QueueTab } from '@/components/styles/StyleQueueTable';
+import { QueueTabs, type QueueTab } from '@/components/styles/StyleQueueTable';
 import {
   getInventoryHealth,
   setStyleDiscontinued,
@@ -42,8 +42,15 @@ const NEUTRAL_DOT = '#A1A1AA';
 // Trend direction colours: velocity rising = green, falling = red, flat = grey.
 const TREND_UP = '#059669';
 const TREND_DOWN = '#DC2626';
+// Clean header bar for the child-size grid.
+const HEADER_BG = '#F6F7F9';
+const HEADER_INK = '#334155';
 // Active-state accents use the app's theme blue.
 const PRIMARY = 'var(--color-primary)';
+
+// Child (size) grid — the sub-header + every size row align to it.
+// SIZE (thumb + size) · COVER · DRR · TREND · STOCK · AT-RISK · MAKE
+const GRID = 'minmax(0,1.5fr) 0.8fr 0.6fr 1.05fr 0.6fr 0.8fr 0.6fr';
 
 /** Per-urgency: label + the meaning-colour (red/amber/neutral) for text + dot. */
 const URG: Record<Urgency, { label: string; color: string; dot: string }> = {
@@ -64,17 +71,6 @@ const AGE: Record<Exclude<Aging, 'active'>, { label: string; dot: string }> = {
 type SortKey = 'style' | 'cover' | 'drr' | 'stock' | 'atrisk' | 'make';
 
 const PAGE_SIZE = 50;
-
-/** One flattened table row — a single size under its style. `firstOfStyle` marks
- *  the first size row of each style group, so style-level chrome (the disable
- *  action + new/disabled/low-volume badges) renders once, not per size. */
-interface FlatRow {
-  style: InventoryStyle;
-  size: InventorySize;
-  firstOfStyle: boolean;
-  /** Style-group ordinal — bands alternating groups via rowAccent. */
-  band: boolean;
-}
 
 function fmtN(n: number): string {
   return n.toLocaleString('en-IN', { maximumFractionDigits: 0 });
@@ -152,6 +148,9 @@ export default function InventoryHealth(): ReactNode {
   const [kpis, setKpis] = useState<InventoryKpis | null>(null);
   // Day-key axis every visible size's trend sparkline aligns to (same for the page).
   const [trendDates, setTrendDates] = useState<string[]>([]);
+  // Per-style expand override (true = open, false = collapsed). Absent ⇒ default:
+  // out/critical styles auto-open, the rest stay collapsed.
+  const [openState, setOpenState] = useState<Record<string, boolean>>({});
   const [syncedAt, setSyncedAt] = useState<string | null>(null);
   const [syncing, setSyncing] = useState(false);
   const [stale, setStale] = useState(false);
@@ -394,19 +393,6 @@ export default function InventoryHealth(): ReactNode {
   const imagePaths = useMemo(() => [...new Set(styles.map((s) => s.imageUrl))], [styles]);
   const signed = useSignedUrls(imagePaths);
 
-  // Flatten style groups → one row per size (sizes soonest-to-run-out first
-  // within a style). `firstOfStyle` + `band` carry style-group identity into the
-  // flat table (server paginates by style, so a group never splits across a page).
-  const rows = useMemo<FlatRow[]>(() => {
-    const out: FlatRow[] = [];
-    styles.forEach((style, i) => {
-      const cover = (z: InventorySize): number => z.coverDays ?? Number.POSITIVE_INFINITY;
-      const sized = [...style.sizes].sort((a, b) => cover(a) - cover(b));
-      sized.forEach((size, j) => out.push({ style, size, firstOfStyle: j === 0, band: i % 2 === 1 }));
-    });
-    return out;
-  }, [styles]);
-
   // Click a column header: toggle dir if it's the active one, else switch to it (asc).
   const onSort = useCallback(
     (key: SortKey): void => {
@@ -475,11 +461,6 @@ export default function InventoryHealth(): ReactNode {
         { key: 'new', label: t('admin.inventoryHealth.tab.new', { defaultValue: 'New arrivals' }), count: kpis.newArrivals },
       ]
     : [];
-
-  const columns = useMemo<QueueColumn<FlatRow>[]>(
-    () => buildColumns({ t, dates: trendDates, signed, sortKey, sortDir, onSort, openStyle }),
-    [t, trendDates, signed, sortKey, sortDir, onSort, openStyle],
-  );
 
   return (
     <div style={{ minHeight: '100%', background: '#f6f7f9' }} className="p-4 sm:p-6 lg:p-8">
@@ -630,22 +611,49 @@ export default function InventoryHealth(): ReactNode {
               </div>
 
               {/* `bare` — the table drops its own card chrome; this panel provides it. */}
-              <StyleQueueTable<FlatRow>
-                bare
-                columns={columns}
-                rows={rows}
-                getRowKey={(r) => `${r.style.styleKey}|${r.size.sku}`}
-                loading={false}
-                error={false}
-                emptyLabel={t('admin.inventoryHealth.empty', { defaultValue: 'Nothing matches this filter.' })}
-                rowAccent={(r) => r.band}
-                actionsWidth="7rem"
-                renderActions={(r) =>
-                  canManage && r.firstOfStyle ? (
-                    <DisableButton style={r.style} onRequest={(styleKey, next) => setConfirmDisc({ styleKey, next })} t={t} />
-                  ) : null
-                }
-              />
+              {total === 0 ? (
+                <div className="px-4 py-12 text-center text-sm text-[var(--color-muted-foreground)]">
+                  {t('admin.inventoryHealth.empty', { defaultValue: 'Nothing matches this filter.' })}
+                </div>
+              ) : (
+                <>
+                  {/* One column header over every style group — the child size rows
+                      align to this single grid, so sorting reads as global. */}
+                  <div
+                    className="hidden gap-3 border-b border-neutral-200 px-4 py-3 text-[12px] font-semibold lg:grid"
+                    style={{ gridTemplateColumns: GRID, background: HEADER_BG, color: HEADER_INK }}
+                  >
+                    <span>{t('admin.inventoryHealth.col.size', { defaultValue: 'Size' })}</span>
+                    <SortHeader label={t('admin.inventoryHealth.col.cover', { defaultValue: 'Cover' })} col="cover" sortKey={sortKey} sortDir={sortDir} onSort={onSort} />
+                    <SortHeader label={t('admin.inventoryHealth.col.drr', { defaultValue: 'DRR · /d' })} col="drr" sortKey={sortKey} sortDir={sortDir} onSort={onSort} />
+                    <span className="flex justify-end">{t('admin.inventoryHealth.col.trend', { defaultValue: 'Trend · /d' })}</span>
+                    <SortHeader label={t('admin.inventoryHealth.col.stock', { defaultValue: 'Stock' })} col="stock" sortKey={sortKey} sortDir={sortDir} onSort={onSort} align="right" />
+                    <SortHeader label={t('admin.inventoryHealth.col.atRisk', { defaultValue: 'At risk · /d' })} col="atrisk" sortKey={sortKey} sortDir={sortDir} onSort={onSort} align="right" />
+                    <SortHeader label={t('admin.inventoryHealth.col.make', { defaultValue: 'Make' })} col="make" sortKey={sortKey} sortDir={sortDir} onSort={onSort} align="right" />
+                  </div>
+                  {styles.map((style) => {
+                    // Auto-expand the act-now tiers (out / critical); less-urgent
+                    // styles stay collapsed. A manual toggle wins.
+                    const isOpen =
+                      openState[style.styleKey] ??
+                      (style.worstUrgency === 'out' || style.worstUrgency === 'critical');
+                    return (
+                      <StyleGroup
+                        key={style.styleKey}
+                        style={style}
+                        imageUrl={(style.imageUrl && signed[style.imageUrl]) || null}
+                        dates={trendDates}
+                        open={isOpen}
+                        onToggle={() => setOpenState((s) => ({ ...s, [style.styleKey]: !isOpen }))}
+                        onOpen={() => openStyle(style.linkedStyleId)}
+                        canManage={canManage}
+                        onRequestDiscontinue={(styleKey, next) => setConfirmDisc({ styleKey, next })}
+                        t={t}
+                      />
+                    );
+                  })}
+                </>
+              )}
 
               {/* Infinite-scroll sentinel as the panel footer: entering the viewport
                   fetches the next page. On a fetch error the observer can't self-retry
@@ -724,166 +732,6 @@ export default function InventoryHealth(): ReactNode {
   );
 }
 
-/* ──────────────────────────────────────────────────────────────────
- * Table column config + cell helpers.
- * ────────────────────────────────────────────────────────────────── */
-
-/** Build the flat-table columns. Sortable numeric columns pass a clickable
- *  SortHeader as their `header` node, so the shared (sort-less) table keeps
- *  IH's server-side column sort without changing the primitive. */
-function buildColumns({
-  t,
-  dates,
-  signed,
-  sortKey,
-  sortDir,
-  onSort,
-  openStyle,
-}: {
-  t: ReturnType<typeof useTranslation>['t'];
-  dates: string[];
-  signed: Record<string, string | null>;
-  sortKey: SortKey | null;
-  sortDir: 'asc' | 'desc';
-  onSort: (k: SortKey) => void;
-  openStyle: (linkedStyleId: number | null) => void;
-}): QueueColumn<FlatRow>[] {
-  const sortH = (label: string, col: SortKey, align: 'left' | 'right' = 'left'): ReactNode => (
-    <SortHeader label={label} col={col} sortKey={sortKey} sortDir={sortDir} onSort={onSort} align={align} />
-  );
-  return [
-    {
-      key: 'product',
-      header: sortH(t('admin.inventoryHealth.col.product', { defaultValue: 'Product' }), 'style'),
-      width: '30%',
-      cell: (r) => <ProductCell row={r} imageUrl={(r.style.imageUrl && signed[r.style.imageUrl]) || null} openStyle={openStyle} t={t} />,
-    },
-    {
-      key: 'status',
-      header: t('admin.inventoryHealth.col.status', { defaultValue: 'Status' }),
-      width: '15%',
-      cell: (r) => <StatusCell row={r} t={t} />,
-    },
-    {
-      key: 'cover',
-      header: sortH(t('admin.inventoryHealth.col.cover', { defaultValue: 'Cover' }), 'cover', 'right'),
-      align: 'right',
-      cell: (r) => <CoverCell size={r.size} t={t} />,
-    },
-    {
-      key: 'drr',
-      header: sortH(t('admin.inventoryHealth.col.drr', { defaultValue: 'DRR · /d' }), 'drr', 'right'),
-      align: 'right',
-      cell: (r) => <DrrCell size={r.size} t={t} />,
-    },
-    {
-      key: 'trend',
-      header: <span className="flex justify-end">{t('admin.inventoryHealth.col.trend', { defaultValue: 'Trend · /d' })}</span>,
-      align: 'right',
-      width: '9rem',
-      className: 'hidden lg:table-cell',
-      headerClassName: 'hidden lg:table-cell',
-      cell: (r) => <TrendCell data={r.size.trend ?? []} dates={dates} t={t} />,
-    },
-    {
-      key: 'stock',
-      header: sortH(t('admin.inventoryHealth.col.stock', { defaultValue: 'Stock' }), 'stock', 'right'),
-      align: 'right',
-      cell: (r) => <span className="tabular-nums text-neutral-700">{fmtN(r.size.currentStock)}</span>,
-    },
-    {
-      key: 'atrisk',
-      header: sortH(t('admin.inventoryHealth.col.atRisk', { defaultValue: 'At risk · /d' }), 'atrisk', 'right'),
-      align: 'right',
-      className: 'hidden sm:table-cell',
-      headerClassName: 'hidden sm:table-cell',
-      cell: (r) => (
-        <span className="tabular-nums" style={{ color: r.size.atRiskUnitsPerDay >= 0.5 ? INK : MUTED }}>
-          {r.size.atRiskUnitsPerDay >= 0.5
-            ? `${r.size.atRiskUnitsPerDay.toLocaleString('en-IN', { maximumFractionDigits: 1 })}/d`
-            : '—'}
-        </span>
-      ),
-    },
-    {
-      key: 'make',
-      header: sortH(t('admin.inventoryHealth.col.make', { defaultValue: 'Make' }), 'make', 'right'),
-      align: 'right',
-      cell: (r) => (
-        <span className="font-bold tabular-nums" style={{ color: r.size.makeQty > 0 ? INK : MUTED }}>
-          {fmtN(r.size.makeQty)}
-        </span>
-      ),
-    },
-  ];
-}
-
-/** Product cell — thumbnail + style code (links to the workspace when the style
- *  is linked to the ERP catalog) + the size, with the SKU beneath. */
-function ProductCell({
-  row,
-  imageUrl,
-  openStyle,
-  t,
-}: {
-  row: FlatRow;
-  imageUrl: string | null;
-  openStyle: (linkedStyleId: number | null) => void;
-  t: ReturnType<typeof useTranslation>['t'];
-}): ReactNode {
-  const { style, size, firstOfStyle } = row;
-  const linked = style.linkedStyleId != null;
-  const codeColor = style.lowVolume ? 'text-neutral-500' : 'text-neutral-900';
-  // Show the human name only when it adds info (differs from the code and isn't
-  // just the SKU) and only once per style group. Marketplace out-links likewise.
-  const norm = (s: string): string => s.toUpperCase().replace(/[^A-Z0-9]/g, '');
-  const normName = norm(style.name ?? '');
-  const showName =
-    firstOfStyle && !!normName && normName !== norm(style.styleKey) && !style.sizes.some((z) => norm(z.sku) === normName);
-  const showLinks = firstOfStyle && style.marketplaceLinks.length > 0;
-  return (
-    <div className="flex min-w-0 items-center gap-3">
-      <HoverThumbnail src={imageUrl} alt={size.sku} size={36} radius="8px" />
-      <div className="min-w-0">
-        <div className="flex min-w-0 items-center gap-2">
-          {linked ? (
-            <button
-              type="button"
-              onClick={(e) => {
-                e.stopPropagation();
-                openStyle(style.linkedStyleId);
-              }}
-              title={t('admin.inventoryHealth.openStyle', { defaultValue: 'Open style workspace' })}
-              className="inline-flex min-w-0 items-center gap-1 truncate text-[13px] font-semibold text-[var(--color-primary)] underline decoration-dotted underline-offset-4 hover:decoration-solid"
-            >
-              <span className="truncate">{style.styleKey}</span>
-              <ArrowUpRight size={12} className="shrink-0" style={{ color: PRIMARY }} />
-            </button>
-          ) : (
-            <span className={`truncate text-[13px] font-semibold ${codeColor}`}>{style.styleKey}</span>
-          )}
-          <span className="shrink-0 rounded border border-neutral-200 bg-neutral-50 px-1.5 py-0.5 text-[11px] font-bold text-neutral-700">
-            {size.size}
-          </span>
-        </div>
-        <span className="mt-0.5 block truncate font-mono text-[11px]" style={{ color: MUTED }}>
-          {size.sku}
-        </span>
-        {(showName || showLinks) && (
-          <div className="mt-0.5 flex min-w-0 items-center gap-2">
-            {showName && (
-              <span className="truncate font-mono text-[11px]" style={{ color: NEUTRAL_DOT }}>
-                {style.name}
-              </span>
-            )}
-            {showLinks && <ChannelChips links={style.marketplaceLinks} />}
-          </div>
-        )}
-      </div>
-    </div>
-  );
-}
-
 /** Per-channel listing chips — clickable out-links to the live marketplace
  *  listing (only channels with a real ERP StyleChannelListing URL appear). */
 function ChannelChips({ links }: { links: { channel: string; url: string }[] }): ReactNode {
@@ -908,98 +756,247 @@ function ChannelChips({ links }: { links: { channel: string; url: string }[] }):
   );
 }
 
-/** Status cell — urgency pill (always), an aging pill when idle, plus the
- *  style-level badges (new / disabled / low-volume) once per style group. */
-function StatusCell({ row, t }: { row: FlatRow; t: ReturnType<typeof useTranslation>['t'] }): ReactNode {
-  const { style, size, firstOfStyle } = row;
+/** A style group — an expandable parent summary row over its size rows. The
+ *  whole parent row toggles expand; the code opens the style workspace. */
+function StyleGroup({
+  style,
+  imageUrl,
+  dates,
+  open,
+  onToggle,
+  onOpen,
+  canManage,
+  onRequestDiscontinue,
+  t,
+}: {
+  style: InventoryStyle;
+  imageUrl: string | null;
+  dates: string[];
+  open: boolean;
+  onToggle: () => void;
+  onOpen: () => void;
+  canManage: boolean;
+  onRequestDiscontinue: (styleKey: string, next: boolean) => void;
+  t: ReturnType<typeof useTranslation>['t'];
+}): ReactNode {
+  const linked = style.linkedStyleId != null;
+  const codeColor = style.lowVolume ? 'text-neutral-500' : 'text-neutral-900';
+  const norm = (s: string): string => s.toUpperCase().replace(/[^A-Z0-9]/g, '');
+  const normName = norm(style.name ?? '');
+  const showName =
+    !!normName && normName !== norm(style.styleKey) && !style.sizes.some((z) => norm(z.sku) === normName);
+  // Sizes soonest-to-run-out first within the group.
+  const cover = (z: InventorySize): number => z.coverDays ?? Number.POSITIVE_INFINITY;
+  const sizes = [...style.sizes].sort((a, b) => cover(a) - cover(b));
   return (
-    <div className="flex flex-wrap items-center gap-1.5">
-      <UrgencyPill urgency={size.urgency} />
-      {/* Guard on the exact keys — an unknown/undefined aging (e.g. FE deployed
-          before BE) must not index AGE and crash the row. */}
-      {(size.aging === 'slow' || size.aging === 'dead') && <AgingPill aging={size.aging} />}
-      {firstOfStyle && style.isNew && (
-        <span className="inline-flex items-center gap-1 rounded-full border border-[var(--color-primary)]/30 bg-[var(--color-primary)]/[0.08] px-1.5 py-0.5 text-[10px] font-semibold text-[var(--color-primary)]">
-          <Sparkles size={10} />
-          {t('admin.inventoryHealth.newBadge', { defaultValue: 'New' })}
-        </span>
-      )}
-      {firstOfStyle && style.discontinued && (
-        <span className="inline-flex items-center rounded border border-neutral-300 bg-neutral-100 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-neutral-500">
-          {t('admin.inventoryHealth.discontinuedBadge', { defaultValue: 'disabled' })}
-        </span>
-      )}
-      {firstOfStyle && style.lowVolume && (
-        <span className="inline-flex items-center rounded border border-neutral-200 px-1.5 py-0.5 text-[10px] font-semibold text-neutral-400">
-          {t('admin.inventoryHealth.lowVolume', { defaultValue: 'low volume' })}
-        </span>
+    // A group section inside the enclosing table panel; divider separates groups.
+    <div className={`border-b border-neutral-200 last:border-b-0 ${style.discontinued ? 'opacity-60' : ''}`}>
+      {/* Parent summary row — subtle tint marks it as the group header. */}
+      <div
+        role="button"
+        tabIndex={0}
+        aria-expanded={open}
+        onClick={onToggle}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter' || e.key === ' ') {
+            e.preventDefault();
+            onToggle();
+          }
+        }}
+        className="flex cursor-pointer items-center gap-3 bg-neutral-50 px-4 py-4 transition hover:bg-neutral-100/70"
+      >
+        <div className="flex min-w-0 flex-1 items-center gap-3">
+          {/* Boxed ± toggle (matches the reference master–detail control). */}
+          <span className="grid h-8 w-8 shrink-0 place-items-center rounded-lg border border-neutral-200 bg-white text-neutral-500 transition hover:border-neutral-300 hover:text-neutral-700">
+            {open ? <Minus size={16} /> : <Plus size={16} />}
+          </span>
+          <div className="min-w-0 flex-1">
+            <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+              {linked ? (
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onOpen();
+                  }}
+                  title={t('admin.inventoryHealth.openStyle', { defaultValue: 'Open style workspace' })}
+                  className="inline-flex min-w-0 items-center gap-1 text-[15px] font-semibold text-[var(--color-primary)] underline decoration-dotted underline-offset-4 hover:decoration-solid"
+                >
+                  <span className="truncate">{style.styleKey}</span>
+                  <ArrowUpRight size={14} className="shrink-0" style={{ color: PRIMARY }} />
+                </button>
+              ) : (
+                <span className={`truncate text-[15px] font-semibold ${codeColor}`}>{style.styleKey}</span>
+              )}
+              <UrgencyPill urgency={style.worstUrgency} />
+              {style.isNew && (
+                <span className="inline-flex items-center gap-1 rounded-full border border-[var(--color-primary)]/30 bg-[var(--color-primary)]/[0.08] px-1.5 py-0.5 text-[10px] font-semibold text-[var(--color-primary)]">
+                  <Sparkles size={10} />
+                  {t('admin.inventoryHealth.newBadge', { defaultValue: 'New' })}
+                </span>
+              )}
+              {style.discontinued && (
+                <span className="inline-flex items-center rounded border border-neutral-300 bg-neutral-100 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-neutral-500">
+                  {t('admin.inventoryHealth.discontinuedBadge', { defaultValue: 'disabled' })}
+                </span>
+              )}
+              {style.lowVolume && (
+                <span className="inline-flex items-center rounded border border-neutral-200 px-1.5 py-0.5 text-[10px] font-semibold text-neutral-400">
+                  {t('admin.inventoryHealth.lowVolume', { defaultValue: 'low volume' })}
+                </span>
+              )}
+            </div>
+            {(showName || style.marketplaceLinks.length > 0) && (
+              <div className="mt-0.5 flex min-w-0 items-center gap-2">
+                {showName && (
+                  <span className="truncate font-mono text-[11px]" style={{ color: NEUTRAL_DOT }}>
+                    {style.name}
+                  </span>
+                )}
+                <ChannelChips links={style.marketplaceLinks} />
+              </div>
+            )}
+          </div>
+        </div>
+        {/* Disable / enable action — red for disable. */}
+        <div className="shrink-0">
+          {canManage && (
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                onRequestDiscontinue(style.styleKey, !style.discontinued);
+              }}
+              className={`inline-flex shrink-0 items-center gap-1 rounded-md border px-2.5 py-1.5 text-xs font-semibold transition ${
+                style.discontinued
+                  ? 'border-neutral-200 text-neutral-600 hover:bg-neutral-50'
+                  : 'border-red-200 text-red-600 hover:bg-red-50'
+              }`}
+            >
+              {style.discontinued ? (
+                <>
+                  <RotateCcw size={13} />
+                  {t('admin.inventoryHealth.enable', { defaultValue: 'Enable' })}
+                </>
+              ) : (
+                <>
+                  <Ban size={13} />
+                  {t('admin.inventoryHealth.disable', { defaultValue: 'Disable' })}
+                </>
+              )}
+            </button>
+          )}
+        </div>
+      </div>
+
+      {/* Children — the size rows; columns align to the single top header.
+          Inset blue bar (not a real border) ties them to the parent style
+          without shifting the grid off the header alignment. */}
+      {open && (
+        <div className="bg-white shadow-[inset_2px_0_0_0_var(--color-primary)]">
+          {sizes.map((sz) => (
+            <SizeRow key={sz.sku} size={sz} imageUrl={imageUrl} dates={dates} t={t} />
+          ))}
+        </div>
       )}
     </div>
   );
 }
 
-function CoverCell({ size, t }: { size: InventorySize; t: ReturnType<typeof useTranslation>['t'] }): ReactNode {
-  if (size.coverDays == null) return <span className="font-semibold" style={{ color: MUTED }}>—</span>;
-  return (
-    <span className="font-semibold" style={{ color: URG[size.urgency].color }}>
-      {t('admin.inventoryHealth.daysLeft', { defaultValue: '{{n}} days left', n: fmtN(size.coverDays) })}
-    </span>
-  );
-}
-
-/** DRR — up to 2dp so a 0.03/day slow-mover never rounds to a misleading "0". */
-function DrrCell({ size, t }: { size: InventorySize; t: ReturnType<typeof useTranslation>['t'] }): ReactNode {
-  const low = size.confidence === 'low';
-  return (
-    <span className="inline-flex items-center">
-      <span className="tabular-nums" style={{ color: low ? MUTED : INK }}>
-        {low ? '~' : ''}
-        {size.drr.toLocaleString('en-IN', { maximumFractionDigits: 2 })}
-      </span>
-      {low && (
-        <span className="ml-1.5 rounded bg-neutral-200 px-1 py-0.5 text-[9px] font-bold uppercase tracking-wide text-neutral-500">
-          {t('admin.inventoryHealth.lowData', { defaultValue: 'low data' })}
-        </span>
-      )}
-    </span>
-  );
-}
-
-/** Disable / enable action — red for disable; shown once per style group. */
-function DisableButton({
-  style,
-  onRequest,
+/** One size — a child row: thumbnail + size (+ aging pill), then the metric columns. */
+function SizeRow({
+  size,
+  imageUrl,
+  dates,
   t,
 }: {
-  style: InventoryStyle;
-  onRequest: (styleKey: string, next: boolean) => void;
+  size: InventorySize;
+  imageUrl: string | null;
+  dates: string[];
   t: ReturnType<typeof useTranslation>['t'];
 }): ReactNode {
+  const u = URG[size.urgency];
+  const low = size.confidence === 'low';
   return (
-    <button
-      type="button"
-      onClick={(e) => {
-        e.stopPropagation();
-        onRequest(style.styleKey, !style.discontinued);
-      }}
-      className={`inline-flex shrink-0 items-center gap-1 rounded-md border px-2.5 py-1.5 text-xs font-semibold transition ${
-        style.discontinued
-          ? 'border-neutral-200 text-neutral-600 hover:bg-neutral-50'
-          : 'border-red-200 text-red-600 hover:bg-red-50'
-      }`}
+    <div
+      className="grid grid-cols-2 items-center gap-y-1 gap-x-3 border-t border-neutral-100 px-4 py-3.5 text-sm transition first:border-t-0 hover:bg-neutral-50/60 lg:grid-cols-[var(--ih-grid)]"
+      style={{ ['--ih-grid' as string]: GRID }}
     >
-      {style.discontinued ? (
-        <>
-          <RotateCcw size={13} />
-          {t('admin.inventoryHealth.enable', { defaultValue: 'Enable' })}
-        </>
-      ) : (
-        <>
-          <Ban size={13} />
-          {t('admin.inventoryHealth.disable', { defaultValue: 'Disable' })}
-        </>
-      )}
-    </button>
+      {/* Size: thumbnail + urgency dot + size + SKU + aging pill */}
+      <div className="col-span-2 flex min-w-0 items-center gap-3 lg:col-span-1">
+        <HoverThumbnail src={imageUrl} alt={size.sku} size={40} radius="8px" />
+        <span style={{ width: 8, height: 8, borderRadius: 999, background: u.dot }} className="shrink-0" />
+        <span className="text-[14px] font-semibold text-neutral-800">{size.size}</span>
+        <span className="truncate font-mono text-[11px]" style={{ color: MUTED }}>
+          {size.sku}
+        </span>
+        {(size.aging === 'slow' || size.aging === 'dead') && <AgingPill aging={size.aging} />}
+      </div>
+
+      <Cell label={t('admin.inventoryHealth.col.cover', { defaultValue: 'Cover' })}>
+        {size.coverDays == null ? (
+          <span className="font-semibold" style={{ color: MUTED }}>—</span>
+        ) : (
+          <span className="font-semibold" style={{ color: u.color }}>
+            {t('admin.inventoryHealth.daysLeft', { defaultValue: '{{n}} days left', n: fmtN(size.coverDays) })}
+          </span>
+        )}
+      </Cell>
+
+      {/* DRR — up to 2dp so a 0.03/day slow-mover never rounds to a misleading "0". */}
+      <Cell label={t('admin.inventoryHealth.col.drr', { defaultValue: 'DRR' })}>
+        <span className="tabular-nums" style={{ color: low ? MUTED : INK }}>
+          {low ? '~' : ''}
+          {size.drr.toLocaleString('en-IN', { maximumFractionDigits: 2 })}
+        </span>
+        {low && (
+          <span className="ml-1.5 rounded bg-neutral-200 px-1 py-0.5 text-[9px] font-bold uppercase tracking-wide text-neutral-500">
+            {t('admin.inventoryHealth.lowData', { defaultValue: 'low data' })}
+          </span>
+        )}
+      </Cell>
+
+      <Cell label={t('admin.inventoryHealth.col.trend', { defaultValue: 'Trend · /d' })} align="right">
+        <TrendCell data={size.trend ?? []} dates={dates} t={t} />
+      </Cell>
+
+      <Cell label={t('admin.inventoryHealth.col.stock', { defaultValue: 'Stock' })} align="right">
+        <span className="tabular-nums text-neutral-700">{fmtN(size.currentStock)}</span>
+      </Cell>
+
+      <Cell label={t('admin.inventoryHealth.col.atRisk', { defaultValue: 'At risk · /d' })} align="right">
+        <span className="tabular-nums" style={{ color: size.atRiskUnitsPerDay >= 0.5 ? INK : MUTED }}>
+          {size.atRiskUnitsPerDay >= 0.5
+            ? `${size.atRiskUnitsPerDay.toLocaleString('en-IN', { maximumFractionDigits: 1 })}/d`
+            : '—'}
+        </span>
+      </Cell>
+
+      <Cell label={t('admin.inventoryHealth.col.make', { defaultValue: 'Make' })} align="right">
+        <span className="font-bold tabular-nums" style={{ color: size.makeQty > 0 ? INK : MUTED }}>
+          {fmtN(size.makeQty)}
+        </span>
+      </Cell>
+    </div>
+  );
+}
+
+/** One data cell — inline column label on small screens; right-align opt-in. */
+function Cell({
+  label,
+  align = 'left',
+  children,
+}: {
+  label: string;
+  align?: 'left' | 'right';
+  children: ReactNode;
+}): ReactNode {
+  const right = align === 'right';
+  return (
+    <div className={`flex items-center justify-between ${right ? 'lg:justify-end' : 'lg:block lg:justify-start'}`}>
+      <span className="text-[10px] font-bold uppercase tracking-wider text-neutral-400 lg:hidden">{label}</span>
+      <span className="flex items-center">{children}</span>
+    </div>
   );
 }
 
