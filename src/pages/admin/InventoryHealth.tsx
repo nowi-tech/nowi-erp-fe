@@ -490,26 +490,7 @@ export default function InventoryHealth(): ReactNode {
             {t('admin.inventoryHealth.title', { defaultValue: 'Inventory Health' })}
           </h1>
           <div className="flex flex-wrap items-center justify-end gap-2">
-            {/* Real / virtual stock filter — pill-segmented, theme-blue active pill. */}
-            <div className="inline-flex items-center gap-1 rounded-xl border border-neutral-200 bg-white p-1 shadow-sm">
-              {(['all', 'real', 'virtual'] as const).map((v) => (
-                <button
-                  key={v}
-                  type="button"
-                  onClick={() => setInventory(v)}
-                  aria-pressed={inventory === v}
-                  className={`rounded-lg px-4 py-1 text-sm font-semibold transition ${
-                    inventory === v
-                      ? 'bg-[var(--color-primary)] text-[var(--color-primary-foreground)] shadow-sm'
-                      : 'text-neutral-500 hover:bg-[var(--color-primary-soft)] hover:text-[var(--color-primary)]'
-                  }`}
-                >
-                  {t(`admin.inventoryHealth.inv.${v}`, {
-                    defaultValue: v === 'all' ? 'All stock' : v === 'real' ? 'Real' : 'Virtual',
-                  })}
-                </button>
-              ))}
-            </div>
+            {/* Real/virtual stock view lives in the table panel now (next to search). */}
             {/* DRR/cover window — same control the sampling dashboard uses. */}
             <DateRangePicker
               from={windowActive ? dateFrom : daysAgoISO(29)}
@@ -594,74 +575,106 @@ export default function InventoryHealth(): ReactNode {
           </>
         ) : kpis ? (
           <>
-            {/* Lens tabs (Sampling chrome): urgency tiers → aging → new arrivals. */}
-            <div className="mb-4">
-              <QueueTabs tabs={lensTabs} active={filter} onSelect={setFilter} />
-            </div>
-
-            {/* Search (left) · to-make + count (right) */}
-            <div className="mb-4 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-              <div className="relative w-full sm:w-72">
-                <Search size={15} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-neutral-400" />
-                <input
-                  value={searchText}
-                  onChange={(e) => setSearchText(e.target.value)}
-                  placeholder={t('admin.inventoryHealth.search', { defaultValue: 'Search style, size or name…' })}
-                  className="w-full rounded-lg border border-neutral-200 bg-white py-2 pl-9 pr-3 text-sm text-neutral-700 shadow-sm outline-none focus:border-[var(--color-primary)]"
-                />
+            {/* One unified panel — the Sampling "style tracking" treatment: lens
+                tabs · search + view filter · table · footer all share a single
+                bordered card. */}
+            <section className="overflow-hidden rounded-[var(--radius-md)] border border-[var(--color-border)] bg-[var(--color-surface)] shadow-sm">
+              {/* Tabs row — QueueTabs' own bottom border is the divider. */}
+              <div className="px-4 pt-3">
+                <QueueTabs tabs={lensTabs} active={filter} onSelect={setFilter} />
               </div>
-              <div className="flex shrink-0 items-center gap-3 text-xs text-neutral-400 tabular-nums">
-                <span>
-                  {t('admin.inventoryHealth.toMakeInline', {
-                    defaultValue: 'To make: {{n}} units',
-                    n: fmtN(kpis.unitsToMake),
-                  })}
-                </span>
-                <span aria-hidden>·</span>
-                <span>{t('admin.inventoryHealth.styleCount', { defaultValue: '{{n}} styles', n: total })}</span>
-              </div>
-            </div>
 
-            <StyleQueueTable<FlatRow>
-              columns={columns}
-              rows={rows}
-              getRowKey={(r) => `${r.style.styleKey}|${r.size.sku}`}
-              loading={false}
-              error={false}
-              emptyLabel={t('admin.inventoryHealth.empty', { defaultValue: 'Nothing matches this filter.' })}
-              rowAccent={(r) => r.band}
-              actionsWidth="7rem"
-              renderActions={(r) =>
-                canManage && r.firstOfStyle ? (
-                  <DisableButton style={r.style} onRequest={(styleKey, next) => setConfirmDisc({ styleKey, next })} t={t} />
-                ) : null
-              }
-            />
-
-            {/* Infinite-scroll sentinel: entering the viewport fetches the next page.
-                On a fetch error the observer can't self-retry (sentinel stays in
-                view), so show a manual Retry instead of stalling silently. */}
-            {styles.length < total && (
-              <div ref={sentinelRef} className="mt-4 py-4 text-center text-xs text-neutral-400">
-                {loadMoreError ? (
-                  <button
-                    type="button"
-                    onClick={() => loadMore()}
-                    className="font-medium text-neutral-600 underline underline-offset-2 hover:text-neutral-900"
-                  >
-                    {t('admin.inventoryHealth.loadMoreRetry', {
-                      defaultValue: 'Couldn’t load more — retry',
+              {/* Search · real/virtual view · to-make + count. */}
+              <div className="flex flex-wrap items-center justify-between gap-3 border-b border-[var(--color-border)] px-4 py-3">
+                <div className="flex flex-1 flex-wrap items-center gap-2">
+                  <div className="relative w-full max-w-sm">
+                    <Search size={16} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-[var(--color-primary)]" />
+                    <input
+                      value={searchText}
+                      onChange={(e) => setSearchText(e.target.value)}
+                      placeholder={t('admin.inventoryHealth.search', { defaultValue: 'Search style, size or name…' })}
+                      className="h-9 w-full rounded-md border border-[var(--color-primary)]/40 bg-[var(--color-primary-soft)]/30 pl-9 pr-3 text-[13px] text-[var(--color-foreground)] outline-none focus-visible:border-[var(--color-primary)] focus-visible:ring-2 focus-visible:ring-[var(--color-primary)]/25"
+                    />
+                  </div>
+                  {/* Real / virtual stock view — in-panel, mirroring Sampling's status chips. */}
+                  <div className="inline-flex items-center gap-1 rounded-[var(--radius-md)] border border-[var(--color-border)] bg-[var(--color-surface)] p-1">
+                    {(['all', 'real', 'virtual'] as const).map((v) => (
+                      <button
+                        key={v}
+                        type="button"
+                        onClick={() => setInventory(v)}
+                        aria-pressed={inventory === v}
+                        className={`rounded-[var(--radius-sm)] px-3 py-1 text-[12px] font-semibold transition ${
+                          inventory === v
+                            ? 'bg-[var(--color-primary)] text-[var(--color-primary-foreground)]'
+                            : 'text-[var(--color-muted-foreground)] hover:text-[var(--color-foreground)]'
+                        }`}
+                      >
+                        {t(`admin.inventoryHealth.inv.${v}`, {
+                          defaultValue: v === 'all' ? 'All stock' : v === 'real' ? 'Real' : 'Virtual',
+                        })}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+                <div className="flex shrink-0 items-center gap-3 text-[12px] tabular-nums text-[var(--color-muted-foreground)]">
+                  <span>
+                    {t('admin.inventoryHealth.toMakeInline', {
+                      defaultValue: 'To make: {{n}} units',
+                      n: fmtN(kpis.unitsToMake),
                     })}
-                  </button>
-                ) : (
-                  t('admin.inventoryHealth.loadingMore', {
-                    defaultValue: 'Loading more… ({{shown}} of {{total}})',
-                    shown: styles.length,
-                    total,
-                  })
-                )}
+                  </span>
+                  <span aria-hidden>·</span>
+                  <span>{t('admin.inventoryHealth.styleCount', { defaultValue: '{{n}} styles', n: total })}</span>
+                </div>
               </div>
-            )}
+
+              {/* `bare` — the table drops its own card chrome; this panel provides it. */}
+              <StyleQueueTable<FlatRow>
+                bare
+                columns={columns}
+                rows={rows}
+                getRowKey={(r) => `${r.style.styleKey}|${r.size.sku}`}
+                loading={false}
+                error={false}
+                emptyLabel={t('admin.inventoryHealth.empty', { defaultValue: 'Nothing matches this filter.' })}
+                rowAccent={(r) => r.band}
+                actionsWidth="7rem"
+                renderActions={(r) =>
+                  canManage && r.firstOfStyle ? (
+                    <DisableButton style={r.style} onRequest={(styleKey, next) => setConfirmDisc({ styleKey, next })} t={t} />
+                  ) : null
+                }
+              />
+
+              {/* Infinite-scroll sentinel as the panel footer: entering the viewport
+                  fetches the next page. On a fetch error the observer can't self-retry
+                  (sentinel stays in view), so show a manual Retry instead of stalling. */}
+              {styles.length < total && (
+                <div
+                  ref={sentinelRef}
+                  className="border-t border-[var(--color-border)] px-4 py-3 text-center text-xs text-[var(--color-muted-foreground)]"
+                >
+                  {loadMoreError ? (
+                    <button
+                      type="button"
+                      onClick={() => loadMore()}
+                      className="font-medium text-[var(--color-foreground)] underline underline-offset-2 hover:opacity-80"
+                    >
+                      {t('admin.inventoryHealth.loadMoreRetry', {
+                        defaultValue: 'Couldn’t load more — retry',
+                      })}
+                    </button>
+                  ) : (
+                    t('admin.inventoryHealth.loadingMore', {
+                      defaultValue: 'Loading more… ({{shown}} of {{total}})',
+                      shown: styles.length,
+                      total,
+                    })
+                  )}
+                </div>
+              )}
+            </section>
           </>
         ) : error ? (
           <div style={CARD_SHELL} className="flex flex-col items-center gap-3 py-12 text-center">
