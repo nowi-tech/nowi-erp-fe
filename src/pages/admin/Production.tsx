@@ -1,7 +1,8 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { ChevronRight, Factory, Loader2, Search, X } from 'lucide-react';
 import { QueueTabs } from '@/components/styles/StyleQueueTable';
+import { HoverThumbnail } from '@/components/dashboard/StylesInFlightTable';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { ConfirmDialog } from '@/components/ui/confirm-dialog';
@@ -16,6 +17,7 @@ import {
   completeBatch,
   createBatch,
   getBatches,
+  type BatchOrigin,
   type BatchStatus,
   type CreateBatchBody,
   type ProductionBatch,
@@ -73,12 +75,15 @@ export default function Production() {
   const debouncedSearch = useDebounced(search, 300);
   const [batches, setBatches] = useState<ProductionBatch[]>([]);
   const [suggestions, setSuggestions] = useState<InventoryStyle[]>([]);
-  /** False when the forecast had more styles than one page — the makeQty filter
-   *  is client-side, so the count would understate the real backlog. */
-  const [suggestionsComplete, setSuggestionsComplete] = useState(true);
   const [kpis, setKpis] = useState<ProductionKpis | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);
+  const [total, setTotal] = useState(0);
+  /** RAW rows fetched (pre client-side trim) — what the "more pages?" test uses. */
+  const [loaded, setLoaded] = useState(0);
+  const [loadMoreError, setLoadMoreError] = useState(false);
+  const [statusFilter, setStatusFilter] = useState<BatchStatus | ''>('');
+  const [originFilter, setOriginFilter] = useState<BatchOrigin | ''>('');
   const [expanded, setExpanded] = useState<Record<number, boolean>>({});
   const [expandedStyles, setExpandedStyles] = useState<Record<string, boolean>>({});
   const [busy, setBusy] = useState(false);
@@ -94,39 +99,108 @@ export default function Production() {
     setKpis(res.kpis);
   }, []);
 
-  const load = useCallback(async () => {
-    setLoading(true);
-    setError(false);
-    try {
+  const fetchPage = useCallback(
+    async (skip: number) => {
       if (tab === 'to_start') {
-        // No `filter` / `sortKey`: that is exactly what the Inventory Health
-        // page sends by default, so this tab inherits its priority ranking
-        // (out/critical first, then watch, by revenue-at-risk per day).
         const res = await getInventoryHealth({
+          skip,
           limit: PAGE_SIZE,
           search: debouncedSearch || undefined,
         });
-        // Anything the forecast says needs making. Sizes with a batch already
-        // running have had their makeQty reduced by the pipeline already.
-        // Filter on the LISTED sizes: the server trims `sizes` to the active
-        // lens, so makeTotal can disagree with what a batch could contain.
-        setSuggestions(res.styles.filter((s) => s.sizes.some((z) => z.makeQty > 0)));
-        setSuggestionsComplete(res.total <= PAGE_SIZE);
-      } else {
-        const res = await getBatches({
-          tab,
-          search: debouncedSearch || undefined,
-          take: PAGE_SIZE,
-        });
-        setBatches(res.rows);
-        setKpis(res.kpis);
+        return {
+          styles: res.styles.filter((x) => x.sizes.some((z) => z.makeQty > 0)),
+          batches: [] as ProductionBatch[],
+          raw: res.styles.length,
+          total: res.total,
+          kpis: null,
+        };
       }
+      const res = await getBatches({
+        tab,
+        status: statusFilter || undefined,
+        origin: originFilter || undefined,
+        search: debouncedSearch || undefined,
+        skip,
+        take: PAGE_SIZE,
+      });
+      return {
+        styles: [] as InventoryStyle[],
+        batches: res.rows,
+        raw: res.rows.length,
+        total: res.total,
+        kpis: res.kpis,
+      };
+    },
+    [tab, debouncedSearch, statusFilter, originFilter],
+  );
+
+  const reqRef = useRef(0);
+  const loadingMoreRef = useRef(false);
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    setError(false);
+    setLoadMoreError(false);
+    const my = ++reqRef.current;
+    try {
+      const d = await fetchPage(0);
+      if (reqRef.current !== my) return;
+      setSuggestions(d.styles);
+      setBatches(d.batches);
+      setLoaded(d.raw);
+      setTotal(d.total);
+      if (d.kpis) setKpis(d.kpis);
     } catch {
-      setError(true);
+      if (reqRef.current === my) setError(true);
     } finally {
-      setLoading(false);
+      if (reqRef.current === my) setLoading(false);
     }
-  }, [tab, debouncedSearch]);
+  }, [fetchPage]);
+
+  // Append the next page when the sentinel scrolls into view.
+  const loadMore = useCallback(() => {
+    // Synchronous ref guard: two observer fires in one commit read the same
+    // stale state, so gate on a ref that flips immediately.
+    if (loading || loadingMoreRef.current || loaded >= total) return;
+    loadingMoreRef.current = true;
+    const my = reqRef.current;
+    setLoadMoreError(false);
+    fetchPage(loaded)
+      .then((d) => {
+        if (reqRef.current !== my) return; // query changed mid-flight
+        setSuggestions((prev) => [...prev, ...d.styles]);
+        setBatches((prev) => [...prev, ...d.batches]);
+        setLoaded((prev) => prev + d.raw);
+        setTotal(d.total);
+      })
+      .catch(() => {
+        // The sentinel stays intersecting, so the observer won't auto-retry —
+        // surface a Retry instead of stalling silently.
+        if (reqRef.current === my) setLoadMoreError(true);
+      })
+      .finally(() => {
+        loadingMoreRef.current = false;
+      });
+  }, [fetchPage, loading, loaded, total]);
+
+  const loadMoreRef = useRef<() => void>(() => {});
+  useEffect(() => {
+    loadMoreRef.current = loadMore;
+  }, [loadMore]);
+  const observerRef = useRef<IntersectionObserver | null>(null);
+  const sentinelRef = useCallback((node: HTMLDivElement | null) => {
+    observerRef.current?.disconnect();
+    if (!node) return;
+    const io = new IntersectionObserver(
+      (entries) => {
+        if (entries[0]?.isIntersecting) loadMoreRef.current();
+      },
+      { rootMargin: '400px' },
+    );
+    io.observe(node);
+    observerRef.current = io;
+  }, []);
+
 
   useEffect(() => {
     void load();
@@ -178,7 +252,9 @@ export default function Production() {
       {
         key: 'to_start' as const,
         label: t('admin.production.tabs.toStart', { defaultValue: 'To start' }),
-        count: suggestionsComplete ? suggestions.length : undefined,
+        // Only trustworthy once every page is in: the makeQty trim is
+        // client-side, so a partial load would understate the backlog.
+        count: loaded >= total ? suggestions.length : undefined,
       },
       {
         key: 'in_production' as const,
@@ -190,7 +266,7 @@ export default function Production() {
         label: t('admin.production.tabs.completed', { defaultValue: 'Completed' }),
       },
     ],
-    [t, suggestions.length, suggestionsComplete, kpis],
+    [t, suggestions.length, loaded, total, kpis],
   );
 
   return (
@@ -240,6 +316,45 @@ export default function Production() {
             <X size={14} />
           </Button>
         )}
+        {tab !== 'to_start' && (
+          <>
+            <select
+              value={statusFilter}
+              onChange={(e) => setStatusFilter(e.target.value as BatchStatus | '')}
+              className="h-9 rounded-[var(--radius-sm)] border border-[var(--color-border)] bg-white px-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-ring)]"
+              aria-label={t('admin.production.filterStatus', { defaultValue: 'Status' })}
+            >
+              <option value="">
+                {t('admin.production.statusAll', { defaultValue: 'Status: All' })}
+              </option>
+              {(tab === 'completed'
+                ? (['completed', 'dispatched'] as BatchStatus[])
+                : ADVANCEABLE_STATUSES.filter((x) => x !== 'dispatched')
+              ).map((x) => (
+                <option key={x} value={x}>
+                  {statusLabel(t, x)}
+                </option>
+              ))}
+              <option value="cancelled">{statusLabel(t, 'cancelled')}</option>
+            </select>
+            <select
+              value={originFilter}
+              onChange={(e) => setOriginFilter(e.target.value as BatchOrigin | '')}
+              className="h-9 rounded-[var(--radius-sm)] border border-[var(--color-border)] bg-white px-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-ring)]"
+              aria-label={t('admin.production.filterOrigin', { defaultValue: 'Origin' })}
+            >
+              <option value="">
+                {t('admin.production.originAll', { defaultValue: 'Origin: All' })}
+              </option>
+              <option value="forecast">
+                {t('admin.production.originForecast', { defaultValue: 'From forecast' })}
+              </option>
+              <option value="style">
+                {t('admin.production.originStyle', { defaultValue: 'From style' })}
+              </option>
+            </select>
+          </>
+        )}
       </div>
 
       {loading ? (
@@ -272,6 +387,21 @@ export default function Production() {
           onComplete={(b) => setOutputTarget(b)}
           onCancel={(b) => setCancelTarget(b)}
         />
+      )}
+
+      {!loading && !error && loaded < total && (
+        <div ref={sentinelRef} className="py-4 text-center text-sm text-[var(--color-muted-foreground)]">
+          {loadMoreError ? (
+            <Button variant="outline" size="sm" onClick={() => loadMoreRef.current()}>
+              {t('admin.production.retry', { defaultValue: 'Retry' })}
+            </Button>
+          ) : (
+            <span className="inline-flex items-center gap-2">
+              <Loader2 size={14} className="animate-spin" />
+              {t('admin.production.loadingMore', { defaultValue: 'Loading more…' })}
+            </span>
+          )}
+        </div>
       )}
 
       <StartProductionDialog
@@ -415,11 +545,7 @@ function ToStartTable({
                 className={`transition-transform ${expanded[s.styleKey] ? 'rotate-90' : ''}`}
               />
             </button>
-            {s.imageUrl ? (
-              <img src={s.imageUrl} alt="" className="h-10 w-10 shrink-0 rounded object-cover" />
-            ) : (
-              <div className="h-10 w-10 shrink-0 rounded bg-[var(--color-muted)]" />
-            )}
+            <HoverThumbnail src={s.imageUrl} alt={s.name ?? s.styleKey} size={40} />
             <div className="min-w-0 flex-1">
               <div className="flex items-center gap-2">
                 <span className="truncate text-sm font-semibold">{s.name ?? s.styleKey}</span>
@@ -447,7 +573,6 @@ function ToStartTable({
             </div>
             {canWrite && (
               <Button
-                variant="outline"
                 size="sm"
                 onClick={() =>
                   onStart({
@@ -605,11 +730,7 @@ function BatchTable({
                 </button>
 
                 <div className="flex min-w-0 items-center gap-3">
-                  {b.imageUrl ? (
-                    <img src={b.imageUrl} alt="" className="h-9 w-9 shrink-0 rounded object-cover" />
-                  ) : (
-                    <div className="h-9 w-9 shrink-0 rounded bg-[var(--color-muted)]" />
-                  )}
+                  <HoverThumbnail src={b.imageUrl} alt={b.name ?? b.batchNo} size={40} />
                   <div className="min-w-0">
                     <div className="truncate text-sm font-semibold">
                       {b.name ??

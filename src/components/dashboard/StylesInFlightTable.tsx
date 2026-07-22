@@ -1054,11 +1054,11 @@ export default function StylesInFlightTable({
     return (
       <>
         {produce && (
-          <GhostActionButton icon="park" onClick={() => void openProduce(row)}>
+          <PrimaryActionButton onClick={() => void openProduce(row)}>
             {t('admin.production.addToPipeline', {
               defaultValue: 'Add to production pipeline',
             })}
-          </GhostActionButton>
+          </PrimaryActionButton>
         )}
         {park && (
           <GhostActionButton icon="park" onClick={() => setParkTarget(row)}>

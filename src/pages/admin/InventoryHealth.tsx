@@ -967,7 +967,7 @@ function StyleGroup({
                 e.stopPropagation();
                 onStartProduction(style, imageUrl);
               }}
-              className="inline-flex shrink-0 items-center gap-1 rounded-md border border-indigo-200 bg-indigo-50 px-2.5 py-1.5 text-xs font-semibold text-indigo-700 transition hover:bg-indigo-100"
+              className="inline-flex shrink-0 items-center gap-1 rounded-md bg-[var(--color-primary)] px-2.5 py-1.5 text-xs font-semibold text-[var(--color-primary-foreground)] transition hover:brightness-95"
             >
               <Factory size={13} />
               {t('admin.production.addToPipeline', {
