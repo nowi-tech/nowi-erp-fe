@@ -1,6 +1,6 @@
 // Hand-written minimal types. Will be regenerated from BE OpenAPI via `pnpm gen:api`.
 
-// Mirrors the BE Prisma `UserRole` enum (11 values). Kept in sync with
+// Mirrors the BE Prisma `UserRole` enum (12 values). Kept in sync with
 // `nowi-erp-api` schema.prisma + the FE role sets in `lib/userRoles.ts`.
 export type UserRole =
   | 'admin'
@@ -16,6 +16,10 @@ export type UserRole =
   // Production admin — full access to production/floor + ops master-data
   // and the main dashboard; sits above floor_manager.
   | 'production_lead'
+  // Production desk: starts batches off the Inventory Health forecast (or a
+  // live style) and walks them through the floor stages. Not a PD editor;
+  // cancelling a batch stays with admin + production_lead.
+  | 'production_editor'
   // Narrow go-to-market role: create a design + do cataloguing (EasyEcom +
   // marketplace take-offline). No editing, approving, or going live.
   | 'cataloguer'

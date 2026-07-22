@@ -18,6 +18,8 @@ const ROLE_HOMES: Record<UserRole, string> = {
   sampling_lead: '/',
   // Production admin is an office-home role (see OFFICE_HOME_ROLES in App.tsx).
   production_lead: '/',
+  // The production desk has one job — land it straight on the board.
+  production_editor: '/admin/production',
   // Cataloguer is an office-home role too — lands on the unified Home.
   cataloguer: '/',
   // Fabric desk lands on the dashboard (office Home).

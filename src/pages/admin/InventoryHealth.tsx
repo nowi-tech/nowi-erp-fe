@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useLocation, useNavigate, useSearchParams } from 'react-router-dom';
-import { RefreshCw, Search, Plus, ArrowUp, ArrowDown, ArrowUpDown, ArrowUpRight, Minus, Ban, RotateCcw, X, Sparkles, Copy, Check } from 'lucide-react';
+import { RefreshCw, Search, Plus, ArrowUp, ArrowDown, ArrowUpDown, ArrowUpRight, Minus, Ban, RotateCcw, X, Sparkles, Copy, Check, Factory } from 'lucide-react';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useToast } from '@/components/ui/toast';
 import { ConfirmDialog } from '@/components/ui/confirm-dialog';
@@ -9,7 +9,11 @@ import { DateRangePicker } from '@/components/ui/DateRangePicker';
 import { todayISO } from '@/lib/date';
 import { useDebounced } from '@/lib/useDebounced';
 import { useAuth } from '@/context/auth';
-import { hasAnyRole } from '@/lib/userRoles';
+import { hasAnyRole, PRODUCTION_WRITE_ROLES } from '@/lib/userRoles';
+import { createBatch } from '@/api/production';
+import StartProductionDialog, {
+  type StartProductionTarget,
+} from '@/components/production/StartProductionDialog';
 import { useSignedUrls } from '@/hooks/useSignedUrls';
 import { HoverThumbnail } from '@/components/dashboard/StylesInFlightTable';
 import { CARD_SHELL, Sparkline as TrendChart } from '@/components/admin/kpiPrimitives';
@@ -176,6 +180,10 @@ export default function InventoryHealth(): ReactNode {
   const { user } = useAuth();
   // Disable/enable is a merchandising action — admins + sampling editors.
   const canManage = hasAnyRole(user, ['admin', 'sampling_editor']);
+  // Starting a batch is a production action — a different desk from disable/enable.
+  const canProduce = hasAnyRole(user, PRODUCTION_WRITE_ROLES);
+  const [startTarget, setStartTarget] = useState<StartProductionTarget | null>(null);
+  const [startBusy, setStartBusy] = useState(false);
   // Pending disable/enable confirmation (per style).
   const [confirmDisc, setConfirmDisc] = useState<{ styleKey: string; next: boolean } | null>(null);
 
@@ -678,7 +686,31 @@ export default function InventoryHealth(): ReactNode {
                         onToggle={() => setOpenState((s) => ({ ...s, [style.styleKey]: !isOpen }))}
                         onOpen={() => openStyle(style.linkedStyleId)}
                         canManage={canManage}
+                        canProduce={canProduce}
                         onRequestDiscontinue={(styleKey, next) => setConfirmDisc({ styleKey, next })}
+                        onStartProduction={(s, img) => {
+                          const covers = s.sizes
+                            .map((z) => z.coverDays)
+                            .filter((c): c is number => c != null);
+                          setStartTarget({
+                            origin: 'forecast',
+                            styleKey: s.styleKey,
+                            styleId: s.linkedStyleId ?? undefined,
+                            styleRef: null,
+                            name: s.name,
+                            imageUrl: img,
+                            worstCoverDays: covers.length > 0 ? Math.min(...covers) : null,
+                            drr: s.sizes.reduce((a, z) => a + z.drr, 0),
+                            totalStock: s.sizes.reduce((a, z) => a + z.currentStock, 0),
+                            sizes: s.sizes.map((z) => ({
+                              sku: z.sku,
+                              size: z.size,
+                              suggestedQty: z.makeQty,
+                              coverDays: z.coverDays,
+                              currentStock: z.currentStock,
+                            })),
+                          });
+                        }}
                         t={t}
                       />
                     );
@@ -758,6 +790,37 @@ export default function InventoryHealth(): ReactNode {
         onConfirm={onConfirmDiscontinue}
         onCancel={() => setConfirmDisc(null)}
       />
+
+      {/* Starting a batch from here writes to production, then reloads so the
+          new pipeline units are reflected in this page's make quantities. */}
+      <StartProductionDialog
+        open={startTarget !== null}
+        busy={startBusy}
+        target={startTarget}
+        onClose={() => setStartTarget(null)}
+        onConfirm={(body) => {
+          setStartBusy(true);
+          void createBatch(body)
+            .then(() => {
+              setStartTarget(null);
+              toast.show(
+                t('admin.production.started', {
+                  defaultValue: 'Production started.',
+                }),
+              );
+              // Race-safe reload — the new pipeline units shrink make quantities.
+              setReloadTick((n) => n + 1);
+            })
+            .catch(() =>
+              toast.show(
+                t('admin.production.startFailed', {
+                  defaultValue: "Couldn't start production.",
+                }),
+              ),
+            )
+            .finally(() => setStartBusy(false));
+        }}
+      />
     </div>
   );
 }
@@ -796,7 +859,9 @@ function StyleGroup({
   onToggle,
   onOpen,
   canManage,
+  canProduce,
   onRequestDiscontinue,
+  onStartProduction,
   t,
 }: {
   style: InventoryStyle;
@@ -806,7 +871,9 @@ function StyleGroup({
   onToggle: () => void;
   onOpen: () => void;
   canManage: boolean;
+  canProduce: boolean;
   onRequestDiscontinue: (styleKey: string, next: boolean) => void;
+  onStartProduction: (style: InventoryStyle, imageUrl: string | null) => void;
   t: ReturnType<typeof useTranslation>['t'];
 }): ReactNode {
   const linked = style.linkedStyleId != null;
@@ -888,8 +955,23 @@ function StyleGroup({
             )}
           </div>
         </div>
-        {/* Disable / enable action — red for disable. */}
-        <div className="shrink-0">
+        {/* Add-to-pipeline + disable/enable actions. */}
+        <div className="flex shrink-0 items-center gap-2">
+          {canProduce && style.makeTotal > 0 && (
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                onStartProduction(style, imageUrl);
+              }}
+              className="inline-flex shrink-0 items-center gap-1 rounded-md border border-indigo-200 bg-indigo-50 px-2.5 py-1.5 text-xs font-semibold text-indigo-700 transition hover:bg-indigo-100"
+            >
+              <Factory size={13} />
+              {t('admin.production.addToPipeline', {
+                defaultValue: 'Add to production pipeline',
+              })}
+            </button>
+          )}
           {canManage && (
             <button
               type="button"

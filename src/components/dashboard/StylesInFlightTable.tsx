@@ -66,7 +66,12 @@ import {
   APPROVER_ROLES,
   ADMIN_ROLES,
   CATALOGUER_WRITE_ROLES,
+  PRODUCTION_WRITE_ROLES,
 } from '@/lib/userRoles';
+import { createBatch, getStyleSizes } from '@/api/production';
+import StartProductionDialog, {
+  type StartProductionTarget,
+} from '@/components/production/StartProductionDialog';
 import { useDebounced } from '@/lib/useDebounced';
 import { formatStyleRef } from '@/lib/styleRef';
 
@@ -728,6 +733,28 @@ export default function StylesInFlightTable({
   // Inline sampling-status edits are gated on the PD write set.
   // Non-writers see read-only cells.
   const canWriteInline = hasAnyRole(user, INLINE_WRITE_ROLES);
+  // A live style can be pushed onto the floor without waiting for the forecast
+  // to flag it. Style-origin: no suggested quantities to compare against.
+  const canProduce = hasAnyRole(user, PRODUCTION_WRITE_ROLES);
+  const [produceTarget, setProduceTarget] = useState<StartProductionTarget | null>(null);
+  const [produceBusy, setProduceBusy] = useState(false);
+
+  const openProduce = async (row: DashboardStyleRow) => {
+    setProduceBusy(true);
+    try {
+      const s = await getStyleSizes(row.id);
+      setProduceTarget({
+        origin: 'style',
+        styleId: s.styleId,
+        styleRef: s.styleRef,
+        name: s.name ?? row.workingName ?? null,
+        imageUrl: s.imageUrl,
+        sizes: s.sizes.map((z) => ({ sku: z.sku, size: z.size, suggestedQty: null })),
+      });
+    } finally {
+      setProduceBusy(false);
+    }
+  };
 
   // The cataloguing write (Mark EasyEcom done) admits the narrow `cataloguer`
   // too — its whole remit. A superset of PD writers; NOT the sampling dropdown.
@@ -1003,6 +1030,7 @@ export default function StylesInFlightTable({
     // Live rows get a "Channel" affordance (manage channels in the
     // workspace) for those who can't add listings inline.
     const channel = row.lifecycle === 'live';
+    const produce = canProduce && row.lifecycle === 'live';
     if (
       !approve &&
       !park &&
@@ -1010,12 +1038,20 @@ export default function StylesInFlightTable({
       !startCat &&
       !markEasyecom &&
       !addListings &&
-      !channel
+      !channel &&
+      !produce
     ) {
       return <RowChevron />;
     }
     return (
       <>
+        {produce && (
+          <GhostActionButton icon="park" onClick={() => void openProduce(row)}>
+            {t('admin.production.addToPipeline', {
+              defaultValue: 'Add to production pipeline',
+            })}
+          </GhostActionButton>
+        )}
         {park && (
           <GhostActionButton icon="park" onClick={() => setParkTarget(row)}>
             {t('dashboard.table.actions.park')}
@@ -1832,6 +1868,18 @@ export default function StylesInFlightTable({
           sampleApproveBusy ? undefined : setSampleApproveTarget(null)
         }
         onConfirm={confirmSampleApprove}
+      />
+      <StartProductionDialog
+        open={produceTarget !== null}
+        busy={produceBusy}
+        target={produceTarget}
+        onClose={() => setProduceTarget(null)}
+        onConfirm={(body) => {
+          setProduceBusy(true);
+          void createBatch(body)
+            .then(() => setProduceTarget(null))
+            .finally(() => setProduceBusy(false));
+        }}
       />
     </div>
   );

@@ -9,6 +9,7 @@ import {
   TrendingUp,
   LineChart,
   HeartPulse,
+  Factory,
   LogOut,
   FlaskConical,
   Inbox,
@@ -32,7 +33,7 @@ import { useToast } from '@/components/ui/toast';
 import LanguageToggle from '@/components/LanguageToggle';
 import Logo from '@/components/Logo';
 import { cn } from '@/lib/utils';
-import { userAllRoles } from '@/lib/userRoles';
+import { userAllRoles, PRODUCTION_READ_ROLES } from '@/lib/userRoles';
 import type { UserRole } from '@/api/types';
 import { RailTooltip, SectionFlyout } from '@/components/ui/sidebar-tooltip';
 
@@ -104,7 +105,8 @@ const NAV_SECTIONS: NavSection[] = [
       // Inventory Health leads the section (the priority screen). Production KPIs
       // stays within the first 4 flattened items so it keeps its mobile bottom-nav
       // slot; Sales KPIs moves into the "More" overflow on mobile.
-      { to: '/admin/analytics/inventory-health', icon: <HeartPulse size={18} />, labelKey: 'admin.nav.inventoryHealth', roles: ['admin', 'viewer'] },
+      { to: '/admin/analytics/inventory-health', icon: <HeartPulse size={18} />, labelKey: 'admin.nav.inventoryHealth', roles: [...PRODUCTION_READ_ROLES] },
+      { to: '/admin/production', icon: <Factory size={18} />, labelKey: 'admin.nav.productionPipeline', roles: [...PRODUCTION_READ_ROLES] },
       { to: '/admin/production-kpis', icon: <BarChart3 size={18} />, labelKey: 'admin.nav.productionKpis', roles: ['admin', 'viewer', 'production_lead'] },
       { to: '/admin/sales-kpis', icon: <TrendingUp size={18} />, labelKey: 'admin.nav.salesKpis', roles: ['admin', 'viewer'] },
       { to: '/admin/analytics/fulfilment', icon: <LineChart size={18} />, labelKey: 'admin.nav.analyticsFulfilment', roles: ['admin', 'viewer'] },

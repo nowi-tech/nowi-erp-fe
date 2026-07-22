@@ -14,7 +14,12 @@ import Login from './pages/Login';
 import SsoSkucast from './pages/SsoSkucast';
 import Dashboard from './pages/Dashboard';
 import { useAuth } from './context/auth';
-import { hasAnyRole, hasRole, DESIGN_SUBMIT_ROLES } from './lib/userRoles';
+import {
+  hasAnyRole,
+  hasRole,
+  DESIGN_SUBMIT_ROLES,
+  PRODUCTION_READ_ROLES,
+} from './lib/userRoles';
 import type { UserRole } from './api/types';
 
 const AdminShell = lazy(() => import('./components/layout/AdminShell'));
@@ -27,6 +32,7 @@ const Warehouses = lazy(() => import('./pages/admin/Warehouses'));
 const ProductionKpis = lazy(() => import('./pages/admin/ProductionKpis'));
 const SalesKpis = lazy(() => import('./pages/admin/SalesKpis'));
 const InventoryHealth = lazy(() => import('./pages/admin/InventoryHealth'));
+const Production = lazy(() => import('./pages/admin/Production'));
 const StitchingHome = lazy(() => import('./pages/stitching/StitchingHome'));
 const StitchingReceiveLot = lazy(
   () => import('./pages/stitching/StitchingReceiveLot'),
@@ -251,9 +257,19 @@ function App() {
               <Route
                 path="analytics/inventory-health"
                 element={
-                  <ProtectedRoute allowedRoles={['admin', 'viewer']}>
+                  <ProtectedRoute allowedRoles={[...PRODUCTION_READ_ROLES]}>
                     <S>
                       <InventoryHealth />
+                    </S>
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="production"
+                element={
+                  <ProtectedRoute allowedRoles={[...PRODUCTION_READ_ROLES]}>
+                    <S>
+                      <Production />
                     </S>
                   </ProtectedRoute>
                 }

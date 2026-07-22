@@ -342,6 +342,7 @@
         "administration": "Administration"
       },
       "production": "Production",
+      "productionPipeline": "Production pipeline",
       "analyticsFulfilment": "Fulfilment",
       "inventoryHealth": "Inventory Health"
     },
