@@ -103,6 +103,9 @@ const NAV_SECTIONS: NavSection[] = [
       // live (SKU drill-down still links to it); only the entry is hidden.
       // ponytail: empty roles = hidden from all (roles.some(...) is false).
       { to: '/admin/locator', icon: <Search size={18} />, labelKey: 'admin.nav.production', roles: [] },
+      // Dispatches was folded into Locator as a tab, so hiding Locator orphaned
+      // it. Restored as its own entry rather than resurrecting Locator.
+      { to: '/admin/dispatches', icon: <Container size={18} />, labelKey: 'admin.nav.dispatches', roles: ['admin', 'viewer', 'production_lead'] },
     ],
   },
   {

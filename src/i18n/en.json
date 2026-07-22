@@ -343,6 +343,7 @@
       },
       "production": "Production",
       "productionPipeline": "Production pipeline",
+      "dispatches": "Dispatches",
       "analyticsFulfilment": "Fulfilment",
       "inventoryHealth": "Inventory Health"
     },

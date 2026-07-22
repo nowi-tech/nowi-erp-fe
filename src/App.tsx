@@ -225,9 +225,13 @@ function App() {
               <Route
                 path="locator"
                 element={
+                  // Re-gated: the /admin parent was widened for production_editor,
+                  // which must NOT inherit unrelated surfaces.
+                  <ProtectedRoute allowedRoles={['admin', 'viewer', 'production_lead']}>
                   <S>
                     <Locator />
                   </S>
+                  </ProtectedRoute>
                 }
               />
               {/* Production KPI dashboard (Google Sheet). Inherits the /admin
@@ -235,9 +239,13 @@ function App() {
               <Route
                 path="production-kpis"
                 element={
+                  // Re-gated: the /admin parent was widened for production_editor,
+                  // which must NOT inherit unrelated surfaces.
+                  <ProtectedRoute allowedRoles={['admin', 'viewer', 'production_lead']}>
                   <S>
                     <ProductionKpis />
                   </S>
+                  </ProtectedRoute>
                 }
               />
               {/* Sales analytics — the same SalesKpis view, filtered per section
@@ -297,25 +305,37 @@ function App() {
               <Route
                 path="locator/sku/:sku"
                 element={
+                  // Re-gated: the /admin parent was widened for production_editor,
+                  // which must NOT inherit unrelated surfaces.
+                  <ProtectedRoute allowedRoles={['admin', 'viewer', 'production_lead']}>
                   <S>
                     <SkuDetail />
                   </S>
+                  </ProtectedRoute>
                 }
               />
               <Route
                 path="dispatches"
                 element={
+                  // Re-gated: the /admin parent was widened for production_editor,
+                  // which must NOT inherit unrelated surfaces.
+                  <ProtectedRoute allowedRoles={['admin', 'viewer', 'production_lead']}>
                   <S>
                     <Dispatches />
                   </S>
+                  </ProtectedRoute>
                 }
               />
               <Route
                 path="dispatches/:id"
                 element={
+                  // Re-gated: the /admin parent was widened for production_editor,
+                  // which must NOT inherit unrelated surfaces.
+                  <ProtectedRoute allowedRoles={['admin', 'viewer', 'production_lead']}>
                   <S>
                     <DispatchDetail />
                   </S>
+                  </ProtectedRoute>
                 }
               />
               <Route
@@ -335,9 +355,13 @@ function App() {
               <Route
                 path="warehouses"
                 element={
+                  // Re-gated: the /admin parent was widened for production_editor,
+                  // which must NOT inherit unrelated surfaces.
+                  <ProtectedRoute allowedRoles={['admin', 'viewer', 'production_lead']}>
                   <S>
                     <Warehouses />
                   </S>
+                  </ProtectedRoute>
                 }
               />
               <Route

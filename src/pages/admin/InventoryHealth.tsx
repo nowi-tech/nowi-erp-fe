@@ -957,7 +957,10 @@ function StyleGroup({
         </div>
         {/* Add-to-pipeline + disable/enable actions. */}
         <div className="flex shrink-0 items-center gap-2">
-          {canProduce && style.makeTotal > 0 && (
+          {/* Gate on the sizes actually LISTED, not makeTotal: the server trims
+              `sizes` to the active lens, so makeTotal can be non-zero while the
+              rows we could seed a batch from are empty or partial. */}
+          {canProduce && style.sizes.some((z) => z.makeQty > 0) && (
             <button
               type="button"
               onClick={(e) => {

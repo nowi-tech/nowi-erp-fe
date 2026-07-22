@@ -23,6 +23,7 @@ import {
 } from '@/api/production';
 import { getInventoryHealth, type InventoryStyle } from '@/api/inventoryHealth';
 import { UrgencyPill } from '@/pages/admin/InventoryHealth';
+import { useToast } from '@/components/ui/toast';
 import { useAuth } from '@/context/auth';
 import { useDebounced } from '@/lib/useDebounced';
 import {
@@ -59,6 +60,7 @@ function fmtDate(iso: string): string {
 export default function Production() {
   const { t } = useTranslation();
   const { user } = useAuth();
+  const toast = useToast();
   const canWrite = hasAnyRole(user, PRODUCTION_WRITE_ROLES);
   const canCancel = hasAnyRole(user, PRODUCTION_CANCEL_ROLES);
 
@@ -78,6 +80,7 @@ export default function Production() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);
   const [expanded, setExpanded] = useState<Record<number, boolean>>({});
+  const [expandedStyles, setExpandedStyles] = useState<Record<string, boolean>>({});
   const [busy, setBusy] = useState(false);
 
   const [startTarget, setStartTarget] = useState<StartProductionTarget | null>(null);
@@ -105,7 +108,9 @@ export default function Production() {
         });
         // Anything the forecast says needs making. Sizes with a batch already
         // running have had their makeQty reduced by the pipeline already.
-        setSuggestions(res.styles.filter((s) => s.makeTotal > 0));
+        // Filter on the LISTED sizes: the server trims `sizes` to the active
+        // lens, so makeTotal can disagree with what a batch could contain.
+        setSuggestions(res.styles.filter((s) => s.sizes.some((z) => z.makeQty > 0)));
         setSuggestionsComplete(res.total <= PAGE_SIZE);
       } else {
         const res = await getBatches({
@@ -140,6 +145,14 @@ export default function Production() {
     try {
       await fn();
       await refresh();
+    } catch {
+      // Without this every mutation failed silently: the controlled <select>
+      // just snapped back and the dialogs stayed open with no explanation.
+      toast.show(
+        t('admin.production.actionFailed', {
+          defaultValue: "That didn't go through. Refresh and try again.",
+        }),
+      );
     } finally {
       setBusy(false);
     }
@@ -242,6 +255,8 @@ export default function Production() {
         <ToStartTable
           styles={suggestions}
           canWrite={canWrite}
+          expanded={expandedStyles}
+          onToggle={(k) => setExpandedStyles((p) => ({ ...p, [k]: !p[k] }))}
           onStart={(target) => setStartTarget(target)}
         />
       ) : (
@@ -356,10 +371,14 @@ function KpiRow({ kpis }: { kpis: ProductionKpis | null }) {
 function ToStartTable({
   styles,
   canWrite,
+  expanded,
+  onToggle,
   onStart,
 }: {
   styles: InventoryStyle[];
   canWrite: boolean;
+  expanded: Record<string, boolean>;
+  onToggle: (styleKey: string) => void;
   onStart: (target: StartProductionTarget) => void;
 }) {
   const { t } = useTranslation();
@@ -380,10 +399,22 @@ function ToStartTable({
         const needing = s.sizes.filter((z) => z.makeQty > 0);
         const covers = s.sizes.map((z) => z.coverDays).filter((c): c is number => c != null);
         return (
-          <div
-            key={s.styleKey}
-            className="flex items-center gap-4 border-b border-[var(--color-border)] px-4 py-3 last:border-b-0"
-          >
+          <div key={s.styleKey} className="border-b border-[var(--color-border)] last:border-b-0">
+          <div className="flex items-center gap-4 px-4 py-3">
+            <button
+              type="button"
+              onClick={() => onToggle(s.styleKey)}
+              aria-expanded={!!expanded[s.styleKey]}
+              aria-label={t('admin.production.toggleSizes', {
+                defaultValue: 'Show size breakdown',
+              })}
+              className="shrink-0 text-[var(--color-muted-foreground)]"
+            >
+              <ChevronRight
+                size={16}
+                className={`transition-transform ${expanded[s.styleKey] ? 'rotate-90' : ''}`}
+              />
+            </button>
             {s.imageUrl ? (
               <img src={s.imageUrl} alt="" className="h-10 w-10 shrink-0 rounded object-cover" />
             ) : (
@@ -396,14 +427,6 @@ function ToStartTable({
               </div>
               <div className="truncate font-mono text-[11px] text-[var(--color-muted-foreground)]">
                 {s.styleKey}
-              </div>
-            </div>
-            <div className="w-20 text-right">
-              <div className="text-sm font-semibold">
-                {s.sizes.reduce((a, z) => a + z.atRiskUnitsPerDay, 0).toFixed(1)}
-              </div>
-              <div className="text-[10px] uppercase tracking-wider text-[var(--color-muted-foreground)]">
-                {t('admin.production.atRisk', { defaultValue: 'at risk/d' })}
               </div>
             </div>
             <div className="w-28 text-xs text-[var(--color-muted-foreground)]">
@@ -452,6 +475,48 @@ function ToStartTable({
                 })}
               </Button>
             )}
+          </div>
+
+          {expanded[s.styleKey] && (
+            <div className="border-t border-[var(--color-border)] bg-[var(--color-surface-2)]/40 px-4 py-3 pl-12">
+              <table className="w-full text-[13px]">
+                <thead>
+                  <tr className="text-[10.5px] font-semibold uppercase tracking-wider text-[var(--color-muted-foreground)]">
+                    <th className="py-1.5 text-left">
+                      {t('admin.production.size', { defaultValue: 'Size' })}
+                    </th>
+                    <th className="py-1.5 text-left">SKU</th>
+                    <th className="py-1.5 text-right">
+                      {t('admin.production.suggested', { defaultValue: 'Suggested' })}
+                    </th>
+                    <th className="py-1.5 text-right">
+                      {t('admin.production.cover', { defaultValue: 'Cover' })}
+                    </th>
+                    <th className="py-1.5 text-right">
+                      {t('admin.production.stock', { defaultValue: 'Stock' })}
+                    </th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {s.sizes.map((z) => (
+                    <tr key={z.sku} className="border-t border-[var(--color-border)]/50">
+                      <td className="py-1.5 font-semibold">{z.size}</td>
+                      <td className="py-1.5 font-mono text-xs text-[var(--color-muted-foreground)]">
+                        {z.sku}
+                      </td>
+                      <td className="py-1.5 text-right font-semibold">{z.makeQty}</td>
+                      <td className="py-1.5 text-right text-[var(--color-muted-foreground)]">
+                        {z.coverDays != null ? `${z.coverDays.toFixed(1)}d` : '—'}
+                      </td>
+                      <td className="py-1.5 text-right text-[var(--color-muted-foreground)]">
+                        {z.currentStock}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
           </div>
         );
       })}
