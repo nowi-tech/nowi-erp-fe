@@ -383,9 +383,22 @@
         "real": "Real",
         "virtual": "Virtual"
       },
+      "tab": {
+        "all": "All styles",
+        "out": "Out of stock",
+        "critical": "Critical",
+        "watch": "Watch",
+        "slow": "Slow-movers",
+        "dead": "Dead stock",
+        "new": "New arrivals"
+      },
+      "toMakeInline": "To make: {{n}} units",
+      "newBadge": "New",
       "col": {
         "style": "Style",
         "size": "Size",
+        "product": "Product",
+        "status": "Status",
         "cover": "Cover",
         "drr": "DRR · /d",
         "trend": "Trend · /d",
@@ -406,7 +419,8 @@
       "discontinuedDone": "Product disabled.",
       "restoredDone": "Product enabled.",
       "discontinueFailed": "Couldn’t update. Please try again.",
-      "loadError": "Couldn’t load inventory health."
+      "loadError": "Couldn’t load inventory health.",
+      "copySku": "Copy SKU"
     },
     "home": {
       "approvalCta": {

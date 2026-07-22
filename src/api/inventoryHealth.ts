@@ -5,11 +5,20 @@ import { apiClient } from './apiClient';
 /** 4 tiers only. `needsAction` = out + critical. */
 export type Urgency = 'out' | 'critical' | 'watch' | 'healthy';
 
-/** One at-risk size — a child row under its style. */
+/** Sales-recency lens (NOW-anchored): `dead` = stocked but no sale in 60d;
+ *  `slow` = stocked, idle 30d but sold within 60d; `active` = sold within 30d. */
+export type Aging = 'active' | 'slow' | 'dead';
+
+/** Every list lens the server accepts: urgency tiers + aging + new arrivals. */
+export type FilterKey = 'all' | 'out' | 'critical' | 'watch' | 'slow' | 'dead' | 'new';
+
+/** One size row (per SKU). */
 export interface InventorySize {
   size: string;
   sku: string;
   urgency: Urgency;
+  /** Sales-recency lens — drives the slow/dead tabs + pill. */
+  aging: Aging;
   /** Days of cover left at the current DRR; null when DRR is 0/unknown. */
   coverDays: number | null;
   /** Daily run rate — units sold per day. */
@@ -44,6 +53,9 @@ export interface InventoryStyle {
   lowVolume: boolean;
   /** Manually marked discontinued — still shown, but forced to the bottom. */
   discontinued: boolean;
+  /** Linked ERP style went live within the last 7 days — drives the new-arrivals
+   *  tab + badge. False when the style isn't linked to the ERP catalog. */
+  isNew: boolean;
   sizes: InventorySize[];
 }
 
@@ -54,6 +66,11 @@ export interface InventoryKpis {
   critical: number;
   watch: number;
   healthy: number;
+  /** Aging-lens counts (per-SKU, like the urgency chips). */
+  slow: number;
+  dead: number;
+  /** Recently-live styles (per-style). */
+  newArrivals: number;
   totalStyles: number;
   totalSkus: number;
 }
