@@ -751,6 +751,14 @@ export default function StylesInFlightTable({
         imageUrl: s.imageUrl,
         sizes: s.sizes.map((z) => ({ sku: z.sku, size: z.size, suggestedQty: null })),
       });
+    } catch {
+      // A style with no active per-size SKUs 400s here — say so rather than
+      // leaving the button looking dead.
+      toast.show(
+        t('admin.production.sizesFailed', {
+          defaultValue: "Couldn't load this style's sizes.",
+        }),
+      );
     } finally {
       setProduceBusy(false);
     }
@@ -1877,7 +1885,19 @@ export default function StylesInFlightTable({
         onConfirm={(body) => {
           setProduceBusy(true);
           void createBatch(body)
-            .then(() => setProduceTarget(null))
+            .then(() => {
+              setProduceTarget(null);
+              toast.show(
+                t('admin.production.started', { defaultValue: 'Production started.' }),
+              );
+            })
+            .catch(() =>
+              toast.show(
+                t('admin.production.startFailed', {
+                  defaultValue: "Couldn't start production.",
+                }),
+              ),
+            )
             .finally(() => setProduceBusy(false));
         }}
       />

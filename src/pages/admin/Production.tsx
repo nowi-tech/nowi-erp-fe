@@ -24,6 +24,7 @@ import {
 import { getInventoryHealth, type InventoryStyle } from '@/api/inventoryHealth';
 import { UrgencyPill } from '@/pages/admin/InventoryHealth';
 import { useAuth } from '@/context/auth';
+import { useDebounced } from '@/lib/useDebounced';
 import {
   hasAnyRole,
   PRODUCTION_CANCEL_ROLES,
@@ -63,6 +64,9 @@ export default function Production() {
 
   const [tab, setTab] = useState<Tab>('in_production');
   const [search, setSearch] = useState('');
+  // Every keystroke would otherwise fire a request, and slow responses can land
+  // out of order and render a stale result set.
+  const debouncedSearch = useDebounced(search, 300);
   const [batches, setBatches] = useState<ProductionBatch[]>([]);
   const [suggestions, setSuggestions] = useState<InventoryStyle[]>([]);
   /** False when the forecast had more styles than one page — the makeQty filter
@@ -93,13 +97,20 @@ export default function Production() {
         // No `filter` / `sortKey`: that is exactly what the Inventory Health
         // page sends by default, so this tab inherits its priority ranking
         // (out/critical first, then watch, by revenue-at-risk per day).
-        const res = await getInventoryHealth({ limit: PAGE_SIZE, search: search || undefined });
+        const res = await getInventoryHealth({
+          limit: PAGE_SIZE,
+          search: debouncedSearch || undefined,
+        });
         // Anything the forecast says needs making. Sizes with a batch already
         // running have had their makeQty reduced by the pipeline already.
         setSuggestions(res.styles.filter((s) => s.makeTotal > 0));
         setSuggestionsComplete(res.total <= PAGE_SIZE);
       } else {
-        const res = await getBatches({ tab, search: search || undefined, take: PAGE_SIZE });
+        const res = await getBatches({
+          tab,
+          search: debouncedSearch || undefined,
+          take: PAGE_SIZE,
+        });
         setBatches(res.rows);
         setKpis(res.kpis);
       }
@@ -108,7 +119,7 @@ export default function Production() {
     } finally {
       setLoading(false);
     }
-  }, [tab, search]);
+  }, [tab, debouncedSearch]);
 
   useEffect(() => {
     void load();
@@ -157,7 +168,7 @@ export default function Production() {
       {
         key: 'in_production' as const,
         label: t('admin.production.tabs.inProduction', { defaultValue: 'In production' }),
-        count: kpis?.openBatches,
+        count: kpis?.inProductionBatches,
       },
       {
         key: 'completed' as const,

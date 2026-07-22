@@ -74,7 +74,10 @@ export interface ProductionBatch {
 }
 
 export interface ProductionKpis {
+  /** On the floor OR completed-but-not-dispatched — the KPI card figure. */
   openBatches: number;
+  /** cutting/stitching/finishing only — what the "In production" tab lists. */
+  inProductionBatches: number;
   unitsInPipeline: number;
   /** Renders as the card sub-line "940 forecast · 344 style". */
   unitsByOrigin: { forecast: number; style: number };

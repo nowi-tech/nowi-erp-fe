@@ -206,7 +206,12 @@ function App() {
             <Route
               path="/admin"
               element={
-                <ProtectedRoute allowedRoles={['admin', 'viewer', 'production_lead']}>
+                // production_editor must be here too: this parent guard runs
+                // BEFORE any child's allowedRoles, so a child-only widening
+                // (production, inventory-health) never gets reached.
+                <ProtectedRoute
+                  allowedRoles={['admin', 'viewer', 'production_lead', 'production_editor']}
+                >
                   <S>
                     <AdminShell />
                   </S>

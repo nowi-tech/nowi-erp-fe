@@ -94,8 +94,12 @@ const NAV_SECTIONS: NavSection[] = [
       // needed on this page; leave it as-is until it's removed for good.
       // ponytail: empty roles = hidden from all (roles.some(...) is false).
       { to: '/styles', end: true, icon: <Shirt size={18} />, labelKey: 'admin.nav.styles', roles: [] },
-      // Production = the renamed Locator. Dispatch lives inside it as a tab.
-      { to: '/admin/locator', icon: <Search size={18} />, labelKey: 'admin.nav.production', roles: ['admin', 'viewer', 'production_lead'] },
+      // Locator (labelled "Production") is RETIRED from the nav — it collided
+      // with the Production pipeline board in Analytics, which is the surface
+      // production work actually starts from. The /admin/locator ROUTE stays
+      // live (SKU drill-down still links to it); only the entry is hidden.
+      // ponytail: empty roles = hidden from all (roles.some(...) is false).
+      { to: '/admin/locator', icon: <Search size={18} />, labelKey: 'admin.nav.production', roles: [] },
     ],
   },
   {
