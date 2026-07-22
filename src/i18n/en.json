@@ -392,7 +392,6 @@
         "dead": "Dead stock",
         "new": "New arrivals"
       },
-      "toMakeInline": "To make: {{n}} units",
       "newBadge": "New",
       "col": {
         "style": "Style",
