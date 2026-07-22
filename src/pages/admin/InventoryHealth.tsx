@@ -39,6 +39,7 @@ const AMBER = '#D97706';
 const INK = '#18181B'; // near-black for emphasis
 const MUTED = '#C4C4C8';
 const NEUTRAL_DOT = '#A1A1AA';
+const LABEL_GREY = '#B0AFAE'; // KPI-card label caps
 // Trend direction colours: velocity rising = green, falling = red, flat = grey.
 const TREND_UP = '#059669';
 const TREND_DOWN = '#DC2626';
@@ -463,14 +464,16 @@ export default function InventoryHealth(): ReactNode {
     : [];
 
   return (
-    <div style={{ minHeight: '100%', background: '#f6f7f9' }} className="p-4 sm:p-6 lg:p-8">
-      <div className="w-full">
-        {/* Header — title + all filters on one line (no subtitle, for the room). */}
-        <div className="mb-5 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-          <h1 className="text-2xl font-semibold text-neutral-900">
+    <div className="space-y-8 pb-10">
+      {/* Header block — serif title + controls (right), status line beneath.
+          Padding / max-width / background come from the AdminShell <main>, so this
+          page reads identically to the dashboard (no self-padding / own bg). */}
+      <div>
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <h1 className="font-serif text-3xl font-semibold tracking-tight">
             {t('admin.inventoryHealth.title', { defaultValue: 'Inventory Health' })}
           </h1>
-          <div className="flex flex-wrap items-center justify-end gap-2">
+          <div className="flex shrink-0 flex-wrap items-center justify-end gap-2">
             {/* Real / virtual stock filter — top-of-page, pill-segmented (matches live). */}
             <div className="inline-flex items-center gap-1 rounded-xl border border-neutral-200 bg-white p-1 shadow-sm">
               {(['all', 'real', 'virtual'] as const).map((v) => (
@@ -516,14 +519,14 @@ export default function InventoryHealth(): ReactNode {
           </div>
         </div>
 
-        {/* Status line */}
-        <div className="mb-4 flex items-center gap-2 text-xs">
+        {/* Status line — the header's subtitle (mirrors the dashboard narrative). */}
+        <div className="mt-1 flex items-center gap-2 text-xs">
           <span
             className={`inline-block h-2 w-2 rounded-full ${
               loading ? 'animate-pulse bg-amber-400' : error ? 'bg-red-500' : stale ? 'bg-amber-400' : 'bg-emerald-500'
             }`}
           />
-          <span className={error ? 'font-medium text-red-600' : stale ? 'font-medium text-amber-600' : 'text-neutral-500'}>
+          <span className={error ? 'font-medium text-red-600' : stale ? 'font-medium text-amber-600' : 'text-[var(--color-muted-foreground)]'}>
             {loading
               ? t('admin.inventoryHealth.loading', { defaultValue: 'Loading…' })
               : error
@@ -558,9 +561,10 @@ export default function InventoryHealth(): ReactNode {
             </span>
           )}
         </div>
+      </div>
 
-        {/* Persistent banner while a manual/background sync is running. */}
-        {(refreshing || syncing) && !loading && <FetchingBanner t={t} />}
+      {/* Persistent banner while a manual/background sync is running. */}
+      {(refreshing || syncing) && !loading && <FetchingBanner t={t} />}
 
         {/* Body */}
         {loading && !styles.length ? (
@@ -575,6 +579,41 @@ export default function InventoryHealth(): ReactNode {
           </>
         ) : kpis ? (
           <>
+            {/* KPI cards — the three urgency cards double as filters (click to
+                toggle, in sync with the lens tabs below); "To make" is the roll-up.
+                Counts are scoped to the Real/Virtual view like the tabs. */}
+            <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+              <StatCard
+                label={t('admin.inventoryHealth.chip.out', { defaultValue: 'Out of stock' })}
+                value={kpis.outOfStock}
+                dot={RED}
+                active={filter === 'out'}
+                onClick={() => setFilter(filter === 'out' ? 'all' : 'out')}
+                t={t}
+              />
+              <StatCard
+                label={t('admin.inventoryHealth.chip.critical', { defaultValue: 'Critical' })}
+                value={kpis.critical}
+                dot={RED}
+                active={filter === 'critical'}
+                onClick={() => setFilter(filter === 'critical' ? 'all' : 'critical')}
+                t={t}
+              />
+              <StatCard
+                label={t('admin.inventoryHealth.chip.watch', { defaultValue: 'Watch' })}
+                value={kpis.watch}
+                dot={AMBER}
+                active={filter === 'watch'}
+                onClick={() => setFilter(filter === 'watch' ? 'all' : 'watch')}
+                t={t}
+              />
+              <StatCard
+                label={t('admin.inventoryHealth.toMake', { defaultValue: 'To make' })}
+                value={kpis.unitsToMake}
+                unit={t('admin.inventoryHealth.headlineUnits', { defaultValue: 'units' })}
+              />
+            </div>
+
             {/* One unified panel — the Sampling "style tracking" treatment: lens
                 tabs · search + view filter · table · footer all share a single
                 bordered card. */}
@@ -598,13 +637,6 @@ export default function InventoryHealth(): ReactNode {
                   </div>
                 </div>
                 <div className="flex shrink-0 items-center gap-3 text-[12px] tabular-nums text-[var(--color-muted-foreground)]">
-                  <span>
-                    {t('admin.inventoryHealth.toMakeInline', {
-                      defaultValue: 'To make: {{n}} units',
-                      n: fmtN(kpis.unitsToMake),
-                    })}
-                  </span>
-                  <span aria-hidden>·</span>
                   <span>{t('admin.inventoryHealth.styleCount', { defaultValue: '{{n}} styles', n: total })}</span>
                 </div>
               </div>
@@ -697,7 +729,6 @@ export default function InventoryHealth(): ReactNode {
             </button>
           </div>
         ) : null}
-      </div>
 
       <ConfirmDialog
         open={confirmDisc != null}
@@ -1023,6 +1054,72 @@ function Cell({
     <div className={`flex items-center justify-between ${right ? 'lg:justify-end' : 'lg:block lg:justify-start'}`}>
       <span className="text-[10px] font-bold uppercase tracking-wider text-neutral-400 lg:hidden">{label}</span>
       <span className="flex items-center">{children}</span>
+    </div>
+  );
+}
+
+/** KPI card. The three urgency cards are clickable filters (active = ring +
+ *  emphasised border) that toggle the same `filter` state as the lens tabs; the
+ *  "to make" roll-up is informational (no onClick). Counts are inventory-scoped. */
+function StatCard({
+  label,
+  value,
+  unit,
+  dot,
+  active,
+  onClick,
+  t,
+}: {
+  label: string;
+  value: number;
+  unit?: string;
+  dot?: string;
+  active?: boolean;
+  onClick?: () => void;
+  t?: ReturnType<typeof useTranslation>['t'];
+}): ReactNode {
+  const clickable = !!onClick;
+  return (
+    <div
+      {...(clickable
+        ? {
+            role: 'button',
+            tabIndex: 0,
+            'aria-pressed': !!active,
+            onClick,
+            onKeyDown: (e: React.KeyboardEvent) => {
+              if (e.key === 'Enter' || e.key === ' ') {
+                e.preventDefault();
+                onClick?.();
+              }
+            },
+          }
+        : {})}
+      style={{ ...CARD_SHELL, padding: '14px 16px', borderColor: active ? PRIMARY : '#EFEDEB' }}
+      className={`flex flex-col transition ${
+        clickable ? 'cursor-pointer hover:border-neutral-400' : 'cursor-default'
+      } ${active ? 'ring-1 ring-[var(--color-primary)]' : ''}`}
+    >
+      <span
+        className="flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wide"
+        style={{ color: LABEL_GREY }}
+      >
+        {dot && <span style={{ width: 7, height: 7, borderRadius: 999, background: dot }} />}
+        {label}
+      </span>
+      <span className="mt-2 tabular-nums" style={{ color: INK, fontSize: 30, fontWeight: 700, lineHeight: 1 }}>
+        {fmtN(value)}
+        {unit && (
+          <span className="ml-1 text-sm font-medium" style={{ color: MUTED }}>
+            {unit}
+          </span>
+        )}
+      </span>
+      {clickable && active && (
+        <span className="mt-1.5 text-[10px] font-medium" style={{ color: NEUTRAL_DOT }}>
+          {t?.('admin.inventoryHealth.filtering', { defaultValue: 'filtering · click to clear' })}
+        </span>
+      )}
     </div>
   );
 }
