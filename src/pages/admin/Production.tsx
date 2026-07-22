@@ -62,7 +62,9 @@ export default function Production() {
   const canWrite = hasAnyRole(user, PRODUCTION_WRITE_ROLES);
   const canCancel = hasAnyRole(user, PRODUCTION_CANCEL_ROLES);
 
-  const [tab, setTab] = useState<Tab>('in_production');
+  // Opens on the queue, not the backlog: the first question is "what should
+  // I start?", and that tab is the forecast's own priority order.
+  const [tab, setTab] = useState<Tab>('to_start');
   const [search, setSearch] = useState('');
   // Every keystroke would otherwise fire a request, and slow responses can land
   // out of order and render a stale result set.
