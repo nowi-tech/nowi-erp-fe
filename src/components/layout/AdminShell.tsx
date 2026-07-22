@@ -87,6 +87,9 @@ const NAV_SECTIONS: NavSection[] = [
     items: [
       // Unified office Home — every office role lands here.
       { to: '/', end: true, icon: <LayoutDashboard size={18} />, labelKey: 'admin.nav.dashboard', roles: OFFICE_ROLES },
+      // Sits directly under Sampling: production work starts from the
+      // forecast, so it belongs in the main flow, not buried in Analytics.
+      { to: '/admin/production', icon: <Factory size={18} />, labelKey: 'admin.nav.productionPipeline', roles: [...PRODUCTION_READ_ROLES] },
       // Old Sampling registry (the legacy Styles page). RETIRED from the nav —
       // the Dashboard ("Sampling") is now the single sampling surface. The
       // /styles ROUTE stays (the dashboard drill-down + intake still use it),
@@ -95,7 +98,7 @@ const NAV_SECTIONS: NavSection[] = [
       // ponytail: empty roles = hidden from all (roles.some(...) is false).
       { to: '/styles', end: true, icon: <Shirt size={18} />, labelKey: 'admin.nav.styles', roles: [] },
       // Locator (labelled "Production") is RETIRED from the nav — it collided
-      // with the Production pipeline board in Analytics, which is the surface
+      // with the Production pipeline board above, which is the surface
       // production work actually starts from. The /admin/locator ROUTE stays
       // live (SKU drill-down still links to it); only the entry is hidden.
       // ponytail: empty roles = hidden from all (roles.some(...) is false).
@@ -110,7 +113,6 @@ const NAV_SECTIONS: NavSection[] = [
       // stays within the first 4 flattened items so it keeps its mobile bottom-nav
       // slot; Sales KPIs moves into the "More" overflow on mobile.
       { to: '/admin/analytics/inventory-health', icon: <HeartPulse size={18} />, labelKey: 'admin.nav.inventoryHealth', roles: [...PRODUCTION_READ_ROLES] },
-      { to: '/admin/production', icon: <Factory size={18} />, labelKey: 'admin.nav.productionPipeline', roles: [...PRODUCTION_READ_ROLES] },
       { to: '/admin/production-kpis', icon: <BarChart3 size={18} />, labelKey: 'admin.nav.productionKpis', roles: ['admin', 'viewer', 'production_lead'] },
       { to: '/admin/sales-kpis', icon: <TrendingUp size={18} />, labelKey: 'admin.nav.salesKpis', roles: ['admin', 'viewer'] },
       { to: '/admin/analytics/fulfilment', icon: <LineChart size={18} />, labelKey: 'admin.nav.analyticsFulfilment', roles: ['admin', 'viewer'] },
