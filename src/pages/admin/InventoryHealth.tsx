@@ -990,10 +990,16 @@ function CopyButton({ text, label }: { text: string; label: string }): ReactNode
       aria-label={label}
       onClick={(e) => {
         e.stopPropagation();
-        void navigator.clipboard?.writeText(text).then(() => {
-          setCopied(true);
-          window.setTimeout(() => setCopied(false), 1200);
-        });
+        void navigator.clipboard
+          ?.writeText(text)
+          .then(() => {
+            setCopied(true);
+            window.setTimeout(() => setCopied(false), 1200);
+          })
+          .catch(() => {
+            // Clipboard blocked (denied permission / insecure context) — the
+            // check-mark just won't show; don't leave the rejection unhandled.
+          });
       }}
       className="shrink-0 rounded p-0.5 text-neutral-400 transition hover:bg-neutral-100 hover:text-neutral-700"
     >
