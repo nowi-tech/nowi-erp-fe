@@ -22,6 +22,7 @@ import {
   type ProductionKpis,
 } from '@/api/production';
 import { getInventoryHealth, type InventoryStyle } from '@/api/inventoryHealth';
+import { UrgencyPill } from '@/pages/admin/InventoryHealth';
 import { useAuth } from '@/context/auth';
 import {
   hasAnyRole,
@@ -89,6 +90,9 @@ export default function Production() {
     setError(false);
     try {
       if (tab === 'to_start') {
+        // No `filter` / `sortKey`: that is exactly what the Inventory Health
+        // page sends by default, so this tab inherits its priority ranking
+        // (out/critical first, then watch, by revenue-at-risk per day).
         const res = await getInventoryHealth({ limit: PAGE_SIZE, search: search || undefined });
         // Anything the forecast says needs making. Sizes with a batch already
         // running have had their makeQty reduced by the pipeline already.
@@ -373,9 +377,20 @@ function ToStartTable({
               <div className="h-10 w-10 shrink-0 rounded bg-[var(--color-muted)]" />
             )}
             <div className="min-w-0 flex-1">
-              <div className="truncate text-sm font-semibold">{s.name ?? s.styleKey}</div>
+              <div className="flex items-center gap-2">
+                <span className="truncate text-sm font-semibold">{s.name ?? s.styleKey}</span>
+                <UrgencyPill urgency={s.worstUrgency} />
+              </div>
               <div className="truncate font-mono text-[11px] text-[var(--color-muted-foreground)]">
                 {s.styleKey}
+              </div>
+            </div>
+            <div className="w-20 text-right">
+              <div className="text-sm font-semibold">
+                {s.sizes.reduce((a, z) => a + z.atRiskUnitsPerDay, 0).toFixed(1)}
+              </div>
+              <div className="text-[10px] uppercase tracking-wider text-[var(--color-muted-foreground)]">
+                {t('admin.production.atRisk', { defaultValue: 'at risk/d' })}
               </div>
             </div>
             <div className="w-28 text-xs text-[var(--color-muted-foreground)]">

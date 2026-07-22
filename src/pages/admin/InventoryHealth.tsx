@@ -1243,7 +1243,9 @@ function SortHeader({
   );
 }
 
-function UrgencyPill({ urgency }: { urgency: Urgency }): ReactNode {
+/** Exported so the Production board's "To start" tab shows the SAME priority
+ *  signal this page ranks by — one tone map, no duplicate colour table. */
+export function UrgencyPill({ urgency }: { urgency: Urgency }): ReactNode {
   const u = URG[urgency];
   // Neutral chrome; the dot carries the meaning-colour (red/amber/grey).
   return (
