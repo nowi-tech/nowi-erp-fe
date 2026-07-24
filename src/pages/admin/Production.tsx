@@ -296,14 +296,14 @@ export default function Production() {
     () => [
       {
         key: 'to_start' as const,
-        label: t('admin.production.tabs.toStart', { defaultValue: 'To start' }),
+        label: t('admin.production.tabs.toStart', { defaultValue: 'Suggested' }),
         // Only trustworthy once every page is in: the makeQty trim is
         // client-side, so a partial load would understate the backlog.
         count: loaded >= total ? suggestions.length : undefined,
       },
       {
         key: 'in_production' as const,
-        label: t('admin.production.tabs.inProduction', { defaultValue: 'In production' }),
+        label: t('admin.production.tabs.inProduction', { defaultValue: 'Planning' }),
         count: kpis?.inProductionBatches,
       },
       {
@@ -566,8 +566,8 @@ function ToStartTable({
     'text-[10.5px] font-semibold uppercase tracking-wider text-[var(--color-muted-foreground)]';
   // One template for the header and every row, so the columns line up.
   const ROW = 'flex items-center gap-4 px-4';
-  // Fixed Style column so headers and rows line up regardless of name length;
-  // a flex spacer after it absorbs the slack and keeps the numbers right-aligned.
+  // Fixed Style column so it never stretches with the name; columns pack left
+  // at their natural widths, leaving any slack on the right (no mid-row gap).
   const STYLE_COL = 'w-72';
 
   if (styles.length === 0) {
@@ -587,7 +587,6 @@ function ToStartTable({
         <span className="w-4 shrink-0" />
         <span className="w-10 shrink-0" />
         <span className={`${STYLE_COL} ${head}`}>{t('admin.production.style', { defaultValue: 'Style' })}</span>
-        <span className="flex-1" />
         <span className={`w-24 ${head}`}>{t('admin.production.sizes', { defaultValue: 'Sizes' })}</span>
         <span className={`w-16 text-right ${head}`}>{t('admin.production.stock', { defaultValue: 'Stock' })}</span>
         <span className={`w-16 text-right ${head}`}>{t('admin.production.drr', { defaultValue: 'DRR/d' })}</span>
@@ -637,7 +636,6 @@ function ToStartTable({
                   />
                 )}
               </div>
-              <div className="flex-1" />
               <div className="w-24 text-xs text-[var(--color-muted-foreground)]">
                 {t('admin.production.sizesNeeding', {
                   defaultValue: '{{n}} of {{total}} sizes',
