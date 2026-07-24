@@ -108,6 +108,8 @@ export interface InventoryHealthParams {
   search?: string;
   sortKey?: string | null;
   sortDir?: 'asc' | 'desc';
+  /** Production Suggested tab: hide styles that already have an open batch. */
+  excludeInProduction?: boolean;
 }
 
 /** GET /api/inventory-health — one page of the per-size stockout forecast.
@@ -123,6 +125,7 @@ export function getInventoryHealth(params: InventoryHealthParams = {}): Promise<
   if (params.search) q.search = params.search;
   if (params.sortKey) q.sortKey = params.sortKey;
   if (params.sortDir) q.sortDir = params.sortDir;
+  if (params.excludeInProduction) q.excludeInProduction = '1';
   return apiClient.get<InventoryHealthResponse>('/api/inventory-health', { params: q }).then((r) => r.data);
 }
 

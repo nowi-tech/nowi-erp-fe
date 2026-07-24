@@ -8,10 +8,9 @@ import { TruncText } from '@/components/ui/trunc-text';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { ConfirmDialog } from '@/components/ui/confirm-dialog';
-import StartProductionDialog, {
-  type StartProductionTarget,
-} from '@/components/production/StartProductionDialog';
 import RecordOutputDialog from '@/components/production/RecordOutputDialog';
+import SendToProductionDialog from '@/components/production/SendToProductionDialog';
+import StartProductionIntakeDialog from '@/components/production/StartProductionIntakeDialog';
 import {
   ADVANCEABLE_STATUSES,
   advanceBatch,
@@ -19,6 +18,9 @@ import {
   completeBatch,
   createBatch,
   getBatches,
+  parkStyle,
+  sendToProduction,
+  unparkStyle,
   type BatchOrigin,
   type BatchStatus,
   type CreateBatchBody,
@@ -36,7 +38,7 @@ import {
   PRODUCTION_WRITE_ROLES,
 } from '@/lib/userRoles';
 
-type Tab = 'to_start' | 'in_production' | 'completed';
+type Tab = 'to_start' | 'planning' | 'in_production' | 'completed' | 'parked';
 
 const PAGE_SIZE = 50;
 
@@ -44,7 +46,7 @@ const PAGE_SIZE = 50;
 // Fixed Style column (288px, matching the To-start STYLE_COL) so it never
 // stretches with the name; the Sizes column (1fr) absorbs the row's slack.
 const BATCH_GRID =
-  'grid grid-cols-[22px_288px_96px_minmax(0,1fr)_70px_90px_140px_78px_180px] items-center gap-3 px-4';
+  'grid grid-cols-[22px_256px_92px_minmax(0,1fr)_64px_84px_128px_64px_92px_236px] items-center gap-3 px-4';
 
 type T = ReturnType<typeof useTranslation>['t'];
 
@@ -98,9 +100,14 @@ export default function Production() {
   const canWrite = hasAnyRole(user, PRODUCTION_WRITE_ROLES);
   const canCancel = hasAnyRole(user, PRODUCTION_CANCEL_ROLES);
 
-  // Opens on the queue, not the backlog: the first question is "what should
-  // I start?", and that tab is the forecast's own priority order.
-  const [tab, setTab] = useState<Tab>('to_start');
+  // Opens on the queue by default ("what should I start?"), but honours ?tab=
+  // so other pages can deep-link here — e.g. starting a batch elsewhere lands
+  // on the Planning tab, its new home.
+  const TABS: Tab[] = ['to_start', 'planning', 'in_production', 'completed', 'parked'];
+  const initialTab = searchParams.get('tab') as Tab | null;
+  const [tab, setTab] = useState<Tab>(
+    initialTab && TABS.includes(initialTab) ? initialTab : 'to_start',
+  );
   const [search, setSearch] = useState(() => searchParams.get('q') ?? '');
   // Every keystroke would otherwise fire a request, and slow responses can land
   // out of order and render a stale result set.
@@ -132,9 +139,11 @@ export default function Production() {
   const [expandedStyles, setExpandedStyles] = useState<Record<string, boolean>>({});
   const [busy, setBusy] = useState(false);
 
-  const [startTarget, setStartTarget] = useState<StartProductionTarget | null>(null);
+  const [intakeOpen, setIntakeOpen] = useState(false);
   const [outputTarget, setOutputTarget] = useState<ProductionBatch | null>(null);
+  const [sendTarget, setSendTarget] = useState<ProductionBatch | null>(null);
   const [cancelTarget, setCancelTarget] = useState<ProductionBatch | null>(null);
+  const [dropTarget, setDropTarget] = useState<InventoryStyle | null>(null);
 
   const loadKpis = useCallback(async () => {
     // Board-level figures live on the batches endpoint; `take: 1` because we
@@ -145,14 +154,21 @@ export default function Production() {
 
   const fetchPage = useCallback(
     async (skip: number) => {
-      if (tab === 'to_start') {
+      if (tab === 'to_start' || tab === 'parked') {
         const res = await getInventoryHealth({
           skip,
           limit: PAGE_SIZE,
           search: debouncedSearch || undefined,
+          filter: tab === 'parked' ? 'parked' : undefined,
+          // Suggested drops any style already in Planning/Production (dedup).
+          excludeInProduction: tab === 'to_start',
         });
+        const styles =
+          tab === 'parked'
+            ? res.styles
+            : res.styles.filter((x) => !x.discontinued && x.sizes.some((z) => z.makeQty > 0));
         return {
-          styles: res.styles.filter((x) => x.sizes.some((z) => z.makeQty > 0)),
+          styles,
           batches: [] as ProductionBatch[],
           raw: res.styles.length,
           total: res.total,
@@ -254,18 +270,37 @@ export default function Production() {
     void loadKpis();
   }, [loadKpis]);
 
-  const refresh = useCallback(async () => {
-    await Promise.all([load(), loadKpis()]);
-  }, [load, loadKpis]);
+  // Patch ONE batch into the visible list without a full reload — so a stage
+  // change repaints just that row instead of blinking the whole table. If the
+  // update takes the batch out of the current tab (completed leaves Planning,
+  // cancelled leaves both) it's removed; otherwise replaced in place.
+  const applyBatch = useCallback(
+    (updated: ProductionBatch) => {
+      const inTab =
+        tab === 'planning'
+          ? updated.status === 'planning'
+          : tab === 'completed'
+            ? updated.status === 'completed'
+            : updated.status === 'cutting' ||
+              updated.status === 'stitching' ||
+              updated.status === 'finishing';
+      setBatches((prev) => {
+        if (!inTab) return prev.filter((b) => b.id !== updated.id);
+        return prev.some((b) => b.id === updated.id)
+          ? prev.map((b) => (b.id === updated.id ? updated : b))
+          : [updated, ...prev];
+      });
+      void loadKpis(); // KPI cards are separate state — updating them can't blink the list
+    },
+    [tab, loadKpis],
+  );
 
-  const run = async (fn: () => Promise<unknown>) => {
+  // A batch mutation that returns the updated batch; patch it in place.
+  const runAction = async (fn: () => Promise<ProductionBatch>) => {
     setBusy(true);
     try {
-      await fn();
-      await refresh();
+      applyBatch(await fn());
     } catch {
-      // Without this every mutation failed silently: the controlled <select>
-      // just snapped back and the dialogs stayed open with no explanation.
       toast.show(
         t('admin.production.actionFailed', {
           defaultValue: "That didn't go through. Refresh and try again.",
@@ -277,41 +312,124 @@ export default function Production() {
     }
   };
 
-  const onStart = (body: CreateBatchBody) =>
-    run(async () => {
-      await createBatch(body);
-      setStartTarget(null);
-    });
+  const onStart = (body: CreateBatchBody) => {
+    setBusy(true);
+    // Direct-to-production opens on the floor; otherwise it lands in Planning.
+    const dest: Tab = body.directToProduction ? 'in_production' : 'planning';
+    createBatch(body)
+      .then(() => {
+        setIntakeOpen(false);
+        toast.show(
+          body.directToProduction
+            ? t('admin.production.started', { defaultValue: 'Sent to production.' })
+            : t('admin.production.plannedToast', { defaultValue: 'Added to planning.' }),
+        );
+        void loadKpis(); // KPI cards are separate state — refresh after a create.
+        setTab(dest);
+      })
+      .catch(() =>
+        toast.show(
+          t('admin.production.startFailed', { defaultValue: "Couldn't start production." }),
+          'error',
+        ),
+      )
+      .finally(() => setBusy(false));
+  };
+
+  // Suggested → Planning: no quantity prompt. Create a planning batch straight
+  // from the forecast, seeding qtyPlanned from the make-qty per size.
+  const onAddToPlanning = (style: InventoryStyle) => {
+    const needing = style.sizes.filter((z) => z.makeQty > 0);
+    if (needing.length === 0) return;
+    setBusy(true);
+    createBatch({
+      origin: 'forecast',
+      styleKey: style.styleKey,
+      styleId: style.linkedStyleId ?? undefined,
+      items: needing.map((z) => ({
+        sku: z.sku,
+        size: z.size,
+        qtyPlanned: z.makeQty,
+        suggestedQty: z.makeQty,
+      })),
+    })
+      .then(() => {
+        // Drop it from Suggested in place, then reveal the Planning tab.
+        setSuggestions((prev) => prev.filter((x) => x.styleKey !== style.styleKey));
+        toast.show(t('admin.production.plannedToast', { defaultValue: 'Added to planning.' }));
+        void loadKpis();
+        setTab('planning');
+      })
+      .catch(() =>
+        toast.show(
+          t('admin.production.startFailed', { defaultValue: "Couldn't add to planning." }),
+          'error',
+        ),
+      )
+      .finally(() => setBusy(false));
+  };
 
   const onRecordOutput = (items: { sku: string; qtyProduced: number }[], reason?: string) => {
     const target = outputTarget;
     if (!target) return;
-    return run(async () => {
-      await completeBatch(target.id, items, reason);
+    return runAction(async () => {
+      const updated = await completeBatch(target.id, items, reason);
       setOutputTarget(null);
+      return updated;
     });
   };
+
+  const onSend = (items: { sku: string; qtyPlanned: number }[]) => {
+    const target = sendTarget;
+    if (!target) return;
+    return runAction(async () => {
+      const updated = await sendToProduction(target.id, items);
+      setSendTarget(null);
+      return updated;
+    });
+  };
+
+  // Park (Drop) or un-park (Restore) a style, removing the row in place.
+  const setParked = async (styleKey: string, parked: boolean) => {
+    setBusy(true);
+    try {
+      await (parked ? parkStyle(styleKey) : unparkStyle(styleKey));
+      setSuggestions((prev) => prev.filter((x) => x.styleKey !== styleKey));
+    } catch {
+      toast.show(
+        t('admin.production.parkFailed', { defaultValue: "Couldn't update this style." }),
+        'error',
+      );
+    } finally {
+      setBusy(false);
+    }
+  };
+  const onDrop = (styleKey: string) => setParked(styleKey, true);
 
   const tabs = useMemo(
     () => [
       {
         key: 'to_start' as const,
         label: t('admin.production.tabs.toStart', { defaultValue: 'Suggested' }),
-        // Only trustworthy once every page is in: the makeQty trim is
-        // client-side, so a partial load would understate the backlog.
-        count: loaded >= total ? suggestions.length : undefined,
+      },
+      {
+        key: 'planning' as const,
+        label: t('admin.production.tabs.planning', { defaultValue: 'Planning' }),
       },
       {
         key: 'in_production' as const,
-        label: t('admin.production.tabs.inProduction', { defaultValue: 'Planning' }),
-        count: kpis?.inProductionBatches,
+        label: t('admin.production.tabs.inProduction', { defaultValue: 'Production' }),
       },
       {
         key: 'completed' as const,
         label: t('admin.production.tabs.completed', { defaultValue: 'Completed' }),
       },
+      {
+        key: 'parked' as const,
+        label: t('admin.production.tabs.parked', { defaultValue: 'Parked' }),
+      },
     ],
-    [t, suggestions.length, loaded, total, kpis],
+    [t],
   );
 
   return (
@@ -327,8 +445,8 @@ export default function Production() {
             })}
           </p>
         </div>
-        {canWrite && tab !== 'to_start' && (
-          <Button size="sm" onClick={() => setTab('to_start')}>
+        {canWrite && (
+          <Button size="sm" onClick={() => setIntakeOpen(true)}>
             <Factory size={14} />
             <span className="ml-1">
               {t('admin.production.startCta', { defaultValue: 'Start production' })}
@@ -337,7 +455,7 @@ export default function Production() {
         )}
       </div>
 
-      <KpiRow kpis={kpis} />
+      <KpiRow kpis={kpis} onTab={setTab} />
 
       <QueueTabs tabs={tabs} active={tab} onSelect={setTab} />
 
@@ -416,13 +534,17 @@ export default function Production() {
         <div className="rounded-[var(--radius-md)] border border-[var(--color-border)] p-8 text-sm text-[var(--color-destructive)]">
           {t('admin.production.loadError', { defaultValue: "Couldn't load production data." })}
         </div>
-      ) : tab === 'to_start' ? (
+      ) : tab === 'to_start' || tab === 'parked' ? (
         <ToStartTable
           styles={suggestions}
           canWrite={canWrite}
+          busy={busy}
+          parked={tab === 'parked'}
           expanded={expandedStyles}
           onToggle={(k) => setExpandedStyles((p) => ({ ...p, [k]: !p[k] }))}
-          onStart={(target) => setStartTarget(target)}
+          onAddToPlanning={onAddToPlanning}
+          onDrop={(style) => setDropTarget(style)}
+          onRestore={(k) => void setParked(k, false)}
         />
       ) : (
         <BatchTable
@@ -433,8 +555,9 @@ export default function Production() {
           busy={busy}
           expanded={expanded}
           onToggle={(id) => setExpanded((p) => ({ ...p, [id]: !p[id] }))}
-          onStage={(b, status) => void run(() => advanceBatch(b.id, status))}
+          onStage={(b, status) => void runAction(() => advanceBatch(b.id, status))}
           onComplete={(b) => setOutputTarget(b)}
+          onSend={(b) => setSendTarget(b)}
           onCancel={(b) => setCancelTarget(b)}
         />
       )}
@@ -454,13 +577,6 @@ export default function Production() {
         </div>
       )}
 
-      <StartProductionDialog
-        open={startTarget !== null}
-        busy={busy}
-        target={startTarget}
-        onClose={() => setStartTarget(null)}
-        onConfirm={onStart}
-      />
       <RecordOutputDialog
         open={outputTarget !== null}
         busy={busy}
@@ -468,15 +584,28 @@ export default function Production() {
         onClose={() => setOutputTarget(null)}
         onConfirm={onRecordOutput}
       />
+      <SendToProductionDialog
+        open={sendTarget !== null}
+        busy={busy}
+        batch={sendTarget}
+        onClose={() => setSendTarget(null)}
+        onConfirm={onSend}
+      />
+      <StartProductionIntakeDialog
+        open={intakeOpen}
+        busy={busy}
+        onClose={() => setIntakeOpen(false)}
+        onConfirm={onStart}
+      />
       <ConfirmDialog
         open={cancelTarget !== null}
-        title={t('admin.production.cancel.title', { defaultValue: 'Cancel this batch?' })}
+        title={t('admin.production.cancel.title', { defaultValue: 'Dismiss this batch?' })}
         message={t('admin.production.cancel.message', {
           defaultValue:
-            'Batch {{no}} will stop counting toward the forecast immediately. This cannot be undone.',
+            'Batch {{no}} will be dismissed and stop counting toward the forecast immediately. This cannot be undone.',
           no: cancelTarget?.batchNo ?? '',
         })}
-        confirmLabel={t('admin.production.cancel.confirm', { defaultValue: 'Cancel batch' })}
+        confirmLabel={t('admin.production.cancel.confirm', { defaultValue: 'Dismiss' })}
         cancelLabel={t('admin.production.cancel.keep', { defaultValue: 'Keep it' })}
         destructive
         onCancel={() => setCancelTarget(null)}
@@ -484,66 +613,96 @@ export default function Production() {
           const target = cancelTarget;
           setCancelTarget(null);
           if (target) {
-            void run(() =>
+            void runAction(() =>
               cancelBatch(
                 target.id,
                 t('admin.production.cancel.reason', {
-                  defaultValue: 'Cancelled from the production board',
+                  defaultValue: 'Dismissed from the production board',
                 }),
               ),
             );
           }
         }}
       />
+      <ConfirmDialog
+        open={dropTarget !== null}
+        title={t('admin.production.drop.title', { defaultValue: 'Drop this style?' })}
+        message={t('admin.production.drop.message', {
+          defaultValue:
+            '{{name}} will be parked and removed from the suggested queue. Re-enable it from Inventory Health.',
+          name: dropTarget?.erpStyleId ?? dropTarget?.styleKey ?? '',
+        })}
+        confirmLabel={t('admin.production.drop.confirm', { defaultValue: 'Drop' })}
+        cancelLabel={t('common.cancel', { defaultValue: 'Cancel' })}
+        destructive
+        onCancel={() => setDropTarget(null)}
+        onConfirm={() => {
+          const k = dropTarget?.styleKey;
+          setDropTarget(null);
+          if (k) void onDrop(k);
+        }}
+      />
     </div>
   );
 }
 
-function KpiRow({ kpis }: { kpis: ProductionKpis | null }) {
+function KpiRow({
+  kpis,
+  onTab,
+}: {
+  kpis: ProductionKpis | null;
+  onTab: (tab: Tab) => void;
+}) {
   const { t } = useTranslation();
-  const card = 'rounded-[var(--radius-md)] border border-[var(--color-border)] bg-[var(--color-surface)] p-4';
+  const card =
+    'rounded-[var(--radius-md)] border border-[var(--color-border)] bg-[var(--color-surface)] p-4 text-left transition hover:border-[var(--color-primary)]/50 hover:bg-[var(--color-surface-2)]/40';
   const label = 'text-[11px] font-semibold uppercase tracking-wider text-[var(--color-muted-foreground)]';
   const value = 'mt-2 text-2xl font-bold tracking-tight';
 
   return (
-    <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
-      <div className={card}>
+    <div className="grid grid-cols-2 gap-4 lg:grid-cols-5">
+      <button type="button" className={card} onClick={() => onTab('planning')}>
         <div className={label}>
-          {t('admin.production.kpi.openBatches', { defaultValue: 'Open batches' })}
+          {t('admin.production.kpi.planning', { defaultValue: 'In planning' })}
         </div>
-        <div className={value}>{kpis?.openBatches ?? '—'}</div>
-      </div>
-      <div className={card}>
+        <div className={value}>{kpis?.planningBatches ?? '—'}</div>
+      </button>
+      <button type="button" className={card} onClick={() => onTab('in_production')}>
+        <div className={label}>
+          {t('admin.production.kpi.inProduction', { defaultValue: 'On the floor' })}
+        </div>
+        <div className={value}>{kpis?.inProductionBatches ?? '—'}</div>
+      </button>
+      <button type="button" className={card} onClick={() => onTab('in_production')}>
         <div className={label}>
           {t('admin.production.kpi.unitsInPipeline', { defaultValue: 'Units in pipeline' })}
         </div>
         <div className={value}>{kpis?.unitsInPipeline?.toLocaleString() ?? '—'}</div>
-        {/* Split by origin: "counting toward forecast" is only true for the
-            forecast share — a style-origin batch may have no forecast row at all. */}
         {kpis && (
           <div className="mt-1 text-xs text-[var(--color-muted-foreground)]">
             {t('admin.production.kpi.originSplit', {
-              defaultValue: '{{f}} forecast · {{s}} style',
+              defaultValue: '{{f}} forecast · {{s}} style · {{e}} external',
               f: kpis.unitsByOrigin.forecast,
               s: kpis.unitsByOrigin.style,
+              e: kpis.unitsByOrigin.external,
             })}
           </div>
         )}
-      </div>
-      <div className={card}>
+      </button>
+      <button type="button" className={card} onClick={() => onTab('completed')}>
         <div className={label}>
           {t('admin.production.kpi.completedThisWeek', { defaultValue: 'Completed this week' })}
         </div>
         <div className={value}>{kpis?.completedThisWeek?.toLocaleString() ?? '—'}</div>
-      </div>
-      <div className={card}>
+      </button>
+      <button type="button" className={card} onClick={() => onTab('in_production')}>
         <div className={label}>
           {t('admin.production.kpi.avgBatchAge', { defaultValue: 'Avg batch age' })}
         </div>
         <div className={value}>
           {kpis?.avgBatchAgeDays != null ? `${kpis.avgBatchAgeDays}d` : '—'}
         </div>
-      </div>
+      </button>
     </div>
   );
 }
@@ -551,24 +710,32 @@ function KpiRow({ kpis }: { kpis: ProductionKpis | null }) {
 function ToStartTable({
   styles,
   canWrite,
+  busy,
+  parked,
   expanded,
   onToggle,
-  onStart,
+  onAddToPlanning,
+  onDrop,
+  onRestore,
 }: {
   styles: InventoryStyle[];
   canWrite: boolean;
+  busy: boolean;
+  parked?: boolean;
   expanded: Record<string, boolean>;
   onToggle: (styleKey: string) => void;
-  onStart: (target: StartProductionTarget) => void;
+  onAddToPlanning: (style: InventoryStyle) => void;
+  onDrop: (style: InventoryStyle) => void;
+  onRestore?: (styleKey: string) => void;
 }) {
   const { t } = useTranslation();
   const head =
     'text-[10.5px] font-semibold uppercase tracking-wider text-[var(--color-muted-foreground)]';
-  // One template for the header and every row, so the columns line up.
-  const ROW = 'flex items-center gap-4 px-4';
-  // Fixed Style column so it never stretches with the name; columns pack left
-  // at their natural widths, leaving any slack on the right (no mid-row gap).
-  const STYLE_COL = 'w-72';
+  // Even data columns (equal fr) with a bounded Style column; the action column
+  // is content-sized. gap-6 before nothing extra — actions get their own left
+  // padding so the red Cover isn't crowding the button.
+  const ROW =
+    'grid grid-cols-[22px_40px_minmax(220px,1.6fr)_1fr_1fr_1fr_1fr_1fr_264px] items-center gap-5 px-4 min-w-[1080px]';
 
   if (styles.length === 0) {
     return (
@@ -581,18 +748,18 @@ function ToStartTable({
   }
 
   return (
-    <div className="overflow-hidden rounded-[var(--radius-md)] border border-[var(--color-border)] bg-[var(--color-surface)]">
+    <div className="overflow-x-auto rounded-[var(--radius-md)] border border-[var(--color-border)] bg-[var(--color-surface)]">
       {/* Header row \u2014 names every column below. */}
       <div className={`${ROW} border-b border-[var(--color-border)] bg-[var(--color-surface-2)] py-2.5`}>
-        <span className="w-4 shrink-0" />
-        <span className="w-10 shrink-0" />
-        <span className={`${STYLE_COL} ${head}`}>{t('admin.production.style', { defaultValue: 'Style' })}</span>
-        <span className={`w-24 ${head}`}>{t('admin.production.sizes', { defaultValue: 'Sizes' })}</span>
-        <span className={`w-16 text-right ${head}`}>{t('admin.production.stock', { defaultValue: 'Stock' })}</span>
-        <span className={`w-16 text-right ${head}`}>{t('admin.production.drr', { defaultValue: 'DRR/d' })}</span>
-        <span className={`w-20 text-right ${head}`}>{t('admin.production.toMake', { defaultValue: 'To make' })}</span>
-        <span className={`w-16 text-right ${head}`}>{t('admin.production.cover', { defaultValue: 'Cover' })}</span>
-        {canWrite && <span className="w-[188px] shrink-0" />}
+        <span />
+        <span />
+        <span className={head}>{t('admin.production.style', { defaultValue: 'Style' })}</span>
+        <span className={head}>{t('admin.production.sizes', { defaultValue: 'Sizes' })}</span>
+        <span className={`text-right ${head}`}>{t('admin.production.stock', { defaultValue: 'Stock' })}</span>
+        <span className={`text-right ${head}`}>{t('admin.production.drr', { defaultValue: 'DRR/d' })}</span>
+        <span className={`text-right ${head}`}>{t('admin.production.toMake', { defaultValue: 'To make' })}</span>
+        <span className={`text-right ${head}`}>{t('admin.production.cover', { defaultValue: 'Cover' })}</span>
+        <span />
       </div>
 
       {styles.map((s) => {
@@ -622,13 +789,11 @@ function ToStartTable({
                 className={`w-4 shrink-0 text-[var(--color-muted-foreground)] transition-transform ${isOpen ? 'rotate-90' : ''}`}
               />
               <HoverThumbnail src={s.imageUrl} alt={s.name ?? s.styleKey} size={40} />
-              <div className={`${STYLE_COL} min-w-0`}>
-                <div className="flex items-center gap-2">
-                  <span className="min-w-0 flex-1">
-                    <TruncText text={s.erpStyleId ?? s.styleKey} className="text-sm font-semibold" />
-                  </span>
+              <div className="min-w-0">
+                <div className="mb-0.5">
                   <UrgencyPill urgency={s.worstUrgency} />
                 </div>
+                <TruncText text={s.erpStyleId ?? s.styleKey} className="text-sm font-semibold" />
                 {meaningfulName(s) && (
                   <TruncText
                     text={meaningfulName(s)!}
@@ -636,55 +801,64 @@ function ToStartTable({
                   />
                 )}
               </div>
-              <div className="w-24 text-xs text-[var(--color-muted-foreground)]">
+              <div className="text-xs text-[var(--color-muted-foreground)]">
                 {t('admin.production.sizesNeeding', {
                   defaultValue: '{{n}} of {{total}} sizes',
                   n: needing.length,
                   total: s.sizes.length,
                 })}
               </div>
-              <div className="w-16 text-right text-sm">{totalStock}</div>
-              <div className="w-16 text-right text-sm text-[var(--color-muted-foreground)]">
+              <div className="text-right text-sm">{totalStock}</div>
+              <div className="text-right text-sm text-[var(--color-muted-foreground)]">
                 {totalDrr.toFixed(1)}
               </div>
-              <div className="w-20 text-right text-base font-bold">{s.makeTotal}</div>
+              <div className="text-right text-base font-bold">{s.makeTotal}</div>
               <div
-                className={`w-16 text-right text-sm font-semibold ${coverTone(covers.length > 0 ? Math.min(...covers) : null)}`}
+                className={`text-right text-sm font-semibold ${coverTone(covers.length > 0 ? Math.min(...covers) : null)}`}
               >
                 {covers.length > 0 ? `${Math.min(...covers).toFixed(1)}d` : '\u2014'}
               </div>
-              {canWrite && (
-                <div className="w-[188px] shrink-0">
+              <div className="flex items-center justify-end gap-2 pl-2">
+                {canWrite && parked && (
                   <Button
                     size="sm"
+                    disabled={busy}
                     onClick={(e) => {
                       e.stopPropagation();
-                      onStart({
-                        origin: 'forecast',
-                        styleKey: s.styleKey,
-                        styleId: s.linkedStyleId ?? undefined,
-                        styleRef: s.erpStyleId,
-                        name: meaningfulName(s),
-                        imageUrl: s.imageUrl,
-                        worstCoverDays: covers.length > 0 ? Math.min(...covers) : null,
-                        drr: totalDrr,
-                        totalStock,
-                        sizes: s.sizes.map((z) => ({
-                          sku: z.sku,
-                          size: z.size,
-                          suggestedQty: z.makeQty,
-                          coverDays: z.coverDays,
-                          currentStock: z.currentStock,
-                        })),
-                      });
+                      onRestore?.(s.styleKey);
                     }}
                   >
-                    {t('admin.production.addToPipeline', {
-                      defaultValue: 'Add to production pipeline',
-                    })}
+                    {t('admin.production.restore', { defaultValue: 'Restore' })}
                   </Button>
-                </div>
-              )}
+                )}
+                {canWrite && !parked && (
+                  <>
+                    <Button
+                      size="sm"
+                      disabled={busy}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        onAddToPlanning(s);
+                      }}
+                    >
+                      {t('admin.production.addToPlanning', {
+                        defaultValue: 'Add to planning',
+                      })}
+                    </Button>
+                    <Button
+                      variant="destructive"
+                      size="sm"
+                      disabled={busy}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        onDrop(s);
+                      }}
+                    >
+                      {t('admin.production.drop', { defaultValue: 'Drop' })}
+                    </Button>
+                  </>
+                )}
+              </div>
             </div>
 
             {isOpen && (
@@ -700,7 +874,8 @@ function ToStartTable({
                     </tr>
                   </thead>
                   <tbody>
-                    {s.sizes.map((z) => (
+                    {/* Only the sizes that need making \u2014 not every SKU on the style. */}
+                    {needing.map((z) => (
                       <tr key={z.sku} className="border-t border-[var(--color-border)]/50">
                         <td className="py-1.5 font-semibold">{z.size}</td>
                         <td className="py-1.5 font-mono text-xs text-[var(--color-muted-foreground)]">{z.sku}</td>
@@ -732,6 +907,7 @@ function BatchTable({
   onToggle,
   onStage,
   onComplete,
+  onSend,
   onCancel,
 }: {
   rows: ProductionBatch[];
@@ -743,6 +919,7 @@ function BatchTable({
   onToggle: (id: number) => void;
   onStage: (batch: ProductionBatch, status: BatchStatus) => void;
   onComplete: (batch: ProductionBatch) => void;
+  onSend: (batch: ProductionBatch) => void;
   onCancel: (batch: ProductionBatch) => void;
 }) {
   const { t } = useTranslation();
@@ -759,7 +936,7 @@ function BatchTable({
 
   return (
     <div className="overflow-x-auto rounded-[var(--radius-md)] border border-[var(--color-border)] bg-[var(--color-surface)]">
-      <div className="min-w-[1160px]">
+      <div className="min-w-[1300px]">
         <div
           className={`${BATCH_GRID} border-b border-[var(--color-border)] bg-[var(--color-surface-2)] py-2.5`}
         >
@@ -780,6 +957,7 @@ function BatchTable({
             {t('admin.production.inStatus', { defaultValue: 'In status' })}
           </div>
           <div className={head}>{t('admin.production.started', { defaultValue: 'Started' })}</div>
+          <div />
         </div>
 
         {rows.map((b) => {
@@ -868,14 +1046,14 @@ function BatchTable({
                 </div>
 
                 <div>
-                  {canWrite && tab !== 'completed' ? (
+                  {canWrite && tab === 'in_production' ? (
                     <select
                       value={b.status}
                       disabled={busy}
                       onChange={(e) => onStage(b, e.target.value as BatchStatus)}
                       className="h-8 w-full rounded-[var(--radius-sm)] border border-[var(--color-border)] bg-white px-2 text-xs font-semibold focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-ring)]"
                     >
-                      {ADVANCEABLE_STATUSES.map((s) => (
+                      {(['cutting', 'stitching', 'finishing'] as BatchStatus[]).map((s) => (
                         <option key={s} value={s}>
                           {statusLabel(t, s)}
                         </option>
@@ -890,15 +1068,22 @@ function BatchTable({
 
                 <div className={`text-sm ${ageTone(b.daysInStatus)}`}>{b.daysInStatus}d</div>
 
-                <div className="flex items-center justify-between gap-2">
-                  <div className="min-w-0">
-                    <div className="truncate text-xs">{fmtDate(b.startedAt)}</div>
-                    <div className="truncate text-[11px] text-[var(--color-muted-foreground)]">
-                      {b.createdBy?.name ?? '—'}
-                    </div>
+                <div className="min-w-0">
+                  <div className="truncate text-xs">{fmtDate(b.startedAt)}</div>
+                  <div className="truncate text-[11px] text-[var(--color-muted-foreground)]">
+                    {b.createdBy?.name ?? '—'}
                   </div>
-                  <div className="flex shrink-0 items-center gap-1.5">
-                    {canWrite && tab !== 'completed' && (
+                </div>
+
+                <div className="flex items-center justify-end gap-1.5">
+                    {canWrite && tab === 'planning' && (
+                      <Button size="sm" disabled={busy} onClick={() => onSend(b)}>
+                        {t('admin.production.sendToProduction', {
+                          defaultValue: 'Send to production',
+                        })}
+                      </Button>
+                    )}
+                    {canWrite && tab === 'in_production' && (
                       <Button size="sm" disabled={busy} onClick={() => onComplete(b)}>
                         {t('admin.production.complete', { defaultValue: 'Complete' })}
                       </Button>
@@ -915,18 +1100,14 @@ function BatchTable({
                     )}
                     {canCancel && b.status !== 'dispatched' && (
                       <Button
-                        variant="outline"
+                        variant="destructive"
                         size="sm"
                         disabled={busy}
                         onClick={() => onCancel(b)}
-                        aria-label={t('admin.production.cancelBatch', {
-                          defaultValue: 'Cancel batch',
-                        })}
                       >
-                        <X size={14} />
+                        {t('admin.production.dismiss', { defaultValue: 'Dismiss' })}
                       </Button>
                     )}
-                  </div>
                 </div>
               </div>
 

@@ -1832,6 +1832,9 @@ export default function StylesInFlightTable({
               toast.show(
                 t('admin.production.started', { defaultValue: 'Production started.' }),
               );
+              // Starting from the dashboard creates a planning batch — land on
+              // the Planning tab where it actually shows.
+              navigate('/admin/production?tab=planning');
             })
             .catch(() =>
               toast.show(
