@@ -1,8 +1,10 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
+import { useSearchParams } from 'react-router-dom';
 import { ChevronRight, Factory, Loader2, Search, X } from 'lucide-react';
 import { QueueTabs } from '@/components/styles/StyleQueueTable';
 import { HoverThumbnail } from '@/components/dashboard/StylesInFlightTable';
+import { TruncText } from '@/components/ui/trunc-text';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { ConfirmDialog } from '@/components/ui/confirm-dialog';
@@ -39,8 +41,10 @@ type Tab = 'to_start' | 'in_production' | 'completed';
 const PAGE_SIZE = 50;
 
 /** Grid template shared by the header, the batch rows, and the size sub-rows. */
+// Fixed Style column (288px, matching the To-start STYLE_COL) so it never
+// stretches with the name; the Sizes column (1fr) absorbs the row's slack.
 const BATCH_GRID =
-  'grid grid-cols-[22px_minmax(0,1.4fr)_96px_minmax(0,1fr)_70px_90px_140px_78px_180px] items-center gap-3 px-4';
+  'grid grid-cols-[22px_288px_96px_minmax(0,1fr)_70px_90px_140px_78px_180px] items-center gap-3 px-4';
 
 type T = ReturnType<typeof useTranslation>['t'];
 
@@ -90,16 +94,29 @@ export default function Production() {
   const { t } = useTranslation();
   const { user } = useAuth();
   const toast = useToast();
+  const [searchParams, setSearchParams] = useSearchParams();
   const canWrite = hasAnyRole(user, PRODUCTION_WRITE_ROLES);
   const canCancel = hasAnyRole(user, PRODUCTION_CANCEL_ROLES);
 
   // Opens on the queue, not the backlog: the first question is "what should
   // I start?", and that tab is the forecast's own priority order.
   const [tab, setTab] = useState<Tab>('to_start');
-  const [search, setSearch] = useState('');
+  const [search, setSearch] = useState(() => searchParams.get('q') ?? '');
   // Every keystroke would otherwise fire a request, and slow responses can land
   // out of order and render a stale result set.
   const debouncedSearch = useDebounced(search, 300);
+
+  // Mirror the (debounced) search into ?q= so back-navigation restores it —
+  // the same system the dashboard Sampling tab and Inventory Health use.
+  useEffect(() => {
+    const params = new URLSearchParams(searchParams);
+    const q = debouncedSearch.trim();
+    if (q) params.set('q', q);
+    else params.delete('q');
+    if (params.toString() !== searchParams.toString()) {
+      setSearchParams(params, { replace: true });
+    }
+  }, [debouncedSearch, searchParams, setSearchParams]);
   const [batches, setBatches] = useState<ProductionBatch[]>([]);
   const [suggestions, setSuggestions] = useState<InventoryStyle[]>([]);
   const [kpis, setKpis] = useState<ProductionKpis | null>(null);
@@ -324,26 +341,31 @@ export default function Production() {
 
       <QueueTabs tabs={tabs} active={tab} onSelect={setTab} />
 
-      <div className="flex items-center gap-2">
-        <div className="relative flex-1">
+      <div className="flex flex-wrap items-center gap-2">
+        <div className="relative w-full max-w-sm">
           <Search
-            size={15}
-            className="absolute left-3 top-1/2 -translate-y-1/2 text-[var(--color-muted-foreground)]"
+            size={16}
+            className="absolute left-3 top-1/2 -translate-y-1/2 text-[var(--color-primary)]"
           />
           <Input
-            className="pl-9"
+            className="h-9 text-[13px] pl-9 pr-9 border-[var(--color-primary)]/40 bg-[var(--color-primary-soft)]/30 focus-visible:border-[var(--color-primary)] focus-visible:ring-2 focus-visible:ring-[var(--color-primary)]/25"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             placeholder={t('admin.production.searchPlaceholder', {
               defaultValue: 'Search styles, batches, or SKUs…',
             })}
           />
+          {search && (
+            <button
+              type="button"
+              onClick={() => setSearch('')}
+              aria-label={t('common.clear', { defaultValue: 'Clear' })}
+              className="absolute right-2.5 top-1/2 -translate-y-1/2 text-[var(--color-muted-foreground)] hover:text-[var(--color-foreground)]"
+            >
+              <X size={15} />
+            </button>
+          )}
         </div>
-        {search && (
-          <Button variant="outline" size="sm" onClick={() => setSearch('')}>
-            <X size={14} />
-          </Button>
-        )}
         {tab !== 'to_start' && (
           <>
             <select
@@ -603,15 +625,16 @@ function ToStartTable({
               <HoverThumbnail src={s.imageUrl} alt={s.name ?? s.styleKey} size={40} />
               <div className={`${STYLE_COL} min-w-0`}>
                 <div className="flex items-center gap-2">
-                  <span className="truncate text-sm font-semibold">
-                    {s.erpStyleId ?? s.styleKey}
+                  <span className="min-w-0 flex-1">
+                    <TruncText text={s.erpStyleId ?? s.styleKey} className="text-sm font-semibold" />
                   </span>
                   <UrgencyPill urgency={s.worstUrgency} />
                 </div>
                 {meaningfulName(s) && (
-                  <div className="truncate font-mono text-[11px] text-[var(--color-muted-foreground)]">
-                    {meaningfulName(s)}
-                  </div>
+                  <TruncText
+                    text={meaningfulName(s)!}
+                    className="font-mono text-[11px] text-[var(--color-muted-foreground)]"
+                  />
                 )}
               </div>
               <div className="flex-1" />
@@ -738,7 +761,7 @@ function BatchTable({
 
   return (
     <div className="overflow-x-auto rounded-[var(--radius-md)] border border-[var(--color-border)] bg-[var(--color-surface)]">
-      <div className="min-w-[1040px]">
+      <div className="min-w-[1160px]">
         <div
           className={`${BATCH_GRID} border-b border-[var(--color-border)] bg-[var(--color-surface-2)] py-2.5`}
         >
@@ -787,15 +810,19 @@ function BatchTable({
                     const nm = cleanName(b.name, b.styleKey, b.sizes.map((z) => z.sku));
                     return (
                       <div className="min-w-0">
-                        <div className="truncate text-sm font-semibold">
-                          {b.styleRef ??
+                        <TruncText
+                          text={
+                            b.styleRef ??
                             b.styleKey ??
-                            t('admin.production.untitled', { defaultValue: 'Untitled style' })}
-                        </div>
+                            t('admin.production.untitled', { defaultValue: 'Untitled style' })
+                          }
+                          className="text-sm font-semibold"
+                        />
                         {nm && (
-                          <div className="truncate font-mono text-[11px] text-[var(--color-muted-foreground)]">
-                            {nm}
-                          </div>
+                          <TruncText
+                            text={nm}
+                            className="font-mono text-[11px] text-[var(--color-muted-foreground)]"
+                          />
                         )}
                       </div>
                     );

@@ -640,8 +640,18 @@ export default function InventoryHealth(): ReactNode {
                       value={searchText}
                       onChange={(e) => setSearchText(e.target.value)}
                       placeholder={t('admin.inventoryHealth.search', { defaultValue: 'Search style, size or name…' })}
-                      className="h-9 w-full rounded-md border border-[var(--color-primary)]/40 bg-[var(--color-primary-soft)]/30 pl-9 pr-3 text-[13px] text-[var(--color-foreground)] outline-none focus-visible:border-[var(--color-primary)] focus-visible:ring-2 focus-visible:ring-[var(--color-primary)]/25"
+                      className="h-9 w-full rounded-md border border-[var(--color-primary)]/40 bg-[var(--color-primary-soft)]/30 pl-9 pr-9 text-[13px] text-[var(--color-foreground)] outline-none focus-visible:border-[var(--color-primary)] focus-visible:ring-2 focus-visible:ring-[var(--color-primary)]/25"
                     />
+                    {searchText && (
+                      <button
+                        type="button"
+                        onClick={() => setSearchText('')}
+                        aria-label={t('common.clear', { defaultValue: 'Clear' })}
+                        className="absolute right-2.5 top-1/2 -translate-y-1/2 text-[var(--color-muted-foreground)] hover:text-[var(--color-foreground)]"
+                      >
+                        <X size={15} />
+                      </button>
+                    )}
                   </div>
                 </div>
                 <div className="flex shrink-0 items-center gap-3 text-[12px] tabular-nums text-[var(--color-muted-foreground)]">

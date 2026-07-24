@@ -22,6 +22,7 @@ import {
 import { Badge } from '@/components/ui/badge';
 import { cn } from '@/lib/utils';
 import { Input } from '@/components/ui/input';
+import { FloatingPill, TruncText } from '@/components/ui/trunc-text';
 import { DateRangePicker } from '@/components/ui/DateRangePicker';
 import { useToast } from '@/components/ui/toast';
 import Approval1Dialog from '@/components/styles/Approval1Dialog';
@@ -317,34 +318,6 @@ function DotStatusPill({
 }
 
 /**
- * The portal'd tooltip pill itself — centred above `rect`, escaping the
- * table's `overflow-x-auto` via a <body> portal. Shared by HoverTip and
- * TruncText so the pill look + positioning live in one place.
- */
-function FloatingPill({
-  rect,
-  children,
-}: {
-  rect: DOMRect;
-  children: ReactNode;
-}) {
-  return createPortal(
-    <div
-      style={{
-        position: 'fixed',
-        left: rect.left + rect.width / 2,
-        top: rect.top - 8,
-        transform: 'translate(-50%, -100%)',
-      }}
-      className="pointer-events-none z-50 max-w-[280px] rounded-[var(--radius-md)] border border-[var(--color-border)] bg-[var(--color-surface)] px-2.5 py-1.5 text-[11px] leading-snug text-[var(--color-foreground)] shadow-md"
-    >
-      {children}
-    </div>,
-    document.body,
-  );
-}
-
-/**
  * Lightweight hover tooltip — wraps a trigger and, on hover/focus, shows a
  * styled detail pill centred above it. Zero-dependency (the house pattern,
  * mirroring HoverThumbnail / RailTooltip). Renders nothing when `content` is
@@ -376,38 +349,6 @@ function HoverTip({
         {children}
       </span>
       {rect && content && <FloatingPill rect={rect}>{content}</FloatingPill>}
-    </>
-  );
-}
-
-/**
- * Truncating text that reveals its FULL value in a styled hover pill — but
- * ONLY when the text is actually clipped (scrollWidth > clientWidth), so short
- * values don't pop a redundant tooltip. Keeps the native `title` as a slow/a11y
- * fallback.
- */
-function TruncText({ text, className }: { text: string; className?: string }) {
-  const ref = useRef<HTMLSpanElement>(null);
-  const [rect, setRect] = useState<DOMRect | null>(null);
-  const show = () => {
-    const el = ref.current;
-    if (el && el.scrollWidth > el.clientWidth + 1) {
-      setRect(el.getBoundingClientRect());
-    }
-  };
-  const hide = () => setRect(null);
-  return (
-    <>
-      <span
-        ref={ref}
-        onMouseEnter={show}
-        onMouseLeave={hide}
-        title={text}
-        className={cn('block truncate', className)}
-      >
-        {text}
-      </span>
-      {rect && <FloatingPill rect={rect}>{text}</FloatingPill>}
     </>
   );
 }
