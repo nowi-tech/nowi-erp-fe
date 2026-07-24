@@ -544,6 +544,9 @@ function ToStartTable({
     'text-[10.5px] font-semibold uppercase tracking-wider text-[var(--color-muted-foreground)]';
   // One template for the header and every row, so the columns line up.
   const ROW = 'flex items-center gap-4 px-4';
+  // Fixed Style column so headers and rows line up regardless of name length;
+  // a flex spacer after it absorbs the slack and keeps the numbers right-aligned.
+  const STYLE_COL = 'w-72';
 
   if (styles.length === 0) {
     return (
@@ -561,7 +564,8 @@ function ToStartTable({
       <div className={`${ROW} border-b border-[var(--color-border)] bg-[var(--color-surface-2)] py-2.5`}>
         <span className="w-4 shrink-0" />
         <span className="w-10 shrink-0" />
-        <span className={`flex-1 ${head}`}>{t('admin.production.style', { defaultValue: 'Style' })}</span>
+        <span className={`${STYLE_COL} ${head}`}>{t('admin.production.style', { defaultValue: 'Style' })}</span>
+        <span className="flex-1" />
         <span className={`w-24 ${head}`}>{t('admin.production.sizes', { defaultValue: 'Sizes' })}</span>
         <span className={`w-16 text-right ${head}`}>{t('admin.production.stock', { defaultValue: 'Stock' })}</span>
         <span className={`w-16 text-right ${head}`}>{t('admin.production.drr', { defaultValue: 'DRR/d' })}</span>
@@ -597,7 +601,7 @@ function ToStartTable({
                 className={`w-4 shrink-0 text-[var(--color-muted-foreground)] transition-transform ${isOpen ? 'rotate-90' : ''}`}
               />
               <HoverThumbnail src={s.imageUrl} alt={s.name ?? s.styleKey} size={40} />
-              <div className="min-w-0 flex-1">
+              <div className={`${STYLE_COL} min-w-0`}>
                 <div className="flex items-center gap-2">
                   <span className="truncate text-sm font-semibold">
                     {s.erpStyleId ?? s.styleKey}
@@ -610,6 +614,7 @@ function ToStartTable({
                   </div>
                 )}
               </div>
+              <div className="flex-1" />
               <div className="w-24 text-xs text-[var(--color-muted-foreground)]">
                 {t('admin.production.sizesNeeding', {
                   defaultValue: '{{n}} of {{total}} sizes',
