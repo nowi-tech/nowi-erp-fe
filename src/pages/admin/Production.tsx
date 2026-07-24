@@ -55,6 +55,14 @@ function ageTone(days: number): string {
   return days >= 7 ? 'text-amber-600 font-semibold' : 'text-[var(--color-muted-foreground)]';
 }
 
+/** Cover-day colour, matching StartProductionDialog: red = reorder now. */
+function coverTone(days: number | null): string {
+  if (days == null) return 'text-[var(--color-muted-foreground)]';
+  if (days < 7) return 'text-[var(--color-destructive)]';
+  if (days <= 15) return 'text-amber-600';
+  return 'text-[var(--color-muted-foreground)]';
+}
+
 function fmtDate(iso: string): string {
   return new Date(iso).toLocaleDateString(undefined, { day: '2-digit', month: 'short' });
 }
@@ -226,6 +234,7 @@ export default function Production() {
         t('admin.production.actionFailed', {
           defaultValue: "That didn't go through. Refresh and try again.",
         }),
+        'error',
       );
     } finally {
       setBusy(false);
@@ -512,12 +521,16 @@ function ToStartTable({
   onStart: (target: StartProductionTarget) => void;
 }) {
   const { t } = useTranslation();
+  const head =
+    'text-[10.5px] font-semibold uppercase tracking-wider text-[var(--color-muted-foreground)]';
+  // One template for the header and every row, so the columns line up.
+  const ROW = 'flex items-center gap-4 px-4';
 
   if (styles.length === 0) {
     return (
       <div className="rounded-[var(--radius-md)] border border-[var(--color-border)] p-8 text-center text-sm text-[var(--color-muted-foreground)]">
         {t('admin.production.toStartEmpty', {
-          defaultValue: 'Nothing needs making — every size has enough cover.',
+          defaultValue: 'Nothing needs making \u2014 every size has enough cover.',
         })}
       </div>
     );
@@ -525,123 +538,136 @@ function ToStartTable({
 
   return (
     <div className="overflow-hidden rounded-[var(--radius-md)] border border-[var(--color-border)] bg-[var(--color-surface)]">
+      {/* Header row \u2014 names every column below. */}
+      <div className={`${ROW} border-b border-[var(--color-border)] bg-[var(--color-surface-2)] py-2.5`}>
+        <span className="w-4 shrink-0" />
+        <span className="w-10 shrink-0" />
+        <span className={`flex-1 ${head}`}>{t('admin.production.style', { defaultValue: 'Style' })}</span>
+        <span className={`w-24 ${head}`}>{t('admin.production.sizes', { defaultValue: 'Sizes' })}</span>
+        <span className={`w-16 text-right ${head}`}>{t('admin.production.stock', { defaultValue: 'Stock' })}</span>
+        <span className={`w-16 text-right ${head}`}>{t('admin.production.drr', { defaultValue: 'DRR/d' })}</span>
+        <span className={`w-20 text-right ${head}`}>{t('admin.production.toMake', { defaultValue: 'To make' })}</span>
+        <span className={`w-16 text-right ${head}`}>{t('admin.production.cover', { defaultValue: 'Cover' })}</span>
+        {canWrite && <span className="w-[188px] shrink-0" />}
+      </div>
+
       {styles.map((s) => {
         const needing = s.sizes.filter((z) => z.makeQty > 0);
         const covers = s.sizes.map((z) => z.coverDays).filter((c): c is number => c != null);
+        const totalStock = s.sizes.reduce((a, z) => a + z.currentStock, 0);
+        const totalDrr = s.sizes.reduce((a, z) => a + z.drr, 0);
+        const isOpen = !!expanded[s.styleKey];
         return (
           <div key={s.styleKey} className="border-b border-[var(--color-border)] last:border-b-0">
-          <div className="flex items-center gap-4 px-4 py-3">
-            <button
-              type="button"
+            {/* Whole row toggles the breakdown; the CTA stops propagation. */}
+            <div
+              role="button"
+              tabIndex={0}
+              aria-expanded={isOpen}
               onClick={() => onToggle(s.styleKey)}
-              aria-expanded={!!expanded[s.styleKey]}
-              aria-label={t('admin.production.toggleSizes', {
-                defaultValue: 'Show size breakdown',
-              })}
-              className="shrink-0 text-[var(--color-muted-foreground)]"
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' || e.key === ' ') {
+                  e.preventDefault();
+                  onToggle(s.styleKey);
+                }
+              }}
+              className={`${ROW} cursor-pointer py-3 hover:bg-[var(--color-surface-2)]/50`}
             >
               <ChevronRight
                 size={16}
-                className={`transition-transform ${expanded[s.styleKey] ? 'rotate-90' : ''}`}
+                className={`w-4 shrink-0 text-[var(--color-muted-foreground)] transition-transform ${isOpen ? 'rotate-90' : ''}`}
               />
-            </button>
-            <HoverThumbnail src={s.imageUrl} alt={s.name ?? s.styleKey} size={40} />
-            <div className="min-w-0 flex-1">
-              <div className="flex items-center gap-2">
-                <span className="truncate text-sm font-semibold">{s.name ?? s.styleKey}</span>
-                <UrgencyPill urgency={s.worstUrgency} />
+              <HoverThumbnail src={s.imageUrl} alt={s.name ?? s.styleKey} size={40} />
+              <div className="min-w-0 flex-1">
+                <div className="flex items-center gap-2">
+                  <span className="truncate text-sm font-semibold">
+                    {s.name ?? s.erpStyleId ?? s.styleKey}
+                  </span>
+                  <UrgencyPill urgency={s.worstUrgency} />
+                </div>
+                <div className="truncate font-mono text-[11px] text-[var(--color-muted-foreground)]">
+                  {s.erpStyleId ?? s.styleKey}
+                </div>
               </div>
-              <div className="truncate font-mono text-[11px] text-[var(--color-muted-foreground)]">
-                {s.styleKey}
-              </div>
-            </div>
-            <div className="w-28 text-xs text-[var(--color-muted-foreground)]">
-              {t('admin.production.sizesNeeding', {
-                defaultValue: '{{n}} of {{total}} sizes',
-                n: needing.length,
-                total: s.sizes.length,
-              })}
-            </div>
-            <div className="w-20 text-right">
-              <div className="text-base font-bold">{s.makeTotal}</div>
-              <div className="text-[10px] uppercase tracking-wider text-[var(--color-muted-foreground)]">
-                {t('admin.production.toMake', { defaultValue: 'to make' })}
-              </div>
-            </div>
-            <div className="w-16 text-right text-sm text-[var(--color-muted-foreground)]">
-              {covers.length > 0 ? `${Math.min(...covers).toFixed(1)}d` : '—'}
-            </div>
-            {canWrite && (
-              <Button
-                size="sm"
-                onClick={() =>
-                  onStart({
-                    origin: 'forecast',
-                    styleKey: s.styleKey,
-                    styleId: s.linkedStyleId ?? undefined,
-                    styleRef: null,
-                    name: s.name,
-                    imageUrl: s.imageUrl,
-                    worstCoverDays: covers.length > 0 ? Math.min(...covers) : null,
-                    drr: s.sizes.reduce((a, z) => a + z.drr, 0),
-                    totalStock: s.sizes.reduce((a, z) => a + z.currentStock, 0),
-                    sizes: s.sizes.map((z) => ({
-                      sku: z.sku,
-                      size: z.size,
-                      suggestedQty: z.makeQty,
-                      coverDays: z.coverDays,
-                      currentStock: z.currentStock,
-                    })),
-                  })
-                }
-              >
-                {t('admin.production.addToPipeline', {
-                  defaultValue: 'Add to production pipeline',
+              <div className="w-24 text-xs text-[var(--color-muted-foreground)]">
+                {t('admin.production.sizesNeeding', {
+                  defaultValue: '{{n}} of {{total}} sizes',
+                  n: needing.length,
+                  total: s.sizes.length,
                 })}
-              </Button>
-            )}
-          </div>
-
-          {expanded[s.styleKey] && (
-            <div className="border-t border-[var(--color-border)] bg-[var(--color-surface-2)]/40 px-4 py-3 pl-12">
-              <table className="w-full text-[13px]">
-                <thead>
-                  <tr className="text-[10.5px] font-semibold uppercase tracking-wider text-[var(--color-muted-foreground)]">
-                    <th className="py-1.5 text-left">
-                      {t('admin.production.size', { defaultValue: 'Size' })}
-                    </th>
-                    <th className="py-1.5 text-left">SKU</th>
-                    <th className="py-1.5 text-right">
-                      {t('admin.production.suggested', { defaultValue: 'Suggested' })}
-                    </th>
-                    <th className="py-1.5 text-right">
-                      {t('admin.production.cover', { defaultValue: 'Cover' })}
-                    </th>
-                    <th className="py-1.5 text-right">
-                      {t('admin.production.stock', { defaultValue: 'Stock' })}
-                    </th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {s.sizes.map((z) => (
-                    <tr key={z.sku} className="border-t border-[var(--color-border)]/50">
-                      <td className="py-1.5 font-semibold">{z.size}</td>
-                      <td className="py-1.5 font-mono text-xs text-[var(--color-muted-foreground)]">
-                        {z.sku}
-                      </td>
-                      <td className="py-1.5 text-right font-semibold">{z.makeQty}</td>
-                      <td className="py-1.5 text-right text-[var(--color-muted-foreground)]">
-                        {z.coverDays != null ? `${z.coverDays.toFixed(1)}d` : '—'}
-                      </td>
-                      <td className="py-1.5 text-right text-[var(--color-muted-foreground)]">
-                        {z.currentStock}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+              </div>
+              <div className="w-16 text-right text-sm">{totalStock}</div>
+              <div className="w-16 text-right text-sm text-[var(--color-muted-foreground)]">
+                {totalDrr.toFixed(1)}
+              </div>
+              <div className="w-20 text-right text-base font-bold">{s.makeTotal}</div>
+              <div
+                className={`w-16 text-right text-sm font-semibold ${coverTone(covers.length > 0 ? Math.min(...covers) : null)}`}
+              >
+                {covers.length > 0 ? `${Math.min(...covers).toFixed(1)}d` : '\u2014'}
+              </div>
+              {canWrite && (
+                <div className="w-[188px] shrink-0">
+                  <Button
+                    size="sm"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onStart({
+                        origin: 'forecast',
+                        styleKey: s.styleKey,
+                        styleId: s.linkedStyleId ?? undefined,
+                        styleRef: s.erpStyleId,
+                        name: s.name,
+                        imageUrl: s.imageUrl,
+                        worstCoverDays: covers.length > 0 ? Math.min(...covers) : null,
+                        drr: totalDrr,
+                        totalStock,
+                        sizes: s.sizes.map((z) => ({
+                          sku: z.sku,
+                          size: z.size,
+                          suggestedQty: z.makeQty,
+                          coverDays: z.coverDays,
+                          currentStock: z.currentStock,
+                        })),
+                      });
+                    }}
+                  >
+                    {t('admin.production.addToPipeline', {
+                      defaultValue: 'Add to production pipeline',
+                    })}
+                  </Button>
+                </div>
+              )}
             </div>
-          )}
+
+            {isOpen && (
+              <div className="border-t border-[var(--color-border)] bg-[var(--color-surface-2)]/40 px-4 py-3 pl-14">
+                <table className="w-full text-[13px]">
+                  <thead>
+                    <tr className={head}>
+                      <th className="py-1.5 text-left">{t('admin.production.size', { defaultValue: 'Size' })}</th>
+                      <th className="py-1.5 text-left">SKU</th>
+                      <th className="py-1.5 text-right">{t('admin.production.suggested', { defaultValue: 'Suggested' })}</th>
+                      <th className="py-1.5 text-right">{t('admin.production.cover', { defaultValue: 'Cover' })}</th>
+                      <th className="py-1.5 text-right">{t('admin.production.stock', { defaultValue: 'Stock' })}</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {s.sizes.map((z) => (
+                      <tr key={z.sku} className="border-t border-[var(--color-border)]/50">
+                        <td className="py-1.5 font-semibold">{z.size}</td>
+                        <td className="py-1.5 font-mono text-xs text-[var(--color-muted-foreground)]">{z.sku}</td>
+                        <td className="py-1.5 text-right font-semibold">{z.makeQty}</td>
+                        <td className={`py-1.5 text-right font-semibold ${coverTone(z.coverDays)}`}>
+                          {z.coverDays != null ? `${z.coverDays.toFixed(1)}d` : '\u2014'}
+                        </td>
+                        <td className="py-1.5 text-right text-[var(--color-muted-foreground)]">{z.currentStock}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
           </div>
         );
       })}

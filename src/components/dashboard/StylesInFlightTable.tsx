@@ -758,6 +758,7 @@ export default function StylesInFlightTable({
         t('admin.production.sizesFailed', {
           defaultValue: "Couldn't load this style's sizes.",
         }),
+        'error',
       );
     } finally {
       setProduceBusy(false);
@@ -1896,6 +1897,7 @@ export default function StylesInFlightTable({
                 t('admin.production.startFailed', {
                   defaultValue: "Couldn't start production.",
                 }),
+                'error',
               ),
             )
             .finally(() => setProduceBusy(false));

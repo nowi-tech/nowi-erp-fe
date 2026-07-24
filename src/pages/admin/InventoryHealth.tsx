@@ -816,6 +816,7 @@ export default function InventoryHealth(): ReactNode {
                 t('admin.production.startFailed', {
                   defaultValue: "Couldn't start production.",
                 }),
+                'error',
               ),
             )
             .finally(() => setStartBusy(false));
@@ -919,11 +920,11 @@ function StyleGroup({
                   title={t('admin.inventoryHealth.openStyle', { defaultValue: 'Open style workspace' })}
                   className="inline-flex min-w-0 items-center gap-1 text-[15px] font-semibold text-[var(--color-primary)] underline decoration-dotted underline-offset-4 hover:decoration-solid"
                 >
-                  <span className="truncate">{style.styleKey}</span>
+                  <span className="truncate">{style.erpStyleId ?? style.styleKey}</span>
                   <ArrowUpRight size={14} className="shrink-0" style={{ color: PRIMARY }} />
                 </button>
               ) : (
-                <span className={`truncate text-[15px] font-semibold ${codeColor}`}>{style.styleKey}</span>
+                <span className={`truncate text-[15px] font-semibold ${codeColor}`}>{style.erpStyleId ?? style.styleKey}</span>
               )}
               <UrgencyPill urgency={style.worstUrgency} />
               {style.isNew && (

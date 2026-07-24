@@ -43,6 +43,9 @@ export interface InventoryStyle {
   /** Signed URL or GCS object path or null (shown on each size child row). */
   imageUrl: string | null;
   linkedStyleId: number | null;
+  /** Canonical ERP Style # (NOWI-…) when linked to the catalog, else null.
+   *  The human identity shown in Sampling — prefer it over the EasyEcom key. */
+  erpStyleId: string | null;
   /** Real ERP listing URLs — one clickable channel chip each (usually empty). */
   marketplaceLinks: { channel: string; url: string }[];
   /** Most-urgent tier across its sizes — drives the parent pill. */
