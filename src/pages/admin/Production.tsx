@@ -56,6 +56,25 @@ function ageTone(days: number): string {
 }
 
 /** Cover-day colour, matching StartProductionDialog: red = reorder now. */
+/** IH's rule: show the SKU-derived name only when it adds information — not
+ *  when it is just the styleKey with a size suffix (e.g. "NOWIMPA1082 30",
+ *  which normalises to the NOWIMPA1082_30 SKU code). */
+function cleanName(
+  name: string | null,
+  styleKey: string | null,
+  skus: string[],
+): string | null {
+  const norm = (x: string) => x.toUpperCase().replace(/[^A-Z0-9]/g, '');
+  const n = norm(name ?? '');
+  if (!n) return null;
+  if (styleKey && n === norm(styleKey)) return null;
+  if (skus.some((sku) => norm(sku) === n)) return null;
+  return name;
+}
+function meaningfulName(style: InventoryStyle): string | null {
+  return cleanName(style.name, style.styleKey, style.sizes.map((z) => z.sku));
+}
+
 function coverTone(days: number | null): string {
   if (days == null) return 'text-[var(--color-muted-foreground)]';
   if (days < 7) return 'text-[var(--color-destructive)]';
@@ -581,13 +600,15 @@ function ToStartTable({
               <div className="min-w-0 flex-1">
                 <div className="flex items-center gap-2">
                   <span className="truncate text-sm font-semibold">
-                    {s.name ?? s.erpStyleId ?? s.styleKey}
+                    {s.erpStyleId ?? s.styleKey}
                   </span>
                   <UrgencyPill urgency={s.worstUrgency} />
                 </div>
-                <div className="truncate font-mono text-[11px] text-[var(--color-muted-foreground)]">
-                  {s.erpStyleId ?? s.styleKey}
-                </div>
+                {meaningfulName(s) && (
+                  <div className="truncate font-mono text-[11px] text-[var(--color-muted-foreground)]">
+                    {meaningfulName(s)}
+                  </div>
+                )}
               </div>
               <div className="w-24 text-xs text-[var(--color-muted-foreground)]">
                 {t('admin.production.sizesNeeding', {
@@ -617,7 +638,7 @@ function ToStartTable({
                         styleKey: s.styleKey,
                         styleId: s.linkedStyleId ?? undefined,
                         styleRef: s.erpStyleId,
-                        name: s.name,
+                        name: meaningfulName(s),
                         imageUrl: s.imageUrl,
                         worstCoverDays: covers.length > 0 ? Math.min(...covers) : null,
                         drr: totalDrr,
@@ -756,17 +777,24 @@ function BatchTable({
                 </button>
 
                 <div className="flex min-w-0 items-center gap-3">
-                  <HoverThumbnail src={b.imageUrl} alt={b.name ?? b.batchNo} size={40} />
-                  <div className="min-w-0">
-                    <div className="truncate text-sm font-semibold">
-                      {b.name ??
-                        b.styleRef ??
-                        t('admin.production.untitled', { defaultValue: 'Untitled style' })}
-                    </div>
-                    <div className="truncate font-mono text-[11px] text-[var(--color-muted-foreground)]">
-                      {b.styleRef ?? b.styleKey}
-                    </div>
-                  </div>
+                  <HoverThumbnail src={b.imageUrl} alt={b.styleRef ?? b.styleKey ?? b.batchNo} size={40} />
+                  {(() => {
+                    const nm = cleanName(b.name, b.styleKey, b.sizes.map((z) => z.sku));
+                    return (
+                      <div className="min-w-0">
+                        <div className="truncate text-sm font-semibold">
+                          {b.styleRef ??
+                            b.styleKey ??
+                            t('admin.production.untitled', { defaultValue: 'Untitled style' })}
+                        </div>
+                        {nm && (
+                          <div className="truncate font-mono text-[11px] text-[var(--color-muted-foreground)]">
+                            {nm}
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })()}
                 </div>
 
                 <div className="font-mono text-xs text-[var(--color-muted-foreground)]">
