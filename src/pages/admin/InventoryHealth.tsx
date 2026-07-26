@@ -150,7 +150,7 @@ export default function InventoryHealth(): ReactNode {
   // Day-key axis every visible size's trend sparkline aligns to (same for the page).
   const [trendDates, setTrendDates] = useState<string[]>([]);
   // Per-style expand override (true = open, false = collapsed). Absent ⇒ default:
-  // out/critical styles auto-open, the rest stay collapsed.
+  // every style expanded.
   const [openState, setOpenState] = useState<Record<string, boolean>>({});
   const [syncedAt, setSyncedAt] = useState<string | null>(null);
   const [syncing, setSyncing] = useState(false);
@@ -663,11 +663,9 @@ export default function InventoryHealth(): ReactNode {
                     <SortHeader label={t('admin.inventoryHealth.col.make', { defaultValue: 'Make' })} col="make" sortKey={sortKey} sortDir={sortDir} onSort={onSort} align="right" />
                   </div>
                   {styles.map((style) => {
-                    // Auto-expand the act-now tiers (out / critical); less-urgent
-                    // styles stay collapsed. A manual toggle wins.
-                    const isOpen =
-                      openState[style.styleKey] ??
-                      (style.worstUrgency === 'out' || style.worstUrgency === 'critical');
+                    // Every style expanded by default (sizes visible); a manual
+                    // toggle wins and is remembered per style.
+                    const isOpen = openState[style.styleKey] ?? true;
                     return (
                       <StyleGroup
                         key={style.styleKey}
@@ -1209,9 +1207,9 @@ function TrendCell({
   dates: string[];
   t: ReturnType<typeof useTranslation>['t'];
 }): ReactNode {
+  // Always render the sparkline — even a flat no-sales line shows the size has a
+  // chart (a "—" placeholder read as missing data). Flat/zero → grey, no arrow.
   const dir = useMemo(() => trendDir(data), [data]);
-  const hasData = data.some((v) => v > 0);
-  if (!hasData) return <span style={{ color: MUTED }}>—</span>;
   const color = dir === 'up' ? TREND_UP : dir === 'down' ? TREND_DOWN : NEUTRAL_DOT;
   const DirIcon = dir === 'up' ? ArrowUp : dir === 'down' ? ArrowDown : Minus;
   return (
