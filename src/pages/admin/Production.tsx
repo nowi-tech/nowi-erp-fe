@@ -48,6 +48,9 @@ const PAGE_SIZE = 50;
 const BATCH_GRID =
   'grid grid-cols-[22px_256px_92px_minmax(0,1fr)_64px_84px_128px_64px_92px_236px] items-center gap-3 px-4';
 
+/** Floor stage order — the "how much" popup only fires moving forward. */
+const STAGE_ORDER: Record<string, number> = { cutting: 0, stitching: 1, finishing: 2 };
+
 type T = ReturnType<typeof useTranslation>['t'];
 
 function statusLabel(t: T, status: BatchStatus): string {
@@ -569,9 +572,18 @@ export default function Production() {
           onToggle={(id) => setExpanded((p) => ({ ...p, [id]: !p[id] }))}
           onStage={(b, status) => {
             // Finishing = the completion step: capture produced qty and mark
-            // completed. Other stages just capture "how much" and advance.
-            if (status === 'finishing') setOutputTarget(b);
-            else setStageTarget({ batch: b, status });
+            // completed.
+            if (status === 'finishing') {
+              setOutputTarget(b);
+              return;
+            }
+            // Forward (cutting → stitching) captures "how much"; going back is a
+            // correction — just move, no popup.
+            if ((STAGE_ORDER[status] ?? 0) > (STAGE_ORDER[b.status] ?? 0)) {
+              setStageTarget({ batch: b, status });
+            } else {
+              void runAction(() => advanceBatch(b.id, status));
+            }
           }}
           onSend={(b) => setSendTarget(b)}
           onCancel={(b) => setCancelTarget(b)}
