@@ -622,7 +622,9 @@
           "needsTarget": "Pick the style this is based on to submit",
           "skipsSampling": "skips sampling",
           "submitColour": "Submit colour",
-          "submitBasedOn": "Submit for approval"
+          "submitBasedOn": "Submit for approval",
+          "inheritsNote": "Everything above carries over to the re-release — nothing else to fill in. Approving it mints a new Style # derived from the old one.",
+          "needsRelive": "Pick the old style # to submit — nothing else is needed."
         }
       },
       "workspace": {

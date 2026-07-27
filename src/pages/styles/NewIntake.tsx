@@ -6,7 +6,6 @@ import { ChevronRight } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useToast } from '@/components/ui/toast';
 
-import SourceToggle from '@/components/styles/SourceToggle';
 import StyleIntakeForm, {
   type StyleIntakeFormHandle,
   type SubmissionForkMode,
@@ -37,12 +36,13 @@ export default function NewIntake() {
   const toast = useToast();
   const [params] = useSearchParams();
 
-  const initialSource: StyleSource =
+  // China-import is hidden from the UI for now: the source toggle is gone, so
+  // the source is fixed at mount. `?source=china_import` still opens the china
+  // form for the (nav-hidden) /china-import registry's "New" button.
+  const source: StyleSource =
     (params.get('source') as StyleSource | null) === 'china_import'
       ? 'china_import'
       : 'sampling';
-
-  const [source, setSource] = useState<StyleSource>(initialSource);
   const [fabrics, setFabrics] = useState<Fabric[]>([]);
   const [categories, setCategories] = useState<CategoryWithStyleCode[]>([]);
   const [collections, setCollections] = useState<Collection[]>([]);
@@ -112,14 +112,17 @@ export default function NewIntake() {
   // style AND a working name — plus a colour for the colour fork), so the
   // hint stays inclusive rather than pin-pointing only the target, which
   // misled users who'd already picked the style.
-  const footerHint = submitDisabled
-    ? forkMode !== 'new' && source !== 'china_import'
-      ? t('admin.styles.intake.fork.needsTargetAndFields', {
-          defaultValue:
-            'Pick the source style and complete the required fields to submit.',
-        })
-      : t('admin.styles.intake.needsName')
-    : t('admin.styles.intake.readyHint');
+  const footerHint = !submitDisabled
+    ? t('admin.styles.intake.readyHint')
+    : // A relive asks for nothing else — the old style # IS the submission.
+      forkMode === 'relive'
+      ? t('admin.styles.intake.fork.needsRelive')
+      : forkMode !== 'new' && source !== 'china_import'
+        ? t('admin.styles.intake.fork.needsTargetAndFields', {
+            defaultValue:
+              'Pick the source style and complete the required fields to submit.',
+          })
+        : t('admin.styles.intake.needsName');
 
   return (
     <div className="mx-auto w-full max-w-[1280px] px-3 pb-32 sm:px-4">
@@ -143,7 +146,6 @@ export default function NewIntake() {
         <h1 className="font-serif text-[26px] leading-tight text-[var(--color-primary)] sm:text-[28px]">
           {t('admin.styles.intake.h1')}
         </h1>
-        <SourceToggle value={source} onChange={setSource} />
       </header>
 
 

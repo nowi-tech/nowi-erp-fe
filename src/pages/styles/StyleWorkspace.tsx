@@ -56,7 +56,6 @@ import type {
   Style,
   StyleAuditLog,
   StyleChannelListing,
-  StyleLifecycle,
 } from '@/api/types';
 import { useAuth } from '@/context/auth';
 import {
@@ -66,24 +65,9 @@ import {
   CATALOGUER_WRITE_ROLES,
 } from '@/lib/userRoles';
 import { cn } from '@/lib/utils';
-import { formatStyleRef } from '@/lib/styleRef';
+import { POST_SAMPLING, formatStyleRef } from '@/lib/styleRef';
 import GoLiveDialog from '@/components/styles/GoLiveDialog';
 import SampleApproveDialog from '@/components/styles/SampleApproveDialog';
-
-// Add-Colour is only meaningful once the family has an approved sample to
-// inherit (a colour sibling skips sampling). `StyleLifecycle` is
-// NON-ORDINAL — enumerate the post-sampling states explicitly, never `>=`.
-// ⚠️ DRIFT HAZARD: this set is duplicated server-side as the spawn gate in
-// `nowi-erp-api` (`spawnColourVariant`, styles-actions.service) and in the
-// LLD §Phase 3 `POST_SAMPLING` list — keep all three in sync.
-const POST_SAMPLING = new Set<StyleLifecycle>([
-  'sample_approved',
-  'cataloguing',
-  'live',
-  'in_pd',
-  'qc',
-  'dispatched',
-]);
 
 // Roles allowed to add a new colour (spawn a sibling submission). Adding a
 // colour is a CREATE-flavoured action — colourways are finished-goods /
