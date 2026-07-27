@@ -142,6 +142,7 @@ export default function Production() {
   const [intakeOpen, setIntakeOpen] = useState(false);
   const [outputTarget, setOutputTarget] = useState<ProductionBatch | null>(null);
   const [sendTarget, setSendTarget] = useState<ProductionBatch | null>(null);
+  const [stageTarget, setStageTarget] = useState<{ batch: ProductionBatch; status: BatchStatus } | null>(null);
   const [cancelTarget, setCancelTarget] = useState<ProductionBatch | null>(null);
   const [dropTarget, setDropTarget] = useState<InventoryStyle | null>(null);
 
@@ -389,6 +390,17 @@ export default function Production() {
     });
   };
 
+  // A stage move (cutting/stitching) captures "how much" and advances.
+  const onStageQty = (items: { sku: string; qtyPlanned: number }[]) => {
+    const tgt = stageTarget;
+    if (!tgt) return;
+    return runAction(async () => {
+      const updated = await advanceBatch(tgt.batch.id, tgt.status, items);
+      setStageTarget(null);
+      return updated;
+    });
+  };
+
   // Park (Drop) or un-park (Restore) a style, removing the row in place.
   const setParked = async (styleKey: string, parked: boolean) => {
     setBusy(true);
@@ -555,8 +567,12 @@ export default function Production() {
           busy={busy}
           expanded={expanded}
           onToggle={(id) => setExpanded((p) => ({ ...p, [id]: !p[id] }))}
-          onStage={(b, status) => void runAction(() => advanceBatch(b.id, status))}
-          onComplete={(b) => setOutputTarget(b)}
+          onStage={(b, status) => {
+            // Finishing = the completion step: capture produced qty and mark
+            // completed. Other stages just capture "how much" and advance.
+            if (status === 'finishing') setOutputTarget(b);
+            else setStageTarget({ batch: b, status });
+          }}
           onSend={(b) => setSendTarget(b)}
           onCancel={(b) => setCancelTarget(b)}
         />
@@ -590,6 +606,22 @@ export default function Production() {
         batch={sendTarget}
         onClose={() => setSendTarget(null)}
         onConfirm={onSend}
+      />
+      <SendToProductionDialog
+        open={stageTarget !== null}
+        busy={busy}
+        batch={stageTarget?.batch ?? null}
+        heading={stageTarget ? statusLabel(t, stageTarget.status) : undefined}
+        confirmLabel={
+          stageTarget
+            ? t('admin.production.moveTo', {
+                defaultValue: 'Move to {{stage}}',
+                stage: statusLabel(t, stageTarget.status),
+              })
+            : undefined
+        }
+        onClose={() => setStageTarget(null)}
+        onConfirm={onStageQty}
       />
       <StartProductionIntakeDialog
         open={intakeOpen}
@@ -906,7 +938,6 @@ function BatchTable({
   expanded,
   onToggle,
   onStage,
-  onComplete,
   onSend,
   onCancel,
 }: {
@@ -918,7 +949,6 @@ function BatchTable({
   expanded: Record<number, boolean>;
   onToggle: (id: number) => void;
   onStage: (batch: ProductionBatch, status: BatchStatus) => void;
-  onComplete: (batch: ProductionBatch) => void;
   onSend: (batch: ProductionBatch) => void;
   onCancel: (batch: ProductionBatch) => void;
 }) {
@@ -1081,11 +1111,6 @@ function BatchTable({
                         {t('admin.production.sendToProduction', {
                           defaultValue: 'Send to production',
                         })}
-                      </Button>
-                    )}
-                    {canWrite && tab === 'in_production' && (
-                      <Button size="sm" disabled={busy} onClick={() => onComplete(b)}>
-                        {t('admin.production.complete', { defaultValue: 'Complete' })}
                       </Button>
                     )}
                     {canWrite && b.status === 'completed' && (

@@ -177,9 +177,16 @@ export function updateBatch(
   return apiClient.patch<ProductionBatch>(`/api/production/batches/${id}`, body).then((r) => r.data);
 }
 
-export function advanceBatch(id: number, status: BatchStatus): Promise<ProductionBatch> {
+export function advanceBatch(
+  id: number,
+  status: BatchStatus,
+  items?: { sku: string; qtyPlanned: number }[],
+): Promise<ProductionBatch> {
   return apiClient
-    .post<ProductionBatch>(`/api/production/batches/${id}/actions/advance`, { status })
+    .post<ProductionBatch>(`/api/production/batches/${id}/actions/advance`, {
+      status,
+      ...(items ? { items } : {}),
+    })
     .then((r) => r.data);
 }
 

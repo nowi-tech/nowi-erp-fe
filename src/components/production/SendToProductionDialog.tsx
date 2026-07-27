@@ -16,12 +16,18 @@ export default function SendToProductionDialog({
   open,
   busy,
   batch,
+  heading,
+  confirmLabel,
   onClose,
   onConfirm,
 }: {
   open: boolean;
   busy: boolean;
   batch: ProductionBatch | null;
+  /** Small eyebrow — defaults to "Send to production" (also used for stage moves). */
+  heading?: string;
+  /** Confirm-button label. Defaults to "Send to production". */
+  confirmLabel?: string;
   onClose: () => void;
   onConfirm: (items: { sku: string; qtyPlanned: number }[]) => void;
 }) {
@@ -52,15 +58,10 @@ export default function SendToProductionDialog({
       title={
         <div className="min-w-0">
           <div className="text-[11px] font-semibold uppercase tracking-wider text-[var(--color-primary)]">
-            {t('admin.production.send.eyebrow', { defaultValue: 'Send to production' })}
+            {heading ?? t('admin.production.send.eyebrow', { defaultValue: 'Send to production' })}
           </div>
           <div className="truncate text-base font-semibold">
-            {batch.name ??
-              batch.styleRef ??
-              batch.batchNo}
-          </div>
-          <div className="truncate font-mono text-[11px] font-normal text-[var(--color-muted-foreground)]">
-            {batch.batchNo}
+            {batch.name ?? batch.styleRef ?? batch.batchNo}
           </div>
         </div>
       }
@@ -80,21 +81,14 @@ export default function SendToProductionDialog({
           >
             <Factory size={14} />
             <span className="ml-1">
-              {t('admin.production.send.confirm', {
-                defaultValue: 'Send to production · {{n}} pcs',
-                n: total,
-              })}
+              {confirmLabel ??
+                t('admin.production.send.eyebrow', { defaultValue: 'Send to production' })}{' '}
+              · {total}
             </span>
           </Button>
         </>
       }
     >
-      <p className="mb-3 text-xs text-[var(--color-muted-foreground)]">
-        {t('admin.production.send.hint', {
-          defaultValue:
-            'Confirm how many you can make per size. The batch opens at Cutting once sent.',
-        })}
-      </p>
       <QtyTable
         rows={batch.sizes.map((s) => ({
           key: s.sku,
@@ -104,13 +98,6 @@ export default function SendToProductionDialog({
         }))}
         onQty={set}
       />
-
-      <div className="mt-3 flex items-center justify-end rounded-[var(--radius-sm)] bg-[var(--color-muted)] px-4 py-2.5">
-        <span className="text-sm text-[var(--color-muted-foreground)]">
-          {t('admin.production.send.total', { defaultValue: 'Total' })}
-        </span>
-        <span className="ml-2 text-lg font-bold">{total} pcs</span>
-      </div>
     </Dialog>
   );
 }

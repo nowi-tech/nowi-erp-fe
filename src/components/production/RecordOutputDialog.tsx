@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { CheckCircle2, Info } from 'lucide-react';
+import { CheckCircle2 } from 'lucide-react';
 import { Dialog } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -234,16 +234,6 @@ export default function RecordOutputDialog({
           />
         </div>
       )}
-
-      <div className="mt-4 flex items-start gap-2 rounded-[var(--radius-sm)] bg-[var(--color-primary)]/10 px-3 py-2.5">
-        <Info size={14} className="mt-0.5 shrink-0 text-[var(--color-primary)]" />
-        <span className="text-xs text-[var(--color-muted-foreground)]">
-          {t('admin.production.output.pipelineNote', {
-            defaultValue:
-              'These units keep counting toward the forecast until the batch is marked Dispatched.',
-          })}
-        </span>
-      </div>
     </Dialog>
   );
 }

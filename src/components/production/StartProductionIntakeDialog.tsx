@@ -268,16 +268,6 @@ export default function StartProductionIntakeDialog({
             {t('admin.production.intake.external', { defaultValue: "Another brand's SKU" })}
           </option>
         </Select>
-        <p className="mt-1.5 text-[12px] text-[var(--color-muted-foreground)]">
-          {mode === 'existing'
-            ? t('admin.production.intake.existingDesc', {
-                defaultValue: 'Produce more of an existing Nowi style — pick it below.',
-              })
-            : t('admin.production.intake.externalDesc', {
-                defaultValue:
-                  "A SKU for another brand we manufacture for. It doesn't count against our forecast.",
-              })}
-        </p>
       </div>
 
       {mode === 'existing' ? (
@@ -367,14 +357,11 @@ export default function StartProductionIntakeDialog({
               </div>
 
               {sel.alreadyInProduction && (
-                <div className="flex items-start gap-2 rounded-[var(--radius-sm)] border border-amber-300 bg-amber-50 px-3 py-2 text-xs text-amber-800">
-                  <AlertTriangle size={15} className="mt-0.5 shrink-0" />
-                  <span>
-                    {t('admin.production.intake.alreadyInProduction', {
-                      defaultValue:
-                        'This style already has units in production (shown per size below). You can still start another run.',
-                    })}
-                  </span>
+                <div className="flex items-center gap-2 rounded-[var(--radius-sm)] border border-amber-300 bg-amber-50 px-3 py-1.5 text-xs font-medium text-amber-800">
+                  <AlertTriangle size={14} className="shrink-0" />
+                  {t('admin.production.intake.alreadyInProduction', {
+                    defaultValue: 'Already in production',
+                  })}
                 </div>
               )}
 
