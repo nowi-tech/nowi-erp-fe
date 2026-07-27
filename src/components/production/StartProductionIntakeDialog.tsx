@@ -236,7 +236,7 @@ export default function StartProductionIntakeDialog({
             onClick={() => submit(false)}
           >
             {t('admin.production.intake.addToPlanning', {
-              defaultValue: 'Add to planning · {{n}}',
+              defaultValue: 'Add to pipeline · {{n}}',
               n: total,
             })}
           </Button>

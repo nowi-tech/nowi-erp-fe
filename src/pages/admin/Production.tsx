@@ -322,7 +322,7 @@ export default function Production() {
         toast.show(
           body.directToProduction
             ? t('admin.production.started', { defaultValue: 'Sent to production.' })
-            : t('admin.production.plannedToast', { defaultValue: 'Added to planning.' }),
+            : t('admin.production.plannedToast', { defaultValue: 'Added to pipeline.' }),
         );
         void loadKpis(); // KPI cards are separate state — refresh after a create.
         setTab(dest);
@@ -356,13 +356,13 @@ export default function Production() {
       .then(() => {
         // Drop it from Suggested in place, then reveal the Planning tab.
         setSuggestions((prev) => prev.filter((x) => x.styleKey !== style.styleKey));
-        toast.show(t('admin.production.plannedToast', { defaultValue: 'Added to planning.' }));
+        toast.show(t('admin.production.plannedToast', { defaultValue: 'Added to pipeline.' }));
         void loadKpis();
         setTab('planning');
       })
       .catch(() =>
         toast.show(
-          t('admin.production.startFailed', { defaultValue: "Couldn't add to planning." }),
+          t('admin.production.startFailed', { defaultValue: "Couldn't add to pipeline." }),
           'error',
         ),
       )
@@ -414,7 +414,7 @@ export default function Production() {
       },
       {
         key: 'planning' as const,
-        label: t('admin.production.tabs.planning', { defaultValue: 'Planning' }),
+        label: t('admin.production.tabs.planning', { defaultValue: 'Pipeline' }),
       },
       {
         key: 'in_production' as const,
@@ -663,7 +663,7 @@ function KpiRow({
     <div className="grid grid-cols-2 gap-4 lg:grid-cols-5">
       <button type="button" className={card} onClick={() => onTab('planning')}>
         <div className={label}>
-          {t('admin.production.kpi.planning', { defaultValue: 'In planning' })}
+          {t('admin.production.kpi.planning', { defaultValue: 'In pipeline' })}
         </div>
         <div className={value}>{kpis?.planningBatches ?? '—'}</div>
       </button>
@@ -842,7 +842,7 @@ function ToStartTable({
                       }}
                     >
                       {t('admin.production.addToPlanning', {
-                        defaultValue: 'Add to planning',
+                        defaultValue: 'Add to pipeline',
                       })}
                     </Button>
                     <Button
