@@ -7,6 +7,7 @@ import {
   useState,
 } from 'react';
 import { useTranslation } from 'react-i18next';
+import { ImageOff } from 'lucide-react';
 
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
@@ -37,6 +38,7 @@ import {
   type LinkExtractResult,
 } from '@/api/styles';
 import { cn } from '@/lib/utils';
+import { POST_SAMPLING } from '@/lib/styleRef';
 
 import type {
   CategoryWithStyleCode,
@@ -290,6 +292,77 @@ function buildInitialForm(style: Style | null | undefined): FormState {
  *  collides with a real (positive) Style.id. */
 const TYPED_CODE_ID = -1;
 
+/** A colour can only fan out from a style that already cleared sampling —
+ *  the same gate `spawnColourVariant` enforces server-side. */
+const colourParentEligible = (s: Style) => POST_SAMPLING.has(s.lifecycle);
+
+/** A relive derives its code from the source's minted Style #, so the source
+ *  must already carry one (drafts have none). */
+const reliveSourceEligible = (s: Style) => !!s.styleId;
+
+/**
+ * What a relive is about to re-release. The relive fork asks for NOTHING —
+ * every field comes from this style — so this card is the whole review step:
+ * it shows what will be copied onto the new Style before you submit.
+ */
+function ReliveSourcePreview({ style }: { style: Style }) {
+  const { t } = useTranslation();
+  const path = style.referenceImages?.[0] ?? style.referenceImage ?? null;
+  const urls = useSignedUrls([path]);
+  const src = path ? (urls[path] ?? null) : null;
+
+  const gender = style.gender ? toFormGender(style.gender) : null;
+  const facts = [
+    gender &&
+      t(
+        `admin.styles.intake.gender${gender[0].toUpperCase()}${gender.slice(1)}`,
+      ),
+    style.category?.name,
+    style.collection?.name,
+    style.primaryColour,
+    style.fabric?.name,
+  ].filter(Boolean) as string[];
+
+  return (
+    <div className="mt-3 max-w-md">
+      <div className="flex items-start gap-3 rounded-[var(--radius-md)] border border-[var(--color-border)] bg-[var(--color-surface-2)] p-3">
+        {src ? (
+          <img
+            src={src}
+            alt=""
+            className="h-16 w-16 shrink-0 rounded-[var(--radius-sm)] border border-[var(--color-border)] object-cover"
+          />
+        ) : (
+          <span
+            aria-hidden
+            className="flex h-16 w-16 shrink-0 items-center justify-center rounded-[var(--radius-sm)] border border-[var(--color-border)] bg-[var(--color-surface)] text-[var(--color-muted-foreground)]"
+          >
+            <ImageOff size={18} />
+          </span>
+        )}
+        <div className="min-w-0 flex-1">
+          <p className="truncate text-[13px] font-medium text-[var(--color-foreground)]">
+            {style.styleId}
+          </p>
+          {style.workingName && (
+            <p className="truncate text-[12px] text-[var(--color-muted-foreground)]">
+              {style.workingName}
+            </p>
+          )}
+          {facts.length > 0 && (
+            <p className="mt-1 text-[11px] leading-relaxed text-[var(--color-muted-foreground)]">
+              {facts.join(' · ')}
+            </p>
+          )}
+        </div>
+      </div>
+      <p className="mt-2 text-[12px] text-[var(--color-muted-foreground)]">
+        {t('admin.styles.intake.fork.inheritsNote')}
+      </p>
+    </div>
+  );
+}
+
 /**
  * Picker for the colour / relive fork. Loads one page of existing
  * sampling products once (`listStyles({ source: "sampling", take: 100 })`)
@@ -302,7 +375,7 @@ function StyleRefPicker({
   value,
   onChange,
   allowCode,
-  approvedOnly = false,
+  eligible,
   placeholder,
   emptyLabel,
   addCodeLabel,
@@ -310,10 +383,10 @@ function StyleRefPicker({
   value: ForkTarget;
   onChange: (next: ForkTarget) => void;
   allowCode: boolean;
-  /** Restrict the options to already-approved styles (those with a minted
-   *  Style #). Used by the relive fork, whose new code is derived from the
-   *  source's code — so the source must already carry one. */
-  approvedOnly?: boolean;
+  /** Which loaded styles may be picked. Each fork has its own rule and the BE
+   *  enforces the same one — offering an ineligible row just buys a 400 at
+   *  submit. */
+  eligible: (s: Style) => boolean;
   placeholder: string;
   emptyLabel: string;
   addCodeLabel: string;
@@ -353,8 +426,7 @@ function StyleRefPicker({
   const thumbUrls = useSignedUrls(results.map(thumbPath));
 
   const options = useMemo<ComboboxOption<number>[]>(() => {
-    // Relive sources must be approved (carry a minted Style #); drop drafts.
-    const rows = approvedOnly ? results.filter((r) => r.styleId) : [...results];
+    const rows = results.filter(eligible);
     const picked = pickedRef.current;
     if (picked && !rows.some((r) => r.id === picked.id)) rows.unshift(picked);
     const mapped = rows.map<ComboboxOption<number>>((s) => {
@@ -380,7 +452,7 @@ function StyleRefPicker({
       mapped.unshift({ value: TYPED_CODE_ID, label: value.code });
     }
     return mapped;
-  }, [results, value, approvedOnly, thumbUrls]);
+  }, [results, value, eligible, thumbUrls]);
 
   const comboValue: number | null = value?.style
     ? value.style.id
@@ -656,6 +728,21 @@ const StyleIntakeForm = forwardRef<StyleIntakeFormHandle, StyleIntakeFormProps>(
     // 3rd-party uses its own free-typed code input, not the style-ref picker.
     const isThirdParty = showFork && forkMode === 'third_party';
     const thirdPartyOk = !isThirdParty || thirdPartyCode.trim().length > 0;
+
+    // ── What this fork actually needs to be asked ───────────────────
+    // A colour variant (spawnColourVariant) and a relive of an IN-SYSTEM
+    // style (create() → resolveRelive) both inherit name / gender / category
+    // / collection / fabric / CAD from the style they come from, server-side.
+    // Asking for them again is dead input the BE throws away — so the whole
+    // identity block hides. A relive of a typed LEGACY code has no source row
+    // to inherit from, so it keeps the full form.
+    const reliveSource =
+      showFork && forkMode === 'relive' ? (forkTarget?.style ?? null) : null;
+    const inheritsIdentity =
+      (showFork && forkMode === 'colour') || reliveSource != null;
+    // Only the net-new path samples. Fabric / sample requirement / timeline /
+    // CAD are sampling inputs, so every skip-sampling fork hides that rail.
+    const skipsSampling = showFork && forkMode !== 'new';
     // The style-ref picker is needed by the linking branches (colour / relive)
     // but NOT by net-new or either 3rd-party path (Kotty types a code;
     // manufactured mints one — neither links to an existing style).
@@ -664,13 +751,13 @@ const StyleIntakeForm = forwardRef<StyleIntakeFormHandle, StyleIntakeFormProps>(
       forkMode !== 'new' &&
       forkMode !== 'third_party' &&
       forkMode !== 'third_party_manufactured';
-    // Collection is required at submission on every path EXCEPT the colour
-    // fork — a colour variant inherits its parent's collection server-side
-    // (spawnColourVariant), so the picker isn't shown there.
-    const collectionRequired = !(showFork && forkMode === 'colour');
+    // Collection + working name are only asked for — and only required — on
+    // the paths that don't inherit them from a source style.
+    const collectionRequired = !inheritsIdentity;
     const collectionOk = !collectionRequired || form.collectionId != null;
+    const nameOk = inheritsIdentity || form.workingName.trim().length > 0;
     const isValid =
-      form.workingName.trim().length > 0 &&
+      nameOk &&
       collectionOk &&
       (!needsForkTarget || forkTargetOk) &&
       thirdPartyOk;
@@ -682,6 +769,14 @@ const StyleIntakeForm = forwardRef<StyleIntakeFormHandle, StyleIntakeFormProps>(
     }, [isValid, onValidityChange]);
 
     const buildPayload = (): Record<string, unknown> => {
+      // Relive of an in-system style: the old code is the WHOLE submission.
+      // Every other field comes from the source (BE resolveRelive), and the
+      // form shows none — so nothing else may travel, or a value left over
+      // from another fork would override what's inherited.
+      if (reliveSource) {
+        return { source, oldStyleId: reliveSource.styleId };
+      }
+
       const code =
         (form.categoryCode as string | null) ??
         defaultCategoryCode(form.gender);
@@ -782,7 +877,12 @@ const StyleIntakeForm = forwardRef<StyleIntakeFormHandle, StyleIntakeFormProps>(
           return saved;
         },
         isValid: () => isValid,
-        getCategoryCode: () => (form.categoryCode as string | null) ?? null,
+        // No category was picked on the inheriting paths — don't feed the
+        // footer chip a default that isn't what gets saved.
+        getCategoryCode: () =>
+          inheritsIdentity
+            ? null
+            : ((form.categoryCode as string | null) ?? null),
       }),
       // intentional dep list: rebuild whenever the form or wiring
       // changes so submit() reads the latest values.
@@ -858,7 +958,7 @@ const StyleIntakeForm = forwardRef<StyleIntakeFormHandle, StyleIntakeFormProps>(
               {/* Linking branches (colour / relive) resolve against an
                   existing style via the ref picker. */}
               {needsForkTarget && (
-                <div className="mt-4">
+                <div className="mt-4 max-w-md">
                   <Label>
                     {forkMode === 'colour'
                       ? t('admin.styles.intake.fork.colourPickLabel')
@@ -871,7 +971,11 @@ const StyleIntakeForm = forwardRef<StyleIntakeFormHandle, StyleIntakeFormProps>(
                     // the system) and matches the searchable list to APPROVED
                     // styles (the new code derives from the source's minted #).
                     allowCode={forkMode === 'relive'}
-                    approvedOnly={forkMode === 'relive'}
+                    eligible={
+                      forkMode === 'relive'
+                        ? reliveSourceEligible
+                        : colourParentEligible
+                    }
                     placeholder={t('admin.styles.intake.fork.pickPlaceholder')}
                     emptyLabel={t('admin.styles.intake.fork.pickEmpty')}
                     addCodeLabel={t('admin.styles.intake.fork.addCode')}
@@ -881,6 +985,8 @@ const StyleIntakeForm = forwardRef<StyleIntakeFormHandle, StyleIntakeFormProps>(
                       ? t('admin.styles.intake.fork.colourHelp')
                       : t('admin.styles.intake.fork.reliveHelp')}
                   </p>
+                  {/* Source resolved → this IS the whole submission. */}
+                  {reliveSource && <ReliveSourcePreview style={reliveSource} />}
                 </div>
               )}
 
@@ -906,11 +1012,15 @@ const StyleIntakeForm = forwardRef<StyleIntakeFormHandle, StyleIntakeFormProps>(
 
         {/* 3-column "swapped" layout (Stitch redesign): Inspiration | Article
             (auto-filled) | Fabric rail. Collapses to 2 columns for china-import
-            (no fabric/CAD) and stacks to 1 on small screens. */}
+            (no fabric/CAD) and stacks to 1 on small screens. A resolved relive
+            has NOTHING to fill in — the fork card above is the whole form. */}
         <div
           className={cn(
             'grid grid-cols-1 gap-4',
-            isChinaImport ? 'lg:grid-cols-2' : 'lg:grid-cols-3',
+            reliveSource && 'hidden',
+            isChinaImport || skipsSampling
+              ? 'lg:grid-cols-2'
+              : 'lg:grid-cols-3',
           )}
         >
           {/* Inspiration — the reference link drives the auto-fill */}
@@ -988,77 +1098,88 @@ const StyleIntakeForm = forwardRef<StyleIntakeFormHandle, StyleIntakeFormProps>(
             subtitle={t('admin.styles.intake.articleSubtitle')}
           >
             <div className="space-y-4">
-              <div>
-                <Label>
-                  {t('admin.styles.intake.workingName')} *
-                  {aiFilled.name && <AiFilledBadge source={aiOrigin} />}
-                </Label>
-                {extracting && !form.workingName.trim() ? (
-                  FIELD_SKELETON
-                ) : (
-                  <Input
-                    value={form.workingName}
-                    onChange={(e) => {
-                      clearAiBadge('name');
-                      set('workingName', e.target.value);
-                    }}
-                    placeholder={t('admin.styles.intake.workingNamePh')}
-                    autoFocus={!isEdit}
-                  />
-                )}
-                {aiMissed.name && <MissedHint />}
-              </div>
-              <div>
-                <Label>
-                  {t('admin.styles.intake.gender')}
-                  {aiFilled.gender && <AiFilledBadge source={aiOrigin} />}
-                </Label>
-                {extracting && !genderTouched.current ? (
-                  FIELD_SKELETON
-                ) : (
-                  <GenderSelect
-                    value={form.gender}
-                    onChange={onGenderChange}
-                    labels={{
-                      women: t('admin.styles.intake.genderWomen'),
-                      men: t('admin.styles.intake.genderMen'),
-                      unisex: t('admin.styles.intake.genderUnisex'),
-                    }}
-                  />
-                )}
-              </div>
-              <div>
-                <Label>
-                  {t('admin.styles.intake.category')}
-                  {aiFilled.category && (
-                    <AiFilledBadge low={aiLowConfidence} source={aiOrigin} />
+              {/* Identity — hidden on the paths that inherit it from the
+                  style they come from (colour variant, relive of an
+                  in-system style). What carries over is spelled out under
+                  the fork picker (`colourHelp` / the relive preview card),
+                  so it isn't repeated here. */}
+              {!inheritsIdentity && (
+                <div>
+                  <Label>
+                    {t('admin.styles.intake.workingName')} *
+                    {aiFilled.name && <AiFilledBadge source={aiOrigin} />}
+                  </Label>
+                  {extracting && !form.workingName.trim() ? (
+                    FIELD_SKELETON
+                  ) : (
+                    <Input
+                      value={form.workingName}
+                      onChange={(e) => {
+                        clearAiBadge('name');
+                        set('workingName', e.target.value);
+                      }}
+                      placeholder={t('admin.styles.intake.workingNamePh')}
+                      autoFocus={!isEdit}
+                    />
                   )}
-                </Label>
-                {extracting && form.categoryId == null ? (
-                  FIELD_SKELETON
-                ) : (
-                  <CategoryPicker
-                    categories={categories}
-                    value={form.categoryId}
-                    fallbackCode={
-                      (form.categoryCode as FineCategoryCode | null) ?? null
-                    }
-                    gender={form.gender}
-                    onChange={({ categoryId, code }) => {
-                      clearAiBadge('category');
-                      setForm((f) => ({
-                        ...f,
-                        categoryId,
-                        categoryCode: code,
-                      }));
-                    }}
-                    onCategoryCreated={(c) =>
-                      onCategoriesChanged([...categories, c])
-                    }
-                  />
-                )}
-                {aiMissed.category && <MissedHint />}
-              </div>
+                  {aiMissed.name && <MissedHint />}
+                </div>
+              )}
+              {!inheritsIdentity && (
+                <div>
+                  <Label>
+                    {t('admin.styles.intake.gender')}
+                    {aiFilled.gender && <AiFilledBadge source={aiOrigin} />}
+                  </Label>
+                  {extracting && !genderTouched.current ? (
+                    FIELD_SKELETON
+                  ) : (
+                    <GenderSelect
+                      value={form.gender}
+                      onChange={onGenderChange}
+                      labels={{
+                        women: t('admin.styles.intake.genderWomen'),
+                        men: t('admin.styles.intake.genderMen'),
+                        unisex: t('admin.styles.intake.genderUnisex'),
+                      }}
+                    />
+                  )}
+                </div>
+              )}
+              {!inheritsIdentity && (
+                <div>
+                  <Label>
+                    {t('admin.styles.intake.category')}
+                    {aiFilled.category && (
+                      <AiFilledBadge low={aiLowConfidence} source={aiOrigin} />
+                    )}
+                  </Label>
+                  {extracting && form.categoryId == null ? (
+                    FIELD_SKELETON
+                  ) : (
+                    <CategoryPicker
+                      categories={categories}
+                      value={form.categoryId}
+                      fallbackCode={
+                        (form.categoryCode as FineCategoryCode | null) ?? null
+                      }
+                      gender={form.gender}
+                      onChange={({ categoryId, code }) => {
+                        clearAiBadge('category');
+                        setForm((f) => ({
+                          ...f,
+                          categoryId,
+                          categoryCode: code,
+                        }));
+                      }}
+                      onCategoryCreated={(c) =>
+                        onCategoriesChanged([...categories, c])
+                      }
+                    />
+                  )}
+                  {aiMissed.category && <MissedHint />}
+                </div>
+              )}
               {collectionRequired && (
                 <div>
                   <Label>{t('admin.styles.intake.collection')} *</Label>
@@ -1077,6 +1198,9 @@ const StyleIntakeForm = forwardRef<StyleIntakeFormHandle, StyleIntakeFormProps>(
               <div>
                 <Label>
                   {t('admin.styles.intake.primaryColour')}
+                  {/* The defining attribute of a colour variant — required
+                      there, an optional override everywhere else. */}
+                  {showFork && forkMode === 'colour' ? ' *' : ''}
                   {aiFilled.colour && <AiFilledBadge source={aiOrigin} />}
                 </Label>
                 {extracting && !form.primaryColour.trim() ? (
@@ -1094,7 +1218,7 @@ const StyleIntakeForm = forwardRef<StyleIntakeFormHandle, StyleIntakeFormProps>(
                 )}
                 {aiMissed.colour && <MissedHint />}
               </div>
-              {!isChinaImport && (
+              {!isChinaImport && !inheritsIdentity && (
                 <div>
                   <Label>{t('admin.styles.intake.developmentReason')}</Label>
                   <Textarea
@@ -1107,8 +1231,10 @@ const StyleIntakeForm = forwardRef<StyleIntakeFormHandle, StyleIntakeFormProps>(
             </div>
           </IntakeCard>
 
-          {/* Fabric & sampling — right rail (sampling source only) */}
-          {!isChinaImport && (
+          {/* Fabric & sampling — right rail. Sampling-source only, and only
+              on the path that actually samples: every fork that skips
+              sampling ignores these fields server-side. */}
+          {!isChinaImport && !skipsSampling && (
             <IntakeCard
               title={t(
                 'admin.styles.intake.samplingSpecifics',
