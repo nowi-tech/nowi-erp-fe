@@ -50,8 +50,8 @@ const HEADER_INK = '#334155';
 const PRIMARY = 'var(--color-primary)';
 
 // Child (size) grid — the sub-header + every size row align to it.
-// SIZE (thumb + size) · COVER · DRR · TREND · STOCK · AT-RISK · MAKE
-const GRID = 'minmax(0,1.5fr) 0.8fr 0.6fr 1.05fr 0.6fr 0.8fr 0.6fr';
+// SIZE (thumb + size) · COVER · DRR · TREND · STOCK · MAKE
+const GRID = 'minmax(0,1.5fr) 0.8fr 0.6fr 1.05fr 0.6fr 0.6fr';
 
 /** Per-urgency: label + the meaning-colour (red/amber/neutral) for text + dot. */
 const URG: Record<Urgency, { label: string; color: string; dot: string }> = {
@@ -641,8 +641,28 @@ export default function InventoryHealth(): ReactNode {
                 </div>
               </div>
 
-              {/* `bare` — the table drops its own card chrome; this panel provides it. */}
-              {total === 0 ? (
+              {/* A fresh query (tab switch / filter / search / sort) shows the loader
+                  in place of the now-stale rows, then the new data — instead of
+                  silently swapping one dataset for another. */}
+              {loading ? (
+                <div aria-busy aria-label={t('admin.inventoryHealth.loading', { defaultValue: 'Loading…' })}>
+                  {Array.from({ length: 6 }).map((_, i) => (
+                    <div
+                      key={i}
+                      className="flex items-center gap-3 border-t border-neutral-100 px-4 py-3.5 first:border-t-0"
+                    >
+                      <Skeleton className="h-9 w-9 shrink-0 rounded-lg" />
+                      <Skeleton className="h-4 w-44 rounded" />
+                      <div className="ml-auto flex items-center gap-6">
+                        <Skeleton className="h-4 w-16 rounded" />
+                        <Skeleton className="hidden h-4 w-24 rounded lg:block" />
+                        <Skeleton className="h-4 w-10 rounded" />
+                        <Skeleton className="h-4 w-10 rounded" />
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ) : total === 0 ? (
                 <div className="px-4 py-12 text-center text-sm text-[var(--color-muted-foreground)]">
                   {t('admin.inventoryHealth.empty', { defaultValue: 'Nothing matches this filter.' })}
                 </div>
@@ -659,7 +679,6 @@ export default function InventoryHealth(): ReactNode {
                     <SortHeader label={t('admin.inventoryHealth.col.drr', { defaultValue: 'DRR · /d' })} col="drr" sortKey={sortKey} sortDir={sortDir} onSort={onSort} />
                     <span className="flex justify-end">{t('admin.inventoryHealth.col.trend', { defaultValue: 'Trend · /d' })}</span>
                     <SortHeader label={t('admin.inventoryHealth.col.stock', { defaultValue: 'Stock' })} col="stock" sortKey={sortKey} sortDir={sortDir} onSort={onSort} align="right" />
-                    <SortHeader label={t('admin.inventoryHealth.col.atRisk', { defaultValue: 'At risk · /d' })} col="atrisk" sortKey={sortKey} sortDir={sortDir} onSort={onSort} align="right" />
                     <SortHeader label={t('admin.inventoryHealth.col.make', { defaultValue: 'Make' })} col="make" sortKey={sortKey} sortDir={sortDir} onSort={onSort} align="right" />
                   </div>
                   {styles.map((style) => {
@@ -989,14 +1008,6 @@ function SizeRow({
 
       <Cell label={t('admin.inventoryHealth.col.stock', { defaultValue: 'Stock' })} align="right">
         <span className="tabular-nums text-neutral-700">{fmtN(size.currentStock)}</span>
-      </Cell>
-
-      <Cell label={t('admin.inventoryHealth.col.atRisk', { defaultValue: 'At risk · /d' })} align="right">
-        <span className="tabular-nums" style={{ color: size.atRiskUnitsPerDay >= 0.5 ? INK : MUTED }}>
-          {size.atRiskUnitsPerDay >= 0.5
-            ? `${size.atRiskUnitsPerDay.toLocaleString('en-IN', { maximumFractionDigits: 1 })}/d`
-            : '—'}
-        </span>
       </Cell>
 
       <Cell label={t('admin.inventoryHealth.col.make', { defaultValue: 'Make' })} align="right">
