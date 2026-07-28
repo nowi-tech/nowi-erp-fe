@@ -33,7 +33,7 @@ import { useToast } from '@/components/ui/toast';
 import LanguageToggle from '@/components/LanguageToggle';
 import Logo from '@/components/Logo';
 import { cn } from '@/lib/utils';
-import { userAllRoles, PRODUCTION_READ_ROLES } from '@/lib/userRoles';
+import { userAllRoles, DISPATCH_VIEW_ROLES, PRODUCTION_READ_ROLES } from '@/lib/userRoles';
 import type { UserRole } from '@/api/types';
 import { RailTooltip, SectionFlyout } from '@/components/ui/sidebar-tooltip';
 
@@ -105,7 +105,7 @@ const NAV_SECTIONS: NavSection[] = [
       { to: '/admin/locator', icon: <Search size={18} />, labelKey: 'admin.nav.production', roles: [] },
       // Dispatches was folded into Locator as a tab, so hiding Locator orphaned
       // it. Restored as its own entry rather than resurrecting Locator.
-      { to: '/admin/dispatches', icon: <Container size={18} />, labelKey: 'admin.nav.dispatches', roles: ['admin', 'viewer', 'production_lead'] },
+      { to: '/admin/dispatches', icon: <Container size={18} />, labelKey: 'admin.nav.dispatches', roles: [...DISPATCH_VIEW_ROLES] },
     ],
   },
   {

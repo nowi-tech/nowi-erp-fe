@@ -18,6 +18,7 @@ import {
   hasAnyRole,
   hasRole,
   DESIGN_SUBMIT_ROLES,
+  DISPATCH_VIEW_ROLES,
   PRODUCTION_READ_ROLES,
 } from './lib/userRoles';
 import type { UserRole } from './api/types';
@@ -206,11 +207,18 @@ function App() {
             <Route
               path="/admin"
               element={
-                // production_editor must be here too: this parent guard runs
-                // BEFORE any child's allowedRoles, so a child-only widening
-                // (production, inventory-health) never gets reached.
+                // production_editor + warehouse_manager must be here too: this
+                // parent guard runs BEFORE any child's allowedRoles, so a
+                // child-only widening (production, inventory-health) never gets
+                // reached. warehouse_manager reaches ONLY the production child.
                 <ProtectedRoute
-                  allowedRoles={['admin', 'viewer', 'production_lead', 'production_editor']}
+                  allowedRoles={[
+                    'admin',
+                    'viewer',
+                    'production_lead',
+                    'production_editor',
+                    'warehouse_manager',
+                  ]}
                 >
                   <S>
                     <AdminShell />
@@ -317,9 +325,9 @@ function App() {
               <Route
                 path="dispatches"
                 element={
-                  // Re-gated: the /admin parent was widened for production_editor,
-                  // which must NOT inherit unrelated surfaces.
-                  <ProtectedRoute allowedRoles={['admin', 'viewer', 'production_lead']}>
+                  // Floor ledger (admin/viewer/production_lead) + Production
+                  // challans tab (adds production_editor + warehouse_manager).
+                  <ProtectedRoute allowedRoles={[...DISPATCH_VIEW_ROLES]}>
                   <S>
                     <Dispatches />
                   </S>

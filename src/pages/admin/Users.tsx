@@ -35,6 +35,8 @@ const ROLES: UserRole[] = [
   'finishing_master',
   // Fabric desk — read/write/delete the fabric domain.
   'fabric_manager',
+  // Receiving warehouse desk — accepts inbound production challans.
+  'warehouse_manager',
   'viewer',
   // Product Development module
   'sampling_editor',

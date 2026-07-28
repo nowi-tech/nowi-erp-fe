@@ -24,6 +24,9 @@ const ROLE_HOMES: Record<UserRole, string> = {
   cataloguer: '/',
   // Fabric desk lands on the dashboard (office Home).
   fabric_manager: '/',
+  // The warehouse desk has one job — land it on Dispatches, where it sees only
+  // the Production challans tab.
+  warehouse_manager: '/admin/dispatches',
 };
 
 export default function Dashboard() {

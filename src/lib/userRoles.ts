@@ -44,6 +44,9 @@ const IS_PD_WRITER: Record<UserRole, boolean> = {
   // `production_editor` runs the production desk only (PRODUCTION_WRITE_ROLES
   // below) — never styles, approvals, or master data.
   production_editor: false,
+  // `warehouse_manager` only accepts inbound challans (DISPATCH_ACCEPT_ROLES
+  // below) — never PD data.
+  warehouse_manager: false,
   viewer: false,
   floor_manager: false,
   stitching_master: false,
@@ -156,6 +159,24 @@ export const PRODUCTION_READ_ROLES: readonly UserRole[] = [
   ...PRODUCTION_WRITE_ROLES,
   'viewer',
 ];
+
+/**
+ * Who may SEE the Dispatch/challan tab — the production readers plus the
+ * receiving `warehouse_manager` desk. Mirrors the BE dispatch controller VIEW
+ * set. Also the route guard for a warehouse-only user reaching the Production
+ * page (where they see only the Dispatch tab).
+ */
+export const DISPATCH_VIEW_ROLES: readonly UserRole[] = [
+  ...PRODUCTION_READ_ROLES,
+  'warehouse_manager',
+];
+
+/**
+ * Who may ACCEPT an inbound challan (record received-per-size). The receiving
+ * warehouse desk plus admin. Mirrors the BE dispatch ACCEPT set. Creating a
+ * challan stays on {@link PRODUCTION_WRITE_ROLES} (the production desk).
+ */
+export const DISPATCH_ACCEPT_ROLES: readonly UserRole[] = ['admin', 'warehouse_manager'];
 
 type RoleSource = Pick<User, 'role'> & {
   roleAssignments?: Array<{ role: UserRole }>;

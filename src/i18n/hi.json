@@ -102,7 +102,8 @@
     "viewer": "Viewer",
     "production_lead": "Production lead",
     "cataloguer": "Cataloguer",
-    "fabric_manager": "फ़ैब्रिक मैनेजर"
+    "fabric_manager": "फ़ैब्रिक मैनेजर",
+    "warehouse_manager": "Warehouse manager"
   },
   "floor": {
     "title": "Floor",
