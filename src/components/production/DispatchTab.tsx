@@ -2,11 +2,10 @@ import { useCallback, useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { AlertTriangle, ChevronRight, Printer } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Dialog } from '@/components/ui/dialog';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useToast } from '@/components/ui/toast';
 import AcceptChallanDialog from '@/components/production/AcceptChallanDialog';
+import ReasonDialog from '@/components/production/ReasonDialog';
 import { printChallan } from '@/components/production/printChallan';
 import {
   acceptDispatch,
@@ -47,7 +46,6 @@ export default function DispatchTab({
   const [expanded, setExpanded] = useState<Record<number, boolean>>({});
   const [acceptTarget, setAcceptTarget] = useState<ProductionDispatch | null>(null);
   const [cancelTarget, setCancelTarget] = useState<ProductionDispatch | null>(null);
-  const [cancelReason, setCancelReason] = useState('');
   const [busy, setBusy] = useState(false);
 
   const load = useCallback(async () => {
@@ -85,15 +83,14 @@ export default function DispatchTab({
       .finally(() => setBusy(false));
   };
 
-  const onCancel = () => {
+  const onCancel = (reason: string) => {
     const target = cancelTarget;
-    if (!target || cancelReason.trim().length < 3) return;
+    if (!target) return;
     setBusy(true);
-    cancelDispatch(target.id, cancelReason.trim())
+    cancelDispatch(target.id, reason)
       .then((updated) => {
         setRows((prev) => prev.map((r) => (r.id === updated.id ? updated : r)));
         setCancelTarget(null);
-        setCancelReason('');
       })
       .catch(() =>
         toast.show(
@@ -192,10 +189,7 @@ export default function DispatchTab({
                         variant="outline"
                         size="sm"
                         disabled={busy}
-                        onClick={() => {
-                          setCancelReason('');
-                          setCancelTarget(d);
-                        }}
+                        onClick={() => setCancelTarget(d)}
                       >
                         {t('admin.production.dispatch.cancel.cta', { defaultValue: 'Cancel' })}
                       </Button>
@@ -268,46 +262,20 @@ export default function DispatchTab({
         onConfirm={onAccept}
       />
 
-      <Dialog
+      <ReasonDialog
         open={cancelTarget !== null}
+        busy={busy}
+        title={t('admin.production.dispatch.cancel.title', {
+          defaultValue: 'Cancel challan {{no}}?',
+          no: cancelTarget?.challanNo ?? '',
+        })}
+        confirmLabel={t('admin.production.dispatch.cancel.confirm', { defaultValue: 'Cancel challan' })}
+        placeholder={t('admin.production.dispatch.cancel.reasonPlaceholder', {
+          defaultValue: 'Why is this challan being voided?',
+        })}
         onClose={() => setCancelTarget(null)}
-        maxWidthClassName="max-w-md"
-        title={
-          <div className="text-base font-semibold">
-            {t('admin.production.dispatch.cancel.title', {
-              defaultValue: 'Cancel challan {{no}}?',
-              no: cancelTarget?.challanNo ?? '',
-            })}
-          </div>
-        }
-        footer={
-          <>
-            <Button variant="outline" size="sm" disabled={busy} onClick={() => setCancelTarget(null)}>
-              {t('admin.production.dispatch.cancel.keep', { defaultValue: 'Keep it' })}
-            </Button>
-            <Button
-              variant="destructive"
-              size="sm"
-              disabled={busy || cancelReason.trim().length < 3}
-              onClick={onCancel}
-            >
-              {t('admin.production.dispatch.cancel.confirm', { defaultValue: 'Cancel challan' })}
-            </Button>
-          </>
-        }
-      >
-        <label className="mb-1 block text-xs font-semibold text-[var(--color-muted-foreground)]">
-          {t('admin.production.dispatch.cancel.reasonLabel', { defaultValue: 'Reason' })}
-        </label>
-        <Input
-          autoFocus
-          value={cancelReason}
-          onChange={(e) => setCancelReason(e.target.value)}
-          placeholder={t('admin.production.dispatch.cancel.reasonPlaceholder', {
-            defaultValue: 'Why is this challan being voided?',
-          })}
-        />
-      </Dialog>
+        onConfirm={onCancel}
+      />
     </div>
   );
 }

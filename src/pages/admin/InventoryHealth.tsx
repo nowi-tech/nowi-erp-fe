@@ -7,6 +7,7 @@ import { useToast } from '@/components/ui/toast';
 import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 import { DateRangePicker } from '@/components/ui/DateRangePicker';
 import { todayISO } from '@/lib/date';
+import { meaningfulName } from '@/lib/production';
 import { useDebounced } from '@/lib/useDebounced';
 import { useAuth } from '@/context/auth';
 import { hasAnyRole } from '@/lib/userRoles';
@@ -813,10 +814,7 @@ function StyleGroup({
 }): ReactNode {
   const linked = style.linkedStyleId != null;
   const codeColor = style.lowVolume ? 'text-neutral-500' : 'text-neutral-900';
-  const norm = (s: string): string => s.toUpperCase().replace(/[^A-Z0-9]/g, '');
-  const normName = norm(style.name ?? '');
-  const showName =
-    !!normName && normName !== norm(style.styleKey) && !style.sizes.some((z) => norm(z.sku) === normName);
+  const showName = meaningfulName(style) != null;
   // Sizes soonest-to-run-out first within the group.
   const cover = (z: InventorySize): number => z.coverDays ?? Number.POSITIVE_INFINITY;
   const sizes = [...style.sizes].sort((a, b) => cover(a) - cover(b));

@@ -104,14 +104,17 @@ export default function Warehouses() {
     const name = draft.name.trim();
     if (!code || !name) return;
     setSaving(true);
-    // Same payload shape for create and edit — the service PATCHes only what's sent.
+    // On EDIT a blanked field must send '' so the PATCH actually clears it; on
+    // CREATE an empty field is simply omitted (undefined). The service PATCHes
+    // only the keys it receives, so `undefined` would leave a stale value.
+    const optional = (v: string) => v.trim() || (editId != null ? '' : undefined);
     const payload = {
       code,
       name,
-      address: draft.address.trim() || undefined,
-      spocName: draft.spocName.trim() || undefined,
-      spocPhone: draft.spocPhone.trim() || undefined,
-      easyecomWarehouseId: draft.easyecomWarehouseId.trim() || undefined,
+      address: optional(draft.address),
+      spocName: optional(draft.spocName),
+      spocPhone: optional(draft.spocPhone),
+      easyecomWarehouseId: optional(draft.easyecomWarehouseId),
       easyecomEnabled: draft.easyecomEnabled,
     };
     try {

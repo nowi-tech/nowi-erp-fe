@@ -32,6 +32,7 @@ import {
   type ProductionKpis,
 } from '@/api/production';
 import { getInventoryHealth, type InventoryStyle } from '@/api/inventoryHealth';
+import { cleanName, coverTone, meaningfulName } from '@/lib/production';
 import { UrgencyPill } from '@/pages/admin/InventoryHealth';
 import { useToast } from '@/components/ui/toast';
 import { useAuth } from '@/context/auth';
@@ -66,33 +67,6 @@ function statusLabel(t: T, status: BatchStatus): string {
 /** Amber past a week — a batch sitting in one stage is the thing to spot. */
 function ageTone(days: number): string {
   return days >= 7 ? 'text-amber-600 font-semibold' : 'text-[var(--color-muted-foreground)]';
-}
-
-/** Cover-day colour, matching StartProductionDialog: red = reorder now. */
-/** IH's rule: show the SKU-derived name only when it adds information — not
- *  when it is just the styleKey with a size suffix (e.g. "NOWIMPA1082 30",
- *  which normalises to the NOWIMPA1082_30 SKU code). */
-function cleanName(
-  name: string | null,
-  styleKey: string | null,
-  skus: string[],
-): string | null {
-  const norm = (x: string) => x.toUpperCase().replace(/[^A-Z0-9]/g, '');
-  const n = norm(name ?? '');
-  if (!n) return null;
-  if (styleKey && n === norm(styleKey)) return null;
-  if (skus.some((sku) => norm(sku) === n)) return null;
-  return name;
-}
-function meaningfulName(style: InventoryStyle): string | null {
-  return cleanName(style.name, style.styleKey, style.sizes.map((z) => z.sku));
-}
-
-function coverTone(days: number | null): string {
-  if (days == null) return 'text-[var(--color-muted-foreground)]';
-  if (days < 7) return 'text-[var(--color-destructive)]';
-  if (days <= 15) return 'text-amber-600';
-  return 'text-[var(--color-muted-foreground)]';
 }
 
 function fmtDate(iso: string): string {
@@ -298,12 +272,23 @@ export default function Production() {
             : updated.status === 'cutting' ||
               updated.status === 'stitching' ||
               updated.status === 'finishing';
+      let removed = false;
       setBatches((prev) => {
-        if (!inTab) return prev.filter((b) => b.id !== updated.id);
+        if (!inTab) {
+          const next = prev.filter((b) => b.id !== updated.id);
+          removed = next.length < prev.length;
+          return next;
+        }
         return prev.some((b) => b.id === updated.id)
           ? prev.map((b) => (b.id === updated.id ? updated : b))
           : [updated, ...prev];
       });
+      // The row left the current tab — shrink the infinite-scroll offset with the
+      // (now smaller) server result set, or the next page fetch skips one row.
+      if (removed) {
+        setLoaded((l) => Math.max(0, l - 1));
+        setTotal((t) => Math.max(0, t - 1));
+      }
       void loadKpis(); // KPI cards are separate state — updating them can't blink the list
     },
     [tab, loadKpis],

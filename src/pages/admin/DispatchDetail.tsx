@@ -171,7 +171,7 @@ export default function DispatchDetail() {
 
   return (
     <div className="space-y-4">
-      <Button variant="outline" size="sm" onClick={() => navigate('/admin/dispatches')}>
+      <Button variant="outline" size="sm" onClick={() => navigate('/admin/dispatches?tab=floor')}>
         ← {t('common.back')}
       </Button>
 

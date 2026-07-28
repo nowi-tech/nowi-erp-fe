@@ -5,6 +5,7 @@ import { Dialog } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import type { BatchOrigin, CreateBatchBody } from '@/api/production';
+import { coverTone } from '@/lib/production';
 
 /** One seed row. Cover/stock/suggested exist only when the seed is a forecast. */
 export interface StartSizeSeed {
@@ -28,13 +29,6 @@ export interface StartProductionTarget {
   drr?: number | null;
   worstCoverDays?: number | null;
   totalStock?: number | null;
-}
-
-function coverTone(days: number | null | undefined): string {
-  if (days == null) return 'text-[var(--color-muted-foreground)]';
-  if (days < 7) return 'text-[var(--color-destructive)]';
-  if (days <= 15) return 'text-amber-600';
-  return 'text-[var(--color-muted-foreground)]';
 }
 
 /**
