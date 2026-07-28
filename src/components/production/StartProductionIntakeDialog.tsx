@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Factory, X, AlertTriangle, ArrowLeft } from 'lucide-react';
+import { Factory, X, AlertTriangle, ArrowLeft, Loader2, Upload } from 'lucide-react';
 import { Dialog } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -8,9 +8,11 @@ import { Label } from '@/components/ui/label';
 import { Combobox, type ComboboxOption } from '@/components/ui/combobox';
 import QtyTable from '@/components/production/QtyTable';
 import { useToast } from '@/components/ui/toast';
-import { listStyles, type Style } from '@/api/styles';
+import { listStyles, listColourMaster, createColourMaster, type Style } from '@/api/styles';
 import { getStyleSizes, type CreateBatchBody } from '@/api/production';
 import { getBrands, createBrand, type Brand } from '@/api/brands';
+import { uploadPhoto } from '@/api/storage';
+import type { Colour } from '@/api/types';
 
 type Mode = 'existing' | 'external';
 
@@ -56,8 +58,14 @@ export default function StartProductionIntakeDialog({
   // ── external brand ───────────────────────────────────────────────
   const [brands, setBrands] = useState<Brand[]>([]);
   const [brandId, setBrandId] = useState<number | ''>('');
+  const [colours, setColours] = useState<Colour[]>([]);
+  const [colourId, setColourId] = useState<number | ''>('');
   const [externalSku, setExternalSku] = useState('');
   const [extSizes, setExtSizes] = useState<Record<string, boolean>>({});
+  // Uploaded image for the brand batch (optional): GCS object path + preview.
+  const [imagePath, setImagePath] = useState('');
+  const [imagePreview, setImagePreview] = useState('');
+  const [uploading, setUploading] = useState(false);
 
   // ── shared qty map (keyed by item sku) ───────────────────────────
   const [qty, setQty] = useState<Record<string, number>>({});
@@ -68,10 +76,14 @@ export default function StartProductionIntakeDialog({
     setMode('existing');
     setSel(null);
     setBrandId('');
+    setColourId('');
     setExternalSku('');
     setExtSizes({});
+    setImagePath('');
+    setImagePreview('');
     setQty({});
     void getBrands().then(setBrands).catch(() => undefined);
+    void listColourMaster().then(setColours).catch(() => undefined);
     // ponytail: load one page (BE caps take at 500) and let the Combobox filter
     // client-side — same shape as the intake "relive" picker. Ceiling = 500
     // styles; swap to a server-search-backed Combobox if the catalog outgrows it.
@@ -141,7 +153,45 @@ export default function StartProductionIntakeDialog({
     setExternalSku('');
     setExtSizes({});
     setBrandId('');
+    setColourId('');
+    setImagePath('');
+    setImagePreview('');
     setQty({});
+  };
+
+  // "+ Add" inside the colour dropdown creates the typed colour and selects it.
+  const addColour = (typed: string) => {
+    const name = typed.trim();
+    if (!name) return;
+    void createColourMaster({ name })
+      .then((c) => {
+        setColours((prev) =>
+          [...prev.filter((x) => x.id !== c.id), c].sort((a, z) => a.name.localeCompare(z.name)),
+        );
+        setColourId(c.id);
+      })
+      .catch(() =>
+        toast.show(
+          t('admin.production.intake.colourFailed', { defaultValue: "Couldn't add that colour." }),
+          'error',
+        ),
+      );
+  };
+
+  const onImageFile = (file: File | undefined) => {
+    if (!file) return;
+    setUploading(true);
+    setImagePreview(URL.createObjectURL(file));
+    void uploadPhoto('production_batch', 'new', file)
+      .then(({ objectPath }) => setImagePath(objectPath))
+      .catch(() => {
+        setImagePreview('');
+        toast.show(
+          t('admin.production.intake.imageFailed', { defaultValue: "Couldn't upload that image." }),
+          'error',
+        );
+      })
+      .finally(() => setUploading(false));
   };
 
   // "+ Add" inside the brand dropdown creates the typed brand and selects it.
@@ -183,9 +233,13 @@ export default function StartProductionIntakeDialog({
 
   const canSubmit =
     total > 0 &&
+    !uploading &&
     (mode === 'existing'
       ? sel != null
-      : brandId !== '' && externalSku.trim().length > 0 && extActiveSizes.length > 0);
+      : brandId !== '' &&
+        colourId !== '' &&
+        externalSku.trim().length > 0 &&
+        extActiveSizes.length > 0);
 
   const build = (directToProduction: boolean): CreateBatchBody | null => {
     if (mode === 'existing') {
@@ -199,11 +253,13 @@ export default function StartProductionIntakeDialog({
           .map((z) => ({ sku: z.sku, size: z.size, qtyPlanned: qty[z.sku] ?? 0 })),
       };
     }
-    if (brandId === '') return null;
+    if (brandId === '' || colourId === '') return null;
     return {
       origin: 'external',
       brandId,
       externalSku: externalSku.trim(),
+      colourId,
+      imagePath: imagePath || undefined,
       directToProduction,
       items: extActiveSizes
         .filter((s) => (qty[s] ?? 0) > 0)
@@ -353,6 +409,59 @@ export default function StartProductionIntakeDialog({
               placeholder={t('admin.production.intake.pickBrand', { defaultValue: 'Choose a brand…' })}
               ariaLabel={t('admin.production.intake.brand', { defaultValue: 'Brand' })}
             />
+          </div>
+
+          <div>
+            <Label required>{t('admin.production.intake.colour', { defaultValue: 'Colour' })}</Label>
+            <Combobox<number>
+              value={colourId === '' ? null : colourId}
+              options={colours.map((c) => ({
+                value: c.id,
+                label: c.name,
+                leading: (
+                  <span
+                    className="h-4 w-4 shrink-0 rounded-full border border-[var(--color-border)]"
+                    style={{ background: c.hex ?? c.name.toLowerCase() }}
+                  />
+                ),
+              }))}
+              onChange={(id) => setColourId(id ?? '')}
+              onAddNew={addColour}
+              addNewLabel={t('admin.production.intake.addColour', { defaultValue: 'Add a new colour' })}
+              placeholder={t('admin.production.intake.pickColour', { defaultValue: 'Choose a colour…' })}
+              ariaLabel={t('admin.production.intake.colour', { defaultValue: 'Colour' })}
+            />
+          </div>
+
+          <div>
+            <Label>{t('admin.production.intake.image', { defaultValue: 'Image (optional)' })}</Label>
+            <div className="flex items-center gap-3">
+              {imagePreview ? (
+                <img
+                  src={imagePreview}
+                  alt=""
+                  className="h-14 w-14 shrink-0 rounded-[var(--radius-sm)] object-cover"
+                />
+              ) : (
+                <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-[var(--radius-sm)] bg-[var(--color-muted)] text-[var(--color-muted-foreground)]">
+                  {uploading ? <Loader2 size={16} className="animate-spin" /> : <Upload size={16} />}
+                </div>
+              )}
+              <label className="cursor-pointer text-sm font-semibold text-[var(--color-primary)] hover:underline">
+                <input
+                  type="file"
+                  accept="image/*"
+                  className="hidden"
+                  disabled={uploading}
+                  onChange={(e) => onImageFile(e.target.files?.[0])}
+                />
+                {uploading
+                  ? t('common.uploading', { defaultValue: 'Uploading…' })
+                  : imagePath
+                    ? t('admin.production.intake.changeImage', { defaultValue: 'Change image' })
+                    : t('admin.production.intake.uploadImage', { defaultValue: 'Upload image' })}
+              </label>
+            </div>
           </div>
 
           <div>

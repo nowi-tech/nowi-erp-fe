@@ -62,6 +62,10 @@ export interface ProductionBatch {
   brandId: number | null;
   brandName: string | null;
   externalSku: string | null;
+  /** Colour master for an external batch; null on style/forecast batches. */
+  colourId: number | null;
+  colourName: string | null;
+  colourHex: string | null;
   /** ERP Style # when linked, external SKU for an external batch, else the key. */
   styleRef: string | null;
   name: string | null;
@@ -162,6 +166,10 @@ export interface CreateBatchBody {
   brandId?: number;
   /** Required on an external batch (free-text SKU, no Sku row). */
   externalSku?: string;
+  /** Colour master FK — REQUIRED on an external (brand) batch. */
+  colourId?: number;
+  /** Uploaded image (GCS object path) for an external batch. */
+  imagePath?: string;
   /** Skip Planning and open on the floor (cutting); stamps both timestamps. */
   directToProduction?: boolean;
   notes?: string;
