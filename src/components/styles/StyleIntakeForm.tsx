@@ -364,18 +364,21 @@ function ReliveSourcePreview({ style }: { style: Style }) {
 }
 
 /**
- * Picker for the colour / relive fork. Loads one page of existing
- * sampling products once (`listStyles({ source: "sampling", take: 100 })`)
- * and filters them client-side through the Combobox, OR — when `allowCode`
- * (the relive branch) — lets the user type a free-text style code the BE
- * will resolve. The colour branch needs a real row (the spawn endpoint
- * addresses the parent by id), so it never enables the free-text path.
+ * Picker for the colour / relive fork. Loads the existing styles once
+ * (`listStyles({ source, take: 500 })` — 500 is the BE page cap and comfortably
+ * exceeds the whole non-test catalog) and filters them client-side through the
+ * Combobox, OR — when `allowCode` (the relive branch) — lets the user type a
+ * free-text style code the BE will resolve. The colour branch needs a real row
+ * (the spawn endpoint addresses the parent by id), so it never enables the
+ * free-text path. `source` scopes the fetch: colour loads sampling only, relive
+ * loads every source (a past design worth re-releasing may be third-party).
  */
 function StyleRefPicker({
   value,
   onChange,
   allowCode,
   eligible,
+  source,
   placeholder,
   emptyLabel,
   addCodeLabel,
@@ -383,6 +386,8 @@ function StyleRefPicker({
   value: ForkTarget;
   onChange: (next: ForkTarget) => void;
   allowCode: boolean;
+  /** Restrict the loaded set to one source; omit to load all sources. */
+  source?: StyleSource;
   /** Which loaded styles may be picked. Each fork has its own rule and the BE
    *  enforces the same one — offering an ineligible row just buys a 400 at
    *  submit. */
@@ -397,12 +402,13 @@ function StyleRefPicker({
   const pickedRef = useRef<Style | null>(value?.style ?? null);
   pickedRef.current = value?.style ?? pickedRef.current;
 
-  // Load a generous page of existing styles once; the Combobox filters
-  // them client-side as the user types. Soft-fails to an empty list so a
-  // flaky search never blocks the form (same pattern as ColourPicker).
+  // Load the styles once (up to the BE's 500 cap — the whole non-test catalog
+  // is well under that); the Combobox filters them client-side as the user
+  // types. Soft-fails to an empty list so a flaky search never blocks the form
+  // (same pattern as ColourPicker).
   useEffect(() => {
     let mounted = true;
-    void listStyles({ source: 'sampling', take: 100 })
+    void listStyles({ source, take: 500 })
       .then((res) => {
         if (mounted) setResults(res.data);
       })
@@ -412,7 +418,7 @@ function StyleRefPicker({
     return () => {
       mounted = false;
     };
-  }, []);
+  }, [source]);
 
   const styleLabel = (s: Style) =>
     s.styleId ?? s.workingName ?? `D-${s.draftNo ?? s.id}`;
@@ -976,6 +982,9 @@ const StyleIntakeForm = forwardRef<StyleIntakeFormHandle, StyleIntakeFormProps>(
                         ? reliveSourceEligible
                         : colourParentEligible
                     }
+                    // Colour spawns from a sampling parent; relive re-releases
+                    // any past design, so it searches every source.
+                    source={forkMode === 'colour' ? 'sampling' : undefined}
                     placeholder={t('admin.styles.intake.fork.pickPlaceholder')}
                     emptyLabel={t('admin.styles.intake.fork.pickEmpty')}
                     addCodeLabel={t('admin.styles.intake.fork.addCode')}
