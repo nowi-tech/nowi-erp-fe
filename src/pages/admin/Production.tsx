@@ -1143,6 +1143,15 @@ function BatchTable({
                             className="font-mono text-[11px] text-[var(--color-muted-foreground)]"
                           />
                         )}
+                        {b.colourName && (
+                          <span className="mt-0.5 flex items-center gap-1 text-[11px] text-[var(--color-muted-foreground)]">
+                            <span
+                              className="h-2.5 w-2.5 shrink-0 rounded-full border border-[var(--color-border)]"
+                              style={{ background: b.colourHex ?? b.colourName.toLowerCase() }}
+                            />
+                            {b.colourName}
+                          </span>
+                        )}
                       </div>
                     );
                   })()}
