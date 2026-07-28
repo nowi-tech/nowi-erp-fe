@@ -46,6 +46,9 @@ export interface BatchSizeLine {
   /** null = no forecast existed (style-origin), NOT "forecast said zero". */
   suggestedQty: number | null;
   qtyProduced: number | null;
+  /** Units already shipped on challans; `qtyProduced - qtyDispatched` is what
+   *  remains to dispatch. Always a number (0 when nothing shipped). */
+  qtyDispatched: number;
 }
 
 export interface ProductionBatch {

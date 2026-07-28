@@ -26,7 +26,11 @@ export type UserRole =
   // Fabric desk owner: full read/write/delete over the fabric domain (fabric
   // master, stock ledger, supplier challans); lands on the dashboard. Not a
   // general PD editor.
-  | 'fabric_manager';
+  | 'fabric_manager'
+  // Receiving warehouse desk: sees inbound production challans and accepts them
+  // (records received-per-size, flags mismatches). Read-only on the rest of
+  // production — cannot start batches, move stages, or create dispatches.
+  | 'warehouse_manager';
 
 export interface User {
   id: string;
@@ -757,6 +761,9 @@ export interface DestinationWarehouse {
   id: number;
   code: string;
   name: string;
+  address?: string | null;
+  spocName?: string | null;
+  spocPhone?: string | null;
   easyecomWarehouseId?: string | null;
   easyecomEnabled: boolean;
   isActive: boolean;
@@ -766,6 +773,9 @@ export interface DestinationWarehouse {
 export interface CreateDestinationWarehousePayload {
   code: string;
   name: string;
+  address?: string;
+  spocName?: string;
+  spocPhone?: string;
   easyecomWarehouseId?: string;
   easyecomEnabled?: boolean;
   isActive?: boolean;
