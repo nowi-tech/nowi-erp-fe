@@ -43,6 +43,9 @@ export interface InventoryStyle {
   /** Signed URL or GCS object path or null (shown on each size child row). */
   imageUrl: string | null;
   linkedStyleId: number | null;
+  /** Canonical ERP Style # (NOWI-…) when linked to the catalog, else null.
+   *  The human identity shown in Sampling — prefer it over the EasyEcom key. */
+  erpStyleId: string | null;
   /** Real ERP listing URLs — one clickable channel chip each (usually empty). */
   marketplaceLinks: { channel: string; url: string }[];
   /** Most-urgent tier across its sizes — drives the parent pill. */
@@ -105,6 +108,8 @@ export interface InventoryHealthParams {
   search?: string;
   sortKey?: string | null;
   sortDir?: 'asc' | 'desc';
+  /** Production Suggested tab: hide styles that already have an open batch. */
+  excludeInProduction?: boolean;
 }
 
 /** GET /api/inventory-health — one page of the per-size stockout forecast.
@@ -120,6 +125,7 @@ export function getInventoryHealth(params: InventoryHealthParams = {}): Promise<
   if (params.search) q.search = params.search;
   if (params.sortKey) q.sortKey = params.sortKey;
   if (params.sortDir) q.sortDir = params.sortDir;
+  if (params.excludeInProduction) q.excludeInProduction = '1';
   return apiClient.get<InventoryHealthResponse>('/api/inventory-health', { params: q }).then((r) => r.data);
 }
 

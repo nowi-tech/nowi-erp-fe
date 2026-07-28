@@ -14,6 +14,16 @@ import { listDispatches } from '@/api/dispatches';
 import { listWarehouses } from '@/api/filters';
 import { FeatureUnavailableError } from '@/api/_errors';
 import { dispatchStatusVariant } from '@/lib/statusBadge';
+import { QueueTabs } from '@/components/styles/StyleQueueTable';
+import DispatchTab from '@/components/production/DispatchTab';
+import { useAuth } from '@/context/auth';
+import {
+  hasAnyRole,
+  DISPATCH_ACCEPT_ROLES,
+  DISPATCH_VIEW_ROLES,
+  PRODUCTION_CANCEL_ROLES,
+} from '@/lib/userRoles';
+import type { UserRole } from '@/api/types';
 import type {
   Dispatch,
   DispatchStatus,
@@ -53,11 +63,46 @@ function paramsFromUrl(sp: URLSearchParams): ListDispatchesParams {
   };
 }
 
+// Floor (EasyEcom) dispatches — the original ledger. Production challans are a
+// separate internal system shown alongside as a second tab.
+const FLOOR_ROLES: UserRole[] = ['admin', 'viewer', 'production_lead'];
+
 export default function Dispatches() {
   const { t } = useTranslation();
+  const { user } = useAuth();
   const navigate = useNavigate();
   const toast = useToast();
   const [searchParams, setSearchParams] = useSearchParams();
+
+  const canViewFloor = hasAnyRole(user, FLOOR_ROLES);
+  const canViewChallans = hasAnyRole(user, DISPATCH_VIEW_ROLES);
+  const canAcceptChallans = hasAnyRole(user, DISPATCH_ACCEPT_ROLES);
+  const canCancelChallans = hasAnyRole(user, PRODUCTION_CANCEL_ROLES);
+
+  // Production challans lead — they're the primary surface here now.
+  const subtabs = useMemo(
+    () =>
+      [
+        canViewChallans && {
+          key: 'challans' as const,
+          label: t('admin.dispatches.tabs.challans', { defaultValue: 'Production challans' }),
+        },
+        canViewFloor && {
+          key: 'floor' as const,
+          label: t('admin.dispatches.tabs.floor', { defaultValue: 'Warehouse dispatches' }),
+        },
+      ].filter(Boolean) as { key: 'floor' | 'challans'; label: string }[],
+    [t, canViewFloor, canViewChallans],
+  );
+  const requestedTab = searchParams.get('tab');
+  const subtab: 'floor' | 'challans' =
+    requestedTab === 'floor' && canViewFloor
+      ? 'floor'
+      : requestedTab === 'challans' && canViewChallans
+        ? 'challans'
+        : canViewChallans
+          ? 'challans'
+          : 'floor';
 
   const [warehouses, setWarehouses] = useState<FilterOption[]>([]);
   const [data, setData] = useState<ListDispatchesResponse | null>(null);
@@ -66,10 +111,12 @@ export default function Dispatches() {
   const current = useMemo(() => paramsFromUrl(searchParams), [searchParams]);
 
   useEffect(() => {
+    if (subtab !== 'floor') return;
     listWarehouses().then(setWarehouses).catch(() => undefined);
-  }, []);
+  }, [subtab]);
 
   useEffect(() => {
+    if (subtab !== 'floor') return;
     let cancelled = false;
     setLoading(true);
     listDispatches(current)
@@ -127,6 +174,22 @@ export default function Dispatches() {
         <h1 className="text-lg font-semibold">{t('admin.dispatches.title')}</h1>
       </div>
 
+      {subtabs.length > 1 && (
+        <QueueTabs
+          tabs={subtabs}
+          active={subtab}
+          onSelect={(k) => {
+            const next = new URLSearchParams(searchParams);
+            next.set('tab', k);
+            setSearchParams(next, { replace: false });
+          }}
+        />
+      )}
+
+      {subtab === 'challans' ? (
+        <DispatchTab canAccept={canAcceptChallans} canCancel={canCancelChallans} />
+      ) : (
+      <>
       <CollapsibleFilters
         activeCount={
           (current.status ? 1 : 0) +
@@ -300,6 +363,8 @@ export default function Dispatches() {
           </div>
         </CardContent>
       </Card>
+      </>
+      )}
     </div>
   );
 }

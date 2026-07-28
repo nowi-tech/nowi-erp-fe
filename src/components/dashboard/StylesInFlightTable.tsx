@@ -22,6 +22,7 @@ import {
 import { Badge } from '@/components/ui/badge';
 import { cn } from '@/lib/utils';
 import { Input } from '@/components/ui/input';
+import { FloatingPill, TruncText } from '@/components/ui/trunc-text';
 import { DateRangePicker } from '@/components/ui/DateRangePicker';
 import { useToast } from '@/components/ui/toast';
 import Approval1Dialog from '@/components/styles/Approval1Dialog';
@@ -66,7 +67,12 @@ import {
   APPROVER_ROLES,
   ADMIN_ROLES,
   CATALOGUER_WRITE_ROLES,
+  PRODUCTION_WRITE_ROLES,
 } from '@/lib/userRoles';
+import { createBatch, getStyleSizes } from '@/api/production';
+import StartProductionDialog, {
+  type StartProductionTarget,
+} from '@/components/production/StartProductionDialog';
 import { useDebounced } from '@/lib/useDebounced';
 import { formatStyleRef } from '@/lib/styleRef';
 
@@ -312,34 +318,6 @@ function DotStatusPill({
 }
 
 /**
- * The portal'd tooltip pill itself — centred above `rect`, escaping the
- * table's `overflow-x-auto` via a <body> portal. Shared by HoverTip and
- * TruncText so the pill look + positioning live in one place.
- */
-function FloatingPill({
-  rect,
-  children,
-}: {
-  rect: DOMRect;
-  children: ReactNode;
-}) {
-  return createPortal(
-    <div
-      style={{
-        position: 'fixed',
-        left: rect.left + rect.width / 2,
-        top: rect.top - 8,
-        transform: 'translate(-50%, -100%)',
-      }}
-      className="pointer-events-none z-50 max-w-[280px] rounded-[var(--radius-md)] border border-[var(--color-border)] bg-[var(--color-surface)] px-2.5 py-1.5 text-[11px] leading-snug text-[var(--color-foreground)] shadow-md"
-    >
-      {children}
-    </div>,
-    document.body,
-  );
-}
-
-/**
  * Lightweight hover tooltip — wraps a trigger and, on hover/focus, shows a
  * styled detail pill centred above it. Zero-dependency (the house pattern,
  * mirroring HoverThumbnail / RailTooltip). Renders nothing when `content` is
@@ -371,38 +349,6 @@ function HoverTip({
         {children}
       </span>
       {rect && content && <FloatingPill rect={rect}>{content}</FloatingPill>}
-    </>
-  );
-}
-
-/**
- * Truncating text that reveals its FULL value in a styled hover pill — but
- * ONLY when the text is actually clipped (scrollWidth > clientWidth), so short
- * values don't pop a redundant tooltip. Keeps the native `title` as a slow/a11y
- * fallback.
- */
-function TruncText({ text, className }: { text: string; className?: string }) {
-  const ref = useRef<HTMLSpanElement>(null);
-  const [rect, setRect] = useState<DOMRect | null>(null);
-  const show = () => {
-    const el = ref.current;
-    if (el && el.scrollWidth > el.clientWidth + 1) {
-      setRect(el.getBoundingClientRect());
-    }
-  };
-  const hide = () => setRect(null);
-  return (
-    <>
-      <span
-        ref={ref}
-        onMouseEnter={show}
-        onMouseLeave={hide}
-        title={text}
-        className={cn('block truncate', className)}
-      >
-        {text}
-      </span>
-      {rect && <FloatingPill rect={rect}>{text}</FloatingPill>}
     </>
   );
 }
@@ -728,6 +674,37 @@ export default function StylesInFlightTable({
   // Inline sampling-status edits are gated on the PD write set.
   // Non-writers see read-only cells.
   const canWriteInline = hasAnyRole(user, INLINE_WRITE_ROLES);
+  // A live style can be pushed onto the floor without waiting for the forecast
+  // to flag it. Style-origin: no suggested quantities to compare against.
+  const canProduce = hasAnyRole(user, PRODUCTION_WRITE_ROLES);
+  const [produceTarget, setProduceTarget] = useState<StartProductionTarget | null>(null);
+  const [produceBusy, setProduceBusy] = useState(false);
+
+  const openProduce = async (row: DashboardStyleRow) => {
+    setProduceBusy(true);
+    try {
+      const s = await getStyleSizes(row.id);
+      setProduceTarget({
+        origin: 'style',
+        styleId: s.styleId,
+        styleRef: s.styleRef,
+        name: s.name ?? row.workingName ?? null,
+        imageUrl: s.imageUrl,
+        sizes: s.sizes.map((z) => ({ sku: z.sku, size: z.size, suggestedQty: null })),
+      });
+    } catch {
+      // A style with no active per-size SKUs 400s here — say so rather than
+      // leaving the button looking dead.
+      toast.show(
+        t('admin.production.sizesFailed', {
+          defaultValue: "Couldn't load this style's sizes.",
+        }),
+        'error',
+      );
+    } finally {
+      setProduceBusy(false);
+    }
+  };
 
   // The cataloguing write (Mark EasyEcom done) admits the narrow `cataloguer`
   // too — its whole remit. A superset of PD writers; NOT the sampling dropdown.
@@ -1003,6 +980,7 @@ export default function StylesInFlightTable({
     // Live rows get a "Channel" affordance (manage channels in the
     // workspace) for those who can't add listings inline.
     const channel = row.lifecycle === 'live';
+    const produce = canProduce && row.lifecycle === 'live';
     if (
       !approve &&
       !park &&
@@ -1010,12 +988,20 @@ export default function StylesInFlightTable({
       !startCat &&
       !markEasyecom &&
       !addListings &&
-      !channel
+      !channel &&
+      !produce
     ) {
       return <RowChevron />;
     }
     return (
       <>
+        {produce && (
+          <PrimaryActionButton onClick={() => void openProduce(row)}>
+            {t('admin.production.addToPipeline', {
+              defaultValue: 'Add to production pipeline',
+            })}
+          </PrimaryActionButton>
+        )}
         {park && (
           <GhostActionButton icon="park" onClick={() => setParkTarget(row)}>
             {t('dashboard.table.actions.park')}
@@ -1832,6 +1818,34 @@ export default function StylesInFlightTable({
           sampleApproveBusy ? undefined : setSampleApproveTarget(null)
         }
         onConfirm={confirmSampleApprove}
+      />
+      <StartProductionDialog
+        open={produceTarget !== null}
+        busy={produceBusy}
+        target={produceTarget}
+        onClose={() => setProduceTarget(null)}
+        onConfirm={(body) => {
+          setProduceBusy(true);
+          void createBatch(body)
+            .then(() => {
+              setProduceTarget(null);
+              toast.show(
+                t('admin.production.started', { defaultValue: 'Production started.' }),
+              );
+              // Starting from the dashboard creates a planning batch — land on
+              // the Planning tab where it actually shows.
+              navigate('/admin/production?tab=planning');
+            })
+            .catch(() =>
+              toast.show(
+                t('admin.production.startFailed', {
+                  defaultValue: "Couldn't start production.",
+                }),
+                'error',
+              ),
+            )
+            .finally(() => setProduceBusy(false));
+        }}
       />
     </div>
   );

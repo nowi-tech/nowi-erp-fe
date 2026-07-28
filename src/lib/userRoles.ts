@@ -41,6 +41,12 @@ const IS_PD_WRITER: Record<UserRole, boolean> = {
   // `fabric_manager` writes ONLY the fabric domain (FABRIC_WRITE_ROLES below),
   // never general PD data.
   fabric_manager: false,
+  // `production_editor` runs the production desk only (PRODUCTION_WRITE_ROLES
+  // below) — never styles, approvals, or master data.
+  production_editor: false,
+  // `warehouse_manager` only accepts inbound challans (DISPATCH_ACCEPT_ROLES
+  // below) — never PD data.
+  warehouse_manager: false,
   viewer: false,
   floor_manager: false,
   stitching_master: false,
@@ -118,6 +124,59 @@ export const FABRIC_WRITE_ROLES: readonly UserRole[] = [
   ...PD_WRITE_ROLES,
   'fabric_manager',
 ];
+
+/**
+ * Roles allowed to START a production batch and move it through the floor
+ * stages. Mirrors the BE `PRODUCTION_WRITE_ROLES`. Gates the "Add to production
+ * pipeline" buttons (Inventory Health rows + the dashboard live tab) and the
+ * stage dropdown / record-output action on the Production board.
+ *
+ * Deliberately NOT the PD set: `production_editor` is absent from
+ * {@link PD_WRITE_ROLES}, and the sampling roles are absent from here.
+ * Cancelling a batch is narrower still — see {@link PRODUCTION_CANCEL_ROLES}.
+ */
+export const PRODUCTION_WRITE_ROLES: readonly UserRole[] = [
+  'admin',
+  'production_lead',
+  'production_editor',
+];
+
+/**
+ * Cancelling destroys a plan, so it stays with admin + the production admin —
+ * mirrors the BE `CANCEL` set on `production.controller.ts`.
+ */
+export const PRODUCTION_CANCEL_ROLES: readonly UserRole[] = [
+  'admin',
+  'production_lead',
+];
+
+/**
+ * Who may READ the Production board + the Inventory Health forecast feeding it.
+ * Mirrors the BE `PRODUCTION_READ_ROLES` — the write set plus the read-only
+ * office role.
+ */
+export const PRODUCTION_READ_ROLES: readonly UserRole[] = [
+  ...PRODUCTION_WRITE_ROLES,
+  'viewer',
+];
+
+/**
+ * Who may SEE the Dispatch/challan tab — the production readers plus the
+ * receiving `warehouse_manager` desk. Mirrors the BE dispatch controller VIEW
+ * set. Also the route guard for a warehouse-only user reaching the Production
+ * page (where they see only the Dispatch tab).
+ */
+export const DISPATCH_VIEW_ROLES: readonly UserRole[] = [
+  ...PRODUCTION_READ_ROLES,
+  'warehouse_manager',
+];
+
+/**
+ * Who may ACCEPT an inbound challan (record received-per-size). The receiving
+ * warehouse desk plus admin. Mirrors the BE dispatch ACCEPT set. Creating a
+ * challan stays on {@link PRODUCTION_WRITE_ROLES} (the production desk).
+ */
+export const DISPATCH_ACCEPT_ROLES: readonly UserRole[] = ['admin', 'warehouse_manager'];
 
 type RoleSource = Pick<User, 'role'> & {
   roleAssignments?: Array<{ role: UserRole }>;

@@ -27,11 +27,16 @@ const ROLES: UserRole[] = [
   'admin',
   // Production / floor
   'production_lead',
+  // Production desk — starts batches off the forecast, walks them through
+  // the floor stages. Not a PD editor.
+  'production_editor',
   'floor_manager',
   'stitching_master',
   'finishing_master',
   // Fabric desk — read/write/delete the fabric domain.
   'fabric_manager',
+  // Receiving warehouse desk — accepts inbound production challans.
+  'warehouse_manager',
   'viewer',
   // Product Development module
   'sampling_editor',

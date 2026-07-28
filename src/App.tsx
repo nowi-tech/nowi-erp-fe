@@ -14,7 +14,13 @@ import Login from './pages/Login';
 import SsoSkucast from './pages/SsoSkucast';
 import Dashboard from './pages/Dashboard';
 import { useAuth } from './context/auth';
-import { hasAnyRole, hasRole, DESIGN_SUBMIT_ROLES } from './lib/userRoles';
+import {
+  hasAnyRole,
+  hasRole,
+  DESIGN_SUBMIT_ROLES,
+  DISPATCH_VIEW_ROLES,
+  PRODUCTION_READ_ROLES,
+} from './lib/userRoles';
 import type { UserRole } from './api/types';
 
 const AdminShell = lazy(() => import('./components/layout/AdminShell'));
@@ -27,6 +33,7 @@ const Warehouses = lazy(() => import('./pages/admin/Warehouses'));
 const ProductionKpis = lazy(() => import('./pages/admin/ProductionKpis'));
 const SalesKpis = lazy(() => import('./pages/admin/SalesKpis'));
 const InventoryHealth = lazy(() => import('./pages/admin/InventoryHealth'));
+const Production = lazy(() => import('./pages/admin/Production'));
 const StitchingHome = lazy(() => import('./pages/stitching/StitchingHome'));
 const StitchingReceiveLot = lazy(
   () => import('./pages/stitching/StitchingReceiveLot'),
@@ -200,7 +207,19 @@ function App() {
             <Route
               path="/admin"
               element={
-                <ProtectedRoute allowedRoles={['admin', 'viewer', 'production_lead']}>
+                // production_editor + warehouse_manager must be here too: this
+                // parent guard runs BEFORE any child's allowedRoles, so a
+                // child-only widening (production, inventory-health) never gets
+                // reached. warehouse_manager reaches ONLY the production child.
+                <ProtectedRoute
+                  allowedRoles={[
+                    'admin',
+                    'viewer',
+                    'production_lead',
+                    'production_editor',
+                    'warehouse_manager',
+                  ]}
+                >
                   <S>
                     <AdminShell />
                   </S>
@@ -214,9 +233,13 @@ function App() {
               <Route
                 path="locator"
                 element={
+                  // Re-gated: the /admin parent was widened for production_editor,
+                  // which must NOT inherit unrelated surfaces.
+                  <ProtectedRoute allowedRoles={['admin', 'viewer', 'production_lead']}>
                   <S>
                     <Locator />
                   </S>
+                  </ProtectedRoute>
                 }
               />
               {/* Production KPI dashboard (Google Sheet). Inherits the /admin
@@ -224,9 +247,13 @@ function App() {
               <Route
                 path="production-kpis"
                 element={
+                  // Re-gated: the /admin parent was widened for production_editor,
+                  // which must NOT inherit unrelated surfaces.
+                  <ProtectedRoute allowedRoles={['admin', 'viewer', 'production_lead']}>
                   <S>
                     <ProductionKpis />
                   </S>
+                  </ProtectedRoute>
                 }
               />
               {/* Sales analytics — the same SalesKpis view, filtered per section
@@ -251,9 +278,19 @@ function App() {
               <Route
                 path="analytics/inventory-health"
                 element={
-                  <ProtectedRoute allowedRoles={['admin', 'viewer']}>
+                  <ProtectedRoute allowedRoles={[...PRODUCTION_READ_ROLES]}>
                     <S>
                       <InventoryHealth />
+                    </S>
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="production"
+                element={
+                  <ProtectedRoute allowedRoles={[...PRODUCTION_READ_ROLES]}>
+                    <S>
+                      <Production />
                     </S>
                   </ProtectedRoute>
                 }
@@ -276,25 +313,37 @@ function App() {
               <Route
                 path="locator/sku/:sku"
                 element={
+                  // Re-gated: the /admin parent was widened for production_editor,
+                  // which must NOT inherit unrelated surfaces.
+                  <ProtectedRoute allowedRoles={['admin', 'viewer', 'production_lead']}>
                   <S>
                     <SkuDetail />
                   </S>
+                  </ProtectedRoute>
                 }
               />
               <Route
                 path="dispatches"
                 element={
+                  // Floor ledger (admin/viewer/production_lead) + Production
+                  // challans tab (adds production_editor + warehouse_manager).
+                  <ProtectedRoute allowedRoles={[...DISPATCH_VIEW_ROLES]}>
                   <S>
                     <Dispatches />
                   </S>
+                  </ProtectedRoute>
                 }
               />
               <Route
                 path="dispatches/:id"
                 element={
+                  // Re-gated: the /admin parent was widened for production_editor,
+                  // which must NOT inherit unrelated surfaces.
+                  <ProtectedRoute allowedRoles={['admin', 'viewer', 'production_lead']}>
                   <S>
                     <DispatchDetail />
                   </S>
+                  </ProtectedRoute>
                 }
               />
               <Route
@@ -314,9 +363,13 @@ function App() {
               <Route
                 path="warehouses"
                 element={
+                  // Re-gated: the /admin parent was widened for production_editor,
+                  // which must NOT inherit unrelated surfaces.
+                  <ProtectedRoute allowedRoles={['admin', 'viewer', 'production_lead']}>
                   <S>
                     <Warehouses />
                   </S>
+                  </ProtectedRoute>
                 }
               />
               <Route

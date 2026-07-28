@@ -9,6 +9,7 @@ import {
   TrendingUp,
   LineChart,
   HeartPulse,
+  Factory,
   LogOut,
   FlaskConical,
   Inbox,
@@ -32,7 +33,7 @@ import { useToast } from '@/components/ui/toast';
 import LanguageToggle from '@/components/LanguageToggle';
 import Logo from '@/components/Logo';
 import { cn } from '@/lib/utils';
-import { userAllRoles } from '@/lib/userRoles';
+import { userAllRoles, DISPATCH_VIEW_ROLES, PRODUCTION_READ_ROLES } from '@/lib/userRoles';
 import type { UserRole } from '@/api/types';
 import { RailTooltip, SectionFlyout } from '@/components/ui/sidebar-tooltip';
 
@@ -55,10 +56,9 @@ interface NavSection {
 /* Nav follows the simplified post-redesign IA (docs/DASHBOARD_REDESIGN.md):
    Dashboard · Sampling · Production · Users · Master Data, plus China Import +
    Fabric Library, plus the floor/stage drop-in surfaces for admins. Dispatch
-   is no longer a top-level item — it folds into the Production page as a tab
-   (the /admin/dispatches ROUTE stays, only the nav entry is gone). Role-gating
-   is unchanged: an item only renders for roles its route's ProtectedRoute
-   permits. */
+   is its own top-level item again — it now hosts the production challans tab
+   alongside the floor dispatch ledger. Role-gating is unchanged: an item only
+   renders for roles its route's ProtectedRoute permits. */
 
 // Office roles that see the unified Home (`/`). Mirrors OFFICE_HOME_ROLES in
 // App.tsx and the Home allow-list in docs/DASHBOARD_REDESIGN.md.
@@ -86,6 +86,9 @@ const NAV_SECTIONS: NavSection[] = [
     items: [
       // Unified office Home — every office role lands here.
       { to: '/', end: true, icon: <LayoutDashboard size={18} />, labelKey: 'admin.nav.dashboard', roles: OFFICE_ROLES },
+      // Sits directly under Sampling: production work starts from the
+      // forecast, so it belongs in the main flow, not buried in Analytics.
+      { to: '/admin/production', icon: <Factory size={18} />, labelKey: 'admin.nav.productionPipeline', roles: [...PRODUCTION_READ_ROLES] },
       // Old Sampling registry (the legacy Styles page). RETIRED from the nav —
       // the Dashboard ("Sampling") is now the single sampling surface. The
       // /styles ROUTE stays (the dashboard drill-down + intake still use it),
@@ -93,8 +96,15 @@ const NAV_SECTIONS: NavSection[] = [
       // needed on this page; leave it as-is until it's removed for good.
       // ponytail: empty roles = hidden from all (roles.some(...) is false).
       { to: '/styles', end: true, icon: <Shirt size={18} />, labelKey: 'admin.nav.styles', roles: [] },
-      // Production = the renamed Locator. Dispatch lives inside it as a tab.
-      { to: '/admin/locator', icon: <Search size={18} />, labelKey: 'admin.nav.production', roles: ['admin', 'viewer', 'production_lead'] },
+      // Locator (labelled "Production") is RETIRED from the nav — it collided
+      // with the Production pipeline board above, which is the surface
+      // production work actually starts from. The /admin/locator ROUTE stays
+      // live (SKU drill-down still links to it); only the entry is hidden.
+      // ponytail: empty roles = hidden from all (roles.some(...) is false).
+      { to: '/admin/locator', icon: <Search size={18} />, labelKey: 'admin.nav.production', roles: [] },
+      // Dispatches was folded into Locator as a tab, so hiding Locator orphaned
+      // it. Restored as its own entry rather than resurrecting Locator.
+      { to: '/admin/dispatches', icon: <Container size={18} />, labelKey: 'admin.nav.dispatches', roles: [...DISPATCH_VIEW_ROLES] },
     ],
   },
   {
@@ -104,7 +114,7 @@ const NAV_SECTIONS: NavSection[] = [
       // Inventory Health leads the section (the priority screen). Production KPIs
       // stays within the first 4 flattened items so it keeps its mobile bottom-nav
       // slot; Sales KPIs moves into the "More" overflow on mobile.
-      { to: '/admin/analytics/inventory-health', icon: <HeartPulse size={18} />, labelKey: 'admin.nav.inventoryHealth', roles: ['admin', 'viewer'] },
+      { to: '/admin/analytics/inventory-health', icon: <HeartPulse size={18} />, labelKey: 'admin.nav.inventoryHealth', roles: [...PRODUCTION_READ_ROLES] },
       { to: '/admin/production-kpis', icon: <BarChart3 size={18} />, labelKey: 'admin.nav.productionKpis', roles: ['admin', 'viewer', 'production_lead'] },
       { to: '/admin/sales-kpis', icon: <TrendingUp size={18} />, labelKey: 'admin.nav.salesKpis', roles: ['admin', 'viewer'] },
       { to: '/admin/analytics/fulfilment', icon: <LineChart size={18} />, labelKey: 'admin.nav.analyticsFulfilment', roles: ['admin', 'viewer'] },
