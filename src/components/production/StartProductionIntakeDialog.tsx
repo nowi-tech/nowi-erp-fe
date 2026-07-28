@@ -1,14 +1,13 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Factory, Loader2, Plus, Search, X, AlertTriangle } from 'lucide-react';
+import { Factory, X, AlertTriangle, ArrowLeft } from 'lucide-react';
 import { Dialog } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Select } from '@/components/ui/select';
 import { Label } from '@/components/ui/label';
+import { Combobox, type ComboboxOption } from '@/components/ui/combobox';
 import QtyTable from '@/components/production/QtyTable';
 import { useToast } from '@/components/ui/toast';
-import { useDebounced } from '@/lib/useDebounced';
 import { listStyles, type Style } from '@/api/styles';
 import { getStyleSizes, type CreateBatchBody } from '@/api/production';
 import { getBrands, createBrand, type Brand } from '@/api/brands';
@@ -28,11 +27,11 @@ interface ExistingSel {
 }
 
 /**
- * The header "Start production" intake. Two sources converge on the Planning
- * stage: an existing Nowi style not in the forecast, or another brand's SKU
- * that isn't in our system. Quantities are captured here; "Add to planning"
- * stages it, "Send to production" opens it straight on the floor (both stamp
- * the Planning timestamp so history reads correctly).
+ * The header "Start production" intake — modelled on the intake form's
+ * "relive an old style" search: one combobox finds an existing Nowi style,
+ * and its "+ Add" row switches to the new-item (another brand's SKU) form,
+ * carrying the typed text over as the SKU. Quantities are captured here;
+ * "Add to pipeline" stages it, "Send to production" opens it on the floor.
  */
 export default function StartProductionIntakeDialog({
   open,
@@ -49,65 +48,57 @@ export default function StartProductionIntakeDialog({
   const toast = useToast();
   const [mode, setMode] = useState<Mode>('existing');
 
-  // ── existing-style search ────────────────────────────────────────
-  const [search, setSearch] = useState('');
-  const debounced = useDebounced(search, 300);
-  const [results, setResults] = useState<Style[]>([]);
-  const [searching, setSearching] = useState(false);
+  // ── existing-style search (one page loaded once; combobox filters it) ──
+  const [styles, setStyles] = useState<Style[]>([]);
   const [sel, setSel] = useState<ExistingSel | null>(null);
   const [loadingSizes, setLoadingSizes] = useState(false);
 
   // ── external brand ───────────────────────────────────────────────
   const [brands, setBrands] = useState<Brand[]>([]);
   const [brandId, setBrandId] = useState<number | ''>('');
-  const [addingBrand, setAddingBrand] = useState(false);
-  const [newBrand, setNewBrand] = useState('');
   const [externalSku, setExternalSku] = useState('');
   const [extSizes, setExtSizes] = useState<Record<string, boolean>>({});
 
   // ── shared qty map (keyed by item sku) ───────────────────────────
   const [qty, setQty] = useState<Record<string, number>>({});
 
-  // Reset everything when the dialog opens.
+  // Reset everything when the dialog opens; load the picker's data once.
   useEffect(() => {
     if (!open) return;
     setMode('existing');
-    setSearch('');
-    setResults([]);
     setSel(null);
     setBrandId('');
-    setNewBrand('');
-    setAddingBrand(false);
     setExternalSku('');
     setExtSizes({});
     setQty({});
     void getBrands().then(setBrands).catch(() => undefined);
+    // ponytail: load one page (BE caps take at 500) and let the Combobox filter
+    // client-side — same shape as the intake "relive" picker. Ceiling = 500
+    // styles; swap to a server-search-backed Combobox if the catalog outgrows it.
+    void listStyles({ take: 500 })
+      .then((r) => setStyles(r.data))
+      .catch(() => setStyles([]));
   }, [open]);
 
-  // Live style search.
-  useEffect(() => {
-    if (!open || mode !== 'existing') return;
-    const q = debounced.trim();
-    if (!q) {
-      setResults([]);
-      return;
-    }
-    let cancelled = false;
-    setSearching(true);
-    listStyles({ search: q, take: 8 })
-      .then((r) => {
-        if (!cancelled) setResults(r.data);
-      })
-      .catch(() => {
-        if (!cancelled) setResults([]);
-      })
-      .finally(() => {
-        if (!cancelled) setSearching(false);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [debounced, open, mode]);
+  const styleOptions = useMemo<ComboboxOption<number>[]>(
+    () =>
+      styles.map((s) => {
+        const img = s.referenceImages?.[0] ?? s.referenceImage ?? null;
+        const label = s.styleId ?? s.workingName ?? `#${s.id}`;
+        return {
+          value: s.id,
+          label,
+          sublabel: s.workingName && s.workingName !== label ? s.workingName : undefined,
+          searchText: [s.styleId, s.workingName].filter(Boolean).join(' '),
+          leading: img ? (
+            <img src={img} alt="" className="h-7 w-7 shrink-0 rounded object-cover" />
+          ) : (
+            <div className="h-7 w-7 shrink-0 rounded bg-[var(--color-muted)]" />
+          ),
+        };
+      }),
+    [styles],
+  );
 
   const pickStyle = async (style: Style) => {
     setLoadingSizes(true);
@@ -124,8 +115,6 @@ export default function StartProductionIntakeDialog({
       const seeded: Record<string, number> = {};
       for (const z of s.sizes) seeded[z.sku] = 0;
       setQty(seeded);
-      setResults([]);
-      setSearch('');
     } catch {
       toast.show(
         t('admin.production.intake.sizesFailed', {
@@ -138,23 +127,40 @@ export default function StartProductionIntakeDialog({
     }
   };
 
-  const onAddBrand = async () => {
-    const name = newBrand.trim();
+  // "+ Add" on the combobox → switch to the new-item form, carrying the typed
+  // text over as the SKU (mirrors relive's typed-code path).
+  const startExternal = (typed: string) => {
+    setMode('external');
+    setExternalSku(typed.trim());
+    setExtSizes({});
+    setQty({});
+  };
+
+  const backToPicker = () => {
+    setMode('existing');
+    setExternalSku('');
+    setExtSizes({});
+    setBrandId('');
+    setQty({});
+  };
+
+  // "+ Add" inside the brand dropdown creates the typed brand and selects it.
+  const addBrand = (typed: string) => {
+    const name = typed.trim();
     if (!name) return;
-    setAddingBrand(true);
-    try {
-      const b = await createBrand(name);
-      setBrands((prev) => [...prev.filter((x) => x.id !== b.id), b].sort((a, z) => a.name.localeCompare(z.name)));
-      setBrandId(b.id);
-      setNewBrand('');
-    } catch {
-      toast.show(
-        t('admin.production.intake.brandFailed', { defaultValue: "Couldn't add that brand." }),
-        'error',
+    void createBrand(name)
+      .then((b) => {
+        setBrands((prev) =>
+          [...prev.filter((x) => x.id !== b.id), b].sort((a, z) => a.name.localeCompare(z.name)),
+        );
+        setBrandId(b.id);
+      })
+      .catch(() =>
+        toast.show(
+          t('admin.production.intake.brandFailed', { defaultValue: "Couldn't add that brand." }),
+          'error',
+        ),
       );
-    } finally {
-      setAddingBrand(false);
-    }
   };
 
   const setQtyFor = (sku: string, raw: string) =>
@@ -163,12 +169,7 @@ export default function StartProductionIntakeDialog({
   const toggleExtSize = (size: string) =>
     setExtSizes((prev) => ({ ...prev, [size]: !prev[size] }));
 
-  // The item list depends on mode. For external, each active size becomes an
-  // item whose sku is derived from the free-text SKU so it's unique per size.
-  const extActiveSizes = useMemo(
-    () => SIZE_PRESETS.filter((s) => extSizes[s]),
-    [extSizes],
-  );
+  const extActiveSizes = useMemo(() => SIZE_PRESETS.filter((s) => extSizes[s]), [extSizes]);
   const extSku = (size: string) => `${externalSku.trim()}-${size}`;
 
   const total = useMemo(() => {
@@ -252,82 +253,32 @@ export default function StartProductionIntakeDialog({
         </>
       }
     >
-      {/* Path picker — mirrors the style-intake "What are you submitting?" fork:
-          a dropdown that decides which fields show below. */}
-      <div className="mb-4 max-w-md">
-        <Label>{t('admin.production.intake.pathLabel', { defaultValue: 'What are you making?' })}</Label>
-        <Select
-          aria-label={t('admin.production.intake.pathLabel', { defaultValue: 'What are you making?' })}
-          value={mode}
-          onChange={(e) => setMode(e.target.value as Mode)}
-        >
-          <option value="existing">
-            {t('admin.production.intake.existing', { defaultValue: 'A Nowi style' })}
-          </option>
-          <option value="external">
-            {t('admin.production.intake.external', { defaultValue: "Another brand's SKU" })}
-          </option>
-        </Select>
-      </div>
-
       {mode === 'existing' ? (
         <div className="space-y-3">
-          {!sel && <Label>{t('admin.production.intake.styleLabel', { defaultValue: 'Style' })}</Label>}
           {!sel && (
-            <div className="relative">
-              <Search
-                size={16}
-                className="absolute left-3 top-1/2 -translate-y-1/2 text-[var(--color-primary)]"
-              />
-              <Input
-                autoFocus
-                className="h-10 pl-9"
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-                placeholder={t('admin.production.intake.searchStyle', {
-                  defaultValue: 'Search a style by name or ID…',
+            <>
+              <Label>{t('admin.production.intake.styleLabel', { defaultValue: 'Style' })}</Label>
+              <Combobox<number>
+                value={null}
+                options={styleOptions}
+                onChange={(id) => {
+                  const s = id != null ? styles.find((x) => x.id === id) : null;
+                  if (s) void pickStyle(s);
+                }}
+                onAddNew={startExternal}
+                addNewLabel={t('admin.production.intake.addExternal', {
+                  defaultValue: "Add another brand's SKU",
                 })}
+                placeholder={
+                  loadingSizes
+                    ? t('common.loading', { defaultValue: 'Loading…' })
+                    : t('admin.production.intake.searchStyle', {
+                        defaultValue: 'Search a style by name or ID…',
+                      })
+                }
+                ariaLabel={t('admin.production.intake.styleLabel', { defaultValue: 'Style' })}
               />
-              {(searching || loadingSizes) && (
-                <Loader2
-                  size={15}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 animate-spin text-[var(--color-muted-foreground)]"
-                />
-              )}
-            </div>
-          )}
-
-          {!sel && results.length > 0 && (
-            <div className="max-h-64 divide-y divide-[var(--color-border)] overflow-y-auto rounded-[var(--radius-sm)] border border-[var(--color-border)]">
-              {results.map((s) => (
-                <button
-                  key={s.id}
-                  type="button"
-                  onClick={() => void pickStyle(s)}
-                  className="flex w-full items-center gap-3 px-3 py-2 text-left hover:bg-[var(--color-surface-2)]/60"
-                >
-                  {s.referenceImage || s.referenceImages?.[0] ? (
-                    <img
-                      src={s.referenceImages?.[0] ?? s.referenceImage ?? ''}
-                      alt=""
-                      className="h-9 w-9 shrink-0 rounded object-cover"
-                    />
-                  ) : (
-                    <div className="h-9 w-9 shrink-0 rounded bg-[var(--color-muted)]" />
-                  )}
-                  <div className="min-w-0">
-                    <div className="truncate text-sm font-semibold">
-                      {s.styleId ?? s.workingName ?? `#${s.id}`}
-                    </div>
-                    {s.workingName && (
-                      <div className="truncate text-xs text-[var(--color-muted-foreground)]">
-                        {s.workingName}
-                      </div>
-                    )}
-                  </div>
-                </button>
-              ))}
-            </div>
+            </>
           )}
 
           {sel && (
@@ -381,48 +332,26 @@ export default function StartProductionIntakeDialog({
         </div>
       ) : (
         <div className="space-y-4">
+          <button
+            type="button"
+            onClick={backToPicker}
+            className="flex items-center gap-1 text-xs font-semibold text-[var(--color-primary)] hover:underline"
+          >
+            <ArrowLeft size={13} />
+            {t('admin.production.intake.backToStyles', { defaultValue: 'Back to styles' })}
+          </button>
+
           <div>
             <Label>{t('admin.production.intake.brand', { defaultValue: 'Brand' })}</Label>
-            {addingBrand ? (
-              <div className="flex gap-2">
-                <Input
-                  autoFocus
-                  value={newBrand}
-                  onChange={(e) => setNewBrand(e.target.value)}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter') void onAddBrand();
-                  }}
-                  placeholder={t('admin.production.intake.newBrand', { defaultValue: 'New brand name' })}
-                />
-                <Button size="sm" disabled={!newBrand.trim()} onClick={() => void onAddBrand()}>
-                  {t('common.add', { defaultValue: 'Add' })}
-                </Button>
-                <Button variant="outline" size="sm" onClick={() => setAddingBrand(false)}>
-                  {t('common.cancel', { defaultValue: 'Cancel' })}
-                </Button>
-              </div>
-            ) : (
-              <div className="flex gap-2">
-                <select
-                  value={brandId}
-                  onChange={(e) => setBrandId(e.target.value ? Number(e.target.value) : '')}
-                  className="h-10 flex-1 rounded-[var(--radius-sm)] border border-[var(--color-border)] bg-white px-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-ring)]"
-                >
-                  <option value="">
-                    {t('admin.production.intake.pickBrand', { defaultValue: 'Choose a brand…' })}
-                  </option>
-                  {brands.map((b) => (
-                    <option key={b.id} value={b.id}>
-                      {b.name}
-                    </option>
-                  ))}
-                </select>
-                <Button variant="outline" size="sm" onClick={() => setAddingBrand(true)}>
-                  <Plus size={14} />
-                  <span className="ml-1">{t('common.new', { defaultValue: 'New' })}</span>
-                </Button>
-              </div>
-            )}
+            <Combobox<number>
+              value={brandId === '' ? null : brandId}
+              options={brands.map((b) => ({ value: b.id, label: b.name }))}
+              onChange={(id) => setBrandId(id ?? '')}
+              onAddNew={addBrand}
+              addNewLabel={t('admin.production.intake.addBrand', { defaultValue: 'Add a new brand' })}
+              placeholder={t('admin.production.intake.pickBrand', { defaultValue: 'Choose a brand…' })}
+              ariaLabel={t('admin.production.intake.brand', { defaultValue: 'Brand' })}
+            />
           </div>
 
           <div>
