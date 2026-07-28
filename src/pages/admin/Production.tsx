@@ -47,8 +47,8 @@ type Tab = 'to_start' | 'planning' | 'in_production' | 'completed' | 'parked';
 const PAGE_SIZE = 50;
 
 /** Grid template shared by the header, the batch rows, and the size sub-rows. */
-// Fixed Style column (288px, matching the To-start STYLE_COL) so it never
-// stretches with the name; the Sizes column (1fr) absorbs the row's slack.
+// Fixed 256px Style column so it never stretches with the name; the Sizes
+// column (1fr) absorbs the row's slack.
 const BATCH_GRID =
   'grid grid-cols-[22px_256px_92px_minmax(0,1fr)_64px_84px_128px_64px_92px_236px] items-center gap-3 px-4';
 

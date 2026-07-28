@@ -38,10 +38,10 @@ function coverTone(days: number | null | undefined): string {
 }
 
 /**
- * The SINGLE way a production batch is started — used by the Production board
- * header, the Inventory Health rows, and the dashboard live tab. Quantities
- * prefill from the forecast where one exists; a style-origin batch starts at 0
- * per size and posts no `suggestedQty` at all (absent ≠ zero).
+ * Starts a production batch from the dashboard "live" tab (StylesInFlightTable).
+ * The Production board header uses StartProductionIntakeDialog instead.
+ * Quantities prefill from the forecast where one exists; a style-origin batch
+ * starts at 0 per size and posts no `suggestedQty` at all (absent ≠ zero).
  */
 export default function StartProductionDialog({
   open,
@@ -214,9 +214,10 @@ export default function StartProductionDialog({
           </thead>
           <tbody>
             {target.sizes.map((s) => {
-              // A size the forecast says needs nothing is dimmed, not hidden —
-              // you can still choose to make it.
-              const idle = (s.suggestedQty ?? 0) === 0;
+              // A size the forecast explicitly says needs nothing is dimmed, not
+              // hidden — you can still choose to make it. `null` = no forecast at
+              // all (style-origin), which must NOT dim (absent ≠ zero).
+              const idle = s.suggestedQty === 0;
               const rowDelta = (qty[s.sku] ?? 0) - (s.suggestedQty ?? 0);
               return (
                 <tr key={s.sku} className="border-b border-[var(--color-border)]/60">
@@ -320,7 +321,7 @@ export default function StartProductionDialog({
       <p className="mt-3 text-xs text-[var(--color-muted-foreground)]">
         {t('admin.production.start.hint', {
           defaultValue:
-            'The batch opens at Cutting. Quantities stay editable until you record output.',
+            'The batch is added to the pipeline. Quantities stay editable until you send it to production.',
         })}
       </p>
     </Dialog>

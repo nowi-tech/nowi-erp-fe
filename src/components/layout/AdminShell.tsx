@@ -56,10 +56,9 @@ interface NavSection {
 /* Nav follows the simplified post-redesign IA (docs/DASHBOARD_REDESIGN.md):
    Dashboard · Sampling · Production · Users · Master Data, plus China Import +
    Fabric Library, plus the floor/stage drop-in surfaces for admins. Dispatch
-   is no longer a top-level item — it folds into the Production page as a tab
-   (the /admin/dispatches ROUTE stays, only the nav entry is gone). Role-gating
-   is unchanged: an item only renders for roles its route's ProtectedRoute
-   permits. */
+   is its own top-level item again — it now hosts the production challans tab
+   alongside the floor dispatch ledger. Role-gating is unchanged: an item only
+   renders for roles its route's ProtectedRoute permits. */
 
 // Office roles that see the unified Home (`/`). Mirrors OFFICE_HOME_ROLES in
 // App.tsx and the Home allow-list in docs/DASHBOARD_REDESIGN.md.

@@ -170,15 +170,16 @@ export default function StartProductionIntakeDialog({
     setExtSizes((prev) => ({ ...prev, [size]: !prev[size] }));
 
   const extActiveSizes = useMemo(() => SIZE_PRESETS.filter((s) => extSizes[s]), [extSizes]);
+  // External qty is keyed by SIZE (not the SKU), so editing the SKU text after
+  // typing quantities doesn't orphan them. The SKU is derived only at submit.
   const extSku = (size: string) => `${externalSku.trim()}-${size}`;
 
   const total = useMemo(() => {
     if (mode === 'existing') {
       return sel ? sel.sizes.reduce((a, z) => a + (qty[z.sku] ?? 0), 0) : 0;
     }
-    return extActiveSizes.reduce((a, s) => a + (qty[extSku(s)] ?? 0), 0);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [mode, sel, qty, extActiveSizes, externalSku]);
+    return extActiveSizes.reduce((a, s) => a + (qty[s] ?? 0), 0);
+  }, [mode, sel, qty, extActiveSizes]);
 
   const canSubmit =
     total > 0 &&
@@ -205,8 +206,8 @@ export default function StartProductionIntakeDialog({
       externalSku: externalSku.trim(),
       directToProduction,
       items: extActiveSizes
-        .filter((s) => (qty[extSku(s)] ?? 0) > 0)
-        .map((s) => ({ sku: extSku(s), size: s, qtyPlanned: qty[extSku(s)] ?? 0 })),
+        .filter((s) => (qty[s] ?? 0) > 0)
+        .map((s) => ({ sku: extSku(s), size: s, qtyPlanned: qty[s] ?? 0 })),
     };
   };
 
@@ -388,11 +389,11 @@ export default function StartProductionIntakeDialog({
           {extActiveSizes.length > 0 && (
             <QtyTable
               rows={extActiveSizes.map((s) => ({
-                key: extSku(s),
+                key: s,
                 size: s,
                 sku: externalSku.trim() ? extSku(s) : '—',
                 inFlight: 0,
-                qty: qty[extSku(s)] ?? 0,
+                qty: qty[s] ?? 0,
               }))}
               onQty={setQtyFor}
             />
