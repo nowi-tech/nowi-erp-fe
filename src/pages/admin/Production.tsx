@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { useSearchParams } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { ChevronRight, Factory, Loader2, Search, X } from 'lucide-react';
 import { QueueTabs } from '@/components/styles/StyleQueueTable';
 import { HoverThumbnail } from '@/components/dashboard/StylesInFlightTable';
@@ -8,9 +8,13 @@ import { TruncText } from '@/components/ui/trunc-text';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { ConfirmDialog } from '@/components/ui/confirm-dialog';
+import { Skeleton } from '@/components/ui/skeleton';
 import RecordOutputDialog from '@/components/production/RecordOutputDialog';
 import SendToProductionDialog from '@/components/production/SendToProductionDialog';
 import StartProductionIntakeDialog from '@/components/production/StartProductionIntakeDialog';
+import DispatchBuilderDialog from '@/components/production/DispatchBuilderDialog';
+import CancelBatchDialog from '@/components/production/CancelBatchDialog';
+import { createDispatch, type CreateDispatchBody } from '@/api/productionDispatch';
 import {
   ADVANCEABLE_STATUSES,
   advanceBatch,
@@ -99,6 +103,7 @@ export default function Production() {
   const { t } = useTranslation();
   const { user } = useAuth();
   const toast = useToast();
+  const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   const canWrite = hasAnyRole(user, PRODUCTION_WRITE_ROLES);
   const canCancel = hasAnyRole(user, PRODUCTION_CANCEL_ROLES);
@@ -148,6 +153,11 @@ export default function Production() {
   const [stageTarget, setStageTarget] = useState<{ batch: ProductionBatch; status: BatchStatus } | null>(null);
   const [cancelTarget, setCancelTarget] = useState<ProductionBatch | null>(null);
   const [dropTarget, setDropTarget] = useState<InventoryStyle | null>(null);
+  // Completed-tab multi-select → the one place a challan is built. Keyed
+  // per-size (`${batchId}:${sku}`) so a challan can ship a subset of a batch's
+  // sizes.
+  const [selected, setSelected] = useState<Record<string, boolean>>({});
+  const [builderOpen, setBuilderOpen] = useState(false);
 
   const loadKpis = useCallback(async () => {
     // Board-level figures live on the batches endpoint; `take: 1` because we
@@ -404,6 +414,52 @@ export default function Production() {
     });
   };
 
+  const selectedKeys = useMemo(
+    () => new Set(Object.keys(selected).filter((k) => selected[k])),
+    [selected],
+  );
+  const selectedCount = selectedKeys.size;
+  // Batches with at least one selected size — what the builder renders.
+  const selectedBatches = useMemo(
+    () => batches.filter((b) => b.sizes.some((s) => selectedKeys.has(`${b.id}:${s.sku}`))),
+    [batches, selectedKeys],
+  );
+
+  const toggleSize = (batchId: number, sku: string) =>
+    setSelected((p) => ({ ...p, [`${batchId}:${sku}`]: !p[`${batchId}:${sku}`] }));
+
+  // Select-all for one batch: flips every size that still has remaining to ship.
+  const toggleAllSizes = (b: ProductionBatch, on: boolean) =>
+    setSelected((p) => {
+      const next = { ...p };
+      for (const s of b.sizes) {
+        if ((s.qtyProduced ?? 0) - (s.qtyDispatched ?? 0) > 0) next[`${b.id}:${s.sku}`] = on;
+      }
+      return next;
+    });
+
+  // Completed tab → challan. The one creation path; clears selection, refreshes
+  // the board, and jumps to the Dispatches page where the challan now lives.
+  const onCreateDispatch = (body: CreateDispatchBody) => {
+    setBusy(true);
+    createDispatch(body)
+      .then(() => {
+        setBuilderOpen(false);
+        setSelected({});
+        toast.show(t('admin.production.dispatch.created', { defaultValue: 'Challan created.' }));
+        void load(); // a fully-dispatched batch leaves the Completed tab
+        void loadKpis();
+        navigate('/admin/dispatches?tab=challans');
+      })
+      .catch(() =>
+        toast.show(
+          t('admin.production.dispatch.createFailed', { defaultValue: "Couldn't create the challan." }),
+          'error',
+        ),
+      )
+      .finally(() => setBusy(false));
+  };
+
   // Park (Drop) or un-park (Restore) a style, removing the row in place.
   const setParked = async (styleKey: string, parked: boolean) => {
     setBusy(true);
@@ -538,13 +594,23 @@ export default function Production() {
             </select>
           </>
         )}
+        {canWrite && tab === 'completed' && (
+          <Button
+            size="sm"
+            className="ml-auto"
+            disabled={busy || selectedCount === 0}
+            onClick={() => setBuilderOpen(true)}
+          >
+            {t('admin.production.dispatch.dispatchN', {
+              defaultValue: 'Dispatch ({{n}})',
+              n: selectedCount,
+            })}
+          </Button>
+        )}
       </div>
 
       {loading ? (
-        <div className="flex items-center gap-2 rounded-[var(--radius-md)] border border-[var(--color-border)] p-8 text-sm text-[var(--color-muted-foreground)]">
-          <Loader2 size={15} className="animate-spin" />
-          {t('common.loading', { defaultValue: 'Loading…' })}
-        </div>
+        <BoardSkeleton />
       ) : error ? (
         <div className="rounded-[var(--radius-md)] border border-[var(--color-border)] p-8 text-sm text-[var(--color-destructive)]">
           {t('admin.production.loadError', { defaultValue: "Couldn't load production data." })}
@@ -569,7 +635,13 @@ export default function Production() {
           canCancel={canCancel}
           busy={busy}
           expanded={expanded}
-          onToggle={(id) => setExpanded((p) => ({ ...p, [id]: !p[id] }))}
+          selectable={canWrite && tab === 'completed'}
+          selected={selected}
+          onToggleSize={toggleSize}
+          onToggleAll={toggleAllSizes}
+          // Completed rows open by default so the per-size checkboxes are visible.
+          defaultExpanded={tab === 'completed'}
+          onToggle={(id, next) => setExpanded((p) => ({ ...p, [id]: next }))}
           onStage={(b, status) => {
             // Finishing = the completion step: capture produced qty and mark
             // completed.
@@ -641,31 +713,23 @@ export default function Production() {
         onClose={() => setIntakeOpen(false)}
         onConfirm={onStart}
       />
-      <ConfirmDialog
+      <DispatchBuilderDialog
+        open={builderOpen}
+        busy={busy}
+        batches={selectedBatches}
+        selectedKeys={selectedKeys}
+        onClose={() => setBuilderOpen(false)}
+        onConfirm={onCreateDispatch}
+      />
+      <CancelBatchDialog
         open={cancelTarget !== null}
-        title={t('admin.production.cancel.title', { defaultValue: 'Dismiss this batch?' })}
-        message={t('admin.production.cancel.message', {
-          defaultValue:
-            'Batch {{no}} will be dismissed and stop counting toward the forecast immediately. This cannot be undone.',
-          no: cancelTarget?.batchNo ?? '',
-        })}
-        confirmLabel={t('admin.production.cancel.confirm', { defaultValue: 'Dismiss' })}
-        cancelLabel={t('admin.production.cancel.keep', { defaultValue: 'Keep it' })}
-        destructive
-        onCancel={() => setCancelTarget(null)}
-        onConfirm={() => {
+        busy={busy}
+        batch={cancelTarget}
+        onClose={() => setCancelTarget(null)}
+        onConfirm={(reason) => {
           const target = cancelTarget;
           setCancelTarget(null);
-          if (target) {
-            void runAction(() =>
-              cancelBatch(
-                target.id,
-                t('admin.production.cancel.reason', {
-                  defaultValue: 'Dismissed from the production board',
-                }),
-              ),
-            );
-          }
+          if (target) void runAction(() => cancelBatch(target.id, reason));
         }}
       />
       <ConfirmDialog
@@ -686,6 +750,30 @@ export default function Production() {
           if (k) void onDrop(k);
         }}
       />
+    </div>
+  );
+}
+
+/** Placeholder rows that mirror the table layout while a tab loads. */
+function BoardSkeleton() {
+  return (
+    <div className="overflow-hidden rounded-[var(--radius-md)] border border-[var(--color-border)] bg-[var(--color-surface)]">
+      {Array.from({ length: 6 }).map((_, i) => (
+        <div
+          key={i}
+          className="flex items-center gap-3 border-b border-[var(--color-border)] px-4 py-3 last:border-b-0"
+        >
+          <Skeleton className="h-4 w-4 shrink-0 rounded" />
+          <Skeleton className="h-10 w-10 shrink-0 rounded-[var(--radius-sm)]" />
+          <div className="min-w-0 flex-1 space-y-1.5">
+            <Skeleton className="h-3.5 w-40" />
+            <Skeleton className="h-3 w-24" />
+          </div>
+          <Skeleton className="h-4 w-24" />
+          <Skeleton className="h-6 w-16 rounded-full" />
+          <Skeleton className="h-4 w-10" />
+        </div>
+      ))}
     </div>
   );
 }
@@ -719,7 +807,7 @@ function KpiRow({
       </button>
       <button type="button" className={card} onClick={() => onTab('in_production')}>
         <div className={label}>
-          {t('admin.production.kpi.unitsInPipeline', { defaultValue: 'Units in pipeline' })}
+          {t('admin.production.kpi.unitsInPipeline', { defaultValue: 'Units in flight' })}
         </div>
         <div className={value}>{kpis?.unitsInPipeline?.toLocaleString() ?? '—'}</div>
         {kpis && (
@@ -948,6 +1036,11 @@ function BatchTable({
   canCancel,
   busy,
   expanded,
+  selectable = false,
+  selected = {},
+  defaultExpanded = false,
+  onToggleSize,
+  onToggleAll,
   onToggle,
   onStage,
   onSend,
@@ -959,7 +1052,15 @@ function BatchTable({
   canCancel: boolean;
   busy: boolean;
   expanded: Record<number, boolean>;
-  onToggle: (id: number) => void;
+  /** Completed tab only: per-SKU checkboxes (in the breakdown) to pick sizes for a challan. */
+  selectable?: boolean;
+  /** Selected size keys `${batchId}:${sku}` → true. */
+  selected?: Record<string, boolean>;
+  /** Rows open unless explicitly collapsed — Completed opens by default. */
+  defaultExpanded?: boolean;
+  onToggleSize?: (batchId: number, sku: string) => void;
+  onToggleAll?: (batch: ProductionBatch, on: boolean) => void;
+  onToggle: (id: number, next: boolean) => void;
   onStage: (batch: ProductionBatch, status: BatchStatus) => void;
   onSend: (batch: ProductionBatch) => void;
   onCancel: (batch: ProductionBatch) => void;
@@ -984,7 +1085,7 @@ function BatchTable({
         >
           <div />
           <div className={head}>{t('admin.production.style', { defaultValue: 'Style' })}</div>
-          <div className={head}>{t('admin.production.batch', { defaultValue: 'Batch' })}</div>
+          <div className={head}>{t('admin.production.lot', { defaultValue: 'Lot' })}</div>
           <div className={head}>{t('admin.production.sizes', { defaultValue: 'Sizes' })}</div>
           <div className={`${head} text-right`}>
             {t('admin.production.planned', { defaultValue: 'Planned' })}
@@ -1003,17 +1104,32 @@ function BatchTable({
         </div>
 
         {rows.map((b) => {
-          const isOpen = !!expanded[b.id];
+          const isOpen = expanded[b.id] ?? defaultExpanded;
+          // Completed-tab selection is per-size; these summarise it for the row.
+          const remainingSizes = b.sizes.filter((s) => (s.qtyProduced ?? 0) - (s.qtyDispatched ?? 0) > 0);
+          const selectedSizes = remainingSizes.filter((s) => selected[`${b.id}:${s.sku}`]);
+          const allSelected = remainingSizes.length > 0 && selectedSizes.length === remainingSizes.length;
           return (
             <div key={b.id} className="border-b border-[var(--color-border)] last:border-b-0">
-              <div className={`${BATCH_GRID} py-3 hover:bg-[var(--color-surface-2)]/50`}>
+              {/* Clicking the row toggles the breakdown for mouse users; the
+                  chevron is the real (keyboard/AX) toggle. The row is NOT a
+                  role=button — it wraps a <select> and buttons, which would be
+                  invalid nesting. Interactive children stopPropagation so a
+                  click on them doesn't also collapse the row. */}
+              <div
+                onClick={() => onToggle(b.id, !isOpen)}
+                className={`${BATCH_GRID} cursor-pointer py-3 hover:bg-[var(--color-surface-2)]/50`}
+              >
                 <button
                   type="button"
-                  onClick={() => onToggle(b.id)}
                   aria-expanded={isOpen}
                   aria-label={t('admin.production.toggleSizes', {
                     defaultValue: 'Show size breakdown',
                   })}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onToggle(b.id, !isOpen);
+                  }}
                   className="text-[var(--color-muted-foreground)]"
                 >
                   <ChevronRight
@@ -1092,6 +1208,7 @@ function BatchTable({
                     <select
                       value={b.status}
                       disabled={busy}
+                      onClick={(e) => e.stopPropagation()}
                       onChange={(e) => onStage(b, e.target.value as BatchStatus)}
                       className="h-8 w-full rounded-[var(--radius-sm)] border border-[var(--color-border)] bg-white px-2 text-xs font-semibold focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-ring)]"
                     >
@@ -1117,7 +1234,10 @@ function BatchTable({
                   </div>
                 </div>
 
-                <div className="flex items-center justify-end gap-1.5">
+                <div
+                  className="flex items-center justify-end gap-2"
+                  onClick={(e) => e.stopPropagation()}
+                >
                     {canWrite && tab === 'planning' && (
                       <Button size="sm" disabled={busy} onClick={() => onSend(b)}>
                         {t('admin.production.sendToProduction', {
@@ -1125,24 +1245,16 @@ function BatchTable({
                         })}
                       </Button>
                     )}
-                    {canWrite && b.status === 'completed' && (
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        disabled={busy}
-                        onClick={() => onStage(b, 'dispatched')}
-                      >
-                        {t('admin.production.markDispatched', { defaultValue: 'Mark dispatched' })}
-                      </Button>
-                    )}
-                    {canCancel && b.status !== 'dispatched' && (
+                    {/* Cancel an in-flight batch. A completed batch is done —
+                        nothing to cancel — so it's hidden there. */}
+                    {canCancel && b.status !== 'dispatched' && b.status !== 'completed' && (
                       <Button
                         variant="destructive"
                         size="sm"
                         disabled={busy}
                         onClick={() => onCancel(b)}
                       >
-                        {t('admin.production.dismiss', { defaultValue: 'Dismiss' })}
+                        {t('admin.production.cancelCta', { defaultValue: 'Cancel' })}
                       </Button>
                     )}
                 </div>
@@ -1154,6 +1266,22 @@ function BatchTable({
                   <table className="w-full text-[13px]">
                     <thead>
                       <tr className={head}>
+                        {selectable && (
+                          <th className="w-6 py-1.5">
+                            {remainingSizes.length > 0 && (
+                              <input
+                                type="checkbox"
+                                className="h-4 w-4 accent-[var(--color-primary)]"
+                                checked={allSelected}
+                                disabled={busy}
+                                onChange={() => onToggleAll?.(b, !allSelected)}
+                                aria-label={t('admin.production.dispatch.selectAll', {
+                                  defaultValue: 'Select all sizes',
+                                })}
+                              />
+                            )}
+                          </th>
+                        )}
                         <th className="py-1.5 text-left">
                           {t('admin.production.size', { defaultValue: 'Size' })}
                         </th>
@@ -1167,22 +1295,48 @@ function BatchTable({
                         <th className="py-1.5 text-right">
                           {t('admin.production.produced', { defaultValue: 'Produced' })}
                         </th>
+                        {selectable && (
+                          <th className="py-1.5 text-right">
+                            {t('admin.production.dispatch.build.remaining', { defaultValue: 'Remaining' })}
+                          </th>
+                        )}
                       </tr>
                     </thead>
                     <tbody>
-                      {b.sizes.map((s) => (
-                        <tr key={s.sku} className="border-t border-[var(--color-border)]/50">
-                          <td className="py-1.5 font-semibold">{s.size}</td>
-                          <td className="py-1.5 font-mono text-xs text-[var(--color-muted-foreground)]">
-                            {s.sku}
-                          </td>
-                          <td className="py-1.5 text-right text-[var(--color-muted-foreground)]">
-                            {s.suggestedQty ?? '—'}
-                          </td>
-                          <td className="py-1.5 text-right font-semibold">{s.qtyPlanned}</td>
-                          <td className="py-1.5 text-right">{s.qtyProduced ?? '—'}</td>
-                        </tr>
-                      ))}
+                      {b.sizes.map((s) => {
+                        const remaining = (s.qtyProduced ?? 0) - (s.qtyDispatched ?? 0);
+                        return (
+                          <tr key={s.sku} className="border-t border-[var(--color-border)]/50">
+                            {selectable && (
+                              <td className="py-1.5">
+                                <input
+                                  type="checkbox"
+                                  className="h-4 w-4 accent-[var(--color-primary)]"
+                                  checked={!!selected[`${b.id}:${s.sku}`]}
+                                  disabled={busy || remaining <= 0}
+                                  onChange={() => onToggleSize?.(b.id, s.sku)}
+                                  aria-label={t('admin.production.dispatch.selectSize', {
+                                    defaultValue: 'Select size {{size}} for dispatch',
+                                    size: s.size,
+                                  })}
+                                />
+                              </td>
+                            )}
+                            <td className="py-1.5 font-semibold">{s.size}</td>
+                            <td className="py-1.5 font-mono text-xs text-[var(--color-muted-foreground)]">
+                              {s.sku}
+                            </td>
+                            <td className="py-1.5 text-right text-[var(--color-muted-foreground)]">
+                              {s.suggestedQty ?? '—'}
+                            </td>
+                            <td className="py-1.5 text-right font-semibold">{s.qtyPlanned}</td>
+                            <td className="py-1.5 text-right">{s.qtyProduced ?? '—'}</td>
+                            {selectable && (
+                              <td className="py-1.5 text-right font-semibold">{remaining}</td>
+                            )}
+                          </tr>
+                        );
+                      })}
                     </tbody>
                   </table>
                   {(b.notes || b.shortfallReason || b.cancelReason) && (

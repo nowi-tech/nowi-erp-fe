@@ -20,6 +20,9 @@ import type { DestinationWarehouse } from '@/api/types';
 interface DraftState {
   code: string;
   name: string;
+  address: string;
+  spocName: string;
+  spocPhone: string;
   easyecomWarehouseId: string;
   easyecomEnabled: boolean;
 }
@@ -27,6 +30,9 @@ interface DraftState {
 const EMPTY_DRAFT: DraftState = {
   code: '',
   name: '',
+  address: '',
+  spocName: '',
+  spocPhone: '',
   easyecomWarehouseId: '',
   easyecomEnabled: false,
 };
@@ -50,6 +56,8 @@ export default function Warehouses() {
   const [loading, setLoading] = useState(true);
   const [draft, setDraft] = useState<DraftState>(EMPTY_DRAFT);
   const [addOpen, setAddOpen] = useState(false);
+  /** null = creating; a number = editing that warehouse. */
+  const [editId, setEditId] = useState<number | null>(null);
   const [saving, setSaving] = useState(false);
   // Per-row "busy" flag so the toggle button doesn't get pressed twice.
   const [togglingId, setTogglingId] = useState<number | null>(null);
@@ -69,24 +77,53 @@ export default function Warehouses() {
     void refresh();
   }, [refresh]);
 
+  function openEdit(row: DestinationWarehouse) {
+    setEditId(row.id);
+    setDraft({
+      code: row.code,
+      name: row.name,
+      address: row.address ?? '',
+      spocName: row.spocName ?? '',
+      spocPhone: row.spocPhone ?? '',
+      easyecomWarehouseId: row.easyecomWarehouseId ?? '',
+      easyecomEnabled: row.easyecomEnabled,
+    });
+    setAddOpen(true);
+  }
+
+  function closeDialog() {
+    if (saving) return;
+    setAddOpen(false);
+    setEditId(null);
+    setDraft(EMPTY_DRAFT);
+  }
+
   async function submitAdd(e?: FormEvent) {
     e?.preventDefault();
     const code = draft.code.trim();
     const name = draft.name.trim();
     if (!code || !name) return;
     setSaving(true);
+    // Same payload shape for create and edit — the service PATCHes only what's sent.
+    const payload = {
+      code,
+      name,
+      address: draft.address.trim() || undefined,
+      spocName: draft.spocName.trim() || undefined,
+      spocPhone: draft.spocPhone.trim() || undefined,
+      easyecomWarehouseId: draft.easyecomWarehouseId.trim() || undefined,
+      easyecomEnabled: draft.easyecomEnabled,
+    };
     try {
-      await createDestinationWarehouse({
-        code,
-        name,
-        easyecomWarehouseId: draft.easyecomWarehouseId.trim() || undefined,
-        easyecomEnabled: draft.easyecomEnabled,
-      });
-      toast.show(
-        t('admin.warehouses.createdToast', { defaultValue: 'Warehouse added' }),
-        'success',
-      );
+      if (editId != null) {
+        await updateDestinationWarehouse(editId, payload);
+        toast.show(t('admin.warehouses.updatedToast', { defaultValue: 'Warehouse updated' }), 'success');
+      } else {
+        await createDestinationWarehouse(payload);
+        toast.show(t('admin.warehouses.createdToast', { defaultValue: 'Warehouse added' }), 'success');
+      }
       setDraft(EMPTY_DRAFT);
+      setEditId(null);
       setAddOpen(false);
       await refresh();
     } catch (err) {
@@ -119,7 +156,14 @@ export default function Warehouses() {
           <CardTitle>
             {t('admin.warehouses.title', { defaultValue: 'Destination warehouses' })}
           </CardTitle>
-          <Button size="sm" onClick={() => setAddOpen(true)}>
+          <Button
+            size="sm"
+            onClick={() => {
+              setEditId(null);
+              setDraft(EMPTY_DRAFT);
+              setAddOpen(true);
+            }}
+          >
             <Plus size={14} />
             {t('admin.warehouses.add', { defaultValue: 'Add warehouse' })}
           </Button>
@@ -164,7 +208,17 @@ export default function Warehouses() {
                       className="border-t border-[var(--color-border)]"
                     >
                       <td className="px-3 py-2 font-mono text-xs">{r.code}</td>
-                      <td className="px-3 py-2">{r.name}</td>
+                      <td className="px-3 py-2">
+                        <div>{r.name}</div>
+                        {r.address && (
+                          <div className="text-xs text-[var(--color-muted-foreground)]">{r.address}</div>
+                        )}
+                        {(r.spocName || r.spocPhone) && (
+                          <div className="text-xs text-[var(--color-muted-foreground)]">
+                            {[r.spocName, r.spocPhone].filter(Boolean).join(' · ')}
+                          </div>
+                        )}
+                      </td>
                       <td className="px-3 py-2">
                         {r.easyecomEnabled ? (
                           <Badge variant="success" dot>
@@ -194,21 +248,26 @@ export default function Warehouses() {
                         )}
                       </td>
                       <td className="px-3 py-2 text-right">
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          onClick={() => void toggleActive(r)}
-                          disabled={togglingId === r.id}
-                        >
-                          <Power size={14} />
-                          {r.isActive
-                            ? t('admin.warehouses.deactivate', {
-                                defaultValue: 'Deactivate',
-                              })
-                            : t('admin.warehouses.activate', {
-                                defaultValue: 'Activate',
-                              })}
-                        </Button>
+                        <div className="flex items-center justify-end gap-2">
+                          <Button size="sm" variant="outline" onClick={() => openEdit(r)}>
+                            {t('common.edit', { defaultValue: 'Edit' })}
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => void toggleActive(r)}
+                            disabled={togglingId === r.id}
+                          >
+                            <Power size={14} />
+                            {r.isActive
+                              ? t('admin.warehouses.deactivate', {
+                                  defaultValue: 'Deactivate',
+                                })
+                              : t('admin.warehouses.activate', {
+                                  defaultValue: 'Activate',
+                                })}
+                          </Button>
+                        </div>
                       </td>
                     </tr>
                   ))}
@@ -221,17 +280,15 @@ export default function Warehouses() {
 
       <Dialog
         open={addOpen}
-        onClose={() => (saving ? undefined : setAddOpen(false))}
-        title={t('admin.warehouses.addTitle', {
-          defaultValue: 'Add destination warehouse',
-        })}
+        onClose={closeDialog}
+        title={
+          editId != null
+            ? t('admin.warehouses.editTitle', { defaultValue: 'Edit destination warehouse' })
+            : t('admin.warehouses.addTitle', { defaultValue: 'Add destination warehouse' })
+        }
         footer={
           <>
-            <Button
-              variant="outline"
-              onClick={() => setAddOpen(false)}
-              disabled={saving}
-            >
+            <Button variant="outline" onClick={closeDialog} disabled={saving}>
               {t('common.cancel')}
             </Button>
             <Button
@@ -267,6 +324,41 @@ export default function Warehouses() {
               value={draft.name}
               onChange={(e) => setDraft((s) => ({ ...s, name: e.target.value }))}
             />
+          </div>
+          <div>
+            <Label htmlFor="wh-address">
+              {t('admin.warehouses.address', { defaultValue: 'Address' })}
+            </Label>
+            <Input
+              id="wh-address"
+              value={draft.address}
+              onChange={(e) => setDraft((s) => ({ ...s, address: e.target.value }))}
+              maxLength={500}
+            />
+          </div>
+          <div className="grid grid-cols-2 gap-2">
+            <div>
+              <Label htmlFor="wh-spoc-name">
+                {t('admin.warehouses.spocName', { defaultValue: 'SPOC name' })}
+              </Label>
+              <Input
+                id="wh-spoc-name"
+                value={draft.spocName}
+                onChange={(e) => setDraft((s) => ({ ...s, spocName: e.target.value }))}
+                maxLength={120}
+              />
+            </div>
+            <div>
+              <Label htmlFor="wh-spoc-phone">
+                {t('admin.warehouses.spocPhone', { defaultValue: 'SPOC phone' })}
+              </Label>
+              <Input
+                id="wh-spoc-phone"
+                value={draft.spocPhone}
+                onChange={(e) => setDraft((s) => ({ ...s, spocPhone: e.target.value }))}
+                maxLength={20}
+              />
+            </div>
           </div>
           <div>
             <Label htmlFor="wh-eee-id">
