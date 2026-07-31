@@ -322,10 +322,6 @@ export default function StartProductionIntakeDialog({
                   const s = id != null ? styles.find((x) => x.id === id) : null;
                   if (s) void pickStyle(s);
                 }}
-                onAddNew={startExternal}
-                addNewLabel={t('admin.production.intake.addExternal', {
-                  defaultValue: "Add another brand's SKU",
-                })}
                 placeholder={
                   loadingSizes
                     ? t('common.loading', { defaultValue: 'Loading…' })
@@ -335,6 +331,17 @@ export default function StartProductionIntakeDialog({
                 }
                 ariaLabel={t('admin.production.intake.styleLabel', { defaultValue: 'Style' })}
               />
+              {/* External-brand entry is a deliberate, secondary action — not a
+                  row inside the style dropdown (which was too easy to mis-click). */}
+              <button
+                type="button"
+                onClick={() => startExternal('')}
+                className="text-xs font-medium text-[var(--color-primary)] hover:underline"
+              >
+                {t('admin.production.intake.addExternal', {
+                  defaultValue: "Add another brand's SKU",
+                })}
+              </button>
             </>
           )}
 
