@@ -184,6 +184,7 @@ export default function StartProductionIntakeDialog({
       const seeded: Record<string, number> = {};
       for (const z of s.sizes) seeded[z.sku] = 0;
       setQty(seeded);
+      setExtSizes({}); // fresh manual-size picker when the style has no resolved sizes
     } catch {
       toast.show(
         t('admin.production.intake.sizesFailed', {
@@ -283,7 +284,10 @@ export default function StartProductionIntakeDialog({
 
   const total = useMemo(() => {
     if (mode === 'existing') {
-      return sel ? sel.sizes.reduce((a, z) => a + (qty[z.sku] ?? 0), 0) : 0;
+      if (!sel) return 0;
+      // No resolved sizes → the manual size-picker (qty keyed by size, like external).
+      if (sel.sizes.length === 0) return extActiveSizes.reduce((a, s) => a + (qty[s] ?? 0), 0);
+      return sel.sizes.reduce((a, z) => a + (qty[z.sku] ?? 0), 0);
     }
     return extActiveSizes.reduce((a, s) => a + (qty[s] ?? 0), 0);
   }, [mode, sel, qty, extActiveSizes]);
@@ -292,7 +296,7 @@ export default function StartProductionIntakeDialog({
     total > 0 &&
     !uploading &&
     (mode === 'existing'
-      ? sel != null
+      ? sel != null && (sel.sizes.length > 0 || extActiveSizes.length > 0)
       : brandId !== '' &&
         colourId !== '' &&
         externalSku.trim().length > 0 &&
@@ -301,14 +305,17 @@ export default function StartProductionIntakeDialog({
   const build = (directToProduction: boolean): CreateBatchBody | null => {
     if (mode === 'existing') {
       if (!sel) return null;
-      return {
-        origin: 'style',
-        styleId: sel.styleId,
-        directToProduction,
-        items: sel.sizes
-          .filter((z) => (qty[z.sku] ?? 0) > 0)
-          .map((z) => ({ sku: z.sku, size: z.size, qtyPlanned: qty[z.sku] ?? 0 })),
-      };
+      const items =
+        sel.sizes.length > 0
+          ? sel.sizes
+              .filter((z) => (qty[z.sku] ?? 0) > 0)
+              .map((z) => ({ sku: z.sku, size: z.size, qtyPlanned: qty[z.sku] ?? 0 }))
+          : // No resolved sizes → manually-picked; SKU follows the ERP form
+            // `<styleId>-<size>` so the BE persists them to `skus` (create()).
+            extActiveSizes
+              .filter((s) => (qty[s] ?? 0) > 0)
+              .map((s) => ({ sku: `${sel.styleRef ?? ''}-${s}`, size: s, qtyPlanned: qty[s] ?? 0 }));
+      return { origin: 'style', styleId: sel.styleId, directToProduction, items };
     }
     if (brandId === '' || colourId === '') return null;
     return {
@@ -443,17 +450,59 @@ export default function StartProductionIntakeDialog({
                 </div>
               )}
 
-              <QtyTable
-                showInFlight
-                rows={sel.sizes.map((z) => ({
-                  key: z.sku,
-                  size: z.size,
-                  sku: z.sku,
-                  inFlight: z.inFlightQty,
-                  qty: qty[z.sku] ?? 0,
-                }))}
-                onQty={setQtyFor}
-              />
+              {sel.sizes.length > 0 ? (
+                <QtyTable
+                  showInFlight
+                  rows={sel.sizes.map((z) => ({
+                    key: z.sku,
+                    size: z.size,
+                    sku: z.sku,
+                    inFlight: z.inFlightQty,
+                    qty: qty[z.sku] ?? 0,
+                  }))}
+                  onQty={setQtyFor}
+                />
+              ) : (
+                // Style not yet on EasyEcom (no resolved sizes) → pick sizes manually.
+                // The chosen sizes persist to `skus` on produce, so it auto-resolves next time.
+                <>
+                  <div>
+                    <Label>
+                      {t('admin.production.intake.pickSizes', {
+                        defaultValue: 'Pick sizes — not yet on EasyEcom',
+                      })}
+                    </Label>
+                    <div className="flex flex-wrap gap-1.5">
+                      {SIZE_PRESETS.map((s) => (
+                        <button
+                          key={s}
+                          type="button"
+                          onClick={() => toggleExtSize(s)}
+                          className={`rounded-full px-3 py-1 text-xs font-semibold transition ${
+                            extSizes[s]
+                              ? 'bg-[var(--color-primary)] text-white'
+                              : 'bg-[var(--color-surface-2)] text-[var(--color-muted-foreground)] hover:text-[var(--color-foreground)]'
+                          }`}
+                        >
+                          {s}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                  {extActiveSizes.length > 0 && (
+                    <QtyTable
+                      rows={extActiveSizes.map((s) => ({
+                        key: s,
+                        size: s,
+                        sku: `${sel.styleRef ?? ''}-${s}`,
+                        inFlight: 0,
+                        qty: qty[s] ?? 0,
+                      }))}
+                      onQty={setQtyFor}
+                    />
+                  )}
+                </>
+              )}
             </div>
           )}
         </div>

@@ -206,6 +206,7 @@ export default function StylesRegistry() {
   // shareable/back-button friendly and stays consistent with deep links.
   const selectTab = (next: StyleTab) => {
     setTab(next);
+    setSearchText(''); // a search is scoped to its tab — reset it on tab switch
     const params = new URLSearchParams(searchParams);
     params.set('tab', next);
     setSearchParams(params, { replace: true });
