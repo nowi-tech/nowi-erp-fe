@@ -97,9 +97,19 @@ export default function StartProductionIntakeDialog({
       .catch(() => setStyles([]));
   }, [open]);
 
-  // Only producible styles have a minted styleId — drafts have no SKUs to make,
-  // so they'd 400 in styleSizes; keep them out of the picker entirely.
-  const producibleStyles = useMemo(() => styles.filter((s) => s.styleId != null), [styles]);
+  // Only production-eligible styles: a minted styleId (past Approval #1, drops
+  // drafts) AND past the sampling section — in_sampling/sample_approved styles
+  // live in Sampling and never belong in the production picker.
+  const producibleStyles = useMemo(
+    () =>
+      styles.filter(
+        (s) =>
+          s.styleId != null &&
+          s.lifecycle !== 'in_sampling' &&
+          s.lifecycle !== 'sample_approved',
+      ),
+    [styles],
+  );
   // Sign the (raw GCS) reference images in one batched call — the dropdown thumbs
   // plus the picked-style preview. Absolute/CDN URLs pass through untouched.
   const imagePaths = useMemo(
