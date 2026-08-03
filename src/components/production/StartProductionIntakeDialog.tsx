@@ -42,6 +42,10 @@ const PRODUCIBLE_LIFECYCLES = new Set<StyleLifecycle>([
   'dispatched',
 ]);
 
+/** Strip an EasyEcom version suffix `(N)` → the base production code. Production
+ *  works on the base (1147), never a version (1147(1)). */
+const baseStyleId = (styleId: string): string => styleId.replace(/\(\d+\)$/, '');
+
 /** A style's primary reference image (raw GCS path or absolute URL), or null. */
 const refImageOf = (s: Style): string | null =>
   s.referenceImages?.[0] ?? s.referenceImage ?? s.referenceImageUrl ?? null;
@@ -113,10 +117,27 @@ export default function StartProductionIntakeDialog({
   // Only production-eligible styles: a minted styleId AND a lifecycle that has
   // cleared sample approval (see PRODUCIBLE_LIFECYCLES). Drops draft, in_sampling,
   // parked and archived; keeps cataloguing/live even when sampling was bypassed.
-  const producibleStyles = useMemo(
-    () => styles.filter((s) => s.styleId != null && PRODUCIBLE_LIFECYCLES.has(s.lifecycle)),
-    [styles],
-  );
+  const producibleStyles = useMemo(() => {
+    const eligible = styles.filter((s) => s.styleId != null && PRODUCIBLE_LIFECYCLES.has(s.lifecycle));
+    // Collapse version listings to one entry per base code (production works on the
+    // base, not 1147(1)/(2)). Prefer the un-versioned base style, then a live one,
+    // else the first seen — so the picker shows a single "1147".
+    const byBase = new Map<string, Style>();
+    for (const s of eligible) {
+      const base = baseStyleId(s.styleId!);
+      const cur = byBase.get(base);
+      if (!cur) {
+        byBase.set(base, s);
+        continue;
+      }
+      const curIsBase = cur.styleId === base;
+      const sIsBase = s.styleId === base;
+      if ((sIsBase && !curIsBase) || (!curIsBase && s.lifecycle === 'live' && cur.lifecycle !== 'live')) {
+        byBase.set(base, s);
+      }
+    }
+    return [...byBase.values()];
+  }, [styles]);
   // Sign the (raw GCS) reference images in one batched call — the dropdown thumbs
   // plus the picked-style preview. Absolute/CDN URLs pass through untouched.
   const imagePaths = useMemo(
@@ -134,8 +155,10 @@ export default function StartProductionIntakeDialog({
         const url = path ? (signedImages[path] ?? null) : null;
         return {
           value: s.id,
-          label: s.styleId ?? `#${s.id}`, // styleId only (producible ⇒ present)
-          searchText: [s.styleId, s.workingName].filter(Boolean).join(' '),
+          label: s.styleId ? baseStyleId(s.styleId) : `#${s.id}`, // base code only
+          searchText: [s.styleId ? baseStyleId(s.styleId) : null, s.styleId, s.workingName]
+            .filter(Boolean)
+            .join(' '),
           leading: url ? (
             <img src={url} alt="" className="h-7 w-7 shrink-0 rounded object-cover" />
           ) : (
@@ -392,7 +415,9 @@ export default function StartProductionIntakeDialog({
                   <div className="h-10 w-10 shrink-0 rounded bg-[var(--color-muted)]" />
                 )}
                 <div className="min-w-0 flex-1">
-                  <div className="truncate text-sm font-semibold">{sel.styleRef ?? sel.name}</div>
+                  <div className="truncate text-sm font-semibold">
+                    {sel.styleRef ? baseStyleId(sel.styleRef) : sel.name}
+                  </div>
                   {sel.name && sel.name !== sel.styleRef && (
                     <div className="truncate text-xs text-[var(--color-muted-foreground)]">
                       {sel.name}
