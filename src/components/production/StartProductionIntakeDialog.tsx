@@ -13,7 +13,7 @@ import { listStyles, listColourMaster, createColourMaster, type Style } from '@/
 import { getStyleSizes, type CreateBatchBody } from '@/api/production';
 import { getBrands, createBrand, type Brand } from '@/api/brands';
 import { uploadPhoto } from '@/api/storage';
-import type { Colour } from '@/api/types';
+import type { Colour, StyleLifecycle } from '@/api/types';
 
 type Mode = 'existing' | 'external';
 
@@ -28,6 +28,19 @@ interface ExistingSel {
   sizes: { sku: string; size: string; inFlightQty: number }[];
   alreadyInProduction: boolean;
 }
+
+/** Lifecycles eligible for the production picker — a style that has cleared
+ *  sample approval (sample_approved) or any downstream go-to-market/production
+ *  state. A style that bypassed sampling (relive / 3rd-party) still qualifies
+ *  once it reaches cataloguing/live. Excludes draft, in_sampling, parked, archived. */
+const PRODUCIBLE_LIFECYCLES = new Set<StyleLifecycle>([
+  'sample_approved',
+  'cataloguing',
+  'live',
+  'in_pd',
+  'qc',
+  'dispatched',
+]);
 
 /** A style's primary reference image (raw GCS path or absolute URL), or null. */
 const refImageOf = (s: Style): string | null =>
@@ -97,17 +110,11 @@ export default function StartProductionIntakeDialog({
       .catch(() => setStyles([]));
   }, [open]);
 
-  // Only production-eligible styles: a minted styleId (past Approval #1, drops
-  // drafts) AND past the sampling section — in_sampling/sample_approved styles
-  // live in Sampling and never belong in the production picker.
+  // Only production-eligible styles: a minted styleId AND a lifecycle that has
+  // cleared sample approval (see PRODUCIBLE_LIFECYCLES). Drops draft, in_sampling,
+  // parked and archived; keeps cataloguing/live even when sampling was bypassed.
   const producibleStyles = useMemo(
-    () =>
-      styles.filter(
-        (s) =>
-          s.styleId != null &&
-          s.lifecycle !== 'in_sampling' &&
-          s.lifecycle !== 'sample_approved',
-      ),
+    () => styles.filter((s) => s.styleId != null && PRODUCIBLE_LIFECYCLES.has(s.lifecycle)),
     [styles],
   );
   // Sign the (raw GCS) reference images in one batched call — the dropdown thumbs
