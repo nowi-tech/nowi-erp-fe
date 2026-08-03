@@ -168,7 +168,11 @@ export default function ReferenceImageGrid({
     });
   }, [value, previews]);
 
-  const primaryUrl = entries[0]?.preview ?? null;
+  // Persistable value for the legacy `referenceImageUrl` mirror: the external
+  // link when the primary is a pasted URL, else null (an uploaded primary already
+  // lives in `referenceImages` as an object path). MUST NOT be `preview`, which
+  // is a blob: object URL for uploads and would poison the DB (never loads later).
+  const primaryUrl = entries[0]?.externalUrl ?? null;
   // Only re-fire when the URL itself changes. Reading `onPrimaryUrlChange`
   // via ref decouples this from the parent's closure identity — the
   // parent typically passes `(u) => set('referenceImageUrl', u)` which
