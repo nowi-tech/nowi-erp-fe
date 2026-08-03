@@ -8,6 +8,7 @@ import { Label } from '@/components/ui/label';
 import { Combobox, type ComboboxOption } from '@/components/ui/combobox';
 import QtyTable from '@/components/production/QtyTable';
 import { useToast } from '@/components/ui/toast';
+import { useSignedUrls } from '@/hooks/useSignedUrls';
 import { listStyles, listColourMaster, createColourMaster, type Style } from '@/api/styles';
 import { getStyleSizes, type CreateBatchBody } from '@/api/production';
 import { getBrands, createBrand, type Brand } from '@/api/brands';
@@ -27,6 +28,10 @@ interface ExistingSel {
   sizes: { sku: string; size: string; inFlightQty: number }[];
   alreadyInProduction: boolean;
 }
+
+/** A style's primary reference image (raw GCS path or absolute URL), or null. */
+const refImageOf = (s: Style): string | null =>
+  s.referenceImages?.[0] ?? s.referenceImage ?? s.referenceImageUrl ?? null;
 
 /**
  * The header "Start production" intake — modelled on the intake form's
@@ -92,24 +97,36 @@ export default function StartProductionIntakeDialog({
       .catch(() => setStyles([]));
   }, [open]);
 
+  // Only producible styles have a minted styleId — drafts have no SKUs to make,
+  // so they'd 400 in styleSizes; keep them out of the picker entirely.
+  const producibleStyles = useMemo(() => styles.filter((s) => s.styleId != null), [styles]);
+  // Sign the (raw GCS) reference images in one batched call — the dropdown thumbs
+  // plus the picked-style preview. Absolute/CDN URLs pass through untouched.
+  const imagePaths = useMemo(
+    () => [...producibleStyles.map(refImageOf), sel?.imageUrl ?? null],
+    [producibleStyles, sel],
+  );
+  const signedImages = useSignedUrls(imagePaths);
+  const signedOf = (p: string | null | undefined): string | null =>
+    p ? (signedImages[p] ?? null) : null;
+
   const styleOptions = useMemo<ComboboxOption<number>[]>(
     () =>
-      styles.map((s) => {
-        const img = s.referenceImages?.[0] ?? s.referenceImage ?? null;
-        const label = s.styleId ?? s.workingName ?? `#${s.id}`;
+      producibleStyles.map((s) => {
+        const path = refImageOf(s);
+        const url = path ? (signedImages[path] ?? null) : null;
         return {
           value: s.id,
-          label,
-          sublabel: s.workingName && s.workingName !== label ? s.workingName : undefined,
+          label: s.styleId ?? `#${s.id}`, // styleId only (producible ⇒ present)
           searchText: [s.styleId, s.workingName].filter(Boolean).join(' '),
-          leading: img ? (
-            <img src={img} alt="" className="h-7 w-7 shrink-0 rounded object-cover" />
+          leading: url ? (
+            <img src={url} alt="" className="h-7 w-7 shrink-0 rounded object-cover" />
           ) : (
             <div className="h-7 w-7 shrink-0 rounded bg-[var(--color-muted)]" />
           ),
         };
       }),
-    [styles],
+    [producibleStyles, signedImages],
   );
 
   const pickStyle = async (style: Style) => {
@@ -348,8 +365,12 @@ export default function StartProductionIntakeDialog({
           {sel && (
             <div className="space-y-3">
               <div className="flex items-center gap-3 rounded-[var(--radius-sm)] border border-[var(--color-border)] bg-[var(--color-surface-2)]/40 p-2.5">
-                {sel.imageUrl ? (
-                  <img src={sel.imageUrl} alt="" className="h-10 w-10 shrink-0 rounded object-cover" />
+                {signedOf(sel.imageUrl) ? (
+                  <img
+                    src={signedOf(sel.imageUrl)!}
+                    alt=""
+                    className="h-10 w-10 shrink-0 rounded object-cover"
+                  />
                 ) : (
                   <div className="h-10 w-10 shrink-0 rounded bg-[var(--color-muted)]" />
                 )}
