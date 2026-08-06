@@ -36,6 +36,7 @@ import {
   listStyles,
   spawnColourVariant,
   type LinkExtractResult,
+  type StyleTab,
 } from '@/api/styles';
 import { cn } from '@/lib/utils';
 import { POST_SAMPLING } from '@/lib/styleRef';
@@ -296,9 +297,11 @@ const TYPED_CODE_ID = -1;
  *  the same gate `spawnColourVariant` enforces server-side. */
 const colourParentEligible = (s: Style) => POST_SAMPLING.has(s.lifecycle);
 
-/** A relive derives its code from the source's minted Style #, so the source
- *  must already carry one (drafts have none). */
-const reliveSourceEligible = (s: Style) => !!s.styleId;
+/** Relive re-releases a FINISHED design: the source must have completed sampling
+ *  (POST_SAMPLING — approved onward, so third-party / manufactured styles that
+ *  skipped straight to cataloguing/live qualify) and carry a minted Style # the
+ *  new code derives from. Parked / draft / in-sampling styles are excluded. */
+const reliveSourceEligible = (s: Style) => POST_SAMPLING.has(s.lifecycle) && !!s.styleId;
 
 /**
  * What a relive is about to re-release. The relive fork asks for NOTHING —
@@ -365,13 +368,14 @@ function ReliveSourcePreview({ style }: { style: Style }) {
 
 /**
  * Picker for the colour / relive fork. Loads the existing styles once
- * (`listStyles({ source, take: 500 })` — 500 is the BE page cap and comfortably
- * exceeds the whole non-test catalog) and filters them client-side through the
- * Combobox, OR — when `allowCode` (the relive branch) — lets the user type a
- * free-text style code the BE will resolve. The colour branch needs a real row
- * (the spawn endpoint addresses the parent by id), so it never enables the
- * free-text path. `source` scopes the fetch: colour loads sampling only, relive
- * loads every source (a past design worth re-releasing may be third-party).
+ * (`listStyles({ source, tab, take: 500 })` — 500 is the BE page cap and
+ * comfortably exceeds the whole non-test catalog) and filters them client-side
+ * through the Combobox, OR — when `allowCode` (the relive branch) — lets the user
+ * type a free-text style code the BE will resolve. The colour branch needs a real
+ * row (the spawn endpoint addresses the parent by id), so it never enables the
+ * free-text path. Fetch scope: colour loads `source=sampling`; relive loads
+ * `tab=all` (every source minus parked — a past design worth re-releasing may be
+ * third-party) then narrows client-side to POST_SAMPLING via `eligible`.
  */
 function StyleRefPicker({
   value,
@@ -379,6 +383,7 @@ function StyleRefPicker({
   allowCode,
   eligible,
   source,
+  tab,
   placeholder,
   emptyLabel,
   addCodeLabel,
@@ -388,6 +393,9 @@ function StyleRefPicker({
   allowCode: boolean;
   /** Restrict the loaded set to one source; omit to load all sources. */
   source?: StyleSource;
+  /** Registry tab scoping the fetch — relive passes `all` (every source, minus
+   *  parked) so a past design from any source is re-releasable. */
+  tab?: StyleTab;
   /** Which loaded styles may be picked. Each fork has its own rule and the BE
    *  enforces the same one — offering an ineligible row just buys a 400 at
    *  submit. */
@@ -408,7 +416,7 @@ function StyleRefPicker({
   // (same pattern as ColourPicker).
   useEffect(() => {
     let mounted = true;
-    void listStyles({ source, take: 500 })
+    void listStyles({ source, tab, take: 500 })
       .then((res) => {
         if (mounted) setResults(res.data);
       })
@@ -418,7 +426,7 @@ function StyleRefPicker({
     return () => {
       mounted = false;
     };
-  }, [source]);
+  }, [source, tab]);
 
   const styleLabel = (s: Style) =>
     s.styleId ?? s.workingName ?? `D-${s.draftNo ?? s.id}`;
@@ -983,8 +991,10 @@ const StyleIntakeForm = forwardRef<StyleIntakeFormHandle, StyleIntakeFormProps>(
                         : colourParentEligible
                     }
                     // Colour spawns from a sampling parent; relive re-releases
-                    // any past design, so it searches every source.
+                    // any past design, so it searches every source (tab=all →
+                    // all sources minus parked), then narrows to POST_SAMPLING.
                     source={forkMode === 'colour' ? 'sampling' : undefined}
+                    tab={forkMode === 'relive' ? 'all' : undefined}
                     placeholder={t('admin.styles.intake.fork.pickPlaceholder')}
                     emptyLabel={t('admin.styles.intake.fork.pickEmpty')}
                     addCodeLabel={t('admin.styles.intake.fork.addCode')}
