@@ -490,70 +490,65 @@ export default function InventoryHealth(): ReactNode {
           Padding / max-width / background come from the AdminShell <main>, so this
           page reads identically to the dashboard (no self-padding / own bg). */}
       <div>
-        <div className="flex flex-wrap items-start justify-between gap-3">
+        {/* Tier 1 (design 1b) — title · compact sync status · Refresh. */}
+        <div className="flex flex-wrap items-center justify-between gap-3">
           <h1 className="font-serif text-3xl font-semibold tracking-tight">
             {t('admin.inventoryHealth.title', { defaultValue: 'Inventory Health' })}
           </h1>
-          <div className="flex shrink-0 flex-wrap items-center justify-end gap-2">
-            {/* Real / virtual stock filter — top-of-page, pill-segmented (matches live). */}
-            <div className="inline-flex items-center gap-1 rounded-xl border border-neutral-200 bg-white p-1 shadow-sm">
-              {(['all', 'real', 'virtual'] as const).map((v) => (
+          <div className="flex flex-wrap items-center justify-end gap-3">
+            {/* Sync status: stale/error read as a coloured pill, healthy as a dot line. */}
+            {loading ? (
+              <span className="inline-flex items-center gap-2 text-xs font-medium text-[var(--color-muted-foreground)]">
+                <span className="h-2 w-2 animate-pulse rounded-full bg-amber-400" />
+                {t('admin.inventoryHealth.loading', { defaultValue: 'Loading…' })}
+              </span>
+            ) : error ? (
+              <span className="inline-flex items-center gap-2 rounded-full border border-red-200 bg-red-50 px-3 py-1.5 text-xs font-semibold text-red-700">
+                <span className="h-2 w-2 rounded-full bg-red-500" />
+                {t('admin.inventoryHealth.loadError', { defaultValue: 'Couldn’t load inventory health.' })}
+              </span>
+            ) : stale && synced ? (
+              <span className="inline-flex items-center gap-2 rounded-full border border-amber-200 bg-amber-50 px-3 py-1.5 text-xs font-semibold text-amber-800">
+                <span className="h-2 w-2 rounded-full bg-amber-500" />
+                {t('admin.inventoryHealth.stale', {
+                  defaultValue: 'Showing data from {{when}} — couldn’t fetch the latest from EasyEcom.',
+                  when: synced,
+                })}
+              </span>
+            ) : (
+              <span className="inline-flex items-center gap-2 text-xs font-medium text-[var(--color-muted-foreground)]">
+                <span className="h-2 w-2 rounded-full bg-emerald-500" />
+                {synced
+                  ? t('admin.inventoryHealth.synced', { defaultValue: 'As of {{when}}', when: synced })
+                  : t('admin.inventoryHealth.neverSynced', { defaultValue: 'Not synced yet' })}
+              </span>
+            )}
+            {/* Active custom window chip — clears back to the default trailing window. */}
+            {windowActive && (
+              <span className="inline-flex items-center gap-1 rounded-full bg-neutral-100 px-2 py-0.5 text-[11px] font-medium text-neutral-600">
+                {t('admin.inventoryHealth.windowActive', {
+                  defaultValue: 'Window: {{from}} – {{to}}',
+                  from: shortDay(dateFrom),
+                  to: shortDay(dateTo),
+                })}
                 <button
-                  key={v}
                   type="button"
-                  onClick={() => setInventory(v)}
-                  aria-pressed={inventory === v}
-                  className={`rounded-lg px-4 py-1 text-sm font-semibold transition ${
-                    inventory === v
-                      ? 'bg-[var(--color-primary)] text-[var(--color-primary-foreground)] shadow-sm'
-                      : 'text-neutral-500 hover:bg-[var(--color-primary-soft)] hover:text-[var(--color-primary)]'
-                  }`}
+                  aria-label={t('admin.inventoryHealth.windowClear', { defaultValue: 'Reset to default window' })}
+                  onClick={() => {
+                    setDateFrom('');
+                    setDateTo('');
+                  }}
+                  className="text-neutral-400 hover:text-neutral-700"
                 >
-                  {t(`admin.inventoryHealth.inv.${v}`, {
-                    defaultValue: v === 'all' ? 'All stock' : v === 'real' ? 'Real' : 'Virtual',
-                  })}
+                  <X size={12} />
                 </button>
-              ))}
-            </div>
-            {/* Category filter — populated from the response's full-set list. */}
-            <select
-              value={category}
-              onChange={(e) => setCategory(e.target.value)}
-              className="h-9 max-w-[11rem] rounded-lg border border-[var(--color-primary)]/60 bg-white px-3 text-sm font-medium text-neutral-700 shadow-sm transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-primary)]/30"
-              aria-label={t('admin.inventoryHealth.filterCategory', { defaultValue: 'Category' })}
-            >
-              <option value="">{t('admin.inventoryHealth.categoryAll', { defaultValue: 'All categories' })}</option>
-              {categories.map((c) => (
-                <option key={c} value={c}>{c}</option>
-              ))}
-            </select>
-            {/* Sort preset — writes the same sortKey/sortDir as the column headers. */}
-            <select
-              value={sortPreset}
-              onChange={(e) => onSortPreset(e.target.value as 'default' | 'best' | 'newest')}
-              className="h-9 rounded-lg border border-[var(--color-primary)]/60 bg-white px-3 text-sm font-medium text-neutral-700 shadow-sm transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-primary)]/30"
-              aria-label={t('admin.inventoryHealth.sortBy', { defaultValue: 'Sort by' })}
-            >
-              <option value="default">{t('admin.inventoryHealth.sort.default', { defaultValue: 'Sort: Default' })}</option>
-              <option value="best">{t('admin.inventoryHealth.sort.best', { defaultValue: 'Best seller' })}</option>
-              <option value="newest">{t('admin.inventoryHealth.sort.newest', { defaultValue: 'New arrival' })}</option>
-            </select>
-            {/* DRR/cover window — same control the sampling dashboard uses. */}
-            <DateRangePicker
-              from={windowActive ? dateFrom : daysAgoISO(29)}
-              to={windowActive ? dateTo : todayISO()}
-              maxDate={todayISO()}
-              label={t('admin.inventoryHealth.window', { defaultValue: 'Window' })}
-              onApply={(f, tt) => {
-                setDateFrom(f);
-                setDateTo(tt);
-              }}
-            />
+              </span>
+            )}
             <button
               type="button"
               onClick={onRefresh}
               aria-busy={refreshing}
-              className="inline-flex items-center gap-1.5 rounded-lg border border-neutral-200 bg-white px-3 py-2 text-sm font-medium text-neutral-700 shadow-sm transition hover:bg-neutral-50"
+              className="inline-flex items-center gap-1.5 rounded-lg bg-[var(--color-primary)] px-4 py-2 text-sm font-semibold text-[var(--color-primary-foreground)] shadow-sm transition hover:opacity-90"
             >
               <RefreshCw size={15} className={refreshing ? 'animate-spin' : ''} />
               {refreshing
@@ -563,47 +558,70 @@ export default function InventoryHealth(): ReactNode {
           </div>
         </div>
 
-        {/* Status line — the header's subtitle (mirrors the dashboard narrative). */}
-        <div className="mt-1 flex items-center gap-2 text-xs">
-          <span
-            className={`inline-block h-2 w-2 rounded-full ${
-              loading ? 'animate-pulse bg-amber-400' : error ? 'bg-red-500' : stale ? 'bg-amber-400' : 'bg-emerald-500'
-            }`}
-          />
-          <span className={error ? 'font-medium text-red-600' : stale ? 'font-medium text-amber-600' : 'text-[var(--color-muted-foreground)]'}>
-            {loading
-              ? t('admin.inventoryHealth.loading', { defaultValue: 'Loading…' })
-              : error
-                ? t('admin.inventoryHealth.loadError', { defaultValue: 'Couldn’t load inventory health.' })
-                : stale && synced
-                  ? t('admin.inventoryHealth.stale', {
-                      defaultValue: 'Showing data from {{when}} — couldn’t fetch the latest from EasyEcom.',
-                      when: synced,
-                    })
-                  : synced
-                    ? t('admin.inventoryHealth.synced', { defaultValue: 'As of {{when}}', when: synced })
-                    : t('admin.inventoryHealth.neverSynced', { defaultValue: 'Not synced yet' })}
-          </span>
-          {windowActive && (
-            <span className="inline-flex items-center gap-1 rounded-full bg-neutral-100 px-2 py-0.5 text-[11px] font-medium text-neutral-600">
-              {t('admin.inventoryHealth.windowActive', {
-                defaultValue: 'Window: {{from}} – {{to}}',
-                from: shortDay(dateFrom),
-                to: shortDay(dateTo),
-              })}
-              <button
-                type="button"
-                aria-label={t('admin.inventoryHealth.windowClear', { defaultValue: 'Reset to default window' })}
-                onClick={() => {
-                  setDateFrom('');
-                  setDateTo('');
+        {/* Tier 2 (design 1b) — one segmented control rail: stock view · category ·
+            sort · window, divided into groups. Left-aligned, not full-width. */}
+        <div className="mt-4 flex">
+          <div className="inline-flex flex-wrap items-stretch gap-2.5 self-start rounded-xl border border-neutral-200 bg-white p-1.5 shadow-sm">
+            {/* Real / virtual stock view. */}
+            <div className="inline-flex items-center gap-0.5 rounded-lg bg-neutral-100 p-0.5">
+              {(['all', 'real', 'virtual'] as const).map((v) => (
+                <button
+                  key={v}
+                  type="button"
+                  onClick={() => setInventory(v)}
+                  aria-pressed={inventory === v}
+                  className={`rounded-md px-4 py-1.5 text-sm font-semibold transition ${
+                    inventory === v
+                      ? 'bg-[var(--color-primary)] text-[var(--color-primary-foreground)] shadow-sm'
+                      : 'text-neutral-500 hover:text-[var(--color-primary)]'
+                  }`}
+                >
+                  {t(`admin.inventoryHealth.inv.${v}`, {
+                    defaultValue: v === 'all' ? 'All stock' : v === 'real' ? 'Real' : 'Virtual',
+                  })}
+                </button>
+              ))}
+            </div>
+            <span className="my-0.5 w-px bg-neutral-300" />
+            {/* Category filter — populated from the response's full-set list. */}
+            <select
+              value={category}
+              onChange={(e) => setCategory(e.target.value)}
+              className="h-9 max-w-[11rem] cursor-pointer rounded-md border-none bg-transparent px-3 text-sm font-semibold text-[var(--color-foreground)] transition hover:bg-neutral-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-primary)]/30"
+              aria-label={t('admin.inventoryHealth.filterCategory', { defaultValue: 'Category' })}
+            >
+              <option value="">{t('admin.inventoryHealth.categoryAll', { defaultValue: 'All categories' })}</option>
+              {categories.map((c) => (
+                <option key={c} value={c}>{c}</option>
+              ))}
+            </select>
+            <span className="my-0.5 w-px bg-neutral-300" />
+            {/* Sort preset — writes the same sortKey/sortDir as the column headers. */}
+            <select
+              value={sortPreset}
+              onChange={(e) => onSortPreset(e.target.value as 'default' | 'best' | 'newest')}
+              className="h-9 cursor-pointer rounded-md border-none bg-transparent px-3 text-sm font-semibold text-[var(--color-foreground)] transition hover:bg-neutral-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-primary)]/30"
+              aria-label={t('admin.inventoryHealth.sortBy', { defaultValue: 'Sort by' })}
+            >
+              <option value="default">{t('admin.inventoryHealth.sort.default', { defaultValue: 'Sort: Default' })}</option>
+              <option value="best">{t('admin.inventoryHealth.sort.best', { defaultValue: 'Best seller' })}</option>
+              <option value="newest">{t('admin.inventoryHealth.sort.newest', { defaultValue: 'New arrival' })}</option>
+            </select>
+            <span className="my-0.5 w-px bg-neutral-300" />
+            {/* DRR/cover window — same control the sampling dashboard uses. */}
+            <div className="flex items-center">
+              <DateRangePicker
+                from={windowActive ? dateFrom : daysAgoISO(29)}
+                to={windowActive ? dateTo : todayISO()}
+                maxDate={todayISO()}
+                label={t('admin.inventoryHealth.window', { defaultValue: 'Window' })}
+                onApply={(f, tt) => {
+                  setDateFrom(f);
+                  setDateTo(tt);
                 }}
-                className="text-neutral-400 hover:text-neutral-700"
-              >
-                <X size={12} />
-              </button>
-            </span>
-          )}
+              />
+            </div>
+          </div>
         </div>
       </div>
 
