@@ -344,7 +344,7 @@
         "administration": "Administration"
       },
       "production": "Production",
-      "productionPipeline": "Production pipeline",
+      "productionPipeline": "Production",
       "dispatches": "Dispatches",
       "analyticsFulfilment": "Fulfilment",
       "inventoryHealth": "Inventory Health"
@@ -408,7 +408,17 @@
         "stock": "Stock",
         "atRisk": "At risk · /d",
         "sizesAtRisk": "Sizes at risk",
+        "pipeline": "Pipeline",
         "make": "Make"
+      },
+      "inProduction": "{{n}} in production",
+      "filterCategory": "Category",
+      "categoryAll": "All categories",
+      "sortBy": "Sort by",
+      "sort": {
+        "default": "Sort: Default",
+        "best": "Best seller",
+        "newest": "New arrival"
       },
       "discontinuedBadge": "disabled",
       "disable": "Disable",

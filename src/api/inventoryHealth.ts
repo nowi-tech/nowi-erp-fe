@@ -26,6 +26,10 @@ export interface InventorySize {
   /** 'low' = too little sales history to trust the DRR/cover. */
   confidence: 'high' | 'low';
   currentStock: number;
+  /** Units already committed to open production batches (planning + on the floor)
+   *  for this size. Folded into `available` server-side, so cover/make already
+   *  account for it — this is the display figure for the Pipeline column. */
+  pipelineQty: number;
   /** Suggested units to make to restore healthy cover. */
   makeQty: number;
   /** Unmet demand per day once below target cover (units/day) — "stock at risk
@@ -90,6 +94,8 @@ export interface InventoryHealthResponse {
   total: number;
   /** Day keys (YYYY-MM-DD) the per-size `trend` arrays align to. */
   trendDates: string[];
+  /** Distinct style categories across the full set (sorted) — drives the category dropdown. */
+  categories: string[];
   /** One page of style groups (server-side filtered/trimmed/sorted/sliced). */
   styles: InventoryStyle[];
 }
@@ -106,6 +112,8 @@ export interface InventoryHealthParams {
   filter?: string;
   inventory?: InventoryView;
   search?: string;
+  /** Exact style category (from the response `categories` list). Omit = all. */
+  category?: string;
   sortKey?: string | null;
   sortDir?: 'asc' | 'desc';
   /** Production Suggested tab: hide styles that already have an open batch. */
@@ -123,6 +131,7 @@ export function getInventoryHealth(params: InventoryHealthParams = {}): Promise<
   if (params.filter && params.filter !== 'all') q.filter = params.filter;
   if (params.inventory && params.inventory !== 'all') q.inventory = params.inventory;
   if (params.search) q.search = params.search;
+  if (params.category) q.category = params.category;
   if (params.sortKey) q.sortKey = params.sortKey;
   if (params.sortDir) q.sortDir = params.sortDir;
   if (params.excludeInProduction) q.excludeInProduction = '1';

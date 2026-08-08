@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useLocation, useNavigate, useSearchParams } from 'react-router-dom';
-import { RefreshCw, Search, ArrowUp, ArrowDown, ArrowUpDown, ArrowUpRight, Minus, Ban, RotateCcw, X, Sparkles, Copy, Check } from 'lucide-react';
+import { RefreshCw, Search, ArrowUp, ArrowDown, ArrowUpDown, ArrowUpRight, Minus, Ban, RotateCcw, X, Sparkles, Copy, Check, Factory } from 'lucide-react';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useToast } from '@/components/ui/toast';
 import { ConfirmDialog } from '@/components/ui/confirm-dialog';
@@ -50,8 +50,8 @@ const HEADER_INK = '#334155';
 const PRIMARY = 'var(--color-primary)';
 
 // Child (size) grid — the sub-header + every size row align to it.
-// SIZE (thumb + size) · COVER · DRR · TREND · STOCK · MAKE
-const GRID = 'minmax(0,1.5fr) 0.8fr 0.6fr 1.05fr 0.6fr 0.6fr';
+// SIZE (thumb + size) · COVER · DRR · TREND · STOCK · PIPELINE · MAKE
+const GRID = 'minmax(0,1.5fr) 0.8fr 0.6fr 1.05fr 0.6fr 0.6fr 0.6fr';
 
 /** Per-urgency: label + the meaning-colour (red/amber/neutral) for text + dot. */
 const URG: Record<Urgency, { label: string; color: string; dot: string }> = {
@@ -68,8 +68,9 @@ const AGE: Record<Exclude<Aging, 'active'>, { label: string; dot: string }> = {
 };
 
 /** Sortable columns. `null` = the priority (urgency-first) default order. A
- *  column sorts the STYLES by that metric aggregated over their sizes. */
-type SortKey = 'style' | 'cover' | 'drr' | 'stock' | 'atrisk' | 'make';
+ *  column sorts the STYLES by that metric aggregated over their sizes. `newest`
+ *  (went-live recency) is dropdown-only — it maps to no column header. */
+type SortKey = 'style' | 'cover' | 'drr' | 'stock' | 'atrisk' | 'make' | 'newest';
 
 const PAGE_SIZE = 50;
 
@@ -160,9 +161,13 @@ export default function InventoryHealth(): ReactNode {
   const [filter, setFilter] = useState<FilterKey>('all');
   // Real / virtual inventory view (display-only filter; China stock = virtual).
   const [inventory, setInventory] = useState<InventoryView>('all');
-  // Clickable column sort; null = priority (urgency-first) default.
+  // Clickable column sort; null = priority (urgency-first) default. The sort
+  // dropdown (default / best seller / new arrival) writes the same two pieces.
   const [sortKey, setSortKey] = useState<SortKey | null>(null);
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('asc');
+  // Category filter (exact match) + the full category list from the response.
+  const [category, setCategory] = useState('');
+  const [categories, setCategories] = useState<string[]>([]);
   // Optional DRR/cover window. Empty = precomputed default (no from/to sent).
   const [dateFrom, setDateFrom] = useState('');
   const [dateTo, setDateTo] = useState('');
@@ -187,10 +192,11 @@ export default function InventoryHealth(): ReactNode {
         filter,
         inventory,
         search: debouncedSearch.trim() || undefined,
+        category: category || undefined,
         sortKey: sortKey ?? undefined,
         sortDir,
       }),
-    [windowActive, dateFrom, dateTo, filter, inventory, debouncedSearch, sortKey, sortDir],
+    [windowActive, dateFrom, dateTo, filter, inventory, debouncedSearch, category, sortKey, sortDir],
   );
 
   // Discard out-of-order responses when the query changes mid-flight.
@@ -244,6 +250,7 @@ export default function InventoryHealth(): ReactNode {
         setStyles(d.styles);
         setTotal(d.total);
         setKpis(d.kpis);
+        setCategories(d.categories);
         setTrendDates(d.trendDates);
         setSyncedAt(d.syncedAt);
         setSyncing(d.syncing);
@@ -341,6 +348,7 @@ export default function InventoryHealth(): ReactNode {
         setStyles(d.styles);
         setTotal(d.total);
         setKpis(d.kpis);
+        setCategories(d.categories);
         setTrendDates(d.trendDates);
         setSyncedAt(d.syncedAt);
         setSyncing(d.syncing);
@@ -406,6 +414,22 @@ export default function InventoryHealth(): ReactNode {
     [sortKey],
   );
 
+  // Preset sort dropdown ↔ the same (sortKey, sortDir) state the column headers use.
+  // A column-header sort (e.g. Cover) matches no preset and reads as Default here.
+  // ponytail: that cosmetic fallback is fine — the dropdown is the primary control.
+  const sortPreset: 'default' | 'best' | 'newest' =
+    sortKey === 'newest' ? 'newest' : sortKey === 'drr' && sortDir === 'desc' ? 'best' : 'default';
+  const onSortPreset = useCallback((v: 'default' | 'best' | 'newest'): void => {
+    if (v === 'default') setSortKey(null);
+    else if (v === 'best') {
+      setSortKey('drr');
+      setSortDir('desc');
+    } else {
+      setSortKey('newest');
+      setSortDir('desc');
+    }
+  }, []);
+
   // Absolute IST clock + "· 5 min ago" relative, mirroring the Sales KPI line.
   const syncedAbs = absTime(syncedAt);
   const syncedAgo = relativeTime(syncedAt);
@@ -456,7 +480,7 @@ export default function InventoryHealth(): ReactNode {
         { key: 'watch', label: t('admin.inventoryHealth.tab.watch', { defaultValue: 'Watch' }), count: kpis.watch },
         { key: 'slow', label: t('admin.inventoryHealth.tab.slow', { defaultValue: 'Slow-movers' }), count: kpis.slow },
         { key: 'dead', label: t('admin.inventoryHealth.tab.dead', { defaultValue: 'Dead stock' }), count: kpis.dead },
-        { key: 'new', label: t('admin.inventoryHealth.tab.new', { defaultValue: 'New arrivals' }), count: kpis.newArrivals },
+        // New arrivals moved to the sort dropdown (Sort → New arrival); no lens tab.
       ]
     : [];
 
@@ -491,6 +515,29 @@ export default function InventoryHealth(): ReactNode {
                 </button>
               ))}
             </div>
+            {/* Category filter — populated from the response's full-set list. */}
+            <select
+              value={category}
+              onChange={(e) => setCategory(e.target.value)}
+              className="h-9 max-w-[11rem] rounded-lg border border-[var(--color-primary)]/60 bg-white px-3 text-sm font-medium text-neutral-700 shadow-sm transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-primary)]/30"
+              aria-label={t('admin.inventoryHealth.filterCategory', { defaultValue: 'Category' })}
+            >
+              <option value="">{t('admin.inventoryHealth.categoryAll', { defaultValue: 'All categories' })}</option>
+              {categories.map((c) => (
+                <option key={c} value={c}>{c}</option>
+              ))}
+            </select>
+            {/* Sort preset — writes the same sortKey/sortDir as the column headers. */}
+            <select
+              value={sortPreset}
+              onChange={(e) => onSortPreset(e.target.value as 'default' | 'best' | 'newest')}
+              className="h-9 rounded-lg border border-[var(--color-primary)]/60 bg-white px-3 text-sm font-medium text-neutral-700 shadow-sm transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-primary)]/30"
+              aria-label={t('admin.inventoryHealth.sortBy', { defaultValue: 'Sort by' })}
+            >
+              <option value="default">{t('admin.inventoryHealth.sort.default', { defaultValue: 'Sort: Default' })}</option>
+              <option value="best">{t('admin.inventoryHealth.sort.best', { defaultValue: 'Best seller' })}</option>
+              <option value="newest">{t('admin.inventoryHealth.sort.newest', { defaultValue: 'New arrival' })}</option>
+            </select>
             {/* DRR/cover window — same control the sampling dashboard uses. */}
             <DateRangePicker
               from={windowActive ? dateFrom : daysAgoISO(29)}
@@ -620,22 +667,20 @@ export default function InventoryHealth(): ReactNode {
                 <QueueTabs tabs={lensTabs} active={filter} onSelect={setFilter} />
               </div>
 
-              {/* Search · to-make + count. */}
-              <div className="flex flex-wrap items-center justify-between gap-3 border-b border-[var(--color-border)] px-4 py-3">
-                <div className="flex flex-1 flex-wrap items-center gap-2">
-                  <div className="relative w-full max-w-sm">
-                    <Search size={16} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-[var(--color-primary)]" />
-                    <input
-                      value={searchText}
-                      onChange={(e) => setSearchText(e.target.value)}
-                      placeholder={t('admin.inventoryHealth.search', { defaultValue: 'Search style, size or name…' })}
-                      className="h-9 w-full rounded-md border border-[var(--color-primary)]/40 bg-[var(--color-primary-soft)]/30 pl-9 pr-3 text-[13px] text-[var(--color-foreground)] outline-none focus-visible:border-[var(--color-primary)] focus-visible:ring-2 focus-visible:ring-[var(--color-primary)]/25"
-                    />
-                  </div>
+              {/* Search · count. Category + sort live in the top-right controls row. */}
+              <div className="flex flex-wrap items-center gap-2.5 border-b border-[var(--color-border)] px-4 py-3">
+                <div className="relative w-full sm:w-72">
+                  <Search size={16} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-[var(--color-primary)]" />
+                  <input
+                    value={searchText}
+                    onChange={(e) => setSearchText(e.target.value)}
+                    placeholder={t('admin.inventoryHealth.search', { defaultValue: 'Search style, size or name…' })}
+                    className="h-9 w-full rounded-md border border-[var(--color-primary)]/40 bg-[var(--color-primary-soft)]/30 pl-9 pr-3 text-[13px] text-[var(--color-foreground)] outline-none focus-visible:border-[var(--color-primary)] focus-visible:ring-2 focus-visible:ring-[var(--color-primary)]/25"
+                  />
                 </div>
-                <div className="flex shrink-0 items-center gap-3 text-[12px] tabular-nums text-[var(--color-muted-foreground)]">
-                  <span>{t('admin.inventoryHealth.styleCount', { defaultValue: '{{n}} styles', n: total })}</span>
-                </div>
+                <span className="ml-auto shrink-0 text-[12px] tabular-nums text-[var(--color-muted-foreground)]">
+                  {t('admin.inventoryHealth.styleCount', { defaultValue: '{{n}} styles', n: total })}
+                </span>
               </div>
 
               {/* A fresh query (tab switch / filter / search / sort) shows the loader
@@ -676,6 +721,7 @@ export default function InventoryHealth(): ReactNode {
                     <SortHeader label={t('admin.inventoryHealth.col.drr', { defaultValue: 'DRR · /d' })} col="drr" sortKey={sortKey} sortDir={sortDir} onSort={onSort} />
                     <span className="flex justify-end">{t('admin.inventoryHealth.col.trend', { defaultValue: 'Trend · /d' })}</span>
                     <SortHeader label={t('admin.inventoryHealth.col.stock', { defaultValue: 'Stock' })} col="stock" sortKey={sortKey} sortDir={sortDir} onSort={onSort} align="right" />
+                    <span className="flex justify-end">{t('admin.inventoryHealth.col.pipeline', { defaultValue: 'Pipeline' })}</span>
                     <SortHeader label={t('admin.inventoryHealth.col.make', { defaultValue: 'Make' })} col="make" sortKey={sortKey} sortDir={sortDir} onSort={onSort} align="right" />
                   </div>
                   {styles.map((style) => (
@@ -818,6 +864,8 @@ function StyleGroup({
   // Sizes soonest-to-run-out first within the group.
   const cover = (z: InventorySize): number => z.coverDays ?? Number.POSITIVE_INFINITY;
   const sizes = [...style.sizes].sort((a, b) => cover(a) - cover(b));
+  // Units in production across the style's sizes (drives the "in production" pill).
+  const pipelineTotal = style.sizes.reduce((a, z) => a + z.pipelineQty, 0);
   return (
     <div
       className={`overflow-hidden rounded-[var(--radius-md)] border border-neutral-200 bg-white shadow-sm ${
@@ -858,6 +906,12 @@ function StyleGroup({
             {style.lowVolume && (
               <span className="inline-flex items-center rounded border border-neutral-200 px-1.5 py-0.5 text-[10px] font-semibold text-neutral-400">
                 {t('admin.inventoryHealth.lowVolume', { defaultValue: 'low volume' })}
+              </span>
+            )}
+            {pipelineTotal > 0 && (
+              <span className="inline-flex items-center gap-1 rounded-full border border-[var(--color-primary)]/30 bg-[var(--color-primary)]/[0.08] px-1.5 py-0.5 text-[10px] font-semibold text-[var(--color-primary)]">
+                <Factory size={10} />
+                {t('admin.inventoryHealth.inProduction', { defaultValue: '{{n}} in production', n: fmtN(pipelineTotal) })}
               </span>
             )}
           </div>
@@ -963,6 +1017,14 @@ function SizeRow({
 
       <Cell label={t('admin.inventoryHealth.col.stock', { defaultValue: 'Stock' })} align="right">
         <span className="tabular-nums text-neutral-700">{fmtN(size.currentStock)}</span>
+      </Cell>
+
+      {/* Units already in open production batches (planning + on the floor). Folded
+          into cover/make server-side; shown so a size mid-make reads as covered. */}
+      <Cell label={t('admin.inventoryHealth.col.pipeline', { defaultValue: 'Pipeline' })} align="right">
+        <span className="tabular-nums" style={{ color: size.pipelineQty > 0 ? INK : MUTED }}>
+          {size.pipelineQty > 0 ? fmtN(size.pipelineQty) : '—'}
+        </span>
       </Cell>
 
       <Cell label={t('admin.inventoryHealth.col.make', { defaultValue: 'Make' })} align="right">
