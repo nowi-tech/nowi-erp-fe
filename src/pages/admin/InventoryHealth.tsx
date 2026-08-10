@@ -50,8 +50,8 @@ const HEADER_INK = '#334155';
 const PRIMARY = 'var(--color-primary)';
 
 // Child (size) grid — the sub-header + every size row align to it.
-// SIZE (thumb + size) · COVER · DRR · TREND · STOCK · PIPELINE · MAKE
-const GRID = 'minmax(0,1.5fr) 0.8fr 0.6fr 1.05fr 0.6fr 0.6fr 0.6fr';
+// SIZE (thumb + size) · COVER · DRR · TREND · RTO% · RTV% · STOCK · PIPELINE · MAKE
+const GRID = 'minmax(0,1.4fr) 0.7fr 0.6fr 0.95fr 0.5fr 0.5fr 0.6fr 0.6fr 0.6fr';
 
 /** Per-urgency: label + the meaning-colour (red/amber/neutral) for text + dot. */
 const URG: Record<Urgency, { label: string; color: string; dot: string }> = {
@@ -738,6 +738,12 @@ export default function InventoryHealth(): ReactNode {
                     <SortHeader label={t('admin.inventoryHealth.col.cover', { defaultValue: 'Cover' })} col="cover" sortKey={sortKey} sortDir={sortDir} onSort={onSort} />
                     <SortHeader label={t('admin.inventoryHealth.col.drr', { defaultValue: 'DRR · /d' })} col="drr" sortKey={sortKey} sortDir={sortDir} onSort={onSort} />
                     <span className="flex justify-end">{t('admin.inventoryHealth.col.trend', { defaultValue: 'Trend · /d' })}</span>
+                    <span className="flex justify-end" title={t('admin.inventoryHealth.col.rtoHint', { defaultValue: 'Courier returns (parcel never delivered) ÷ units sold, over the selected window' })}>
+                      {t('admin.inventoryHealth.col.rto', { defaultValue: 'RTO %' })}
+                    </span>
+                    <span className="flex justify-end" title={t('admin.inventoryHealth.col.rtvHint', { defaultValue: 'Customer returns (delivered, then sent back) ÷ units sold, over the selected window' })}>
+                      {t('admin.inventoryHealth.col.rtv', { defaultValue: 'RTV %' })}
+                    </span>
                     <SortHeader label={t('admin.inventoryHealth.col.stock', { defaultValue: 'Stock' })} col="stock" sortKey={sortKey} sortDir={sortDir} onSort={onSort} align="right" />
                     <span className="flex justify-end">{t('admin.inventoryHealth.col.pipeline', { defaultValue: 'Pipeline' })}</span>
                     <SortHeader label={t('admin.inventoryHealth.col.make', { defaultValue: 'Make' })} col="make" sortKey={sortKey} sortDir={sortDir} onSort={onSort} align="right" />
@@ -1033,6 +1039,16 @@ function SizeRow({
         <TrendCell data={size.trend ?? []} dates={dates} t={t} />
       </Cell>
 
+      {/* Return rates over the selected window. Separate because RTO over-counts
+          while RTV is trustworthy — see docs/EASYECOM_DATA_QUALITY.md. */}
+      <Cell label={t('admin.inventoryHealth.col.rto', { defaultValue: 'RTO %' })} align="right">
+        <ReturnPct pct={size.rtoPct} units={size.rtoUnits} sold={size.soldInWindow} t={t} />
+      </Cell>
+
+      <Cell label={t('admin.inventoryHealth.col.rtv', { defaultValue: 'RTV %' })} align="right">
+        <ReturnPct pct={size.rtvPct} units={size.rtvUnits} sold={size.soldInWindow} t={t} />
+      </Cell>
+
       <Cell label={t('admin.inventoryHealth.col.stock', { defaultValue: 'Stock' })} align="right">
         <span className="tabular-nums text-neutral-700">{fmtN(size.currentStock)}</span>
       </Cell>
@@ -1099,6 +1115,40 @@ function Cell({
       <span className="text-[10px] font-bold uppercase tracking-wider text-neutral-400 lg:hidden">{label}</span>
       <span className="flex items-center">{children}</span>
     </div>
+  );
+}
+
+/** One return-rate cell. null (nothing sold in the window) reads as '—' rather
+ *  than 0% — no sales means no rate, not a perfect one. Amber above 20%, red
+ *  above 40%; the title carries the raw "n of m" so a 100% off one sale is
+ *  legible as the noise it is. */
+function ReturnPct({
+  pct,
+  units,
+  sold,
+  t,
+}: {
+  pct: number | null;
+  units: number;
+  sold: number;
+  t: ReturnType<typeof useTranslation>['t'];
+}): ReactNode {
+  if (pct == null) {
+    return <span className="tabular-nums" style={{ color: MUTED }}>—</span>;
+  }
+  const color = pct >= 40 ? '#B42318' : pct >= 20 ? '#B54708' : units > 0 ? INK : MUTED;
+  return (
+    <span
+      className="tabular-nums"
+      style={{ color }}
+      title={t('admin.inventoryHealth.returnOf', {
+        defaultValue: '{{units}} returned of {{sold}} sold in this window',
+        units,
+        sold,
+      })}
+    >
+      {pct}%
+    </span>
   );
 }
 

@@ -38,6 +38,16 @@ export interface InventorySize {
   /** Raw daily units over the response window (aligned to response `trendDates`).
    *  Drives the per-size interactive trend sparkline. */
   trend: number[];
+  /** Return rates over the SAME window the page is showing (returned ÷ sold, %).
+   *  Kept apart on purpose: RTV (customer returns) reconciles to ~1% of the
+   *  marketplace, RTO (courier returns) is known to over-count. null = nothing
+   *  sold in the window, so there is no rate — render as '—', not 0%. */
+  rtoPct: number | null;
+  rtvPct: number | null;
+  /** Raw counts behind the rates (same window) — context for tiny volumes. */
+  rtoUnits: number;
+  rtvUnits: number;
+  soldInWindow: number;
 }
 
 /** A style group — an expandable parent row (summary) over its at-risk `sizes`. */

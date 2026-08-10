@@ -409,8 +409,13 @@
         "atRisk": "At risk · /d",
         "sizesAtRisk": "Sizes at risk",
         "pipeline": "Pipeline",
+        "rto": "RTO %",
+        "rtv": "RTV %",
+        "rtoHint": "Courier returns (parcel never delivered) ÷ units sold, over the selected window",
+        "rtvHint": "Customer returns (delivered, then sent back) ÷ units sold, over the selected window",
         "make": "Make"
       },
+      "returnOf": "{{units}} returned of {{sold}} sold in this window",
       "inProduction": "{{n}} in production",
       "filterCategory": "Category",
       "categoryAll": "All categories",
