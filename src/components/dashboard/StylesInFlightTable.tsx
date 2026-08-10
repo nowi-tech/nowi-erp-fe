@@ -1090,7 +1090,7 @@ export default function StylesInFlightTable({
     cell: (row) => (
       <HoverThumbnail
         src={row.thumbnail}
-        alt={row.workingName ?? formatStyleRef(row)}
+        alt={row.workingName ?? formatStyleRef(row, t('admin.styles.draft'))}
       />
     ),
   };
@@ -1766,7 +1766,9 @@ export default function StylesInFlightTable({
       <ParkDialog
         open={parkTarget !== null}
         busy={parkBusy}
-        styleLabel={parkTarget ? formatStyleRef(parkTarget) : null}
+        styleLabel={
+          parkTarget ? formatStyleRef(parkTarget, t('admin.styles.draft')) : null
+        }
         approved={parkTarget ? parkTarget.lifecycle !== 'draft' : false}
         onClose={() => setParkTarget(null)}
         onConfirm={async (reason) => {

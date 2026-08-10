@@ -342,9 +342,16 @@ export function StyleRefLink({
   style,
   onClick,
 }: {
-  style: { styleId: string | null; draftNo: number | null };
+  style: {
+    id?: number | null;
+    styleId: string | null;
+    draftNo: number | null;
+    lifecycle?: StyleLifecycle | null;
+  };
   onClick?: () => void;
 }) {
+  const { t } = useTranslation();
+  const label = formatStyleRef(style, t('admin.styles.draft'));
   return (
     <button
       type="button"
@@ -352,10 +359,10 @@ export function StyleRefLink({
         e.stopPropagation();
         onClick?.();
       }}
-      title={formatStyleRef(style)}
+      title={label}
       className="block max-w-full truncate text-left font-mono text-[13px] text-[var(--color-primary)] hover:underline"
     >
-      {formatStyleRef(style)}
+      {label}
     </button>
   );
 }
