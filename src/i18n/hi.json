@@ -649,6 +649,7 @@
       }
     },
     "styles": {
+      "draft": "ड्राफ़्ट",
       "intake": {
         "sampleFabricRequired": "सैंपल के लिए आवश्यक कपड़ा",
         "sampleFabricRequiredHelp": "प्रति सैंपल खपत मात्रा",

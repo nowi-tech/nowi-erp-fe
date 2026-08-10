@@ -25,16 +25,32 @@ export const POST_SAMPLING = new Set<StyleLifecycle>([
  * drawer subtitles. Falls back through:
  *
  *   1. Real Style # (`NOWIWDR1001`) — once Approval #1 has minted it.
- *   2. Draft handle (`D-1042`) — minted at intake for sampling intakes
- *      so the team can reference the design before approval.
- *   3. The fallback label (default `(draft)`) — only hit when neither
- *      exists, e.g. legacy rows imported without a draft #.
+ *      Sources that carry a preset code (Kotty designs, legacy relives)
+ *      have one from intake, so a still-draft row reads
+ *      `NOWIMENSJEANS022 (Draft)` — the code alone can't tell you the
+ *      style hasn't cleared approval.
+ *   2. Draft handle (`D-1042`) — minted at intake for every style that
+ *      would otherwise have no code at all.
+ *   3. Row id (`#334`) — the last rung is still a resolvable reference
+ *      (`getByIdOrStyleId` accepts a bare id), never a bare word.
+ *
+ * DISPLAY ONLY. Never feed the result to SKU derivation or a lookup —
+ * per-size SKUs are `<styleId>-<size>` and a suffixed code won't match.
  */
 export function formatStyleRef(
-  style: { styleId: string | null; draftNo: number | null },
-  fallback: string = '(draft)',
+  style: {
+    id?: number | null;
+    styleId: string | null;
+    draftNo: number | null;
+    lifecycle?: StyleLifecycle | null;
+  },
+  draftLabel: string = 'Draft',
 ): string {
-  if (style.styleId) return style.styleId;
+  if (style.styleId) {
+    return style.lifecycle === 'draft'
+      ? `${style.styleId} (${draftLabel})`
+      : style.styleId;
+  }
   if (style.draftNo != null) return `D-${style.draftNo}`;
-  return fallback;
+  return style.id != null ? `#${style.id}` : `(${draftLabel})`;
 }

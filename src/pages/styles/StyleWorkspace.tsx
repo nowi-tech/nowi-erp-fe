@@ -772,7 +772,7 @@ export default function StyleWorkspace() {
           </button>
           <div className="flex items-center gap-3 flex-wrap">
             <h1 className="font-mono text-3xl font-semibold text-[var(--color-primary)] tracking-tight m-0">
-              {formatStyleRef(style, `(${t('admin.styles.draft')})`)}
+              {formatStyleRef(style, t('admin.styles.draft'))}
             </h1>
             {/* For China Import styles the source IS the story — surface it.
                 For sampling styles the NOWI prefix already implies source,
