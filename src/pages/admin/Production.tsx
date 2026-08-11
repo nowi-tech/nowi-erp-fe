@@ -82,13 +82,13 @@ export default function Production() {
   const canWrite = hasAnyRole(user, PRODUCTION_WRITE_ROLES);
   const canCancel = hasAnyRole(user, PRODUCTION_CANCEL_ROLES);
 
-  // Opens on the queue by default ("what should I start?"), but honours ?tab=
-  // so other pages can deep-link here — e.g. starting a batch elsewhere lands
-  // on the Planning tab, its new home.
+  // Opens on the floor by default ("what's running right now?"), but honours
+  // ?tab= so other pages can deep-link here — e.g. starting a batch elsewhere
+  // lands on the Planning tab, its new home.
   const TABS: Tab[] = ['to_start', 'planning', 'in_production', 'completed', 'parked'];
   const initialTab = searchParams.get('tab') as Tab | null;
   const [tab, setTab] = useState<Tab>(
-    initialTab && TABS.includes(initialTab) ? initialTab : 'to_start',
+    initialTab && TABS.includes(initialTab) ? initialTab : 'in_production',
   );
   const [search, setSearch] = useState(() => searchParams.get('q') ?? '');
   // Every keystroke would otherwise fire a request, and slow responses can land
@@ -325,6 +325,9 @@ export default function Production() {
         );
         void loadKpis(); // KPI cards are separate state — refresh after a create.
         setTab(dest);
+        // Switching tabs refetches on its own; already being on `dest` doesn't,
+        // so the new batch would be missing until a manual reload.
+        if (tab === dest) void load();
       })
       .catch(() =>
         toast.show(
@@ -384,6 +387,9 @@ export default function Production() {
     return runAction(async () => {
       const updated = await sendToProduction(target.id, items);
       setSendTarget(null);
+      // The batch just left Pipeline for the floor — follow it to the tab it's
+      // now on (the send button only exists on Pipeline, so this always moves).
+      setTab('in_production');
       return updated;
     });
   };
