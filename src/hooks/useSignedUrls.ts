@@ -1,9 +1,14 @@
 import { useEffect, useMemo, useState } from 'react';
 import { getReadUrls, isAbsoluteUrl } from '@/api/storage';
 
+/** The signer rejects a request carrying more than 50 paths (IssueReadUrlsDto),
+ *  and a rejected request blanks every thumbnail — so send them in batches. */
+const BATCH_SIZE = 50;
+
 /**
- * Resolve a set of GCS object paths to short-lived signed read URLs in a
- * single batched call, returning a `path → url` lookup. Absolute URLs
+ * Resolve a set of GCS object paths to short-lived signed read URLs in as few
+ * calls as the signer's per-request cap allows, returning a `path → url`
+ * lookup. Absolute URLs
  * (remote CDN / data: / blob:) are returned as-is and never sent to the
  * signer, so callers can look up any value uniformly.
  *
@@ -36,13 +41,26 @@ export function useSignedUrls(paths: Array<string | null | undefined>): Record<s
       setSigned({});
       return;
     }
-    void getReadUrls(toSign)
-      .then((map) => {
-        if (!cancelled) setSigned(map);
-      })
-      .catch(() => {
-        if (!cancelled) setSigned({});
-      });
+    const batches: string[][] = [];
+    for (let i = 0; i < toSign.length; i += BATCH_SIZE) {
+      batches.push(toSign.slice(i, i + BATCH_SIZE));
+    }
+    // allSettled, not all: one rejected batch must not blank the paths the
+    // others resolved.
+    void Promise.allSettled(batches.map((b) => getReadUrls(b))).then((results) => {
+      if (cancelled) return;
+      setSigned(
+        Object.assign(
+          {},
+          ...results
+            .filter(
+              (r): r is PromiseFulfilledResult<Record<string, string>> =>
+                r.status === 'fulfilled',
+            )
+            .map((r) => r.value),
+        ),
+      );
+    });
     return () => {
       cancelled = true;
     };
