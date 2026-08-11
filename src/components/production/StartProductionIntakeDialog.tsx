@@ -8,12 +8,12 @@ import { Label } from '@/components/ui/label';
 import { Combobox, type ComboboxOption } from '@/components/ui/combobox';
 import QtyTable from '@/components/production/QtyTable';
 import { useToast } from '@/components/ui/toast';
-import { useSignedUrls } from '@/hooks/useSignedUrls';
-import { listStyles, listColourMaster, createColourMaster, type Style } from '@/api/styles';
-import { getStyleSizes, type CreateBatchBody } from '@/api/production';
+import { useDebounced } from '@/lib/useDebounced';
+import { listColourMaster, createColourMaster } from '@/api/styles';
+import { searchCatalog, type CatalogStyle, type CreateBatchBody } from '@/api/production';
 import { getBrands, createBrand, type Brand } from '@/api/brands';
 import { uploadPhoto } from '@/api/storage';
-import type { Colour, StyleLifecycle } from '@/api/types';
+import type { Colour } from '@/api/types';
 
 type Mode = 'existing' | 'external';
 
@@ -21,34 +21,16 @@ type Mode = 'existing' | 'external';
 const SIZE_PRESETS = ['XS', 'S', 'M', 'L', 'XL', 'XXL', '28', '30', '32', '34', '36', '38', '40'];
 
 interface ExistingSel {
-  styleId: number;
+  /** EasyEcom style key — the batch's real identity. Always present. */
+  styleKey: string;
+  /** ERP style behind it, when one exists. Null for catalog-only styles. */
+  styleId: number | null;
   styleRef: string | null;
   name: string | null;
   imageUrl: string | null;
   sizes: { sku: string; size: string; inFlightQty: number }[];
   alreadyInProduction: boolean;
 }
-
-/** Lifecycles eligible for the production picker — a style that has cleared
- *  sample approval (sample_approved) or any downstream go-to-market/production
- *  state. A style that bypassed sampling (relive / 3rd-party) still qualifies
- *  once it reaches cataloguing/live. Excludes draft, in_sampling, parked, archived. */
-const PRODUCIBLE_LIFECYCLES = new Set<StyleLifecycle>([
-  'sample_approved',
-  'cataloguing',
-  'live',
-  'in_pd',
-  'qc',
-  'dispatched',
-]);
-
-/** Strip an EasyEcom version suffix `(N)` → the base production code. Production
- *  works on the base (1147), never a version (1147(1)). */
-const baseStyleId = (styleId: string): string => styleId.replace(/\(\d+\)$/, '');
-
-/** A style's primary reference image (raw GCS path or absolute URL), or null. */
-const refImageOf = (s: Style): string | null =>
-  s.referenceImages?.[0] ?? s.referenceImage ?? s.referenceImageUrl ?? null;
 
 /**
  * The header "Start production" intake — modelled on the intake form's
@@ -72,10 +54,11 @@ export default function StartProductionIntakeDialog({
   const toast = useToast();
   const [mode, setMode] = useState<Mode>('existing');
 
-  // ── existing-style search (one page loaded once; combobox filters it) ──
-  const [styles, setStyles] = useState<Style[]>([]);
+  // ── existing-style search (server-side over the EasyEcom catalog) ──
+  const [results, setResults] = useState<CatalogStyle[]>([]);
+  const [query, setQuery] = useState('');
+  const [searching, setSearching] = useState(false);
   const [sel, setSel] = useState<ExistingSel | null>(null);
-  const [loadingSizes, setLoadingSizes] = useState(false);
 
   // ── external brand ───────────────────────────────────────────────
   const [brands, setBrands] = useState<Brand[]>([]);
@@ -104,97 +87,66 @@ export default function StartProductionIntakeDialog({
     setImagePath('');
     setImagePreview('');
     setQty({});
+    setQuery('');
     void getBrands().then(setBrands).catch(() => undefined);
     void listColourMaster().then(setColours).catch(() => undefined);
-    // ponytail: load one page (BE caps take at 500) and let the Combobox filter
-    // client-side — same shape as the intake "relive" picker. Ceiling = 500
-    // styles; swap to a server-search-backed Combobox if the catalog outgrows it.
-    void listStyles({ take: 500 })
-      .then((r) => setStyles(r.data))
-      .catch(() => setStyles([]));
   }, [open]);
 
-  // Only production-eligible styles: a minted styleId AND a lifecycle that has
-  // cleared sample approval (see PRODUCIBLE_LIFECYCLES). Drops draft, in_sampling,
-  // parked and archived; keeps cataloguing/live even when sampling was bypassed.
-  const producibleStyles = useMemo(() => {
-    const eligible = styles.filter((s) => s.styleId != null && PRODUCIBLE_LIFECYCLES.has(s.lifecycle));
-    // Collapse version listings to one entry per base code (production works on the
-    // base, not 1147(1)/(2)). Prefer the un-versioned base style, then a live one,
-    // else the first seen — so the picker shows a single "1147".
-    const byBase = new Map<string, Style>();
-    for (const s of eligible) {
-      const base = baseStyleId(s.styleId!);
-      const cur = byBase.get(base);
-      if (!cur) {
-        byBase.set(base, s);
-        continue;
-      }
-      const curIsBase = cur.styleId === base;
-      const sIsBase = s.styleId === base;
-      if ((sIsBase && !curIsBase) || (!curIsBase && s.lifecycle === 'live' && cur.lifecycle !== 'live')) {
-        byBase.set(base, s);
-      }
-    }
-    return [...byBase.values()];
-  }, [styles]);
-  // Sign the (raw GCS) reference images in one batched call — the dropdown thumbs
-  // plus the picked-style preview. Absolute/CDN URLs pass through untouched.
-  const imagePaths = useMemo(
-    () => [...producibleStyles.map(refImageOf), sel?.imageUrl ?? null],
-    [producibleStyles, sel],
-  );
-  const signedImages = useSignedUrls(imagePaths);
-  const signedOf = (p: string | null | undefined): string | null =>
-    p ? (signedImages[p] ?? null) : null;
-
-  const styleOptions = useMemo<ComboboxOption<number>[]>(
-    () =>
-      producibleStyles.map((s) => {
-        const path = refImageOf(s);
-        const url = path ? (signedImages[path] ?? null) : null;
-        return {
-          value: s.id,
-          label: s.styleId ? baseStyleId(s.styleId) : `#${s.id}`, // base code only
-          searchText: [s.styleId ? baseStyleId(s.styleId) : null, s.styleId, s.workingName]
-            .filter(Boolean)
-            .join(' '),
-          leading: url ? (
-            <img src={url} alt="" className="h-7 w-7 shrink-0 rounded object-cover" />
-          ) : (
-            <div className="h-7 w-7 shrink-0 rounded bg-[var(--color-muted)]" />
-          ),
-        };
-      }),
-    [producibleStyles, signedImages],
-  );
-
-  const pickStyle = async (style: Style) => {
-    setLoadingSizes(true);
-    try {
-      const s = await getStyleSizes(style.id);
-      setSel({
-        styleId: s.styleId,
-        styleRef: s.styleRef,
-        name: s.name,
-        imageUrl: s.imageUrl,
-        sizes: s.sizes,
-        alreadyInProduction: s.alreadyInProduction,
+  // Server-side search over the EasyEcom catalog — everything Nowi sells is
+  // producible, whether or not the ERP design pipeline ever knew about it. The
+  // BE collapses versions, signs images and returns each style's sizes, so
+  // picking one needs no second round-trip.
+  const debouncedQuery = useDebounced(query, 250);
+  useEffect(() => {
+    if (!open) return;
+    let cancelled = false;
+    setSearching(true);
+    void searchCatalog(debouncedQuery)
+      .then((r) => {
+        if (!cancelled) setResults(r.rows);
+      })
+      .catch(() => {
+        if (!cancelled) setResults([]);
+      })
+      .finally(() => {
+        if (!cancelled) setSearching(false);
       });
-      const seeded: Record<string, number> = {};
-      for (const z of s.sizes) seeded[z.sku] = 0;
-      setQty(seeded);
-      setExtSizes({}); // fresh manual-size picker when the style has no resolved sizes
-    } catch {
-      toast.show(
-        t('admin.production.intake.sizesFailed', {
-          defaultValue: "Couldn't load that style's sizes.",
-        }),
-        'error',
-      );
-    } finally {
-      setLoadingSizes(false);
-    }
+    return () => {
+      cancelled = true;
+    };
+  }, [open, debouncedQuery]);
+
+  const styleOptions = useMemo<ComboboxOption<string>[]>(
+    () =>
+      results.map((s) => ({
+        value: s.styleKey,
+        label: s.styleKey,
+        sublabel: s.name && s.name !== s.styleKey ? s.name : undefined,
+        leading: s.imageUrl ? (
+          <img src={s.imageUrl} alt="" className="h-7 w-7 shrink-0 rounded object-cover" />
+        ) : (
+          <div className="h-7 w-7 shrink-0 rounded bg-[var(--color-muted)]" />
+        ),
+      })),
+    [results],
+  );
+
+  const pickStyle = (styleKey: string) => {
+    const s = results.find((x) => x.styleKey === styleKey);
+    if (!s) return;
+    setSel({
+      styleKey: s.styleKey,
+      styleId: s.linkedStyleId,
+      styleRef: s.erpStyleId ?? s.styleKey,
+      name: s.name,
+      imageUrl: s.imageUrl,
+      sizes: s.sizes,
+      alreadyInProduction: s.alreadyInProduction,
+    });
+    const seeded: Record<string, number> = {};
+    for (const z of s.sizes) seeded[z.sku] = 0;
+    setQty(seeded);
+    setExtSizes({}); // fresh manual-size picker when the style has no resolved sizes
   };
 
   // "+ Add" on the combobox → switch to the new-item form, carrying the typed
@@ -315,7 +267,15 @@ export default function StartProductionIntakeDialog({
             extActiveSizes
               .filter((s) => (qty[s] ?? 0) > 0)
               .map((s) => ({ sku: `${sel.styleRef ?? ''}-${s}`, size: s, qtyPlanned: qty[s] ?? 0 }));
-      return { origin: 'style', styleId: sel.styleId, directToProduction, items };
+      // styleKey is the identity; styleId is the optional ERP link, absent for
+      // the many catalog styles that never went through the design pipeline.
+      return {
+        origin: 'style',
+        styleKey: sel.styleKey,
+        styleId: sel.styleId ?? undefined,
+        directToProduction,
+        items,
+      };
     }
     if (brandId === '' || colourId === '') return null;
     return {
@@ -379,20 +339,19 @@ export default function StartProductionIntakeDialog({
           {!sel && (
             <>
               <Label>{t('admin.production.intake.styleLabel', { defaultValue: 'Style' })}</Label>
-              <Combobox<number>
+              <Combobox<string>
                 value={null}
                 options={styleOptions}
-                onChange={(id) => {
-                  const s = id != null ? styles.find((x) => x.id === id) : null;
-                  if (s) void pickStyle(s);
+                onChange={(key) => {
+                  if (key != null) pickStyle(key);
                 }}
-                placeholder={
-                  loadingSizes
-                    ? t('common.loading', { defaultValue: 'Loading…' })
-                    : t('admin.production.intake.searchStyle', {
-                        defaultValue: 'Search a style by name or ID…',
-                      })
-                }
+                onQueryChange={setQuery}
+                serverFiltered
+                loading={searching}
+                loadingLabel={t('common.loading', { defaultValue: 'Loading…' })}
+                placeholder={t('admin.production.intake.searchStyle', {
+                  defaultValue: 'Search a style by name, code or SKU…',
+                })}
                 ariaLabel={t('admin.production.intake.styleLabel', { defaultValue: 'Style' })}
               />
               {/* External-brand entry is a deliberate, secondary action — not a
@@ -412,9 +371,9 @@ export default function StartProductionIntakeDialog({
           {sel && (
             <div className="space-y-3">
               <div className="flex items-center gap-3 rounded-[var(--radius-sm)] border border-[var(--color-border)] bg-[var(--color-surface-2)]/40 p-2.5">
-                {signedOf(sel.imageUrl) ? (
+                {sel.imageUrl ? (
                   <img
-                    src={signedOf(sel.imageUrl)!}
+                    src={sel.imageUrl}
                     alt=""
                     className="h-10 w-10 shrink-0 rounded object-cover"
                   />
@@ -422,10 +381,8 @@ export default function StartProductionIntakeDialog({
                   <div className="h-10 w-10 shrink-0 rounded bg-[var(--color-muted)]" />
                 )}
                 <div className="min-w-0 flex-1">
-                  <div className="truncate text-sm font-semibold">
-                    {sel.styleRef ? baseStyleId(sel.styleRef) : sel.name}
-                  </div>
-                  {sel.name && sel.name !== sel.styleRef && (
+                  <div className="truncate text-sm font-semibold">{sel.styleKey}</div>
+                  {sel.name && sel.name !== sel.styleKey && (
                     <div className="truncate text-xs text-[var(--color-muted-foreground)]">
                       {sel.name}
                     </div>

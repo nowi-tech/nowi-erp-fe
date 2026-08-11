@@ -1,4 +1,5 @@
 import { apiClient } from './apiClient';
+import type { StyleLifecycle } from './types';
 
 // Types co-located with the caller (same convention as inventoryHealth.ts).
 
@@ -130,6 +131,34 @@ export function getBatches(params: ListBatchesParams = {}): Promise<ListBatchesR
   if (params.skip != null) q.skip = String(params.skip);
   if (params.take != null) q.take = String(params.take);
   return apiClient.get<ListBatchesResponse>('/api/production/batches', { params: q }).then((r) => r.data);
+}
+
+/**
+ * One selectable style in the production picker, sourced from the EasyEcom
+ * catalog rather than the ERP styles table — anything Nowi sells is producible.
+ * `linkedStyleId` is null for the many styles that were listed and sold without
+ * ever passing through the ERP design pipeline.
+ */
+export interface CatalogStyle {
+  /** Base EasyEcom style key — versions `(N)` already collapsed by the BE. */
+  styleKey: string;
+  name: string | null;
+  imageUrl: string | null;
+  sizes: { sku: string; size: string; inFlightQty: number }[];
+  linkedStyleId: number | null;
+  erpStyleId: string | null;
+  lifecycle: StyleLifecycle | null;
+  alreadyInProduction: boolean;
+}
+
+/** Server-side search over the EasyEcom catalog. Replaces the old
+ *  load-one-page-and-filter-in-the-browser picker — the catalog is past that. */
+export function searchCatalog(q: string, take = 30): Promise<{ rows: CatalogStyle[]; total: number }> {
+  return apiClient
+    .get<{ rows: CatalogStyle[]; total: number }>('/api/production/catalog', {
+      params: { q: q || undefined, take },
+    })
+    .then((r) => r.data);
 }
 
 export interface StyleSizes {
