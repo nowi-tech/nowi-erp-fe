@@ -1,4 +1,5 @@
 import { useTranslation } from 'react-i18next';
+import { CopyPlus } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 
 export interface QtyRow {
@@ -25,6 +26,12 @@ export default function QtyTable({
   showInFlight?: boolean;
 }) {
   const { t } = useTranslation();
+  // Copy one size's number onto every other size — the common case is the same
+  // qty across the run. Uses the existing per-row setter, so both dialogs' state
+  // updates stay functional and no extra prop is needed.
+  const fillAll = (value: number) => {
+    for (const r of rows) onQty(r.key, String(value));
+  };
   return (
     <div className="overflow-x-auto">
       <table className="w-full text-sm">
@@ -63,18 +70,39 @@ export default function QtyTable({
                 </td>
               )}
               <td className="py-2">
-                <Input
-                  type="number"
-                  min={0}
-                  inputMode="numeric"
-                  className="h-9 w-24 text-center text-sm font-semibold"
-                  value={String(r.qty)}
-                  onChange={(e) => onQty(r.key, e.target.value)}
-                  aria-label={t('admin.production.send.qtyFor', {
-                    defaultValue: 'Quantity for size {{size}}',
-                    size: r.size,
-                  })}
-                />
+                <div className="flex items-center gap-1.5">
+                  <Input
+                    type="number"
+                    min={0}
+                    inputMode="numeric"
+                    className="h-9 w-24 text-center text-sm font-semibold"
+                    // Blank at zero — an entry box pre-filled with 0 forces you to
+                    // clear it before typing.
+                    value={r.qty === 0 ? '' : String(r.qty)}
+                    placeholder="0"
+                    onChange={(e) => onQty(r.key, e.target.value)}
+                    aria-label={t('admin.production.send.qtyFor', {
+                      defaultValue: 'Quantity for size {{size}}',
+                      size: r.size,
+                    })}
+                  />
+                  {rows.length > 1 && (
+                    <button
+                      type="button"
+                      onClick={() => fillAll(r.qty)}
+                      disabled={r.qty === 0}
+                      className="rounded p-1.5 text-[var(--color-muted-foreground)] transition hover:bg-[var(--color-surface-2)] hover:text-[var(--color-primary)] disabled:pointer-events-none disabled:opacity-30"
+                      title={t('admin.production.send.applyToAll', {
+                        defaultValue: 'Use this quantity for every size',
+                      })}
+                      aria-label={t('admin.production.send.applyToAll', {
+                        defaultValue: 'Use this quantity for every size',
+                      })}
+                    >
+                      <CopyPlus size={15} />
+                    </button>
+                  )}
+                </div>
               </td>
             </tr>
           ))}
