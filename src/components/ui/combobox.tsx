@@ -42,8 +42,20 @@ interface Props<V extends string | number = string | number> {
    * auto-switches to `+ Add "<typed value>"` regardless of this prop.
    */
   addNewLabel?: string;
+  /**
+   * Fires as the user types. Pair with `serverFiltered` to search server-side
+   * instead of loading one capped page and filtering it in the browser — the
+   * only workable shape once the list outgrows a page.
+   */
+  onQueryChange?: (q: string) => void;
+  /** `options` already match the query — skip the local filter entirely. */
+  serverFiltered?: boolean;
+  /** A server search is in flight; shows a searching row instead of "no matches". */
+  loading?: boolean;
   placeholder?: string;
   emptyLabel?: string;
+  /** Row text while `loading`. */
+  loadingLabel?: string;
   disabled?: boolean;
   /** Tailwind className for the trigger. */
   className?: string;
@@ -78,8 +90,12 @@ export function Combobox<V extends string | number = string | number>({
   onChange,
   onAddNew,
   addNewLabel,
+  onQueryChange,
+  serverFiltered = false,
+  loading = false,
   placeholder = 'Select…',
   emptyLabel = 'No matches.',
+  loadingLabel = 'Searching…',
   disabled = false,
   className,
   ariaLabel,
@@ -105,6 +121,9 @@ export function Combobox<V extends string | number = string | number>({
   );
 
   const filtered = useMemo(() => {
+    // Server-filtered lists are a page of matches, not the whole set — filtering
+    // them again would hide rows the server deliberately returned.
+    if (serverFiltered) return options;
     const q = query.trim().toLowerCase();
     if (!q) return options;
     return options.filter((o) => {
@@ -112,7 +131,7 @@ export function Combobox<V extends string | number = string | number>({
         `${o.label} ${o.sublabel ?? ''} ${o.searchText ?? ''}`.toLowerCase();
       return hay.includes(q);
     });
-  }, [options, query]);
+  }, [options, query, serverFiltered]);
 
   // Reset active index whenever the visible list changes.
   useEffect(() => {
@@ -300,7 +319,10 @@ export function Combobox<V extends string | number = string | number>({
               <input
                 ref={inputRef}
                 value={query}
-                onChange={(e) => setQuery(e.target.value)}
+                onChange={(e) => {
+                  setQuery(e.target.value);
+                  onQueryChange?.(e.target.value);
+                }}
                 onKeyDown={onKeyDown}
                 placeholder="Search…"
                 className="w-full bg-transparent text-[14px] focus:outline-none placeholder:text-[var(--color-muted-foreground)]"
@@ -328,7 +350,7 @@ export function Combobox<V extends string | number = string | number>({
 
               {filtered.length === 0 ? (
                 <div className="px-3 py-2 text-[13px] text-[var(--color-muted-foreground)]">
-                  {emptyLabel}
+                  {loading ? loadingLabel : emptyLabel}
                 </div>
               ) : (
                 filtered.map((o, idx) => {

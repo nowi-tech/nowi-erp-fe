@@ -26,6 +26,7 @@ import ColourPicker from '@/components/styles/intake/ColourPicker';
 import ReferenceImageGrid from '@/components/styles/intake/ReferenceImageGrid';
 import { Thumbnail } from '@/components/styles/StyleQueueTable';
 import { useSignedUrls } from '@/hooks/useSignedUrls';
+import { useDebounced } from '@/lib/useDebounced';
 import {
   GENDER_CATEGORIES,
   deriveArticleCategory,
@@ -367,11 +368,10 @@ function ReliveSourcePreview({ style }: { style: Style }) {
 }
 
 /**
- * Picker for the colour / relive fork. Loads the existing styles once
- * (`listStyles({ source, tab, take: 500 })` — 500 is the BE page cap and
- * comfortably exceeds the whole non-test catalog) and filters them client-side
- * through the Combobox, OR — when `allowCode` (the relive branch) — lets the user
- * type a free-text style code the BE will resolve. The colour branch needs a real
+ * Picker for the colour / relive fork. Searches styles server-side as the user
+ * types (`listStyles({ source, tab, search })`), OR — when `allowCode` (the
+ * relive branch) — lets the user type a free-text style code the BE will
+ * resolve. The colour branch needs a real
  * row (the spawn endpoint addresses the parent by id), so it never enables the
  * free-text path. Fetch scope: colour loads `source=sampling`; relive loads
  * `tab=all` (every source minus parked — a past design worth re-releasing may be
@@ -405,28 +405,33 @@ function StyleRefPicker({
   addCodeLabel: string;
 }) {
   const [results, setResults] = useState<Style[]>([]);
+  const [query, setQuery] = useState('');
+  const [searching, setSearching] = useState(false);
   // Keep the picked style around so its row keeps rendering even when it
-  // isn't in the loaded page.
+  // isn't in the current page of results.
   const pickedRef = useRef<Style | null>(value?.style ?? null);
   pickedRef.current = value?.style ?? pickedRef.current;
 
-  // Load the styles once (up to the BE's 500 cap — the whole non-test catalog
-  // is well under that); the Combobox filters them client-side as the user
-  // types. Soft-fails to an empty list so a flaky search never blocks the form
-  // (same pattern as ColourPicker).
+  // Search server-side as the user types. Soft-fails to an empty list so a
+  // flaky search never blocks the form (same pattern as ColourPicker).
+  const debouncedQuery = useDebounced(query, 250);
   useEffect(() => {
     let mounted = true;
-    void listStyles({ source, tab, take: 500 })
+    setSearching(true);
+    void listStyles({ source, tab, search: debouncedQuery || undefined, take: 50 })
       .then((res) => {
         if (mounted) setResults(res.data);
       })
       .catch(() => {
         if (mounted) setResults([]);
+      })
+      .finally(() => {
+        if (mounted) setSearching(false);
       });
     return () => {
       mounted = false;
     };
-  }, [source, tab]);
+  }, [source, tab, debouncedQuery]);
 
   const styleLabel = (s: Style) =>
     s.styleId ?? s.workingName ?? `D-${s.draftNo ?? s.id}`;
@@ -499,6 +504,9 @@ function StyleRefPicker({
           : undefined
       }
       addNewLabel={addCodeLabel}
+      onQueryChange={setQuery}
+      serverFiltered
+      loading={searching}
       placeholder={placeholder}
       emptyLabel={emptyLabel}
     />
