@@ -49,10 +49,23 @@ export default function TailorPicker({
       .then((rows) => {
         if (!cancelled) setTailors(rows);
       })
-      .catch(() => undefined);
+      .catch(() => {
+        // Say so. Swallowing this rendered a REQUIRED picker as an empty list,
+        // indistinguishable from "no tailors exist yet" — so the natural next
+        // move is to add a tailor who is already on file.
+        if (!cancelled) {
+          toast.show(
+            t('admin.production.tailor.loadFailed', {
+              defaultValue: "Couldn't load tailors. Reopen this to try again.",
+            }),
+            'error',
+          );
+        }
+      });
     return () => {
       cancelled = true;
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const options = useMemo<ComboboxOption<number>[]>(

@@ -52,6 +52,10 @@ export default function ProductionLotDetail() {
   useEffect(() => {
     let cancelled = false;
     setLoading(true);
+    // Drop the previous lot before fetching the next one. Without this, a failed
+    // request leaves the OLD lot on screen under the NEW url — you'd be reading
+    // one lot's quantities believing they belong to another.
+    setLot(null);
     getLot(Number(id))
       .then((res) => {
         if (!cancelled) setLot(res);

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Send } from 'lucide-react';
 import { Dialog } from '@/components/ui/dialog';
@@ -58,17 +58,45 @@ export default function DispatchBuilderDialog({
 
   // Seed every size to its full remaining qty — the common case is "ship
   // everything that's left", and holding a size back is the exception you type.
+  // `batches` is a dependency because the parent can load more while this is
+  // open, but a reseed then would wipe what you typed (a size you deliberately
+  // zeroed springs back to full). So seed once per opening, and afterwards only
+  // add keys that weren't there before.
+  const seeded = useRef(false);
   useEffect(() => {
-    if (!open) return;
-    const seeded: Record<string, number> = {};
-    for (const b of batches) {
-      for (const s of b.sizes) {
-        const remaining = (s.qtyProduced ?? 0) - (s.qtyDispatched ?? 0);
-        if (remaining > 0) seeded[key(b.id, s.sku)] = remaining;
-      }
+    if (!open) {
+      seeded.current = false;
+      return;
     }
-    setQty(seeded);
-    setNotes('');
+    const remainingOf = (s: { qtyProduced?: number | null; qtyDispatched?: number | null }): number =>
+      (s.qtyProduced ?? 0) - (s.qtyDispatched ?? 0);
+    if (!seeded.current) {
+      const fresh: Record<string, number> = {};
+      for (const b of batches) {
+        for (const s of b.sizes) {
+          const remaining = remainingOf(s);
+          if (remaining > 0) fresh[key(b.id, s.sku)] = remaining;
+        }
+      }
+      setQty(fresh);
+      setNotes('');
+      seeded.current = true;
+      return;
+    }
+    setQty((prev) => {
+      const next: Record<string, number> = {};
+      for (const b of batches) {
+        for (const s of b.sizes) {
+          const remaining = remainingOf(s);
+          if (remaining <= 0) continue;
+          const k = key(b.id, s.sku);
+          // Keep the typed figure (clamped, in case the remainder shrank);
+          // only a key we've never shown gets seeded.
+          next[k] = k in prev ? Math.min(prev[k], remaining) : remaining;
+        }
+      }
+      return next;
+    });
   }, [open, batches]);
 
   const remainingByKey = useMemo(() => {
