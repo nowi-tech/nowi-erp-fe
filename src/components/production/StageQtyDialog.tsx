@@ -15,6 +15,15 @@ const PREVIOUS: Record<string, { key: 'qtyPlanned' | 'qtyCut' | 'qtyStitched'; l
   finishing: { key: 'qtyStitched', label: 'Stitched' },
 };
 
+/** The line's own figure for the stage being ENTERED. Entries are additive on
+ *  the server, so whatever this stage already holds has to be netted off — else
+ *  a second pass (back a stage, then forward again) counts the same pieces twice. */
+const CURRENT: Record<string, 'qtyCut' | 'qtyStitched' | 'qtyFinished'> = {
+  cutting: 'qtyCut',
+  stitching: 'qtyStitched',
+  finishing: 'qtyFinished',
+};
+
 const STAGE_VERB: Record<string, string> = {
   cutting: 'Cutting',
   stitching: 'Stitching',
@@ -27,8 +36,11 @@ const STAGE_VERB: Record<string, string> = {
  * number gains its suffix), then cutting → stitching → finishing.
  *
  * The plan is shown but never editable: the whole point is that "planned 500,
- * cut 480" survives the move. Quantities are additive on the server, so moving
- * into a stage twice records more rather than replacing what was there.
+ * cut 480" survives the move.
+ *
+ * The box means "how many MORE", because the server appends rather than
+ * replaces. It is seeded with what's still outstanding at this stage, so the
+ * first pass reads as the full quantity and a return visit only tops up.
  */
 export default function StageQtyDialog({
   open,
@@ -60,17 +72,22 @@ export default function StageQtyDialog({
   const [fabricOk, setFabricOk] = useState(false);
 
   const prev = PREVIOUS[stage] ?? PREVIOUS.cutting;
+  const cur = CURRENT[stage] ?? 'qtyCut';
 
   useEffect(() => {
     if (!open || !batch) return;
-    // Seed each size with what the previous step recorded — the common case is
-    // "all of it moved on", and a short size is the exception you type over.
+    // Seed each size with what is still OUTSTANDING at this stage: everything
+    // the previous step passed on, minus whatever this stage already recorded.
+    // First pass that's the full quantity; coming back it's the remainder, so
+    // the box always means "how many more" — which is what the server appends.
     const seeded: Record<string, number> = {};
-    for (const s of batch.sizes) seeded[s.sku] = s[prev.key] ?? 0;
+    for (const s of batch.sizes) {
+      seeded[s.sku] = Math.max(0, (s[prev.key] ?? 0) - (s[cur] ?? 0));
+    }
     setQty(seeded);
     setTailorId(batch.tailorId ?? '');
     setFabricOk(false);
-  }, [open, batch, prev.key]);
+  }, [open, batch, prev.key, cur]);
 
   const total = useMemo(() => Object.values(qty).reduce((a, b) => a + b, 0), [qty]);
 
@@ -80,7 +97,11 @@ export default function StageQtyDialog({
     setQty((p) => ({ ...p, [sku]: Math.max(0, Number.parseInt(raw, 10) || 0) }));
 
   const verb = STAGE_VERB[stage] ?? stage;
-  const canSubmit = total > 0 && (!askTailor || (tailorId !== '' && fabricOk));
+  // Anything already banked at this stage — shown as its own column, and what
+  // makes a zero-quantity submit legitimate (the work is recorded; this move is
+  // only putting the lot back on the right stage).
+  const anyRecorded = batch.sizes.some((s) => (s[cur] ?? 0) > 0);
+  const canSubmit = (total > 0 || anyRecorded) && (!askTailor || (tailorId !== '' && fabricOk));
 
   return (
     <Dialog
@@ -169,7 +190,16 @@ export default function StageQtyDialog({
               <th className="py-2 pr-3 text-right font-semibold">
                 {t(`admin.production.stage.prev.${prev.key}`, { defaultValue: prev.label })}
               </th>
-              <th className="py-2 pr-3 text-left font-semibold">{verb}</th>
+              {anyRecorded && (
+                <th className="py-2 pr-3 text-right font-semibold">
+                  {t('admin.production.stage.already', { defaultValue: 'Already' })}
+                </th>
+              )}
+              <th className="py-2 pr-3 text-left font-semibold">
+                {anyRecorded
+                  ? t('admin.production.stage.more', { defaultValue: '{{verb}} more', verb })
+                  : verb}
+              </th>
               <th className="py-2 text-right font-semibold">
                 {t('admin.production.stage.delta', { defaultValue: 'Diff' })}
               </th>
@@ -178,13 +208,21 @@ export default function StageQtyDialog({
           <tbody>
             {batch.sizes.map((s) => {
               const before = s[prev.key] ?? 0;
-              const delta = (qty[s.sku] ?? 0) - before;
+              const already = s[cur] ?? 0;
+              // Compares this stage's TOTAL after the entry (not just the entry)
+              // against the step before it — otherwise a top-up always reads short.
+              const delta = already + (qty[s.sku] ?? 0) - before;
               return (
                 <tr key={s.sku} className="border-b border-[var(--color-border)]/60">
                   <td className="py-2 pr-3 font-semibold">{s.size}</td>
                   <td className="py-2 pr-3 text-right text-[var(--color-muted-foreground)]">
                     {before}
                   </td>
+                  {anyRecorded && (
+                    <td className="py-2 pr-3 text-right text-[var(--color-muted-foreground)]">
+                      {already || '—'}
+                    </td>
+                  )}
                   <td className="py-2 pr-3">
                     <Input
                       type="number"
