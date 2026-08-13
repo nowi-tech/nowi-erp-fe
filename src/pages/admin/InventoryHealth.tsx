@@ -73,7 +73,7 @@ const AGE: Record<Exclude<Aging, 'active'>, { label: string; dot: string }> = {
 
 /** Sortable columns. `null` = the priority (urgency-first) default order. A
  *  column sorts the STYLES by that metric aggregated over their sizes. `newest`
- *  (went-live recency) is dropdown-only — it maps to no column header. */
+ *  (arrival recency) is dropdown-only — it maps to no column header. */
 type SortKey = 'style' | 'cover' | 'drr' | 'stock' | 'atrisk' | 'make' | 'newest';
 
 const PAGE_SIZE = 50;
@@ -533,7 +533,8 @@ export default function InventoryHealth(): ReactNode {
         { key: 'watch', label: t('admin.inventoryHealth.tab.watch', { defaultValue: 'Watch' }), count: kpis.watch },
         { key: 'slow', label: t('admin.inventoryHealth.tab.slow', { defaultValue: 'Slow-movers' }), count: kpis.slow },
         { key: 'dead', label: t('admin.inventoryHealth.tab.dead', { defaultValue: 'Dead stock' }), count: kpis.dead },
-        // New arrivals moved to the sort dropdown (Sort → New arrival); no lens tab.
+        // "What's new" is a sort preset (it reorders whichever lens is in focus),
+        // not a lens of its own — no tab.
       ]
     : [];
 
@@ -658,7 +659,7 @@ export default function InventoryHealth(): ReactNode {
             >
               <option value="default">{t('admin.inventoryHealth.sort.default', { defaultValue: 'Sort: Default' })}</option>
               <option value="best">{t('admin.inventoryHealth.sort.best', { defaultValue: 'Best seller' })}</option>
-              <option value="newest">{t('admin.inventoryHealth.sort.newest', { defaultValue: 'New arrival' })}</option>
+              <option value="newest">{t('admin.inventoryHealth.sort.newest', { defaultValue: 'What’s new' })}</option>
             </select>
             <span className="my-0.5 w-px bg-neutral-300" />
             {/* DRR/cover window — same control the sampling dashboard uses. */}
@@ -984,7 +985,7 @@ function StyleGroup({
             {style.isNew && (
               <span className="inline-flex items-center gap-1 rounded-full border border-[var(--color-primary)]/30 bg-[var(--color-primary)]/[0.08] px-1.5 py-0.5 text-[10px] font-semibold text-[var(--color-primary)]">
                 <Sparkles size={10} />
-                {t('admin.inventoryHealth.newBadge', { defaultValue: 'New' })}
+                {t('admin.inventoryHealth.newBadge', { defaultValue: 'New arrival' })}
               </span>
             )}
             {style.discontinued && (
