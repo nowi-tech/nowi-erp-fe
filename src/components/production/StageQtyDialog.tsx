@@ -5,7 +5,12 @@ import { Dialog } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import TailorPicker from '@/components/production/TailorPicker';
-import type { BatchStatus, ProductionBatch, StageQtyItem } from '@/api/production';
+import type {
+  BatchSizeLine,
+  BatchStatus,
+  ProductionBatch,
+  StageQtyItem,
+} from '@/api/production';
 
 /** Which recorded figure the stage being entered is measured against. Cutting
  *  answers to the plan; every later stage answers to the stage before it. */
@@ -29,6 +34,15 @@ const STAGE_VERB: Record<string, string> = {
   stitching: 'Stitching',
   finishing: 'Finishing',
 };
+
+/** What this stage still has coming to it: what the previous step passed on,
+ *  less what this stage already banked. Both the seeded value and the input's
+ *  ceiling are this number, so they can't drift apart. */
+const outstanding = (
+  s: BatchSizeLine,
+  prevKey: (typeof PREVIOUS)[string]['key'],
+  curKey: (typeof CURRENT)[string],
+): number => Math.max(0, (s[prevKey] ?? 0) - (s[curKey] ?? 0));
 
 /**
  * Records how many pieces of each size reached ONE stage. Every floor move goes
@@ -81,9 +95,7 @@ export default function StageQtyDialog({
     // First pass that's the full quantity; coming back it's the remainder, so
     // the box always means "how many more" — which is what the server appends.
     const seeded: Record<string, number> = {};
-    for (const s of batch.sizes) {
-      seeded[s.sku] = Math.max(0, (s[prev.key] ?? 0) - (s[cur] ?? 0));
-    }
+    for (const s of batch.sizes) seeded[s.sku] = outstanding(s, prev.key, cur);
     setQty(seeded);
     setTailorId(batch.tailorId ?? '');
     setFabricOk(false);
@@ -93,8 +105,19 @@ export default function StageQtyDialog({
 
   if (!batch) return null;
 
-  const set = (sku: string, raw: string) =>
-    setQty((p) => ({ ...p, [sku]: Math.max(0, Number.parseInt(raw, 10) || 0) }));
+  // You cannot stitch more than was cut, or finish more than was stitched — the
+  // previous figure is physical output, so the excess is unenterable rather than
+  // merely flagged. Cutting is deliberately exempt: its "previous" is the PLAN,
+  // and cutting a few pieces over plan is a real thing that happens on the floor.
+  const capped = stage !== 'cutting';
+  const maxFor = (s: BatchSizeLine): number =>
+    capped ? outstanding(s, prev.key, cur) : Number.POSITIVE_INFINITY;
+
+  const set = (sku: string, raw: string, max: number) =>
+    setQty((p) => ({
+      ...p,
+      [sku]: Math.min(max, Math.max(0, Number.parseInt(raw, 10) || 0)),
+    }));
 
   const verb = STAGE_VERB[stage] ?? stage;
   // Anything already banked at this stage — shown as its own column, and what
@@ -227,11 +250,12 @@ export default function StageQtyDialog({
                     <Input
                       type="number"
                       min={0}
+                      max={Number.isFinite(maxFor(s)) ? maxFor(s) : undefined}
                       inputMode="numeric"
                       className="h-9 w-24 text-center text-sm font-semibold"
                       value={qty[s.sku] === 0 ? '' : String(qty[s.sku] ?? '')}
                       placeholder="0"
-                      onChange={(e) => set(s.sku, e.target.value)}
+                      onChange={(e) => set(s.sku, e.target.value, maxFor(s))}
                       aria-label={t('admin.production.send.qtyFor', {
                         defaultValue: 'Quantity for size {{size}}',
                         size: s.size,
