@@ -32,8 +32,12 @@ export default function RecordOutputDialog({
   useEffect(() => {
     if (!open || !batch) return;
     const seeded: Record<string, number> = {};
-    // Prefill with the plan — the common case is "we made what we planned".
-    for (const s of batch.sizes) seeded[s.sku] = s.qtyProduced ?? s.qtyPlanned;
+    // Prefill with what finishing actually recorded — that IS the output. Falls
+    // back to the plan for a lot that never had finishing entered (including
+    // every lot that ran before the stage journey shipped).
+    for (const s of batch.sizes) {
+      seeded[s.sku] = s.qtyProduced ?? (s.qtyFinished > 0 ? s.qtyFinished : s.qtyPlanned);
+    }
     setProduced(seeded);
     setReason('');
   }, [open, batch]);
@@ -99,7 +103,9 @@ export default function RecordOutputDialog({
           </Button>
           <Button
             size="sm"
-            disabled={busy}
+            // Short of plan needs a reason — the server refuses it otherwise,
+            // and the lot is meant to stay open until the rest is made.
+            disabled={busy || (diff < 0 && !reason.trim())}
             onClick={() =>
               onConfirm(
                 batch.sizes.map((s) => ({ sku: s.sku, qtyProduced: produced[s.sku] ?? 0 })),
@@ -222,7 +228,7 @@ export default function RecordOutputDialog({
         <div className="mt-4">
           <label className="mb-1 block text-xs text-[var(--color-muted-foreground)]">
             {t('admin.production.output.reason', {
-              defaultValue: 'Shortfall reason (optional)',
+              defaultValue: 'Why is it short?',
             })}
           </label>
           <Input

@@ -1,4 +1,15 @@
+import type { useTranslation } from 'react-i18next';
 import type { InventoryStyle } from '@/api/inventoryHealth';
+import type { BatchStatus } from '@/api/production';
+
+type T = ReturnType<typeof useTranslation>['t'];
+
+/** Status label, shared so the board and the lot page can't word it differently. */
+export function statusLabel(t: T, status: BatchStatus): string {
+  return t(`admin.production.status.${status}`, {
+    defaultValue: status.charAt(0).toUpperCase() + status.slice(1),
+  });
+}
 
 /**
  * Show a style's SKU-derived name only when it adds information — not when it is

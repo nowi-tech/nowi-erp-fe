@@ -44,6 +44,12 @@ export interface BatchSizeLine {
   sku: string;
   size: string;
   qtyPlanned: number;
+  /** Units recorded into each floor stage (the sum of that stage's entries).
+   *  0 also means "nothing recorded" — lots that ran before the lot journey
+   *  shipped have no history to show. */
+  qtyCut: number;
+  qtyStitched: number;
+  qtyFinished: number;
   /** null = no forecast existed (style-origin), NOT "forecast said zero". */
   suggestedQty: number | null;
   qtyProduced: number | null;
@@ -67,6 +73,9 @@ export interface ProductionBatch {
   colourId: number | null;
   colourName: string | null;
   colourHex: string | null;
+  /** Tailor the lot went to the floor with; their code is inside `batchNo`. */
+  tailorId: number | null;
+  tailorName: string | null;
   /** ERP Style # when linked, external SKU for an external batch, else the key. */
   styleRef: string | null;
   name: string | null;
@@ -201,6 +210,9 @@ export interface CreateBatchBody {
   imagePath?: string;
   /** Skip Planning and open on the floor (cutting); stamps both timestamps. */
   directToProduction?: boolean;
+  /** Tailor for a lot opening straight on the floor — their short code becomes
+   *  the lot number suffix. Ignored when the lot lands in Planning. */
+  tailorId?: number;
   notes?: string;
   items: CreateBatchItem[];
 }
@@ -217,10 +229,17 @@ export function updateBatch(
   return apiClient.patch<ProductionBatch>(`/api/production/batches/${id}`, body).then((r) => r.data);
 }
 
+/** Per-size line for a stage move: how many pieces reached that stage. It does
+ *  NOT touch the plan — planned is fixed when the lot is created. */
+export interface StageQtyItem {
+  sku: string;
+  qty: number;
+}
+
 export function advanceBatch(
   id: number,
   status: BatchStatus,
-  items?: { sku: string; qtyPlanned: number }[],
+  items?: StageQtyItem[],
 ): Promise<ProductionBatch> {
   return apiClient
     .post<ProductionBatch>(`/api/production/batches/${id}/actions/advance`, {
@@ -230,13 +249,20 @@ export function advanceBatch(
     .then((r) => r.data);
 }
 
-/** Planning → floor. Commits the per-size "how many can you make" quantities. */
+/** Planning → floor. Records what went into cutting and names the tailor, whose
+ *  short code turns lot `1001` into `1001-RAJ`. `fabricFeasible` is the sender's
+ *  confirmation that the fabric exists; it lands on the audit entry. */
 export function sendToProduction(
   id: number,
-  items: { sku: string; qtyPlanned: number }[],
+  items: StageQtyItem[],
+  extra?: { tailorId?: number; fabricFeasible?: boolean },
 ): Promise<ProductionBatch> {
   return apiClient
-    .post<ProductionBatch>(`/api/production/batches/${id}/actions/send-to-production`, { items })
+    .post<ProductionBatch>(`/api/production/batches/${id}/actions/send-to-production`, {
+      items,
+      ...(extra?.tailorId != null ? { tailorId: extra.tailorId } : {}),
+      ...(extra?.fabricFeasible != null ? { fabricFeasible: extra.fabricFeasible } : {}),
+    })
     .then((r) => r.data);
 }
 
@@ -248,6 +274,27 @@ export function completeBatch(
   return apiClient
     .post<ProductionBatch>(`/api/production/batches/${id}/actions/complete`, { items, shortfallReason })
     .then((r) => r.data);
+}
+
+/** One recording on a lot's timeline — "300 M cut on Tuesday by Asha". */
+export interface LotTimelineEntry {
+  id: number;
+  sku: string;
+  size: string;
+  stage: 'cutting' | 'stitching' | 'finishing';
+  qty: number;
+  note: string | null;
+  recordedAt: string;
+  recordedBy: { id: number; name: string } | null;
+}
+
+export interface LotDetail extends ProductionBatch {
+  timeline: LotTimelineEntry[];
+}
+
+/** The lot page's payload: the batch plus every stage entry, oldest first. */
+export function getLot(id: number): Promise<LotDetail> {
+  return apiClient.get<LotDetail>(`/api/production/lots/${id}`).then((r) => r.data);
 }
 
 /** Drop a style from the production queue (Parked tab). */

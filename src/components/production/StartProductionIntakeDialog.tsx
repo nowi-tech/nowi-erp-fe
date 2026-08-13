@@ -12,6 +12,7 @@ import { useDebounced } from '@/lib/useDebounced';
 import { listColourMaster, createColourMaster } from '@/api/styles';
 import { searchCatalog, type CatalogStyle, type CreateBatchBody } from '@/api/production';
 import { getBrands, createBrand, type Brand } from '@/api/brands';
+import TailorPicker from '@/components/production/TailorPicker';
 import { uploadPhoto } from '@/api/storage';
 import type { Colour } from '@/api/types';
 
@@ -74,6 +75,9 @@ export default function StartProductionIntakeDialog({
 
   // ── shared qty map (keyed by item sku) ───────────────────────────
   const [qty, setQty] = useState<Record<string, number>>({});
+  // Only used when the lot opens straight on the floor — that's when the lot
+  // number gains its `-RAJ`. A lot going to the pipeline is named later.
+  const [tailorId, setTailorId] = useState<number | ''>('');
 
   // Reset everything when the dialog opens; load the picker's data once.
   useEffect(() => {
@@ -88,6 +92,7 @@ export default function StartProductionIntakeDialog({
     setImagePreview('');
     setQty({});
     setQuery('');
+    setTailorId('');
     void getBrands().then(setBrands).catch(() => undefined);
     void listColourMaster().then(setColours).catch(() => undefined);
   }, [open]);
@@ -274,6 +279,7 @@ export default function StartProductionIntakeDialog({
         styleKey: sel.styleKey,
         styleId: sel.styleId ?? undefined,
         directToProduction,
+        tailorId: directToProduction && tailorId !== '' ? tailorId : undefined,
         items,
       };
     }
@@ -285,6 +291,7 @@ export default function StartProductionIntakeDialog({
       colourId,
       imagePath: imagePath || undefined,
       directToProduction,
+      tailorId: directToProduction && tailorId !== '' ? tailorId : undefined,
       items: extActiveSizes
         .filter((s) => (qty[s] ?? 0) > 0)
         .map((s) => ({ sku: extSku(s), size: s, qtyPlanned: qty[s] ?? 0 })),
@@ -322,7 +329,13 @@ export default function StartProductionIntakeDialog({
               n: total,
             })}
           </Button>
-          <Button size="sm" disabled={busy || !canSubmit} onClick={() => submit(true)}>
+          {/* Straight to the floor needs the tailor — their code is minted into
+              the lot number, so it can't be filled in afterwards. */}
+          <Button
+            size="sm"
+            disabled={busy || !canSubmit || tailorId === ''}
+            onClick={() => submit(true)}
+          >
             <Factory size={14} />
             <span className="ml-1">
               {t('admin.production.intake.sendDirect', {
@@ -583,6 +596,24 @@ export default function StartProductionIntakeDialog({
               onQty={setQtyFor}
             />
           )}
+        </div>
+      )}
+
+      {/* Shared by both modes. Only "Send to production" needs it — a lot added
+          to the pipeline is named on its way out — so it shows as soon as
+          there's something to make, not once quantities are typed: the button
+          it gates would otherwise sit disabled with no visible cause. */}
+      {(mode === 'external' || sel) && (
+        <div className="mt-4">
+          <Label>
+            {t('admin.production.intake.tailorLabel', {
+              defaultValue: 'Tailor (to send straight to the floor)',
+            })}
+          </Label>
+          <TailorPicker
+            value={tailorId === '' ? null : tailorId}
+            onChange={(id) => setTailorId(id ?? '')}
+          />
         </div>
       )}
     </Dialog>
