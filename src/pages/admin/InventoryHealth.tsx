@@ -10,7 +10,11 @@ import { todayISO } from '@/lib/date';
 import { meaningfulName } from '@/lib/production';
 import { useDebounced } from '@/lib/useDebounced';
 import { useAuth } from '@/context/auth';
-import { hasAnyRole } from '@/lib/userRoles';
+import { hasAnyRole, PRODUCTION_WRITE_ROLES } from '@/lib/userRoles';
+import { createBatch, type CreateBatchBody } from '@/api/production';
+import StartProductionDialog, {
+  type StartProductionTarget,
+} from '@/components/production/StartProductionDialog';
 import { useSignedUrls } from '@/hooks/useSignedUrls';
 import { HoverThumbnail } from '@/components/dashboard/StylesInFlightTable';
 import { CARD_SHELL, Sparkline as TrendChart } from '@/components/admin/kpiPrimitives';
@@ -178,8 +182,14 @@ export default function InventoryHealth(): ReactNode {
   const { user } = useAuth();
   // Disable/enable is a merchandising action — admins + sampling editors.
   const canManage = hasAnyRole(user, ['admin', 'sampling_editor']);
+  // Sending a style to the pipeline is a production action — a different set
+  // (the page itself is open to every production reader).
+  const canProduce = hasAnyRole(user, PRODUCTION_WRITE_ROLES);
   // Pending disable/enable confirmation (per style).
   const [confirmDisc, setConfirmDisc] = useState<{ styleKey: string; next: boolean } | null>(null);
+  // Style queued for the "add to pipeline" dialog (quantities are editable there).
+  const [produceTarget, setProduceTarget] = useState<StartProductionTarget | null>(null);
+  const [produceBusy, setProduceBusy] = useState(false);
 
   // Fetch one server page for the current query (server filters/trims/sorts/slices).
   const load = useCallback(
@@ -471,6 +481,49 @@ export default function InventoryHealth(): ReactNode {
     }
   };
 
+  // Add to pipeline → the shared start-production dialog, seeded from the
+  // forecast. Quantities stay editable there: a new arrival has no sales history,
+  // so every suggested qty is 0 and a one-click send would have nothing to send.
+  const openProduce = (style: InventoryStyle, imageUrl: string | null): void => {
+    const covers = style.sizes.map((z) => z.coverDays).filter((c): c is number => c != null);
+    setProduceTarget({
+      origin: 'forecast',
+      styleKey: style.styleKey,
+      styleId: style.linkedStyleId ?? undefined,
+      styleRef: style.erpStyleId,
+      name: meaningfulName(style),
+      imageUrl,
+      sizes: style.sizes.map((z) => ({
+        sku: z.sku,
+        size: z.size,
+        suggestedQty: z.makeQty,
+        coverDays: z.coverDays,
+        currentStock: z.currentStock,
+      })),
+      drr: style.sizes.reduce((a, z) => a + z.drr, 0),
+      worstCoverDays: covers.length ? Math.min(...covers) : null,
+      totalStock: style.sizes.reduce((a, z) => a + z.currentStock, 0),
+    });
+  };
+
+  const onProduceConfirm = async (body: CreateBatchBody): Promise<void> => {
+    setProduceBusy(true);
+    try {
+      await createBatch(body);
+      setProduceTarget(null);
+      toast.show(t('admin.inventoryHealth.pipelineDone', { defaultValue: 'Added to pipeline.' }), 'success');
+      // Reload so the style's Pipeline column + "in production" pill catch up.
+      setReloadTick((n) => n + 1);
+    } catch {
+      toast.show(
+        t('admin.inventoryHealth.pipelineFailed', { defaultValue: 'Couldn’t add to pipeline. Please try again.' }),
+        'error',
+      );
+    } finally {
+      setProduceBusy(false);
+    }
+  };
+
   // The lens tabs (Sampling-style) — urgency tiers, then the aging + new lenses.
   const lensTabs: QueueTab<FilterKey>[] = kpis
     ? [
@@ -742,18 +795,23 @@ export default function InventoryHealth(): ReactNode {
                     <span className="flex justify-end">{t('admin.inventoryHealth.col.pipeline', { defaultValue: 'Pipeline' })}</span>
                     <SortHeader label={t('admin.inventoryHealth.col.make', { defaultValue: 'Make' })} col="make" sortKey={sortKey} sortDir={sortDir} onSort={onSort} align="right" />
                   </div>
-                  {styles.map((style) => (
-                    <StyleGroup
-                      key={style.styleKey}
-                      style={style}
-                      imageUrl={(style.imageUrl && signed[style.imageUrl]) || null}
-                      dates={trendDates}
-                      onOpen={() => openStyle(style.linkedStyleId)}
-                      canManage={canManage}
-                      onRequestDiscontinue={(styleKey, next) => setConfirmDisc({ styleKey, next })}
-                      t={t}
-                    />
-                  ))}
+                  {styles.map((style) => {
+                    const img = (style.imageUrl && signed[style.imageUrl]) || null;
+                    return (
+                      <StyleGroup
+                        key={style.styleKey}
+                        style={style}
+                        imageUrl={img}
+                        dates={trendDates}
+                        onOpen={() => openStyle(style.linkedStyleId)}
+                        canManage={canManage}
+                        canProduce={canProduce}
+                        onRequestDiscontinue={(styleKey, next) => setConfirmDisc({ styleKey, next })}
+                        onProduce={() => openProduce(style, img)}
+                        t={t}
+                      />
+                    );
+                  })}
                 </div>
               )}
 
@@ -829,6 +887,15 @@ export default function InventoryHealth(): ReactNode {
         onConfirm={onConfirmDiscontinue}
         onCancel={() => setConfirmDisc(null)}
       />
+
+      {/* Add to pipeline — the same dialog the dashboard starts production from. */}
+      <StartProductionDialog
+        open={produceTarget != null}
+        busy={produceBusy}
+        target={produceTarget}
+        onClose={() => setProduceTarget(null)}
+        onConfirm={(body) => void onProduceConfirm(body)}
+      />
     </div>
   );
 }
@@ -865,7 +932,9 @@ function StyleGroup({
   dates,
   onOpen,
   canManage,
+  canProduce,
   onRequestDiscontinue,
+  onProduce,
   t,
 }: {
   style: InventoryStyle;
@@ -873,7 +942,9 @@ function StyleGroup({
   dates: string[];
   onOpen: () => void;
   canManage: boolean;
+  canProduce: boolean;
   onRequestDiscontinue: (styleKey: string, next: boolean) => void;
+  onProduce: () => void;
   t: ReturnType<typeof useTranslation>['t'];
 }): ReactNode {
   const linked = style.linkedStyleId != null;
@@ -944,6 +1015,16 @@ function StyleGroup({
             </div>
           )}
         </div>
+        {canProduce && !style.discontinued && (
+          <button
+            type="button"
+            onClick={onProduce}
+            className="inline-flex shrink-0 items-center gap-1 rounded-md border border-[var(--color-primary)]/30 bg-[var(--color-primary)]/[0.08] px-2.5 py-1.5 text-xs font-semibold text-[var(--color-primary)] transition hover:bg-[var(--color-primary)]/[0.14]"
+          >
+            <Factory size={13} />
+            {t('admin.inventoryHealth.addToPipeline', { defaultValue: 'Add to pipeline' })}
+          </button>
+        )}
         {canManage && (
           <button
             type="button"

@@ -432,6 +432,9 @@
       "discontinuedDone": "Product disabled.",
       "restoredDone": "Product enabled.",
       "discontinueFailed": "Couldn’t update. Please try again.",
+      "addToPipeline": "Add to pipeline",
+      "pipelineDone": "Added to pipeline.",
+      "pipelineFailed": "Couldn’t add to pipeline. Please try again.",
       "loadError": "Couldn’t load inventory health.",
       "copySku": "Copy SKU"
     },
