@@ -34,6 +34,7 @@ const ProductionKpis = lazy(() => import('./pages/admin/ProductionKpis'));
 const SalesKpis = lazy(() => import('./pages/admin/SalesKpis'));
 const InventoryHealth = lazy(() => import('./pages/admin/InventoryHealth'));
 const Production = lazy(() => import('./pages/admin/Production'));
+const ProductionLotDetail = lazy(() => import('./pages/admin/ProductionLotDetail'));
 const StitchingHome = lazy(() => import('./pages/stitching/StitchingHome'));
 const StitchingReceiveLot = lazy(
   () => import('./pages/stitching/StitchingReceiveLot'),
@@ -291,6 +292,17 @@ function App() {
                   <ProtectedRoute allowedRoles={[...PRODUCTION_READ_ROLES]}>
                     <S>
                       <Production />
+                    </S>
+                  </ProtectedRoute>
+                }
+              />
+              {/* One lot's journey. Same guard as the board it opens from. */}
+              <Route
+                path="production/lots/:id"
+                element={
+                  <ProtectedRoute allowedRoles={[...PRODUCTION_READ_ROLES]}>
+                    <S>
+                      <ProductionLotDetail />
                     </S>
                   </ProtectedRoute>
                 }

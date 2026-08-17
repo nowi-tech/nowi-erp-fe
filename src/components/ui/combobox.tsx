@@ -234,14 +234,13 @@ export function Combobox<V extends string | number = string | number>({
     }
     if (e.key === 'Enter') {
       e.preventDefault();
-      // If the typed query has no exact match and "+ Add" is wired up,
-      // commit the typed value directly. This makes the picker feel
-      // like a free-form input when the user types something new.
+      // Treat the query as NEW only when nothing matched it — then "+ Add" is
+      // the only sensible reading of Enter, and the picker still feels free-form.
+      // Falling through on any non-exact query meant typing "raj" and pressing
+      // Enter opened "add new" while Rajesh Kumar sat highlighted right below:
+      // one keystroke from a duplicate record.
       const q = query.trim();
-      const exact = filtered.find(
-        (o) => o.label.toLowerCase() === q.toLowerCase(),
-      );
-      if (q && !exact && onAddNew) {
+      if (q && filtered.length === 0 && onAddNew) {
         close();
         onAddNew(q);
         return;

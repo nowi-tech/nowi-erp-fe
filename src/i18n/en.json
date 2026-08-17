@@ -396,7 +396,7 @@
         "dead": "Dead stock",
         "new": "New arrivals"
       },
-      "newBadge": "New",
+      "newBadge": "New arrival",
       "col": {
         "style": "Style",
         "size": "Size",
@@ -418,7 +418,7 @@
       "sort": {
         "default": "Sort: Default",
         "best": "Best seller",
-        "newest": "New arrival"
+        "newest": "What’s new"
       },
       "discontinuedBadge": "disabled",
       "disable": "Disable",
@@ -432,6 +432,9 @@
       "discontinuedDone": "Product disabled.",
       "restoredDone": "Product enabled.",
       "discontinueFailed": "Couldn’t update. Please try again.",
+      "addToPipeline": "Add to pipeline",
+      "pipelineDone": "Added to pipeline.",
+      "pipelineFailed": "Couldn’t add to pipeline. Please try again.",
       "loadError": "Couldn’t load inventory health.",
       "copySku": "Copy SKU"
     },

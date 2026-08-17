@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Send } from 'lucide-react';
 import { Dialog } from '@/components/ui/dialog';
@@ -14,24 +14,27 @@ import type { ProductionBatch } from '@/api/production';
 const key = (batchId: number, sku: string) => `${batchId}:${sku}`;
 
 /**
- * Builds a challan from the Completed tab's selected sizes — each seeded to
- * what's left to ship. The one place a production challan is created; the
- * Dispatch surface is view + accept.
+ * Builds a challan from the lots selected on the Completed tab — several lots
+ * ship on one challan, so this lists each lot's remaining sizes together.
+ *
+ * Sizes are picked HERE, not on the board: every size with something left is
+ * seeded to its full remaining quantity, and setting one to 0 drops it from the
+ * challan. That's why the board only selects lots.
+ *
+ * The one place a production challan is created; the Dispatch surface is
+ * view + accept.
  */
 export default function DispatchBuilderDialog({
   open,
   busy,
   batches,
-  selectedKeys,
   onClose,
   onConfirm,
 }: {
   open: boolean;
   busy: boolean;
-  /** Batches with at least one selected size. */
+  /** Lots selected on the board. */
   batches: ProductionBatch[];
-  /** Selected size keys `${batchId}:${sku}` — only these sizes ship. */
-  selectedKeys: Set<string>;
   onClose: () => void;
   onConfirm: (body: CreateDispatchBody) => void;
 }) {
@@ -53,20 +56,48 @@ export default function DispatchBuilderDialog({
     });
   }, [open]);
 
-  // Seed each SELECTED size to its full remaining qty (the common case: ship
-  // everything that's left of the sizes you picked).
+  // Seed every size to its full remaining qty — the common case is "ship
+  // everything that's left", and holding a size back is the exception you type.
+  // `batches` is a dependency because the parent can load more while this is
+  // open, but a reseed then would wipe what you typed (a size you deliberately
+  // zeroed springs back to full). So seed once per opening, and afterwards only
+  // add keys that weren't there before.
+  const seeded = useRef(false);
   useEffect(() => {
-    if (!open) return;
-    const seeded: Record<string, number> = {};
-    for (const b of batches) {
-      for (const s of b.sizes) {
-        const remaining = (s.qtyProduced ?? 0) - (s.qtyDispatched ?? 0);
-        if (remaining > 0 && selectedKeys.has(key(b.id, s.sku))) seeded[key(b.id, s.sku)] = remaining;
-      }
+    if (!open) {
+      seeded.current = false;
+      return;
     }
-    setQty(seeded);
-    setNotes('');
-  }, [open, batches, selectedKeys]);
+    const remainingOf = (s: { qtyProduced?: number | null; qtyDispatched?: number | null }): number =>
+      (s.qtyProduced ?? 0) - (s.qtyDispatched ?? 0);
+    if (!seeded.current) {
+      const fresh: Record<string, number> = {};
+      for (const b of batches) {
+        for (const s of b.sizes) {
+          const remaining = remainingOf(s);
+          if (remaining > 0) fresh[key(b.id, s.sku)] = remaining;
+        }
+      }
+      setQty(fresh);
+      setNotes('');
+      seeded.current = true;
+      return;
+    }
+    setQty((prev) => {
+      const next: Record<string, number> = {};
+      for (const b of batches) {
+        for (const s of b.sizes) {
+          const remaining = remainingOf(s);
+          if (remaining <= 0) continue;
+          const k = key(b.id, s.sku);
+          // Keep the typed figure (clamped, in case the remainder shrank);
+          // only a key we've never shown gets seeded.
+          next[k] = k in prev ? Math.min(prev[k], remaining) : remaining;
+        }
+      }
+      return next;
+    });
+  }, [open, batches]);
 
   const remainingByKey = useMemo(() => {
     const m = new Map<string, number>();
@@ -86,10 +117,11 @@ export default function DispatchBuilderDialog({
     () =>
       batches.flatMap((b) =>
         b.sizes
-          .filter((s) => selectedKeys.has(key(b.id, s.sku)) && (qty[key(b.id, s.sku)] ?? 0) > 0)
+          // A size left at 0 is deliberately held back — that IS the picker.
+          .filter((s) => (qty[key(b.id, s.sku)] ?? 0) > 0)
           .map((s) => ({ batchId: b.id, sku: s.sku, size: s.size, qty: qty[key(b.id, s.sku)] })),
       ),
-    [batches, selectedKeys, qty],
+    [batches, qty],
   );
 
   const total = batchLines.reduce((a, l) => a + l.qty, 0);
@@ -149,9 +181,7 @@ export default function DispatchBuilderDialog({
         </div>
 
         {batches.map((b) => {
-          const lines = b.sizes.filter(
-            (s) => (s.qtyProduced ?? 0) - (s.qtyDispatched ?? 0) > 0 && selectedKeys.has(key(b.id, s.sku)),
-          );
+          const lines = b.sizes.filter((s) => (s.qtyProduced ?? 0) - (s.qtyDispatched ?? 0) > 0);
           if (lines.length === 0) return null;
           return (
             <div key={b.id} className="rounded-[var(--radius-sm)] border border-[var(--color-border)] p-3">

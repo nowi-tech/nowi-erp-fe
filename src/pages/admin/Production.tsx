@@ -2,15 +2,20 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { ChevronRight, Factory, Loader2, Search, X } from 'lucide-react';
-import { QueueTabs } from '@/components/styles/StyleQueueTable';
+import {
+  QueueTabs,
+  StyleQueueTable,
+  type QueueColumn,
+} from '@/components/styles/StyleQueueTable';
 import { HoverThumbnail } from '@/components/dashboard/StylesInFlightTable';
 import { TruncText } from '@/components/ui/trunc-text';
+import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 import { Skeleton } from '@/components/ui/skeleton';
 import RecordOutputDialog from '@/components/production/RecordOutputDialog';
-import SendToProductionDialog from '@/components/production/SendToProductionDialog';
+import StageQtyDialog from '@/components/production/StageQtyDialog';
 import StartProductionIntakeDialog from '@/components/production/StartProductionIntakeDialog';
 import DispatchBuilderDialog from '@/components/production/DispatchBuilderDialog';
 import CancelBatchDialog from '@/components/production/CancelBatchDialog';
@@ -30,9 +35,10 @@ import {
   type CreateBatchBody,
   type ProductionBatch,
   type ProductionKpis,
+  type StageQtyItem,
 } from '@/api/production';
 import { getInventoryHealth, type InventoryStyle } from '@/api/inventoryHealth';
-import { cleanName, coverTone, meaningfulName } from '@/lib/production';
+import { cleanName, coverTone, meaningfulName, statusLabel } from '@/lib/production';
 import { UrgencyPill } from '@/pages/admin/InventoryHealth';
 import { useToast } from '@/components/ui/toast';
 import { useAuth } from '@/context/auth';
@@ -47,21 +53,37 @@ type Tab = 'to_start' | 'planning' | 'in_production' | 'completed' | 'parked';
 
 const PAGE_SIZE = 50;
 
-/** Grid template shared by the header, the batch rows, and the size sub-rows. */
-// Fixed 256px Style column so it never stretches with the name; the Sizes
-// column (1fr) absorbs the row's slack.
-const BATCH_GRID =
-  'grid grid-cols-[22px_256px_92px_minmax(0,1fr)_64px_84px_128px_64px_92px_236px] items-center gap-3 px-4';
-
 /** Floor stage order — the "how much" popup only fires moving forward. */
 const STAGE_ORDER: Record<string, number> = { cutting: 0, stitching: 1, finishing: 2 };
 
-type T = ReturnType<typeof useTranslation>['t'];
+/** Units made but not yet shipped — what a challan can still draw from. */
+function remainingToDispatch(b: ProductionBatch): number {
+  return b.sizes.reduce((n, s) => n + Math.max(0, (s.qtyProduced ?? 0) - s.qtyDispatched), 0);
+}
 
-function statusLabel(t: T, status: BatchStatus): string {
-  return t(`admin.production.status.${status}`, {
-    defaultValue: status.charAt(0).toUpperCase() + status.slice(1),
-  });
+/** Selectable for dispatch only while something is left to ship. */
+function hasRemaining(b: ProductionBatch): boolean {
+  return remainingToDispatch(b) > 0;
+}
+
+/** Which per-size figure each floor stage reports, and the word for it. */
+const STAGE_DONE: Record<string, { key: 'qtyCut' | 'qtyStitched' | 'qtyFinished'; label: string }> =
+  {
+    cutting: { key: 'qtyCut', label: 'cut' },
+    stitching: { key: 'qtyStitched', label: 'stitched' },
+    finishing: { key: 'qtyFinished', label: 'finished' },
+  };
+
+/**
+ * Units recorded into the stage this lot is currently sitting in — "in stitching,
+ * 460 stitched". Null off the floor (Planning has no stage) and for lots that ran
+ * before stage entries existed, where every figure is a zero that means "unknown".
+ */
+function stageTotal(b: ProductionBatch): { qty: number; label: string } | null {
+  const at = STAGE_DONE[b.status];
+  if (!at) return null;
+  const qty = b.sizes.reduce((sum, s) => sum + (s[at.key] ?? 0), 0);
+  return qty > 0 ? { qty, label: at.label } : null;
 }
 
 /** Amber past a week — a batch sitting in one stage is the thing to spot. */
@@ -117,7 +139,8 @@ export default function Production() {
   const [loadMoreError, setLoadMoreError] = useState(false);
   const [statusFilter, setStatusFilter] = useState<BatchStatus | ''>('');
   const [originFilter, setOriginFilter] = useState<BatchOrigin | ''>('');
-  const [expanded, setExpanded] = useState<Record<number, boolean>>({});
+  // Suggested-tab styles still expand; batch rows don't — the lot page is their
+  // detail view.
   const [expandedStyles, setExpandedStyles] = useState<Record<string, boolean>>({});
   const [busy, setBusy] = useState(false);
 
@@ -130,7 +153,7 @@ export default function Production() {
   // Completed-tab multi-select → the one place a challan is built. Keyed
   // per-size (`${batchId}:${sku}`) so a challan can ship a subset of a batch's
   // sizes.
-  const [selected, setSelected] = useState<Record<string, boolean>>({});
+  const [selected, setSelected] = useState<Set<number>>(new Set());
   const [builderOpen, setBuilderOpen] = useState(false);
 
   const loadKpis = useCallback(async () => {
@@ -381,11 +404,14 @@ export default function Production() {
     });
   };
 
-  const onSend = (items: { sku: string; qtyPlanned: number }[]) => {
+  const onSend = (
+    items: StageQtyItem[],
+    extra?: { tailorId?: number; fabricFeasible?: boolean },
+  ) => {
     const target = sendTarget;
     if (!target) return;
     return runAction(async () => {
-      const updated = await sendToProduction(target.id, items);
+      const updated = await sendToProduction(target.id, items, extra);
       setSendTarget(null);
       // The batch just left Pipeline for the floor — follow it to the tab it's
       // now on (the send button only exists on Pipeline, so this always moves).
@@ -394,8 +420,9 @@ export default function Production() {
     });
   };
 
-  // A stage move (cutting/stitching) captures "how much" and advances.
-  const onStageQty = (items: { sku: string; qtyPlanned: number }[]) => {
+  // A stage move records how many pieces reached that stage. It does NOT touch
+  // the plan — "planned 500, cut 480" has to survive the move.
+  const onStageQty = (items: StageQtyItem[]) => {
     const tgt = stageTarget;
     if (!tgt) return;
     return runAction(async () => {
@@ -405,29 +432,30 @@ export default function Production() {
     });
   };
 
-  const selectedKeys = useMemo(
-    () => new Set(Object.keys(selected).filter((k) => selected[k])),
-    [selected],
-  );
-  const selectedCount = selectedKeys.size;
-  // Batches with at least one selected size — what the builder renders.
+  // Several lots ship on one challan, so this is a multi-select. Sizes and
+  // quantities are then picked inside the builder.
   const selectedBatches = useMemo(
-    () => batches.filter((b) => b.sizes.some((s) => selectedKeys.has(`${b.id}:${s.sku}`))),
-    [batches, selectedKeys],
+    () => batches.filter((b) => selected.has(b.id)),
+    [batches, selected],
   );
+  // Count the lots actually on screen, not the raw id set — a lot that was
+  // fully dispatched has left the tab, and the CTA must not offer to ship it.
+  const selectedCount = selectedBatches.length;
 
-  const toggleSize = (batchId: number, sku: string) =>
-    setSelected((p) => ({ ...p, [`${batchId}:${sku}`]: !p[`${batchId}:${sku}`] }));
-
-  // Select-all for one batch: flips every size that still has remaining to ship.
-  const toggleAllSizes = (b: ProductionBatch, on: boolean) =>
+  const toggleLot = (id: number) =>
     setSelected((p) => {
-      const next = { ...p };
-      for (const s of b.sizes) {
-        if ((s.qtyProduced ?? 0) - (s.qtyDispatched ?? 0) > 0) next[`${b.id}:${s.sku}`] = on;
-      }
+      const next = new Set(p);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
       return next;
     });
+
+  // Header checkbox: every lot on screen that still has something to ship.
+  const dispatchable = useMemo(() => batches.filter(hasRemaining), [batches]);
+  const allSelected =
+    dispatchable.length > 0 && dispatchable.every((b) => selected.has(b.id));
+  const toggleAllLots = (on: boolean) =>
+    setSelected(on ? new Set(dispatchable.map((b) => b.id)) : new Set());
 
   // Completed tab → challan. The one creation path; clears selection, refreshes
   // the board, and jumps to the Dispatches page where the challan now lives.
@@ -436,7 +464,7 @@ export default function Production() {
     createDispatch(body)
       .then(() => {
         setBuilderOpen(false);
-        setSelected({});
+        setSelected(new Set());
         toast.show(t('admin.production.dispatch.created', { defaultValue: 'Challan created.' }));
         void load(); // a fully-dispatched batch leaves the Completed tab
         void loadKpis();
@@ -600,13 +628,16 @@ export default function Production() {
         )}
       </div>
 
-      {loading ? (
-        <BoardSkeleton />
-      ) : error ? (
+      {/* The batch table draws its own shimmer rows, shaped like its columns, so
+          it takes `loading` rather than being swapped for a skeleton block. */}
+      {error ? (
         <div className="rounded-[var(--radius-md)] border border-[var(--color-border)] p-8 text-sm text-[var(--color-destructive)]">
           {t('admin.production.loadError', { defaultValue: "Couldn't load production data." })}
         </div>
       ) : tab === 'to_start' || tab === 'parked' ? (
+        loading ? (
+          <BoardSkeleton />
+        ) : (
         <ToStartTable
           styles={suggestions}
           canWrite={canWrite}
@@ -618,36 +649,32 @@ export default function Production() {
           onDrop={(style) => setDropTarget(style)}
           onRestore={(k) => void setParked(k, false)}
         />
+        )
       ) : (
         <BatchTable
+          loading={loading}
           rows={batches}
           tab={tab}
           canWrite={canWrite}
           canCancel={canCancel}
           busy={busy}
-          expanded={expanded}
           selectable={canWrite && tab === 'completed'}
           selected={selected}
-          onToggleSize={toggleSize}
-          onToggleAll={toggleAllSizes}
-          // Completed rows open by default so the per-size checkboxes are visible.
-          defaultExpanded={tab === 'completed'}
-          onToggle={(id, next) => setExpanded((p) => ({ ...p, [id]: next }))}
+          allSelected={allSelected}
+          onToggleLot={toggleLot}
+          onToggleAll={toggleAllLots}
           onStage={(b, status) => {
-            // Finishing = the completion step: capture produced qty and mark
-            // completed.
-            if (status === 'finishing') {
-              setOutputTarget(b);
-              return;
-            }
-            // Forward (cutting → stitching) captures "how much"; going back is a
-            // correction — just move, no popup.
+            // Every forward move captures "how many reached this stage",
+            // finishing included — finishing is a stage, not the finish line.
+            // Going back is a correction: just move, no popup.
             if ((STAGE_ORDER[status] ?? 0) > (STAGE_ORDER[b.status] ?? 0)) {
               setStageTarget({ batch: b, status });
             } else {
               void runAction(() => advanceBatch(b.id, status));
             }
           }}
+          onComplete={(b) => setOutputTarget(b)}
+          onOpen={(b) => navigate(`/admin/production/lots/${b.id}`)}
           onSend={(b) => setSendTarget(b)}
           onCancel={(b) => setCancelTarget(b)}
         />
@@ -675,26 +702,22 @@ export default function Production() {
         onClose={() => setOutputTarget(null)}
         onConfirm={onRecordOutput}
       />
-      <SendToProductionDialog
+      {/* Pipeline → floor: records what went into cutting AND names the tailor,
+          which is what gives the lot number its suffix. */}
+      <StageQtyDialog
         open={sendTarget !== null}
         busy={busy}
         batch={sendTarget}
+        stage="cutting"
+        askTailor
         onClose={() => setSendTarget(null)}
         onConfirm={onSend}
       />
-      <SendToProductionDialog
+      <StageQtyDialog
         open={stageTarget !== null}
         busy={busy}
         batch={stageTarget?.batch ?? null}
-        heading={stageTarget ? statusLabel(t, stageTarget.status) : undefined}
-        confirmLabel={
-          stageTarget
-            ? t('admin.production.moveTo', {
-                defaultValue: 'Move to {{stage}}',
-                stage: statusLabel(t, stageTarget.status),
-              })
-            : undefined
-        }
+        stage={stageTarget?.status ?? 'stitching'}
         onClose={() => setStageTarget(null)}
         onConfirm={onStageQty}
       />
@@ -708,7 +731,6 @@ export default function Production() {
         open={builderOpen}
         busy={busy}
         batches={selectedBatches}
-        selectedKeys={selectedKeys}
         onClose={() => setBuilderOpen(false)}
         onConfirm={onCreateDispatch}
       />
@@ -1020,338 +1042,315 @@ function ToStartTable({
   );
 }
 
+
+/** Stop a click on an interactive cell from also opening the lot page. */
+const stopRowClick = (e: React.MouseEvent) => e.stopPropagation();
+
+/**
+ * The production board, on the shared queue-table chrome the Sampling registry
+ * uses — same card, sticky header, dense rows and action cluster, so the two
+ * surfaces read as one app.
+ *
+ * Flat by design: the lot page is the detail view, and dispatch sizes are
+ * chosen in the challan builder, so no row expands here.
+ */
 function BatchTable({
   rows,
   tab,
   canWrite,
   canCancel,
   busy,
-  expanded,
+  loading,
   selectable = false,
-  selected = {},
-  defaultExpanded = false,
-  onToggleSize,
+  selected,
+  allSelected = false,
+  onToggleLot,
   onToggleAll,
-  onToggle,
   onStage,
   onSend,
   onCancel,
+  onComplete,
+  onOpen,
 }: {
   rows: ProductionBatch[];
   tab: Tab;
   canWrite: boolean;
   canCancel: boolean;
   busy: boolean;
-  expanded: Record<number, boolean>;
-  /** Completed tab only: per-SKU checkboxes (in the breakdown) to pick sizes for a challan. */
+  loading?: boolean;
+  /** Completed tab only: per-LOT checkboxes picking what goes on a challan. */
   selectable?: boolean;
-  /** Selected size keys `${batchId}:${sku}` → true. */
-  selected?: Record<string, boolean>;
-  /** Rows open unless explicitly collapsed — Completed opens by default. */
-  defaultExpanded?: boolean;
-  onToggleSize?: (batchId: number, sku: string) => void;
-  onToggleAll?: (batch: ProductionBatch, on: boolean) => void;
-  onToggle: (id: number, next: boolean) => void;
+  selected?: Set<number>;
+  allSelected?: boolean;
+  onToggleLot?: (id: number) => void;
+  onToggleAll?: (on: boolean) => void;
   onStage: (batch: ProductionBatch, status: BatchStatus) => void;
   onSend: (batch: ProductionBatch) => void;
   onCancel: (batch: ProductionBatch) => void;
+  /** Closes the lot: records produced-per-size and asks why if it's short. */
+  onComplete?: (batch: ProductionBatch) => void;
+  /** Opens the lot's own page. */
+  onOpen?: (batch: ProductionBatch) => void;
 }) {
   const { t } = useTranslation();
-  const head =
-    'text-[10.5px] font-semibold uppercase tracking-wider text-[var(--color-muted-foreground)]';
 
-  if (rows.length === 0) {
-    return (
-      <div className="rounded-[var(--radius-md)] border border-[var(--color-border)] p-8 text-center text-sm text-[var(--color-muted-foreground)]">
-        {t('admin.production.empty', { defaultValue: 'No batches here yet.' })}
-      </div>
-    );
-  }
+  const columns = useMemo<QueueColumn<ProductionBatch>[]>(() => {
+    const cols: QueueColumn<ProductionBatch>[] = [];
 
-  return (
-    <div className="overflow-x-auto rounded-[var(--radius-md)] border border-[var(--color-border)] bg-[var(--color-surface)]">
-      <div className="min-w-[1300px]">
-        <div
-          className={`${BATCH_GRID} border-b border-[var(--color-border)] bg-[var(--color-surface-2)] py-2.5`}
-        >
-          <div />
-          <div className={head}>{t('admin.production.style', { defaultValue: 'Style' })}</div>
-          <div className={head}>{t('admin.production.lot', { defaultValue: 'Lot' })}</div>
-          <div className={head}>{t('admin.production.sizes', { defaultValue: 'Sizes' })}</div>
-          <div className={`${head} text-right`}>
-            {t('admin.production.planned', { defaultValue: 'Planned' })}
-          </div>
-          <div className={`${head} text-right`}>
-            {tab === 'completed'
-              ? t('admin.production.produced', { defaultValue: 'Produced' })
-              : t('admin.production.suggested', { defaultValue: 'Suggested' })}
-          </div>
-          <div className={head}>{t('admin.production.stage', { defaultValue: 'Stage' })}</div>
-          <div className={head}>
-            {t('admin.production.inStatus', { defaultValue: 'In status' })}
-          </div>
-          <div className={head}>{t('admin.production.started', { defaultValue: 'Started' })}</div>
-          <div />
-        </div>
+    if (selectable) {
+      cols.push({
+        key: 'pick',
+        width: '40px',
+        header: (
+          <input
+            type="checkbox"
+            className="h-4 w-4 accent-[var(--color-primary)]"
+            checked={allSelected}
+            disabled={busy}
+            onChange={() => onToggleAll?.(!allSelected)}
+            aria-label={t('admin.production.dispatch.selectAll', {
+              defaultValue: 'Select all lots',
+            })}
+          />
+        ),
+        cell: (b) =>
+          // A fully-shipped lot has nothing left to put on a challan.
+          remainingToDispatch(b) > 0 ? (
+            <input
+              type="checkbox"
+              className="h-4 w-4 accent-[var(--color-primary)]"
+              checked={selected?.has(b.id) ?? false}
+              disabled={busy}
+              onClick={stopRowClick}
+              onChange={() => onToggleLot?.(b.id)}
+              aria-label={t('admin.production.dispatch.selectLot', {
+                defaultValue: 'Select lot {{lot}} for dispatch',
+                lot: b.batchNo,
+              })}
+            />
+          ) : null,
+      });
+    }
 
-        {rows.map((b) => {
-          const isOpen = expanded[b.id] ?? defaultExpanded;
-          // Completed-tab selection is per-size; these summarise it for the row.
-          const remainingSizes = b.sizes.filter((s) => (s.qtyProduced ?? 0) - (s.qtyDispatched ?? 0) > 0);
-          const selectedSizes = remainingSizes.filter((s) => selected[`${b.id}:${s.sku}`]);
-          const allSelected = remainingSizes.length > 0 && selectedSizes.length === remainingSizes.length;
-          return (
-            <div key={b.id} className="border-b border-[var(--color-border)] last:border-b-0">
-              {/* Clicking the row toggles the breakdown for mouse users; the
-                  chevron is the real (keyboard/AX) toggle. The row is NOT a
-                  role=button — it wraps a <select> and buttons, which would be
-                  invalid nesting. Interactive children stopPropagation so a
-                  click on them doesn't also collapse the row. */}
-              <div
-                onClick={() => onToggle(b.id, !isOpen)}
-                className={`${BATCH_GRID} cursor-pointer py-3 hover:bg-[var(--color-surface-2)]/50`}
+    cols.push({
+      key: 'style',
+      width: '26%',
+      header: t('admin.production.style', { defaultValue: 'Style' }),
+      cell: (b) => {
+        const nm = cleanName(
+          b.name,
+          b.styleKey,
+          b.sizes.map((z) => z.sku),
+        );
+        const label =
+          b.styleRef ??
+          b.styleKey ??
+          t('admin.production.untitled', { defaultValue: 'Untitled style' });
+        return (
+          <div className="flex min-w-0 items-center gap-3">
+            {/* 28px to match the sampling table; the hover preview is this
+                board's own affordance and doesn't change the footprint. */}
+            <HoverThumbnail src={b.imageUrl} alt={label} size={28} />
+            <div className="min-w-0">
+              {/* Primary-coloured like the sampling table's style link, so the
+                  row reads as leading somewhere. */}
+              <button
+                type="button"
+                title={label}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onOpen?.(b);
+                }}
+                className="block max-w-full truncate text-left font-semibold text-[var(--color-primary)] hover:underline"
               >
-                <button
-                  type="button"
-                  aria-expanded={isOpen}
-                  aria-label={t('admin.production.toggleSizes', {
-                    defaultValue: 'Show size breakdown',
-                  })}
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    onToggle(b.id, !isOpen);
-                  }}
-                  className="text-[var(--color-muted-foreground)]"
-                >
-                  <ChevronRight
-                    size={16}
-                    className={`transition-transform ${isOpen ? 'rotate-90' : ''}`}
+                {label}
+              </button>
+              {nm && (
+                <TruncText
+                  text={nm}
+                  className="font-mono text-[11px] text-[var(--color-muted-foreground)]"
+                />
+              )}
+              {b.colourName && (
+                <span className="mt-0.5 flex items-center gap-1 text-[11px] text-[var(--color-muted-foreground)]">
+                  <span
+                    className="h-2.5 w-2.5 shrink-0 rounded-full border border-[var(--color-border)]"
+                    style={{ background: b.colourHex ?? b.colourName.toLowerCase() }}
                   />
-                </button>
-
-                <div className="flex min-w-0 items-center gap-3">
-                  <HoverThumbnail src={b.imageUrl} alt={b.styleRef ?? b.styleKey ?? b.batchNo} size={40} />
-                  {(() => {
-                    const nm = cleanName(b.name, b.styleKey, b.sizes.map((z) => z.sku));
-                    return (
-                      <div className="min-w-0">
-                        <TruncText
-                          text={
-                            b.styleRef ??
-                            b.styleKey ??
-                            t('admin.production.untitled', { defaultValue: 'Untitled style' })
-                          }
-                          className="text-sm font-semibold"
-                        />
-                        {nm && (
-                          <TruncText
-                            text={nm}
-                            className="font-mono text-[11px] text-[var(--color-muted-foreground)]"
-                          />
-                        )}
-                        {b.colourName && (
-                          <span className="mt-0.5 flex items-center gap-1 text-[11px] text-[var(--color-muted-foreground)]">
-                            <span
-                              className="h-2.5 w-2.5 shrink-0 rounded-full border border-[var(--color-border)]"
-                              style={{ background: b.colourHex ?? b.colourName.toLowerCase() }}
-                            />
-                            {b.colourName}
-                          </span>
-                        )}
-                      </div>
-                    );
-                  })()}
-                </div>
-
-                <div className="font-mono text-xs text-[var(--color-muted-foreground)]">
-                  {b.batchNo}
-                </div>
-
-                <div className="flex flex-wrap gap-1.5">
-                  {b.sizes.slice(0, 3).map((s) => (
-                    <span
-                      key={s.sku}
-                      className="rounded bg-[var(--color-surface-2)] px-1.5 py-0.5 text-[11px]"
-                    >
-                      <span className="font-semibold">{s.size}</span>{' '}
-                      <span className="text-[var(--color-muted-foreground)]">{s.qtyPlanned}</span>
-                    </span>
-                  ))}
-                  {b.sizes.length > 3 && (
-                    <span className="text-[11px] text-[var(--color-muted-foreground)]">
-                      +{b.sizes.length - 3}
-                    </span>
-                  )}
-                </div>
-
-                <div className="text-right text-sm font-semibold">{b.qtyPlanned}</div>
-
-                <div className="text-right text-sm text-[var(--color-muted-foreground)]">
-                  {tab === 'completed' ? (
-                    (b.qtyProduced ?? '—')
-                  ) : (
-                    <>
-                      {/* "—" not 0: a style-origin batch had no forecast. */}
-                      {b.qtySuggested ?? '—'}
-                      {b.qtySuggested != null && b.qtyPlanned !== b.qtySuggested && (
-                        <div className="mt-0.5 text-[11px] font-semibold text-amber-600">
-                          {b.qtyPlanned > b.qtySuggested ? '+' : ''}
-                          {b.qtyPlanned - b.qtySuggested}
-                        </div>
-                      )}
-                    </>
-                  )}
-                </div>
-
-                <div>
-                  {canWrite && tab === 'in_production' ? (
-                    <select
-                      value={b.status}
-                      disabled={busy}
-                      onClick={(e) => e.stopPropagation()}
-                      onChange={(e) => onStage(b, e.target.value as BatchStatus)}
-                      className="h-8 w-full rounded-[var(--radius-sm)] border border-[var(--color-border)] bg-white px-2 text-xs font-semibold focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-ring)]"
-                    >
-                      {(['cutting', 'stitching', 'finishing'] as BatchStatus[]).map((s) => (
-                        <option key={s} value={s}>
-                          {statusLabel(t, s)}
-                        </option>
-                      ))}
-                    </select>
-                  ) : (
-                    <span className="rounded-full bg-[var(--color-surface-2)] px-2 py-0.5 text-xs font-medium">
-                      {statusLabel(t, b.status)}
-                    </span>
-                  )}
-                </div>
-
-                <div className={`text-sm ${ageTone(b.daysInStatus)}`}>{b.daysInStatus}d</div>
-
-                <div className="min-w-0">
-                  <div className="truncate text-xs">{fmtDate(b.startedAt)}</div>
-                  <div className="truncate text-[11px] text-[var(--color-muted-foreground)]">
-                    {b.createdBy?.name ?? '—'}
-                  </div>
-                </div>
-
-                <div
-                  className="flex items-center justify-end gap-2"
-                  onClick={(e) => e.stopPropagation()}
-                >
-                    {canWrite && tab === 'planning' && (
-                      <Button size="sm" disabled={busy} onClick={() => onSend(b)}>
-                        {t('admin.production.sendToProduction', {
-                          defaultValue: 'Send to production',
-                        })}
-                      </Button>
-                    )}
-                    {/* Cancel an in-flight batch. A completed batch is done —
-                        nothing to cancel — so it's hidden there. */}
-                    {canCancel && b.status !== 'dispatched' && b.status !== 'completed' && (
-                      <Button
-                        variant="destructive"
-                        size="sm"
-                        disabled={busy}
-                        onClick={() => onCancel(b)}
-                      >
-                        {t('admin.production.cancelCta', { defaultValue: 'Cancel' })}
-                      </Button>
-                    )}
-                </div>
-              </div>
-
-              {/* The expansion IS the detail view — a batch has no other child data. */}
-              {isOpen && (
-                <div className="border-t border-[var(--color-border)] bg-[var(--color-surface-2)]/40 px-4 py-3 pl-12">
-                  <table className="w-full text-[13px]">
-                    <thead>
-                      <tr className={head}>
-                        {selectable && (
-                          <th className="w-6 py-1.5">
-                            {remainingSizes.length > 0 && (
-                              <input
-                                type="checkbox"
-                                className="h-4 w-4 accent-[var(--color-primary)]"
-                                checked={allSelected}
-                                disabled={busy}
-                                onChange={() => onToggleAll?.(b, !allSelected)}
-                                aria-label={t('admin.production.dispatch.selectAll', {
-                                  defaultValue: 'Select all sizes',
-                                })}
-                              />
-                            )}
-                          </th>
-                        )}
-                        <th className="py-1.5 text-left">
-                          {t('admin.production.size', { defaultValue: 'Size' })}
-                        </th>
-                        <th className="py-1.5 text-left">SKU</th>
-                        <th className="py-1.5 text-right">
-                          {t('admin.production.suggested', { defaultValue: 'Suggested' })}
-                        </th>
-                        <th className="py-1.5 text-right">
-                          {t('admin.production.planned', { defaultValue: 'Planned' })}
-                        </th>
-                        <th className="py-1.5 text-right">
-                          {t('admin.production.produced', { defaultValue: 'Produced' })}
-                        </th>
-                        {selectable && (
-                          <th className="py-1.5 text-right">
-                            {t('admin.production.dispatch.build.remaining', { defaultValue: 'Remaining' })}
-                          </th>
-                        )}
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {b.sizes.map((s) => {
-                        const remaining = (s.qtyProduced ?? 0) - (s.qtyDispatched ?? 0);
-                        return (
-                          <tr key={s.sku} className="border-t border-[var(--color-border)]/50">
-                            {selectable && (
-                              <td className="py-1.5">
-                                <input
-                                  type="checkbox"
-                                  className="h-4 w-4 accent-[var(--color-primary)]"
-                                  checked={!!selected[`${b.id}:${s.sku}`]}
-                                  disabled={busy || remaining <= 0}
-                                  onChange={() => onToggleSize?.(b.id, s.sku)}
-                                  aria-label={t('admin.production.dispatch.selectSize', {
-                                    defaultValue: 'Select size {{size}} for dispatch',
-                                    size: s.size,
-                                  })}
-                                />
-                              </td>
-                            )}
-                            <td className="py-1.5 font-semibold">{s.size}</td>
-                            <td className="py-1.5 font-mono text-xs text-[var(--color-muted-foreground)]">
-                              {s.sku}
-                            </td>
-                            <td className="py-1.5 text-right text-[var(--color-muted-foreground)]">
-                              {s.suggestedQty ?? '—'}
-                            </td>
-                            <td className="py-1.5 text-right font-semibold">{s.qtyPlanned}</td>
-                            <td className="py-1.5 text-right">{s.qtyProduced ?? '—'}</td>
-                            {selectable && (
-                              <td className="py-1.5 text-right font-semibold">{remaining}</td>
-                            )}
-                          </tr>
-                        );
-                      })}
-                    </tbody>
-                  </table>
-                  {(b.notes || b.shortfallReason || b.cancelReason) && (
-                    <div className="mt-2 space-y-1 text-xs text-[var(--color-muted-foreground)]">
-                      {b.notes && <div>{b.notes}</div>}
-                      {b.shortfallReason && <div>{b.shortfallReason}</div>}
-                      {b.cancelReason && <div>{b.cancelReason}</div>}
-                    </div>
-                  )}
-                </div>
+                  {b.colourName}
+                </span>
               )}
             </div>
-          );
-        })}
-      </div>
-    </div>
+          </div>
+        );
+      },
+    });
+
+    cols.push({
+      key: 'lot',
+      width: '130px',
+      header: t('admin.production.lot', { defaultValue: 'Lot' }),
+      cell: (b) => (
+        <div className="min-w-0">
+          <div className="truncate font-mono text-[12px]">{b.batchNo}</div>
+          {b.tailorName && (
+            <div className="truncate text-[11px] text-[var(--color-muted-foreground)]">
+              {b.tailorName}
+            </div>
+          )}
+        </div>
+      ),
+    });
+
+    cols.push({
+      key: 'sizes',
+      width: '15%',
+      header: t('admin.production.sizes', { defaultValue: 'Sizes' }),
+      cell: (b) => (
+        <div className="flex flex-wrap gap-1.5">
+          {b.sizes.slice(0, 3).map((s) => (
+            <span
+              key={s.sku}
+              className="rounded bg-[var(--color-surface-2)] px-1.5 py-0.5 text-[11px]"
+            >
+              <span className="font-semibold">{s.size}</span>{' '}
+              <span className="text-[var(--color-muted-foreground)]">{s.qtyPlanned}</span>
+            </span>
+          ))}
+          {b.sizes.length > 3 && (
+            <span className="text-[11px] text-[var(--color-muted-foreground)]">
+              +{b.sizes.length - 3}
+            </span>
+          )}
+        </div>
+      ),
+    });
+
+    cols.push({
+      key: 'planned',
+      width: '80px',
+      align: 'right',
+      header: t('admin.production.planned', { defaultValue: 'Planned' }),
+      cell: (b) => <span className="font-semibold">{b.qtyPlanned}</span>,
+    });
+
+    cols.push({
+      key: 'atStage',
+      width: '96px',
+      align: 'right',
+      header:
+        tab === 'completed'
+          ? t('admin.production.produced', { defaultValue: 'Produced' })
+          : t('admin.production.atStage', { defaultValue: 'At stage' }),
+      cell: (b) => {
+        if (tab === 'completed') return b.qtyProduced ?? '—';
+        // "—" while the lot is still in Planning, and for lots that ran before
+        // stage entries existed — there is nothing recorded to show.
+        const at = stageTotal(b);
+        if (!at) return <span className="text-[var(--color-muted-foreground)]">—</span>;
+        return (
+          <>
+            <span className="font-semibold">{at.qty}</span>
+            <div className="mt-0.5 text-[11px] text-[var(--color-muted-foreground)]">
+              {t(`admin.production.stageDone.${b.status}`, { defaultValue: at.label })}
+            </div>
+          </>
+        );
+      },
+    });
+
+    cols.push({
+      key: 'stage',
+      width: '130px',
+      header: t('admin.production.stage', { defaultValue: 'Stage' }),
+      cell: (b) =>
+        canWrite && tab === 'in_production' ? (
+          <select
+            value={b.status}
+            disabled={busy}
+            onClick={stopRowClick}
+            onChange={(e) => onStage(b, e.target.value as BatchStatus)}
+            className="h-8 w-full rounded-[var(--radius-sm)] border border-[var(--color-border)] bg-white px-2 text-xs font-semibold focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-ring)]"
+          >
+            {(['cutting', 'stitching', 'finishing'] as BatchStatus[]).map((s) => (
+              <option key={s} value={s}>
+                {statusLabel(t, s)}
+              </option>
+            ))}
+          </select>
+        ) : (
+          <Badge variant="outline">{statusLabel(t, b.status)}</Badge>
+        ),
+    });
+
+    cols.push({
+      key: 'age',
+      width: '82px',
+      header: t('admin.production.inStatus', { defaultValue: 'In status' }),
+      cell: (b) => <span className={ageTone(b.daysInStatus)}>{b.daysInStatus}d</span>,
+    });
+
+    cols.push({
+      key: 'started',
+      width: '116px',
+      header: t('admin.production.started', { defaultValue: 'Started' }),
+      cell: (b) => (
+        <div className="min-w-0">
+          <div className="truncate">{fmtDate(b.startedAt)}</div>
+          <div className="truncate text-[11px] text-[var(--color-muted-foreground)]">
+            {b.createdBy?.name ?? '—'}
+          </div>
+        </div>
+      ),
+    });
+
+    return cols;
+  }, [
+    t,
+    tab,
+    canWrite,
+    busy,
+    selectable,
+    selected,
+    allSelected,
+    onToggleLot,
+    onToggleAll,
+    onStage,
+    onOpen,
+  ]);
+
+  return (
+    <StyleQueueTable<ProductionBatch>
+      columns={columns}
+      rows={rows}
+      getRowKey={(b) => b.id}
+      loading={loading}
+      loadingLabel={t('common.loading', { defaultValue: 'Loading…' })}
+      emptyLabel={t('admin.production.empty', { defaultValue: 'No batches here yet.' })}
+      onRowClick={onOpen}
+      actionsWidth="200px"
+      renderActions={(b) => (
+        <span className="flex items-center gap-2" onClick={stopRowClick}>
+          {canWrite && tab === 'planning' && (
+            <Button size="sm" disabled={busy} onClick={() => onSend(b)}>
+              {t('admin.production.sendToProduction', { defaultValue: 'Send to production' })}
+            </Button>
+          )}
+          {/* Closing the lot is a deliberate click, never a side effect of
+              reaching finishing — 10 of 14 made keeps the lot open. */}
+          {canWrite && tab === 'in_production' && (
+            <Button size="sm" disabled={busy} onClick={() => onComplete?.(b)}>
+              {t('admin.production.completeCta', { defaultValue: 'Complete' })}
+            </Button>
+          )}
+          {/* A completed batch is done — nothing to cancel — so it's hidden there. */}
+          {canCancel && b.status !== 'dispatched' && b.status !== 'completed' && (
+            <Button variant="destructive" size="sm" disabled={busy} onClick={() => onCancel(b)}>
+              {t('admin.production.cancelCta', { defaultValue: 'Cancel' })}
+            </Button>
+          )}
+        </span>
+      )}
+    />
   );
 }
