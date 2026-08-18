@@ -322,11 +322,17 @@ export default function Production() {
     setBusy(true);
     try {
       applyBatch(await fn());
-    } catch {
+    } catch (e: unknown) {
+      // The server explains refusals ("lot is dispatched — this action needs
+      // …"); show that rather than burying it under the generic line.
+      const raw = (e as { response?: { data?: { message?: string | string[] } } })
+        ?.response?.data?.message;
+      const m = Array.isArray(raw) ? raw.join(', ') : raw;
       toast.show(
-        t('admin.production.actionFailed', {
-          defaultValue: "That didn't go through. Refresh and try again.",
-        }),
+        m ||
+          t('admin.production.actionFailed', {
+            defaultValue: "That didn't go through. Refresh and try again.",
+          }),
         'error',
       );
     } finally {
