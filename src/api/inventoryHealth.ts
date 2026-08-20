@@ -2,7 +2,8 @@ import { apiClient } from './apiClient';
 
 // Types co-located with the caller (same convention as salesKpis.ts).
 
-/** 4 tiers only. `needsAction` = out + critical. */
+/** 4 tiers only. `needsAction` = styles that are out OR critical (never a sum:
+ *  one style with both an out and a critical size would be counted twice). */
 export type Urgency = 'out' | 'critical' | 'watch' | 'healthy';
 
 /** Sales-recency lens (NOW-anchored): `dead` = stocked but no sale in 60d;
