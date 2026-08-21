@@ -1,7 +1,6 @@
 import { useTranslation } from 'react-i18next';
-import { Link } from 'react-router-dom';
-import { ArrowRight } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { SummaryCard } from '@/components/ui/summary-card';
 import { Skeleton } from '@/components/ui/skeleton';
 import type { DashboardCards } from '@/api/dashboard';
 
@@ -155,68 +154,21 @@ export default function SummaryCards({ cards, embedded = false }: Props) {
       )}
     >
       {items.map((item) => (
-        // Whole card is the click target (not just the "View →" cue).
-        // Stitch "Precision Industrial" chrome — matches StyleQueueTable's
-        // card (rounded + border + surface + soft shadow, label-caps). In
-        // standalone mode the card lifts on hover so it reads as tactile.
-        <Link
+        // Whole card is the click target (not just the "View →" cue). The card
+        // body lives in the shared SummaryCard so the production board renders
+        // the identical thing.
+        <SummaryCard
           key={item.key}
+          label={item.label}
+          value={item.count}
+          breakdown={item.breakdown}
           to={item.to}
-          className={cn(
-            'group flex flex-col focus:outline-none',
+          className={
             embedded
-              ? 'p-5 transition-colors hover:bg-[var(--color-surface-2)]/40'
-              : 'rounded-[var(--radius-lg)] border border-[var(--color-border)] bg-[var(--color-surface)] p-5 shadow-sm transition-all duration-150 hover:-translate-y-0.5 hover:border-[var(--color-border-strong)] hover:shadow-md focus-visible:border-[var(--color-primary)] focus-visible:ring-2 focus-visible:ring-[var(--color-primary)]/20',
-          )}
-        >
-          {/* Label — Stitch label-caps, muted, never coloured. */}
-          <span className="text-[11px] font-bold uppercase tracking-[0.05em] text-[var(--color-muted-foreground)]">
-            {item.label}
-          </span>
-
-          {/* Big tabular-numerals count — display style, plain foreground. */}
-          <span className="mt-3 text-[40px] font-bold leading-none tabular-nums text-[var(--color-foreground)]">
-            {item.count}
-          </span>
-
-          {/* Optional sub-status split (Sampling / Cataloguing cards) — muted
-              "label · value" rows beneath the count. Partitions the total. */}
-          {item.breakdown && (
-            <div className="mt-2.5 flex flex-col gap-0.5">
-              {item.breakdown.map((b) => (
-                <span
-                  key={b.label}
-                  className="flex items-center justify-between text-[12px] text-[var(--color-muted-foreground)]"
-                >
-                  <span>{b.label}</span>
-                  <span className="font-semibold tabular-nums text-[var(--color-foreground)]">
-                    {b.value}
-                  </span>
-                </span>
-              ))}
-            </div>
-          )}
-
-          {/* Footer divider + the ONLY coloured element: the indigo "View →"
-              cue. mt-auto pins it to the card's base so a row of cards keeps a
-              flush footer regardless of label wrap. The arrow nudges on hover. */}
-          <span
-            className={cn(
-              'mt-auto flex items-center gap-1 text-[13px] font-medium text-[var(--color-primary)]',
-              embedded
-                ? 'mt-3'
-                : 'border-t border-[var(--color-border)]/60 pt-3',
-            )}
-          >
-            {t('dashboard.cards.view', { defaultValue: 'View' })}
-            <ArrowRight
-              size={13}
-              strokeWidth={2.25}
-              aria-hidden
-              className="transition-transform duration-150 group-hover:translate-x-0.5"
-            />
-          </span>
-        </Link>
+              ? 'rounded-none border-0 shadow-none hover:translate-y-0 hover:shadow-none hover:bg-[var(--color-surface-2)]/40'
+              : undefined
+          }
+        />
       ))}
     </div>
   );

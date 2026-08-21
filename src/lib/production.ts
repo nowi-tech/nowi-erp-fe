@@ -4,10 +4,19 @@ import type { BatchStatus } from '@/api/production';
 
 type T = ReturnType<typeof useTranslation>['t'];
 
+/** The three floor stages read as a state the lot is IN; the off-floor statuses
+ *  (planning / completed / dispatched / cancelled) keep their plain name. */
+const FLOOR_STAGE_LABEL: Partial<Record<BatchStatus, string>> = {
+  cutting: 'In cutting',
+  stitching: 'In stitching',
+  finishing: 'In finishing',
+};
+
 /** Status label, shared so the board and the lot page can't word it differently. */
 export function statusLabel(t: T, status: BatchStatus): string {
   return t(`admin.production.status.${status}`, {
-    defaultValue: status.charAt(0).toUpperCase() + status.slice(1),
+    defaultValue:
+      FLOOR_STAGE_LABEL[status] ?? status.charAt(0).toUpperCase() + status.slice(1),
   });
 }
 

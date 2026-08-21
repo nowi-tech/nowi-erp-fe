@@ -10,14 +10,15 @@ import { createPortal } from 'react-dom';
 import { useTranslation } from 'react-i18next';
 import { DayPicker, type DateRange } from 'react-day-picker';
 import { CalendarDays, ChevronDown } from 'lucide-react';
-import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 
 /**
  * Polished date-range picker for the dashboard activity window. Replaces the
  * two native `<input type="date">` + reset button with one trigger + popover:
  * a presets sidebar (Today / Last 7·30·90 days / This year / This financial
- * year) and a dual-month react-day-picker range calendar, plus Cancel / Apply.
+ * year) and a dual-month react-day-picker range calendar. AUTO-APPLIES: a preset
+ * click, or the second click that completes a range, commits and closes — there
+ * is no Apply button.
  *
  * OUTPUT CONTRACT: the parent owns `from`/`to` as LOCAL `YYYY-MM-DD` strings
  * (the same shape the dashboard cards + styles table consume). This component
@@ -74,9 +75,26 @@ export interface PresetRange {
 }
 
 /** Build the presets fresh on each open so "today" tracks the wall clock. */
+/**
+ * Range floor for the "All time" preset — predates all data. The single
+ * definition: pages seeding an all-time default import THIS rather than
+ * re-typing the date, so the preset and the default can never disagree (a
+ * mismatch would show a custom range label instead of "All time").
+ */
+export const ALL_TIME_FROM_ISO = '2000-01-01';
+
 function buildPresets(t: ReturnType<typeof useTranslation>['t']): PresetRange[] {
   const today = localToday();
   return [
+    {
+      // A floor low enough to predate every record, so "All time" is expressible
+      // as a RANGE — the control (and every server filter behind it) only speaks
+      // from/to, and a null window would need a second code path everywhere.
+      key: 'allTime',
+      label: t('dashboard.dateFilter.presets.allTime', { defaultValue: 'All time' }),
+      from: fromLocalISO(ALL_TIME_FROM_ISO),
+      to: today,
+    },
     {
       key: 'today',
       label: t('dashboard.dateFilter.presets.today', { defaultValue: 'Today' }),
@@ -258,9 +276,23 @@ export function DateRangePicker({
     };
   }, [open]);
 
-  const applyPreset = useCallback((p: PresetRange) => {
-    setDraft({ from: p.from, to: p.to });
-  }, []);
+  /** Commit a complete range and close. The picker auto-applies — there is no
+   *  Apply button — so every path that produces a full range routes through here. */
+  const commit = useCallback(
+    (f: Date, tEnd: Date) => {
+      onApply(toLocalISO(f), toLocalISO(tEnd));
+      close();
+    },
+    [onApply, close],
+  );
+
+  const applyPreset = useCallback(
+    (p: PresetRange) => {
+      setDraft({ from: p.from, to: p.to });
+      commit(p.from, p.to);
+    },
+    [commit],
+  );
 
   // Google-style range selection — deterministic two-click cycle, so a click
   // can always start a fresh range (change the start date), which react-day-
@@ -274,27 +306,20 @@ export function DateRangePicker({
     (_range: DateRange | undefined, clickedDay: Date) => {
       setDraft((prev) => {
         if (prev?.from && !prev?.to) {
-          return clickedDay.getTime() >= prev.from.getTime()
-            ? { from: prev.from, to: clickedDay }
-            : { from: clickedDay, to: prev.from };
+          // Second click completes the range → apply straight away. Applying on
+          // the FIRST click would fire a request for a half-picked window.
+          const next =
+            clickedDay.getTime() >= prev.from.getTime()
+              ? { from: prev.from, to: clickedDay }
+              : { from: clickedDay, to: prev.from };
+          commit(next.from, next.to);
+          return next;
         }
         return { from: clickedDay, to: undefined };
       });
     },
-    [],
+    [commit],
   );
-
-  const apply = useCallback(() => {
-    if (!draft?.from) {
-      close();
-      return;
-    }
-    // A single-day click leaves `to` undefined → treat it as a same-day range.
-    const f = draft.from;
-    const tEnd = draft.to ?? draft.from;
-    onApply(toLocalISO(f), toLocalISO(tEnd));
-    close();
-  }, [draft, onApply, close]);
 
   // Default the calendar to show the month containing the draft's end (or
   // start), so reopening lands on the active range rather than today.
@@ -439,15 +464,6 @@ export function DateRangePicker({
               </div>
             </div>
 
-            {/* Footer — Cancel / Apply */}
-            <div className="flex items-center justify-end gap-2 border-t border-[var(--color-border)] px-3 py-2">
-              <Button size="sm" variant="outline" onClick={close}>
-                {t('dashboard.dateFilter.cancel', { defaultValue: 'Cancel' })}
-              </Button>
-              <Button size="sm" onClick={apply} disabled={!draft?.from}>
-                {t('dashboard.dateFilter.apply', { defaultValue: 'Apply' })}
-              </Button>
-            </div>
           </div>,
           document.body,
         )}

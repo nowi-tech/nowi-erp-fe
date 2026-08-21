@@ -6,6 +6,12 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { useToast } from '@/components/ui/toast';
 import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 import { DateRangePicker } from '@/components/ui/DateRangePicker';
+import {
+  FilterRail,
+  FilterRailDivider,
+  FilterRailSegments,
+  RAIL_SELECT_CLASS,
+} from '@/components/ui/filter-rail';
 import { todayISO } from '@/lib/date';
 import { meaningfulName } from '@/lib/production';
 import { useDebounced } from '@/lib/useDebounced';
@@ -614,34 +620,25 @@ export default function InventoryHealth(): ReactNode {
 
         {/* Tier 2 (design 1b) — one segmented control rail: stock view · category ·
             sort · window, divided into groups. Left-aligned, not full-width. */}
-        <div className="mt-4 flex">
-          <div className="inline-flex flex-wrap items-stretch gap-2.5 self-start rounded-xl border border-neutral-200 bg-white p-1.5 shadow-sm">
+        <FilterRail className="mt-4">
             {/* Real / virtual stock view. */}
-            <div className="inline-flex items-center gap-0.5 rounded-lg bg-neutral-100 p-0.5">
-              {(['all', 'real', 'virtual'] as const).map((v) => (
-                <button
-                  key={v}
-                  type="button"
-                  onClick={() => setInventory(v)}
-                  aria-pressed={inventory === v}
-                  className={`rounded-md px-4 py-1.5 text-sm font-semibold transition ${
-                    inventory === v
-                      ? 'bg-[var(--color-primary)] text-[var(--color-primary-foreground)] shadow-sm'
-                      : 'text-neutral-500 hover:text-[var(--color-primary)]'
-                  }`}
-                >
-                  {t(`admin.inventoryHealth.inv.${v}`, {
-                    defaultValue: v === 'all' ? 'All stock' : v === 'real' ? 'Real' : 'Virtual',
-                  })}
-                </button>
-              ))}
-            </div>
-            <span className="my-0.5 w-px bg-neutral-300" />
+            <FilterRailSegments
+              value={inventory}
+              onChange={setInventory}
+              ariaLabel={t('admin.inventoryHealth.inv.all', { defaultValue: 'All stock' })}
+              options={(['all', 'real', 'virtual'] as const).map((v) => ({
+                value: v,
+                label: t(`admin.inventoryHealth.inv.${v}`, {
+                  defaultValue: v === 'all' ? 'All stock' : v === 'real' ? 'Real' : 'Virtual',
+                }),
+              }))}
+            />
+            <FilterRailDivider />
             {/* Category filter — populated from the response's full-set list. */}
             <select
               value={category}
               onChange={(e) => setCategory(e.target.value)}
-              className="h-9 max-w-[11rem] cursor-pointer rounded-md border-none bg-transparent px-3 text-sm font-semibold text-[var(--color-foreground)] transition hover:bg-neutral-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-primary)]/30"
+              className={`${RAIL_SELECT_CLASS} max-w-[11rem]`}
               aria-label={t('admin.inventoryHealth.filterCategory', { defaultValue: 'Category' })}
             >
               <option value="">{t('admin.inventoryHealth.categoryAll', { defaultValue: 'All categories' })}</option>
@@ -649,19 +646,19 @@ export default function InventoryHealth(): ReactNode {
                 <option key={c} value={c}>{c}</option>
               ))}
             </select>
-            <span className="my-0.5 w-px bg-neutral-300" />
+            <FilterRailDivider />
             {/* Sort preset — writes the same sortKey/sortDir as the column headers. */}
             <select
               value={sortPreset}
               onChange={(e) => onSortPreset(e.target.value as 'default' | 'best' | 'newest')}
-              className="h-9 cursor-pointer rounded-md border-none bg-transparent px-3 text-sm font-semibold text-[var(--color-foreground)] transition hover:bg-neutral-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-primary)]/30"
+              className={RAIL_SELECT_CLASS}
               aria-label={t('admin.inventoryHealth.sortBy', { defaultValue: 'Sort by' })}
             >
               <option value="default">{t('admin.inventoryHealth.sort.default', { defaultValue: 'Sort: Default' })}</option>
               <option value="best">{t('admin.inventoryHealth.sort.best', { defaultValue: 'Best seller' })}</option>
               <option value="newest">{t('admin.inventoryHealth.sort.newest', { defaultValue: 'What’s new' })}</option>
             </select>
-            <span className="my-0.5 w-px bg-neutral-300" />
+            <FilterRailDivider />
             {/* DRR/cover window — same control the sampling dashboard uses. */}
             <div className="flex items-center">
               <DateRangePicker
@@ -675,8 +672,7 @@ export default function InventoryHealth(): ReactNode {
                 }}
               />
             </div>
-          </div>
-        </div>
+        </FilterRail>
       </div>
 
       {/* Persistent banner while a manual/background sync is running. */}

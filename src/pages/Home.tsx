@@ -3,12 +3,12 @@ import { useTranslation } from 'react-i18next';
 import { Link, useSearchParams } from 'react-router-dom';
 import { Plus } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { Skeleton } from '@/components/ui/skeleton';
 import SummaryCards, {
   SummaryCardsSkeleton,
 } from '@/components/dashboard/SummaryCards';
 import StylesInFlightTable from '@/components/dashboard/StylesInFlightTable';
-import { DateRangePicker } from '@/components/ui/DateRangePicker';
+import { ALL_TIME_FROM_ISO, DateRangePicker } from '@/components/ui/DateRangePicker';
+import { FilterRail } from '@/components/ui/filter-rail';
 import { useAuth } from '@/context/auth';
 import { hasAnyRole, DESIGN_SUBMIT_ROLES } from '@/lib/userRoles';
 import {
@@ -61,12 +61,11 @@ function isoDaysAgo(n: number): string {
   const day = String(d.getDate()).padStart(2, '0');
   return `${y}-${m}-${day}`;
 }
-const DEFAULT_RANGE_DAYS = 7;
+const DEFAULT_RANGE_DAYS = 30;
 // "View all" clears the activity window to surface EVERY product regardless of
 // last-touched date. The picker can't render an empty range, so we widen to an
 // all-time floor (predates all data → BE date filter matches everything)
 // rather than null out from/to.
-const ALL_TIME_FROM = '2000-01-01';
 
 export default function Home() {
   const { t } = useTranslation();
@@ -78,6 +77,9 @@ export default function Home() {
   // BE will 403.
   const canSubmit = hasAnyRole(user, DESIGN_SUBMIT_ROLES);
 
+  // State-backed ref: a plain useRef would still be null on first render, so
+  // the portal would never mount. Setting state when the node attaches re-renders.
+  const [filterSlot, setFilterSlot] = useState<HTMLDivElement | null>(null);
   const [cards, setCards] = useState<DashboardCards | null>(null);
   const [cardsError, setCardsError] = useState(false);
 
@@ -107,70 +109,33 @@ export default function Home() {
 
   return (
     <div className="space-y-6 pb-10">
-      {/* Page header — title + narrative (left), Stats filter + Submit (right).
-          The title is page identity, not boxed in the panel. */}
-      <header className="flex flex-wrap items-start justify-between gap-3">
-        <div className="min-w-0">
-          <h1 className="font-serif text-3xl font-semibold tracking-tight">
-            {t('dashboard.title', { defaultValue: 'Dashboard' })}
-          </h1>
-          <p className="mt-1 text-sm text-[var(--color-muted-foreground)]">
-            {cards === null && !cardsError ? (
-              <Skeleton className="inline-block h-4 w-80 align-middle" />
-            ) : cards ? (
-              <span className="tabular-nums">
-                {/* First segment mirrors SummaryCards' first card: the
-                    role-aware "My work" union for the signed-in user. */}
-                <b className="font-medium text-[var(--color-foreground-2)]">
-                  {cards.myWork}
-                </b>{' '}
-                {t('dashboard.narrative.inYourQueue', {
-                  defaultValue: 'in your queue',
-                })}
-                {' · '}
-                <b className="font-medium text-[var(--color-foreground-2)]">
-                  {cards.inSampling}
-                </b>{' '}
-                {t('dashboard.narrative.inSampling', {
-                  defaultValue: 'in sampling',
-                })}
-                {' · '}
-                <b className="font-medium text-[var(--color-foreground-2)]">
-                  {cards.inCataloguing}
-                </b>{' '}
-                {t('dashboard.narrative.inCataloguing', {
-                  defaultValue: 'in cataloguing',
-                })}
-                {' · '}
-                <b className="font-medium text-[var(--color-foreground-2)]">
-                  {cards.live}
-                </b>{' '}
-                {t('dashboard.narrative.live', { defaultValue: 'live' })}
-              </span>
-            ) : (
-              t('dashboard.narrative.error', {
-                defaultValue: "Couldn't load the summary.",
-              })
-            )}
-          </p>
-        </div>
+      {/* Page header — title (left); filter rail + Submit (right). */}
+      <header className="flex flex-wrap items-center justify-between gap-3">
+        <h1 className="font-serif text-3xl font-semibold tracking-tight">
+          {t('dashboard.title', { defaultValue: 'Dashboard' })}
+        </h1>
 
-        <div className="flex shrink-0 items-center gap-2">
-          {/* Page-wide date filter — scopes BOTH the summary cards and the
-              in-flight list below (shared window; mirrors the list's in-card
-              picker). */}
-          <DateRangePicker
-            from={cardsFrom}
-            to={cardsTo}
-            maxDate={isoDaysAgo(0)}
-            label={t('dashboard.dateFilter.label', {
-              defaultValue: 'Showing',
-            })}
-            onApply={(nextFrom, nextTo) => {
-              setCardsFrom(nextFrom);
-              setCardsTo(nextTo);
-            }}
-          />
+        {/* Filters sit beside the primary action, on the title row. */}
+        <div className="flex flex-wrap items-center gap-2">
+          <FilterRail>
+            {/* Status first (left): the list's own filter renders itself in here
+                — its options depend on the table's active tab, so the state stays
+                with the table while the control sits in the header. */}
+            <div ref={setFilterSlot} className="contents" />
+            {/* Page-wide window, last (right) — scopes BOTH cards and list. */}
+            <DateRangePicker
+              from={cardsFrom}
+              to={cardsTo}
+              maxDate={isoDaysAgo(0)}
+              label={t('dashboard.dateFilter.label', {
+                defaultValue: 'Showing',
+              })}
+              onApply={(nextFrom, nextTo) => {
+                setCardsFrom(nextFrom);
+                setCardsTo(nextTo);
+              }}
+            />
+          </FilterRail>
           {canSubmit && (
             <Button asChild>
               <Link to="/styles/new">
@@ -200,12 +165,13 @@ export default function Home() {
           No in-card picker here — omitting onDateApply hides it; the table is
           still scoped by the shared from/to window. */}
       <StylesInFlightTable
+        filterSlot={filterSlot}
         initialTab={initialTab}
         from={cardsFrom}
         to={cardsTo}
         onActionDone={loadCards}
         onViewAll={() => {
-          setCardsFrom(ALL_TIME_FROM);
+          setCardsFrom(ALL_TIME_FROM_ISO);
           setCardsTo(isoDaysAgo(0));
         }}
       />

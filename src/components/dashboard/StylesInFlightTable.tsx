@@ -23,7 +23,11 @@ import { Badge } from '@/components/ui/badge';
 import { cn } from '@/lib/utils';
 import { Input } from '@/components/ui/input';
 import { FloatingPill, TruncText } from '@/components/ui/trunc-text';
-import { DateRangePicker } from '@/components/ui/DateRangePicker';
+import {
+  FilterRail,
+  FilterRailDivider,
+  FilterRailMultiSelect,
+} from '@/components/ui/filter-rail';
 import { useToast } from '@/components/ui/toast';
 import Approval1Dialog from '@/components/styles/Approval1Dialog';
 import ParkDialog from '@/components/styles/ParkDialog';
@@ -89,15 +93,16 @@ import { formatStyleRef } from '@/lib/styleRef';
 interface Props {
   /** Seed the starting tab — Home passes it from a `?tab=` query param. */
   initialTab?: DashboardStyleTab;
+  /**
+   * DOM node in the page header's filter rail to render this table's status
+   * filter into. The control's options depend on the ACTIVE TAB, which is this
+   * component's state — so the state stays here and only the control moves.
+   * Omit and it falls back to its own rail above the card.
+   */
+  filterSlot?: HTMLElement | null;
   /** Activity window (YYYY-MM-DD) from the shared dashboard date control. */
   from?: string;
   to?: string;
-  /** Commit a new activity window — wires the in-card date filter back to the
-   *  Home's `tableFrom`/`tableTo` state. When given, the filter renders inside
-   *  the table card; omit to hide it. */
-  onDateApply?: (from: string, to: string) => void;
-  /** Upper bound for the in-card date filter (YYYY-MM-DD). */
-  maxDate?: string;
   /**
    * Called after a successful inline approve/park (in addition to the
    * table's own refetch) so the Home can refresh its summary cards.
@@ -328,7 +333,7 @@ function DotStatusPill({
  * mirroring HoverThumbnail / RailTooltip). Renders nothing when `content` is
  * empty, so callers can wrap unconditionally.
  */
-function HoverTip({
+export function HoverTip({
   content,
   children,
 }: {
@@ -499,10 +504,9 @@ export default function StylesInFlightTable({
   initialTab = 'all',
   from,
   to,
-  onDateApply,
-  maxDate,
   onActionDone,
   onViewAll,
+  filterSlot,
 }: Props) {
   const { t } = useTranslation();
   const { user } = useAuth();
@@ -533,6 +537,7 @@ export default function StylesInFlightTable({
   const statusOptions = STATUS_OPTIONS_BY_TAB[tab] ?? [];
 
   const [rows, setRows] = useState<DashboardStyleRow[]>([]);
+  const [tabCounts, setTabCounts] = useState<Partial<Record<DashboardStyleTab, number>>>({});
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);
   // Pagination — page through the feed `PAGE_SIZE` at a time. `total` drives
@@ -577,9 +582,11 @@ export default function StylesInFlightTable({
       });
       setRows(res.rows);
       setTotal(res.page.total);
+      setTabCounts(res.tabCounts);
     } catch {
       setRows([]);
       setTotal(0);
+      setTabCounts({});
       setError(true);
     } finally {
       setLoading(false);
@@ -633,12 +640,6 @@ export default function StylesInFlightTable({
     params.delete('q');
     setSearchParams(params, { replace: true });
   };
-
-  // Toggle one status in/out of the multi-select filter.
-  const toggleStatus = (s: DashboardStatusFilter) =>
-    setStatuses((prev) =>
-      prev.includes(s) ? prev.filter((x) => x !== s) : [...prev, s],
-    );
 
   const canApprove = (row: DashboardStyleRow) =>
     row.lifecycle === 'draft' && hasAnyRole(user, APPROVER_ROLES);
@@ -1610,8 +1611,35 @@ export default function StylesInFlightTable({
       </div>
     ) : null;
 
+  // The status filter belongs in the page header's filter rail, but its options
+  // depend on THIS component's active tab — so the state stays here and only the
+  // control is portalled into the slot the page provides. Without a slot it
+  // falls back to its own rail above the card.
+  const statusControl =
+    statusOptions.length > 1 ? (
+      <>
+        <FilterRailMultiSelect
+          label={t('dashboard.table.columns.status', { defaultValue: 'Status' })}
+          allLabel={t('dashboard.table.statusFilter.all', { defaultValue: 'Status: All' })}
+          value={statuses}
+          onChange={setStatuses}
+          options={statusOptions.map((s2) => ({
+            value: s2,
+            label: t(`dashboard.table.statusFilter.${s2}` as const),
+          }))}
+        />
+        <FilterRailDivider />
+      </>
+    ) : null;
+
   return (
     <div className="space-y-3">
+      {statusControl &&
+        (filterSlot ? (
+          createPortal(statusControl, filterSlot)
+        ) : (
+          <FilterRail>{statusControl}</FilterRail>
+        ))}
       {/* One unified panel: tabs · search/pagination · table all share a
           single bordered card (the "Style tracking" treatment). */}
       <section className="overflow-hidden rounded-[var(--radius-md)] border border-[var(--color-border)] bg-[var(--color-surface)] shadow-sm">
@@ -1621,6 +1649,7 @@ export default function StylesInFlightTable({
             tabs={TABS.map((tk) => ({
               key: tk,
               label: t(`dashboard.table.tabs.${tk}` as const),
+              count: tabCounts[tk],
             }))}
             active={tab}
             onSelect={selectTab}
@@ -1652,55 +1681,6 @@ export default function StylesInFlightTable({
                 </button>
               )}
             </div>
-            {/* In-card activity-window filter (the old "List" picker). */}
-            {onDateApply && from && to && (
-              <DateRangePicker
-                from={from}
-                to={to}
-                maxDate={maxDate}
-                label={t('dashboard.dateFilter.activity', {
-                  defaultValue: 'Updated',
-                })}
-                onApply={onDateApply}
-              />
-            )}
-
-            {/* Multi-select status filter — toggle chips, only for tabs with
-                more than one reachable status. Narrows within the active tab. */}
-            {statusOptions.length > 1 && (
-              <div className="flex flex-wrap items-center gap-1.5">
-                {statusOptions.map((s) => {
-                  const on = statuses.includes(s);
-                  return (
-                    <button
-                      key={s}
-                      type="button"
-                      onClick={() => toggleStatus(s)}
-                      aria-pressed={on}
-                      className={cn(
-                        'h-8 rounded-full border px-3 text-[12px] font-medium transition-colors',
-                        on
-                          ? 'border-[var(--color-primary)] bg-[var(--color-primary)]/10 text-[var(--color-primary)]'
-                          : 'border-[var(--color-border)] text-[var(--color-muted-foreground)] hover:border-[var(--color-border-strong)] hover:text-[var(--color-foreground)]',
-                      )}
-                    >
-                      {t(`dashboard.table.statusFilter.${s}` as const)}
-                    </button>
-                  );
-                })}
-                {statuses.length > 0 && (
-                  <button
-                    type="button"
-                    onClick={() => setStatuses([])}
-                    className="h-8 px-2 text-[12px] font-medium text-[var(--color-muted-foreground)] hover:text-[var(--color-foreground)]"
-                  >
-                    {t('dashboard.table.statusFilter.clear', {
-                      defaultValue: 'Clear',
-                    })}
-                  </button>
-                )}
-              </div>
-            )}
           </div>
 
           {/* "Showing X–Y of Z" + prev/next (mirrored at the table bottom). */}

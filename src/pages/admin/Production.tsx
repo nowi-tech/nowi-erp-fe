@@ -7,8 +7,11 @@ import {
   StyleQueueTable,
   type QueueColumn,
 } from '@/components/styles/StyleQueueTable';
-import { HoverThumbnail } from '@/components/dashboard/StylesInFlightTable';
+import { HoverThumbnail, HoverTip } from '@/components/dashboard/StylesInFlightTable';
 import { TruncText } from '@/components/ui/trunc-text';
+import { SummaryCard } from '@/components/ui/summary-card';
+import { ALL_TIME_FROM_ISO, DateRangePicker } from '@/components/ui/DateRangePicker';
+import { FilterRail, FilterRailDivider, RAIL_SELECT_CLASS } from '@/components/ui/filter-rail';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -91,6 +94,21 @@ function ageTone(days: number): string {
   return days >= 7 ? 'text-amber-600 font-semibold' : 'text-[var(--color-muted-foreground)]';
 }
 
+/** Local `YYYY-MM-DD` `n` days ago (never toISOString — that formats in UTC and
+ *  shifts the day for an IST user in the small hours). */
+function daysAgoISO(n: number): string {
+  const d = new Date();
+  d.setDate(d.getDate() - n);
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  return `${d.getFullYear()}-${m}-${String(d.getDate()).padStart(2, '0')}`;
+}
+
+/** The board opens on ALL TIME, not a trailing window. It is an operational
+ *  queue — a lot started 45 days ago and still on the floor is exactly the one
+ *  you must not hide, and the KPI cards above are unwindowed, so a default
+ *  window would also make the cards and the table disagree. Narrowing is an
+ *  explicit choice via the picker. */
+
 function fmtDate(iso: string): string {
   return new Date(iso).toLocaleDateString(undefined, { day: '2-digit', month: 'short' });
 }
@@ -139,6 +157,9 @@ export default function Production() {
   const [loadMoreError, setLoadMoreError] = useState(false);
   const [statusFilter, setStatusFilter] = useState<BatchStatus | ''>('');
   const [originFilter, setOriginFilter] = useState<BatchOrigin | ''>('');
+  // Start-date window, defaulting to all time (see ALL_TIME_FROM_ISO).
+  const [dateFrom, setDateFrom] = useState<string>(ALL_TIME_FROM_ISO);
+  const [dateTo, setDateTo] = useState<string>(() => daysAgoISO(0));
   // Suggested-tab styles still expand; batch rows don't — the lot page is their
   // detail view.
   const [expandedStyles, setExpandedStyles] = useState<Record<string, boolean>>({});
@@ -191,6 +212,8 @@ export default function Production() {
         status: statusFilter || undefined,
         origin: originFilter || undefined,
         search: debouncedSearch || undefined,
+        from: dateFrom,
+        to: dateTo,
         skip,
         take: PAGE_SIZE,
       });
@@ -202,7 +225,7 @@ export default function Production() {
         kpis: res.kpis,
       };
     },
-    [tab, debouncedSearch, statusFilter, originFilter],
+    [tab, debouncedSearch, statusFilter, originFilter, dateFrom, dateTo],
   );
 
   const reqRef = useRef(0);
@@ -502,6 +525,9 @@ export default function Production() {
   };
   const onDrop = (styleKey: string) => setParked(styleKey, true);
 
+  // Counts come off the board KPIs, which derive them from the same status
+  // groups the tabs list — so a chip can't disagree with its tab. `to_start` is
+  // served by /inventory-health and has no count.
   const tabs = useMemo(
     () => [
       {
@@ -511,45 +537,104 @@ export default function Production() {
       {
         key: 'planning' as const,
         label: t('admin.production.tabs.planning', { defaultValue: 'Pipeline' }),
+        count: kpis?.tabCounts.planning,
       },
       {
         key: 'in_production' as const,
         label: t('admin.production.tabs.inProduction', { defaultValue: 'Production' }),
+        count: kpis?.tabCounts.in_production,
       },
       {
         key: 'completed' as const,
         label: t('admin.production.tabs.completed', { defaultValue: 'Completed' }),
+        count: kpis?.tabCounts.completed,
       },
       {
         key: 'parked' as const,
         label: t('admin.production.tabs.parked', { defaultValue: 'Parked' }),
+        count: kpis?.tabCounts.parked,
       },
     ],
-    [t],
+    [t, kpis],
   );
 
   return (
     <div className="space-y-6">
-      <div className="flex items-end justify-between gap-6">
-        <div>
-          <h1 className="text-2xl font-bold tracking-tight">
-            {t('admin.production.title', { defaultValue: 'Production pipeline' })}
-          </h1>
-          <p className="mt-1 text-sm text-[var(--color-muted-foreground)]">
-            {t('admin.production.subtitle', {
-              defaultValue: 'Batches started from the Inventory Health forecast.',
-            })}
-          </p>
+      {/* Page header — title (left); filter rail + primary action (right),
+          the same arrangement the sampling dashboard uses. */}
+      <header className="flex flex-wrap items-center justify-between gap-3">
+        <h1 className="text-2xl font-bold tracking-tight">
+          {t('admin.production.title', { defaultValue: 'Production pipeline' })}
+        </h1>
+
+        <div className="flex flex-wrap items-center gap-2">
+          {/* Status / origin / start-date all filter BATCHES. The Suggested and
+              Parked tabs are served by /inventory-health instead, so the rail
+              would be inert there — and a parked style is on hold indefinitely,
+              which a date window would hide. */}
+          {tab !== 'to_start' && tab !== 'parked' && (
+            <FilterRail>
+            <select
+              value={statusFilter}
+              onChange={(e) => setStatusFilter(e.target.value as BatchStatus | '')}
+              className={RAIL_SELECT_CLASS}
+              aria-label={t('admin.production.filterStatus', { defaultValue: 'Status' })}
+            >
+              <option value="">
+                {t('admin.production.statusAll', { defaultValue: 'Status: All' })}
+              </option>
+              {(tab === 'completed'
+                ? (['completed', 'dispatched'] as BatchStatus[])
+                : ADVANCEABLE_STATUSES.filter((x) => x !== 'dispatched')
+              ).map((x) => (
+                <option key={x} value={x}>
+                  {statusLabel(t, x)}
+                </option>
+              ))}
+              <option value="cancelled">{statusLabel(t, 'cancelled')}</option>
+            </select>
+            <FilterRailDivider />
+            <select
+              value={originFilter}
+              onChange={(e) => setOriginFilter(e.target.value as BatchOrigin | '')}
+              className={RAIL_SELECT_CLASS}
+              aria-label={t('admin.production.filterOrigin', { defaultValue: 'Origin' })}
+            >
+              <option value="">
+                {t('admin.production.originAll', { defaultValue: 'Origin: All' })}
+              </option>
+              <option value="forecast">
+                {t('admin.production.originForecast', { defaultValue: 'From forecast' })}
+              </option>
+              <option value="style">
+                {t('admin.production.originStyle', { defaultValue: 'From style' })}
+              </option>
+            </select>
+            <FilterRailDivider />
+            {/* Start-date window — the same shared picker the dashboard and
+                Inventory Health use, so the presets and behaviour match. */}
+            <DateRangePicker
+              from={dateFrom}
+              to={dateTo}
+              maxDate={daysAgoISO(0)}
+              label={t('admin.production.startedWindow', { defaultValue: 'Started' })}
+              onApply={(f, tt) => {
+                setDateFrom(f);
+                setDateTo(tt);
+              }}
+            />
+            </FilterRail>
+          )}
+          {canWrite && (
+            <Button size="sm" onClick={() => setIntakeOpen(true)}>
+              <Factory size={14} />
+              <span className="ml-1">
+                {t('admin.production.startCta', { defaultValue: 'Start production' })}
+              </span>
+            </Button>
+          )}
         </div>
-        {canWrite && (
-          <Button size="sm" onClick={() => setIntakeOpen(true)}>
-            <Factory size={14} />
-            <span className="ml-1">
-              {t('admin.production.startCta', { defaultValue: 'Start production' })}
-            </span>
-          </Button>
-        )}
-      </div>
+      </header>
 
       <KpiRow kpis={kpis} onTab={setTab} />
 
@@ -580,45 +665,6 @@ export default function Production() {
             </button>
           )}
         </div>
-        {tab !== 'to_start' && (
-          <>
-            <select
-              value={statusFilter}
-              onChange={(e) => setStatusFilter(e.target.value as BatchStatus | '')}
-              className="h-9 rounded-[var(--radius-sm)] border border-[var(--color-border)] bg-white px-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-ring)]"
-              aria-label={t('admin.production.filterStatus', { defaultValue: 'Status' })}
-            >
-              <option value="">
-                {t('admin.production.statusAll', { defaultValue: 'Status: All' })}
-              </option>
-              {(tab === 'completed'
-                ? (['completed', 'dispatched'] as BatchStatus[])
-                : ADVANCEABLE_STATUSES.filter((x) => x !== 'dispatched')
-              ).map((x) => (
-                <option key={x} value={x}>
-                  {statusLabel(t, x)}
-                </option>
-              ))}
-              <option value="cancelled">{statusLabel(t, 'cancelled')}</option>
-            </select>
-            <select
-              value={originFilter}
-              onChange={(e) => setOriginFilter(e.target.value as BatchOrigin | '')}
-              className="h-9 rounded-[var(--radius-sm)] border border-[var(--color-border)] bg-white px-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-ring)]"
-              aria-label={t('admin.production.filterOrigin', { defaultValue: 'Origin' })}
-            >
-              <option value="">
-                {t('admin.production.originAll', { defaultValue: 'Origin: All' })}
-              </option>
-              <option value="forecast">
-                {t('admin.production.originForecast', { defaultValue: 'From forecast' })}
-              </option>
-              <option value="style">
-                {t('admin.production.originStyle', { defaultValue: 'From style' })}
-              </option>
-            </select>
-          </>
-        )}
         {canWrite && tab === 'completed' && (
           <Button
             size="sm"
@@ -805,55 +851,75 @@ function KpiRow({
   onTab: (tab: Tab) => void;
 }) {
   const { t } = useTranslation();
-  const card =
-    'rounded-[var(--radius-md)] border border-[var(--color-border)] bg-[var(--color-surface)] p-4 text-left transition hover:border-[var(--color-primary)]/50 hover:bg-[var(--color-surface-2)]/40';
-  const label = 'text-[11px] font-semibold uppercase tracking-wider text-[var(--color-muted-foreground)]';
-  const value = 'mt-2 text-2xl font-bold tracking-tight';
+  const dash = '\u2014';
 
   return (
-    <div className="grid grid-cols-2 gap-4 lg:grid-cols-5">
-      <button type="button" className={card} onClick={() => onTab('planning')}>
-        <div className={label}>
-          {t('admin.production.kpi.planning', { defaultValue: 'In pipeline' })}
-        </div>
-        <div className={value}>{kpis?.planningBatches ?? '—'}</div>
-      </button>
-      <button type="button" className={card} onClick={() => onTab('in_production')}>
-        <div className={label}>
-          {t('admin.production.kpi.inProduction', { defaultValue: 'On the floor' })}
-        </div>
-        <div className={value}>{kpis?.inProductionBatches ?? '—'}</div>
-      </button>
-      <button type="button" className={card} onClick={() => onTab('in_production')}>
-        <div className={label}>
-          {t('admin.production.kpi.unitsInPipeline', { defaultValue: 'Units in flight' })}
-        </div>
-        <div className={value}>{kpis?.unitsInPipeline?.toLocaleString() ?? '—'}</div>
-        {kpis && (
-          <div className="mt-1 text-xs text-[var(--color-muted-foreground)]">
-            {t('admin.production.kpi.originSplit', {
-              defaultValue: '{{f}} forecast · {{s}} style · {{e}} external',
-              f: kpis.unitsByOrigin.forecast,
-              s: kpis.unitsByOrigin.style,
-              e: kpis.unitsByOrigin.external,
-            })}
-          </div>
-        )}
-      </button>
-      <button type="button" className={card} onClick={() => onTab('completed')}>
-        <div className={label}>
-          {t('admin.production.kpi.completedThisWeek', { defaultValue: 'Completed this week' })}
-        </div>
-        <div className={value}>{kpis?.completedThisWeek?.toLocaleString() ?? '—'}</div>
-      </button>
-      <button type="button" className={card} onClick={() => onTab('in_production')}>
-        <div className={label}>
-          {t('admin.production.kpi.avgBatchAge', { defaultValue: 'Avg batch age' })}
-        </div>
-        <div className={value}>
-          {kpis?.avgBatchAgeDays != null ? `${kpis.avgBatchAgeDays}d` : '—'}
-        </div>
-      </button>
+    // Same card as the dashboard's summary row (shared SummaryCard) — production
+    // numbers, sampling's design.
+    <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-5">
+      <SummaryCard
+        label={t('admin.production.kpi.planning', { defaultValue: 'In pipeline' })}
+        value={kpis?.planningBatches ?? dash}
+        onClick={() => onTab('planning')}
+      />
+      <SummaryCard
+        label={t('admin.production.kpi.inProduction', { defaultValue: 'On the floor' })}
+        value={kpis?.inProductionBatches ?? dash}
+        onClick={() => onTab('in_production')}
+      />
+      <SummaryCard
+        label={t('admin.production.kpi.stylesInPipeline', { defaultValue: 'Styles in flight' })}
+        value={kpis?.stylesInPipeline ?? dash}
+        breakdown={
+          kpis
+            ? [
+                {
+                  label: t('admin.production.kpi.originForecast', { defaultValue: 'Forecast' }),
+                  value: kpis.stylesByOrigin.forecast,
+                },
+                {
+                  label: t('admin.production.kpi.originStyle', { defaultValue: 'Style' }),
+                  value: kpis.stylesByOrigin.style,
+                },
+                {
+                  label: t('admin.production.kpi.originExternal', { defaultValue: 'External' }),
+                  value: kpis.stylesByOrigin.external,
+                },
+              ]
+            : undefined
+        }
+        onClick={() => onTab('in_production')}
+      />
+      <SummaryCard
+        label={t('admin.production.kpi.stalled', { defaultValue: 'Stalled 7d+' })}
+        value={kpis?.stalledBatches ?? dash}
+        breakdown={
+          kpis && kpis.stalledOldestDays != null
+            ? [
+                {
+                  label: t('admin.production.kpi.oldest', { defaultValue: 'Oldest' }),
+                  value: `${kpis.stalledOldestDays}d`,
+                },
+              ]
+            : undefined
+        }
+        onClick={() => onTab('in_production')}
+      />
+      <SummaryCard
+        label={t('admin.production.kpi.dueToDispatch', { defaultValue: 'Due to dispatch' })}
+        value={kpis?.dueToDispatchBatches ?? dash}
+        breakdown={
+          kpis
+            ? [
+                {
+                  label: t('admin.production.kpi.unitsToShip', { defaultValue: 'Units' }),
+                  value: kpis.dueToDispatchUnits.toLocaleString(),
+                },
+              ]
+            : undefined
+        }
+        onClick={() => onTab('completed')}
+      />
     </div>
   );
 }
@@ -1138,9 +1204,27 @@ function BatchTable({
       });
     }
 
+    // Own column at the sampling table's footprint (80px thumb + cell padding),
+    // so a production row reads at the same rhythm as a sampling row.
+    cols.push({
+      key: 'img',
+      width: '116px',
+      header: t('admin.production.img', { defaultValue: 'Img' }),
+      cell: (b) => (
+        <HoverThumbnail
+          src={b.imageUrl}
+          alt={
+            b.styleRef ??
+            b.styleKey ??
+            t('admin.production.untitled', { defaultValue: 'Untitled style' })
+          }
+        />
+      ),
+    });
+
     cols.push({
       key: 'style',
-      width: '26%',
+      width: '210px',
       header: t('admin.production.style', { defaultValue: 'Style' }),
       cell: (b) => {
         const nm = cleanName(
@@ -1153,40 +1237,34 @@ function BatchTable({
           b.styleKey ??
           t('admin.production.untitled', { defaultValue: 'Untitled style' });
         return (
-          <div className="flex min-w-0 items-center gap-3">
-            {/* 28px to match the sampling table; the hover preview is this
-                board's own affordance and doesn't change the footprint. */}
-            <HoverThumbnail src={b.imageUrl} alt={label} size={28} />
-            <div className="min-w-0">
-              {/* Primary-coloured like the sampling table's style link, so the
-                  row reads as leading somewhere. */}
-              <button
-                type="button"
-                title={label}
-                onClick={(e) => {
-                  e.stopPropagation();
-                  onOpen?.(b);
-                }}
-                className="block max-w-full truncate text-left font-semibold text-[var(--color-primary)] hover:underline"
-              >
-                {label}
-              </button>
-              {nm && (
-                <TruncText
-                  text={nm}
-                  className="font-mono text-[11px] text-[var(--color-muted-foreground)]"
+          // No thumbnail — the IMG column owns that, as in the sampling table.
+          <div className="min-w-0">
+            {/* Primary-coloured like the sampling table's style link, so the
+                row reads as leading somewhere. */}
+            <button
+              type="button"
+              title={label}
+              onClick={(e) => {
+                e.stopPropagation();
+                onOpen?.(b);
+              }}
+              // Same type as the sampling table's StyleRefLink — mono 13px
+              // primary. A batch has no Style row, so the classes are matched
+              // rather than the component reused.
+              className="block max-w-full truncate text-left font-mono text-[13px] text-[var(--color-primary)] hover:underline"
+            >
+              {label}
+            </button>
+            {nm && <TruncText text={nm} className="text-[var(--color-foreground)]" />}
+            {b.colourName && (
+              <span className="mt-0.5 flex items-center gap-1 text-[11px] text-[var(--color-muted-foreground)]">
+                <span
+                  className="h-2.5 w-2.5 shrink-0 rounded-full border border-[var(--color-border)]"
+                  style={{ background: b.colourHex ?? b.colourName.toLowerCase() }}
                 />
-              )}
-              {b.colourName && (
-                <span className="mt-0.5 flex items-center gap-1 text-[11px] text-[var(--color-muted-foreground)]">
-                  <span
-                    className="h-2.5 w-2.5 shrink-0 rounded-full border border-[var(--color-border)]"
-                    style={{ background: b.colourHex ?? b.colourName.toLowerCase() }}
-                  />
-                  {b.colourName}
-                </span>
-              )}
-            </div>
+                {b.colourName}
+              </span>
+            )}
           </div>
         );
       },
@@ -1210,23 +1288,41 @@ function BatchTable({
 
     cols.push({
       key: 'sizes',
-      width: '15%',
+      width: '180px',
       header: t('admin.production.sizes', { defaultValue: 'Sizes' }),
       cell: (b) => (
-        <div className="flex flex-wrap gap-1.5">
-          {b.sizes.slice(0, 3).map((s) => (
-            <span
+        // Circular chips: the size ladder at a glance, quantity one hover away.
+        // A rectangular "S 100" chip cost ~50px each and broke the column.
+        <div className="flex flex-wrap items-center gap-1">
+          {b.sizes.slice(0, 5).map((s) => (
+            <HoverTip
               key={s.sku}
-              className="rounded bg-[var(--color-surface-2)] px-1.5 py-0.5 text-[11px]"
+              content={
+                <span className="whitespace-nowrap">
+                  {s.size} · {s.qtyPlanned}
+                </span>
+              }
             >
-              <span className="font-semibold">{s.size}</span>{' '}
-              <span className="text-[var(--color-muted-foreground)]">{s.qtyPlanned}</span>
-            </span>
+              <span className="flex h-6 w-6 items-center justify-center rounded-full bg-[var(--color-surface-2)] text-[10px] font-semibold text-[var(--color-foreground)]">
+                {s.size}
+              </span>
+            </HoverTip>
           ))}
-          {b.sizes.length > 3 && (
-            <span className="text-[11px] text-[var(--color-muted-foreground)]">
-              +{b.sizes.length - 3}
-            </span>
+          {b.sizes.length > 5 && (
+            <HoverTip
+              content={
+                <span className="whitespace-nowrap">
+                  {b.sizes
+                    .slice(5)
+                    .map((s) => `${s.size} · ${s.qtyPlanned}`)
+                    .join(', ')}
+                </span>
+              }
+            >
+              <span className="text-[11px] text-[var(--color-muted-foreground)]">
+                +{b.sizes.length - 5}
+              </span>
+            </HoverTip>
           )}
         </div>
       ),
