@@ -181,11 +181,48 @@ export default function Production() {
   const [selected, setSelected] = useState<Set<number>>(new Set());
   const [builderOpen, setBuilderOpen] = useState(false);
 
+  // Current filters, held in a ref so `loadKpis` can read them while keeping a
+  // STABLE identity — it sits in an effect's dep list, so recreating it on every
+  // filter change would fire a second request alongside the list's own reload.
+  const filtersRef = useRef({
+    tab,
+    statusFilter,
+    originFilter,
+    search: debouncedSearch,
+    from: dateFrom,
+    to: dateTo,
+  });
+  filtersRef.current = {
+    tab,
+    statusFilter,
+    originFilter,
+    search: debouncedSearch,
+    from: dateFrom,
+    to: dateTo,
+  };
+
   const loadKpis = useCallback(async () => {
     // Board-level figures live on the batches endpoint; `take: 1` because we
     // only want the KPI block, not another page of rows.
-    const res = await getBatches({ take: 1 });
-    setKpis(res.kpis); // cards only — tabCounts here are unfiltered, so ignore them
+    //
+    // The active filters go with it so the TAB COUNTS come back scoped to what
+    // the board is showing. The cards are unaffected — the server computes them
+    // board-wide and ignores the query — so one call serves both. Mutations
+    // refresh through here without reloading the list (which would blink it),
+    // and before this carried the filters they left the chips on pre-mutation
+    // numbers.
+    const f = filtersRef.current;
+    const res = await getBatches({
+      take: 1,
+      tab: f.tab === 'to_start' || f.tab === 'parked' ? undefined : f.tab,
+      status: f.statusFilter || undefined,
+      origin: f.originFilter || undefined,
+      search: f.search || undefined,
+      from: f.from,
+      to: f.to,
+    });
+    setKpis(res.kpis);
+    setTabCounts(res.kpis.tabCounts);
   }, []);
 
   const fetchPage = useCallback(

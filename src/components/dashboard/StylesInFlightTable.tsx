@@ -539,6 +539,8 @@ export default function StylesInFlightTable({
 
   const [rows, setRows] = useState<DashboardStyleRow[]>([]);
   const [tabCounts, setTabCounts] = useState<Partial<Record<DashboardStyleTab, number>>>({});
+  /** Monotonic request id — only the newest fetch may write state. */
+  const reqRef = useRef(0);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);
   // Pagination — page through the feed `PAGE_SIZE` at a time. `total` drives
@@ -571,6 +573,11 @@ export default function StylesInFlightTable({
   const load = useCallback(async () => {
     setLoading(true);
     setError(false);
+    // Requests overlap when tabs/filters/dates are changed quickly, and they do
+    // not come back in order. Without this, a slower earlier response lands last
+    // and repaints the view with the PREVIOUS query's rows and chip counts.
+    // Same guard the production board uses.
+    const my = ++reqRef.current;
     try {
       const res = await getDashboardStyles({
         tab,
@@ -581,16 +588,18 @@ export default function StylesInFlightTable({
         skip,
         take: PAGE_SIZE,
       });
+      if (reqRef.current !== my) return;
       setRows(res.rows);
       setTotal(res.page.total);
       setTabCounts(res.tabCounts);
     } catch {
+      if (reqRef.current !== my) return;
       setRows([]);
       setTotal(0);
       setTabCounts({});
       setError(true);
     } finally {
-      setLoading(false);
+      if (reqRef.current === my) setLoading(false);
     }
   }, [tab, debouncedSearch, statuses, from, to, skip]);
 

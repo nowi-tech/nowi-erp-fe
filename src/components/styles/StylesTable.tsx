@@ -49,11 +49,6 @@ const WRITE_ROLES = STYLE_EDIT_ROLES;
 // PD editor set even though inline edit widened to `cataloguer`.
 const LIFECYCLE_ROLES = PD_WRITE_ROLES;
 
-// Sample sign-off (Approval #2) is never a field edit: the BE rejects it from
-// PATCH for anyone outside the PD editor set, so `cataloguer` must not see the
-// cell either.
-const SAMPLE_APPROVAL_ROLES = PD_WRITE_ROLES;
-
 // Row-action role gates — mirror the BE guards (and the dashboard
 // StylesInFlightTable) so /styles never shows a button that 403s:
 //  • Approve (Approval #1) → APPROVE set (Option A drops sampling_editor).
@@ -61,6 +56,12 @@ const SAMPLE_APPROVAL_ROLES = PD_WRITE_ROLES;
 //    "Withdraw" is a detail-page action, not a queue button).
 // BE still enforces; this is UX.
 const APPROVER_ROLES: readonly UserRole[] = ['admin', 'sampling_lead'] as const;
+
+// Sample sign-off (Approval #2) is never a field edit: the BE rejects it from
+// PATCH for anyone outside APPROVE_ROLES, so only approvers see the cell.
+// NOT PD_WRITE_ROLES — that carries `sampling_editor` and `production_lead`,
+// who are deliberately not approvers and would get a 403 on save.
+const SAMPLE_APPROVAL_ROLES = APPROVER_ROLES;
 
 /**
  * Distinct values + per-value row counts for a column. Used to populate
