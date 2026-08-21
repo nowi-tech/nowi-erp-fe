@@ -17,9 +17,9 @@ import {
 import InlineStatusCell from '@/components/styles/InlineStatusCell';
 import { useToast } from '@/components/ui/toast';
 import { useAuth } from '@/context/auth';
-import { hasAnyRole, PD_WRITE_ROLES } from '@/lib/userRoles';
+import { APPROVER_ROLES, hasAnyRole, PD_WRITE_ROLES, STYLE_EDIT_ROLES } from '@/lib/userRoles';
 import { patchStyle } from '@/api/styles';
-import type { Style, UserRole } from '@/api/types';
+import type { Style } from '@/api/types';
 import { cn } from '@/lib/utils';
 import { formatStyleRef } from '@/lib/styleRef';
 
@@ -42,16 +42,18 @@ const SAMPLE_APPROVAL_OPTIONS = [
 ] as const;
 
 // Roles allowed to flip status cells inline — matches the styles WRITE
-// set on the BE via the shared PD_WRITE_ROLES. Viewers see read-only badges.
-const WRITE_ROLES = PD_WRITE_ROLES;
+// set on the BE via the shared STYLE_EDIT_ROLES. Viewers see read-only badges.
+const WRITE_ROLES = STYLE_EDIT_ROLES;
 
-// Row-action role gates — mirror the BE guards (and the dashboard
-// StylesInFlightTable) so /styles never shows a button that 403s:
-//  • Approve (Approval #1) → APPROVE set (Option A drops sampling_editor).
-//  • Inline Park → DRAFT rows only, reusing WRITE_ROLES (post-approval
-//    "Withdraw" is a detail-page action, not a queue button).
-// BE still enforces; this is UX.
-const APPROVER_ROLES: readonly UserRole[] = ['admin', 'sampling_lead'] as const;
+// Revive is a lifecycle action, not a field edit — it stays on the narrower
+// PD editor set even though inline edit widened to `cataloguer`.
+const LIFECYCLE_ROLES = PD_WRITE_ROLES;
+
+// Sample sign-off (Approval #2) is never a field edit: the BE rejects it from
+// PATCH for anyone outside APPROVE_ROLES, so only approvers see the cell.
+// NOT PD_WRITE_ROLES — that carries `sampling_editor` and `production_lead`,
+// who are deliberately not approvers and would get a 403 on save.
+const SAMPLE_APPROVAL_ROLES = APPROVER_ROLES;
 
 /**
  * Distinct values + per-value row counts for a column. Used to populate
@@ -209,6 +211,7 @@ export default function StylesTable({
   const [expanded, setExpanded] = useState<Set<number>>(new Set());
   // Inline-edit gating for the status cells.
   const canEdit = hasAnyRole(user, WRITE_ROLES);
+  const canEditSampleApproval = hasAnyRole(user, SAMPLE_APPROVAL_ROLES);
 
   /**
    * Wrapper around `patchStyle` that emits a toast on failure and
@@ -699,7 +702,7 @@ export default function StylesTable({
                                 ),
                               }))}
                               badgeVariant="success"
-                              editable={canEdit}
+                              editable={canEditSampleApproval}
                               onCommit={(next) =>
                                 commitStylePatch(s.id, {
                                   sampleApproval: (next || null) as never,
@@ -894,9 +897,12 @@ function RowActions({
   // design is a rare admin/lead "Withdraw" on the detail page, not a queue
   // button (2026-06-01 refinement; see the workspace submission-flow spec,
   // docs/STYLE_SUBMISSION_FLOWS.md in the erp workspace root).
-  const canPark = style.lifecycle === 'draft' && hasAnyRole(user, WRITE_ROLES);
+  // BE park is gated on APPROVE_ROLES (admin + sampling_lead) — not the PD
+  // write set — so anything wider here renders a button that 403s.
+  const canPark =
+    style.lifecycle === 'draft' && hasAnyRole(user, APPROVER_ROLES);
   const canRevive =
-    style.lifecycle === 'parked' && hasAnyRole(user, WRITE_ROLES);
+    style.lifecycle === 'parked' && hasAnyRole(user, LIFECYCLE_ROLES);
   const hasAny =
     (canApprove && onApprove) || (canPark && onPark) || (canRevive && onRevive);
 

@@ -106,10 +106,26 @@ export interface ProductionKpis {
   /** cutting/stitching/finishing only — what the "Production" tab lists. */
   inProductionBatches: number;
   unitsInPipeline: number;
-  /** Renders as the card sub-line "940 forecast · 344 style · 120 external". */
+  /** Distinct styles across open batches — the "Styles in flight" card. Two
+   *  batches of one style count once, so it is not the sum of the split below. */
+  stylesInPipeline: number;
+  /** Renders as the card sub-line "12 forecast · 4 style · 2 external". */
+  stylesByOrigin: { forecast: number; style: number; external: number };
   unitsByOrigin: { forecast: number; style: number; external: number };
-  completedThisWeek: number;
-  avgBatchAgeDays: number | null;
+  /** Open, not-yet-completed batches sat 7+ days in their CURRENT status — the
+   *  same threshold the board ambers in its "In status" column. */
+  stalledBatches: number;
+  stalledOldestDays: number | null;
+  /** Completed batches still holding units no challan has shipped. */
+  dueToDispatchBatches: number;
+  dueToDispatchUnits: number;
+  /** Row count per board tab — the chips on the tab strip. */
+  tabCounts: {
+    planning: number;
+    in_production: number;
+    completed: number;
+    parked: number;
+  };
 }
 
 export interface ListBatchesResponse {
@@ -127,6 +143,9 @@ export interface ListBatchesParams {
   status?: BatchStatus;
   origin?: BatchOrigin;
   search?: string;
+  /** Inclusive `startedAt` window, local `YYYY-MM-DD` (interpreted IST server-side). */
+  from?: string;
+  to?: string;
   skip?: number;
   take?: number;
 }
@@ -137,6 +156,8 @@ export function getBatches(params: ListBatchesParams = {}): Promise<ListBatchesR
   if (params.status) q.status = params.status;
   if (params.origin) q.origin = params.origin;
   if (params.search) q.search = params.search;
+  if (params.from) q.from = params.from;
+  if (params.to) q.to = params.to;
   if (params.skip != null) q.skip = String(params.skip);
   if (params.take != null) q.take = String(params.take);
   return apiClient.get<ListBatchesResponse>('/api/production/batches', { params: q }).then((r) => r.data);

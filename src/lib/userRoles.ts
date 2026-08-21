@@ -101,6 +101,22 @@ export const CATALOGUER_WRITE_ROLES: readonly UserRole[] = [
 ];
 
 /**
+ * Roles allowed to EDIT an existing style's own fields (core specs, BOM,
+ * pattern CAD, reference images) — the PD editors plus `cataloguer`. Mirrors
+ * the BE `STYLE_EDIT_ROLES` (`nowi-erp-api/src/modules/auth/roles.constants.ts`).
+ *
+ * Kept separate from {@link CATALOGUER_WRITE_ROLES} (identical members today)
+ * so "create + catalogue" and "edit a style" can diverge without one silently
+ * widening the other. Scope is the Style record ONLY — variants, inspections,
+ * archive and park/revive stay on {@link PD_WRITE_ROLES}, sign-off on
+ * {@link APPROVER_ROLES}.
+ */
+export const STYLE_EDIT_ROLES: readonly UserRole[] = [
+  ...PD_WRITE_ROLES,
+  'cataloguer',
+];
+
+/**
  * Roles allowed to FILE a design intake (the "Submit design" CTA + the
  * `/styles/new` route) — everyone who can create a design plus the narrow
  * submit-only `design_submitter`. Mirrors the BE `styles.controller` CREATE

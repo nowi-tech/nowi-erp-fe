@@ -85,6 +85,9 @@ export interface DashboardStyleRow {
 export interface DashboardStylesResult {
   rows: DashboardStyleRow[];
   page: { skip: number; take: number; total: number };
+  /** Row count per tab for the tab-strip chips, scoped by the same date window
+   *  as the list (search excluded — it deliberately spans every tab). */
+  tabCounts: Record<DashboardStyleTab, number>;
 }
 
 /** Role-aware counts for the 4 Home summary cards. */
