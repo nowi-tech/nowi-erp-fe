@@ -17,9 +17,9 @@ import {
 import InlineStatusCell from '@/components/styles/InlineStatusCell';
 import { useToast } from '@/components/ui/toast';
 import { useAuth } from '@/context/auth';
-import { hasAnyRole, PD_WRITE_ROLES, STYLE_EDIT_ROLES } from '@/lib/userRoles';
+import { APPROVER_ROLES, hasAnyRole, PD_WRITE_ROLES, STYLE_EDIT_ROLES } from '@/lib/userRoles';
 import { patchStyle } from '@/api/styles';
-import type { Style, UserRole } from '@/api/types';
+import type { Style } from '@/api/types';
 import { cn } from '@/lib/utils';
 import { formatStyleRef } from '@/lib/styleRef';
 
@@ -48,14 +48,6 @@ const WRITE_ROLES = STYLE_EDIT_ROLES;
 // Revive is a lifecycle action, not a field edit — it stays on the narrower
 // PD editor set even though inline edit widened to `cataloguer`.
 const LIFECYCLE_ROLES = PD_WRITE_ROLES;
-
-// Row-action role gates — mirror the BE guards (and the dashboard
-// StylesInFlightTable) so /styles never shows a button that 403s:
-//  • Approve (Approval #1) → APPROVE set (Option A drops sampling_editor).
-//  • Inline Park → DRAFT rows only, reusing WRITE_ROLES (post-approval
-//    "Withdraw" is a detail-page action, not a queue button).
-// BE still enforces; this is UX.
-const APPROVER_ROLES: readonly UserRole[] = ['admin', 'sampling_lead'] as const;
 
 // Sample sign-off (Approval #2) is never a field edit: the BE rejects it from
 // PATCH for anyone outside APPROVE_ROLES, so only approvers see the cell.
