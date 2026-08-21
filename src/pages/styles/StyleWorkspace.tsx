@@ -59,10 +59,11 @@ import type {
 } from '@/api/types';
 import { useAuth } from '@/context/auth';
 import {
-  userAllRoles,
-  STYLE_EDIT_ROLES,
   APPROVER_ROLES,
   CATALOGUER_WRITE_ROLES,
+  PD_WRITE_ROLES,
+  STYLE_EDIT_ROLES,
+  userAllRoles,
 } from '@/lib/userRoles';
 import { cn } from '@/lib/utils';
 import { POST_SAMPLING, formatStyleRef } from '@/lib/styleRef';
@@ -408,6 +409,10 @@ export default function StyleWorkspace() {
   // (core-specs pencil / BOM / pattern-CAD upload) and the Edit surface so
   // a read-only viewer never sees a control that 403s on save.
   const canWrite = roles.some((r) => STYLE_EDIT_ROLES.includes(r));
+  // Sampling pipeline moves are WORKFLOW, not a style edit: `cataloguer` sits in
+  // STYLE_EDIT_ROLES for a design's specs, but the BE rejects samplingStatus
+  // from a style edit, so the stepper must not offer it to them.
+  const canEditWorkflow = roles.some((r) => PD_WRITE_ROLES.includes(r));
 
   // Cataloguing writes (EasyEcom checkpoint + marketplace take-offline) also
   // admit the narrow `cataloguer`. A superset of canWrite for the Channels
@@ -958,9 +963,9 @@ export default function StyleWorkspace() {
           <SamplingPipelineStepper
             samplingStatus={style.samplingStatus as SamplingStatus | null}
             onStepClick={
-              // Sampling status is editable only after intake is approved
-              // (lifecycle = in_sampling). Drafts render the stepper read-only.
-              style.lifecycle === 'in_sampling'
+              // Editable only after intake is approved (lifecycle = in_sampling)
+              // AND by a PD editor. Drafts — and cataloguer — get it read-only.
+              style.lifecycle === 'in_sampling' && canEditWorkflow
                 ? (next) =>
                     void doAction('step', () =>
                       patchStyle(style.id, { samplingStatus: next }),

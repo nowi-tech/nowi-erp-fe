@@ -68,7 +68,6 @@ import { useAuth } from '@/context/auth';
 import {
   hasAnyRole,
   PD_WRITE_ROLES,
-  STYLE_EDIT_ROLES,
   APPROVER_ROLES,
   ADMIN_ROLES,
   CATALOGUER_WRITE_ROLES,
@@ -158,9 +157,11 @@ const STATUS_OPTIONS_BY_TAB: Partial<
 // page while still paginating the larger "All" list (BE caps `take` at 200).
 const PAGE_SIZE = 50;
 
-// Roles allowed to inline-edit the sampling Stage — the styles write set on
-// the BE (STYLE_EDIT_ROLES). Park has its own gate (see canPark).
-const INLINE_WRITE_ROLES = STYLE_EDIT_ROLES;
+// Roles allowed to inline-edit the sampling Stage. NOT STYLE_EDIT_ROLES:
+// `cataloguer` was widened into that set to edit a design's SPECS, but moving a
+// style through the sampling pipeline is workflow, and the BE rejects it from a
+// style edit — showing the dropdown here would just 403 on click.
+const INLINE_WRITE_ROLES = PD_WRITE_ROLES;
 
 // Cost + MRP are pricing data, not design details — they stay on the PD editor
 // set. `cataloguer` edits a style's specs, never what it costs to make.
