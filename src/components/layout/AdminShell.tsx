@@ -102,19 +102,20 @@ const NAV_SECTIONS: NavSection[] = [
       // live (SKU drill-down still links to it); only the entry is hidden.
       // ponytail: empty roles = hidden from all (roles.some(...) is false).
       { to: '/admin/locator', icon: <Search size={18} />, labelKey: 'admin.nav.production', roles: [] },
-      // Dispatches was folded into Locator as a tab, so hiding Locator orphaned
-      // it. Restored as its own entry rather than resurrecting Locator.
-      { to: '/admin/dispatches', icon: <Container size={18} />, labelKey: 'admin.nav.dispatches', roles: [...DISPATCH_VIEW_ROLES] },
     ],
   },
   {
     id: 'analytics',
     titleKey: 'admin.nav.sections.analytics',
     items: [
-      // Inventory Health leads the section (the priority screen). Production KPIs
-      // stays within the first 4 flattened items so it keeps its mobile bottom-nav
-      // slot; Sales KPIs moves into the "More" overflow on mobile.
+      // Inventory Health leads the section (the priority screen). Note the mobile
+      // bottom nav shows only the first 4 role-visible items across ALL sections,
+      // so everything from Production KPIs down already lives in "More".
       { to: '/admin/analytics/inventory-health', icon: <HeartPulse size={18} />, labelKey: 'admin.nav.inventoryHealth', roles: [...PRODUCTION_READ_ROLES] },
+      // Sits directly under Inventory Health: a dispatch is the last step of the
+      // forecast → produce → ship flow, so it reads next to the forecast rather
+      // than back up in Overview (where hiding Locator had orphaned it).
+      { to: '/admin/dispatches', icon: <Container size={18} />, labelKey: 'admin.nav.dispatches', roles: [...DISPATCH_VIEW_ROLES] },
       { to: '/admin/production-kpis', icon: <BarChart3 size={18} />, labelKey: 'admin.nav.productionKpis', roles: ['admin', 'viewer', 'production_lead'] },
       { to: '/admin/sales-kpis', icon: <TrendingUp size={18} />, labelKey: 'admin.nav.salesKpis', roles: ['admin', 'viewer'] },
       { to: '/admin/analytics/fulfilment', icon: <LineChart size={18} />, labelKey: 'admin.nav.analyticsFulfilment', roles: ['admin', 'viewer'] },

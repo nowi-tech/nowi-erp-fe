@@ -2,7 +2,22 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <link rel="icon" type="image/png" href="/logo-bg-removed.png" />
+    <!-- Favicon per browser theme. The dark-scheme (light ink) link comes FIRST
+         and the light-scheme one LAST on purpose: a browser that ignores the
+         `media` attribute takes the last matching icon, so it lands on the
+         original dark wordmark and behaviour is unchanged for it. -->
+    <link
+      rel="icon"
+      type="image/png"
+      href="/logo-light.png"
+      media="(prefers-color-scheme: dark)"
+    />
+    <link
+      rel="icon"
+      type="image/png"
+      href="/logo-bg-removed.png"
+      media="(prefers-color-scheme: light)"
+    />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
     <meta name="theme-color" content="#14213d" />
     <link rel="preconnect" href="https://fonts.googleapis.com" />
