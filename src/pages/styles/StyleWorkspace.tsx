@@ -60,7 +60,7 @@ import type {
 import { useAuth } from '@/context/auth';
 import {
   userAllRoles,
-  PD_WRITE_ROLES,
+  STYLE_EDIT_ROLES,
   APPROVER_ROLES,
   CATALOGUER_WRITE_ROLES,
 } from '@/lib/userRoles';
@@ -404,10 +404,10 @@ export default function StyleWorkspace() {
     roles.some((r) => COLOUR_WRITE.includes(r));
 
   // Whether the user may edit this style's fields at all — mirrors the BE
-  // styles WRITE set (PD_WRITE_ROLES). Gates the scoped edit affordances
+  // styles WRITE set (STYLE_EDIT_ROLES). Gates the scoped edit affordances
   // (core-specs pencil / BOM / pattern-CAD upload) and the Edit surface so
   // a read-only viewer never sees a control that 403s on save.
-  const canWrite = roles.some((r) => PD_WRITE_ROLES.includes(r));
+  const canWrite = roles.some((r) => STYLE_EDIT_ROLES.includes(r));
 
   // Cataloguing writes (EasyEcom checkpoint + marketplace take-offline) also
   // admit the narrow `cataloguer`. A superset of canWrite for the Channels

@@ -64,6 +64,7 @@ import { useAuth } from '@/context/auth';
 import {
   hasAnyRole,
   PD_WRITE_ROLES,
+  STYLE_EDIT_ROLES,
   APPROVER_ROLES,
   ADMIN_ROLES,
   CATALOGUER_WRITE_ROLES,
@@ -153,8 +154,12 @@ const STATUS_OPTIONS_BY_TAB: Partial<
 const PAGE_SIZE = 50;
 
 // Roles allowed to inline-edit the sampling Stage — the styles write set on
-// the BE (PD_WRITE_ROLES). Park has its own gate (see canPark).
-const INLINE_WRITE_ROLES = PD_WRITE_ROLES;
+// the BE (STYLE_EDIT_ROLES). Park has its own gate (see canPark).
+const INLINE_WRITE_ROLES = STYLE_EDIT_ROLES;
+
+// Cost + MRP are pricing data, not design details — they stay on the PD editor
+// set. `cataloguer` edits a style's specs, never what it costs to make.
+const MONEY_WRITE_ROLES = PD_WRITE_ROLES;
 
 // Sampling-status options for the inline Stage editor — the in-progress
 // WORKING steps only. The terminal outcomes (sign-off / corrections) are NOT
@@ -674,6 +679,7 @@ export default function StylesInFlightTable({
   // Inline sampling-status edits are gated on the PD write set.
   // Non-writers see read-only cells.
   const canWriteInline = hasAnyRole(user, INLINE_WRITE_ROLES);
+  const canEditMoney = hasAnyRole(user, MONEY_WRITE_ROLES);
   // A live style can be pushed onto the floor without waiting for the forecast
   // to flag it. Style-origin: no suggested quantities to compare against.
   const canProduce = hasAnyRole(user, PRODUCTION_WRITE_ROLES);
@@ -1366,7 +1372,7 @@ export default function StylesInFlightTable({
     cell: (row) => (
       <PriceCell
         value={row.costPrice}
-        canEdit={canWriteInline}
+        canEdit={canEditMoney}
         editTitle={t('dashboard.table.editCost', {
           defaultValue: 'Edit cost price',
         })}
@@ -1385,7 +1391,7 @@ export default function StylesInFlightTable({
     cell: (row) => (
       <PriceCell
         value={row.mrp}
-        canEdit={canWriteInline}
+        canEdit={canEditMoney}
         editTitle={t('dashboard.table.editMrp', { defaultValue: 'Edit MRP' })}
         addLabel={t('dashboard.table.addMrp', { defaultValue: 'Add' })}
         onSave={(n) => changeMrp(row, n)}
