@@ -149,6 +149,10 @@ export default function Production() {
   const [batches, setBatches] = useState<ProductionBatch[]>([]);
   const [suggestions, setSuggestions] = useState<InventoryStyle[]>([]);
   const [kpis, setKpis] = useState<ProductionKpis | null>(null);
+  // Tab chips are FILTER-AWARE and the KPI cards are board-wide, so they cannot
+  // share state: `loadKpis` deliberately fetches unfiltered and would otherwise
+  // race the list response and overwrite the filtered counts with global ones.
+  const [tabCounts, setTabCounts] = useState<ProductionKpis['tabCounts'] | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);
   const [total, setTotal] = useState(0);
@@ -181,7 +185,7 @@ export default function Production() {
     // Board-level figures live on the batches endpoint; `take: 1` because we
     // only want the KPI block, not another page of rows.
     const res = await getBatches({ take: 1 });
-    setKpis(res.kpis);
+    setKpis(res.kpis); // cards only — tabCounts here are unfiltered, so ignore them
   }, []);
 
   const fetchPage = useCallback(
@@ -243,7 +247,10 @@ export default function Production() {
       setBatches(d.batches);
       setLoaded(d.raw);
       setTotal(d.total);
-      if (d.kpis) setKpis(d.kpis);
+      if (d.kpis) {
+        setKpis(d.kpis);
+        setTabCounts(d.kpis.tabCounts); // only the LIST response carries filtered counts
+      }
     } catch {
       if (reqRef.current === my) setError(true);
     } finally {
@@ -537,25 +544,25 @@ export default function Production() {
       {
         key: 'planning' as const,
         label: t('admin.production.tabs.planning', { defaultValue: 'Pipeline' }),
-        count: kpis?.tabCounts.planning,
+        count: tabCounts?.planning,
       },
       {
         key: 'in_production' as const,
         label: t('admin.production.tabs.inProduction', { defaultValue: 'Production' }),
-        count: kpis?.tabCounts.in_production,
+        count: tabCounts?.in_production,
       },
       {
         key: 'completed' as const,
         label: t('admin.production.tabs.completed', { defaultValue: 'Completed' }),
-        count: kpis?.tabCounts.completed,
+        count: tabCounts?.completed,
       },
       {
         key: 'parked' as const,
         label: t('admin.production.tabs.parked', { defaultValue: 'Parked' }),
-        count: kpis?.tabCounts.parked,
+        count: tabCounts?.parked,
       },
     ],
-    [t, kpis],
+    [t, tabCounts],
   );
 
   return (

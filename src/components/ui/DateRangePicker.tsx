@@ -304,21 +304,24 @@ export function DateRangePicker({
   // We ignore rdp's proposed `range` and drive the draft ourselves.
   const handleRangeSelect = useCallback(
     (_range: DateRange | undefined, clickedDay: Date) => {
-      setDraft((prev) => {
-        if (prev?.from && !prev?.to) {
-          // Second click completes the range → apply straight away. Applying on
-          // the FIRST click would fire a request for a half-picked window.
-          const next =
-            clickedDay.getTime() >= prev.from.getTime()
-              ? { from: prev.from, to: clickedDay }
-              : { from: clickedDay, to: prev.from };
-          commit(next.from, next.to);
-          return next;
-        }
-        return { from: clickedDay, to: undefined };
-      });
+      // Decide from the CURRENT draft, never inside a setDraft updater: React
+      // may replay updaters (StrictMode invokes them twice), and committing in
+      // there fires the parent's state update + refetch mid-render — the double
+      // apply and the cross-component update warning that comes with it.
+      if (draft?.from && !draft.to) {
+        // Second click completes the range → apply straight away. Applying on
+        // the FIRST click would fire a request for a half-picked window.
+        const next =
+          clickedDay.getTime() >= draft.from.getTime()
+            ? { from: draft.from, to: clickedDay }
+            : { from: clickedDay, to: draft.from };
+        setDraft(next);
+        commit(next.from, next.to);
+        return;
+      }
+      setDraft({ from: clickedDay, to: undefined });
     },
-    [commit],
+    [draft, commit],
   );
 
   // Default the calendar to show the month containing the draft's end (or
