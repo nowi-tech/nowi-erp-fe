@@ -54,8 +54,15 @@ export interface InventoryStyle {
   erpStyleId: string | null;
   /** Real ERP listing URLs — one clickable channel chip each (usually empty). */
   marketplaceLinks: { channel: string; url: string }[];
-  /** Most-urgent tier across its sizes — drives the parent pill. */
+  /** Most-urgent tier across its sizes. */
   worstUrgency: Urgency;
+  /** How the STYLE is short: every size gone = `out`, only some = `cut`, none =
+   *  null. The parent pill reads THIS — one empty size used to make a
+   *  still-sellable style announce "Out of stock". */
+  stockout: 'out' | 'cut' | null;
+  /** Units in open production across the style's sizes — a fact about the STYLE,
+   *  so it does not move when a lens trims which size rows are listed. */
+  pipelineTotal: number;
   /** Suggested units to make across its sizes. */
   makeTotal: number;
   /** Tiny seller — de-emphasised in the list (shown, not hidden). */

@@ -1004,8 +1004,11 @@ function StyleGroup({
   // Sizes soonest-to-run-out first within the group.
   const cover = (z: InventorySize): number => z.coverDays ?? Number.POSITIVE_INFINITY;
   const sizes = [...style.sizes].sort((a, b) => cover(a) - cover(b));
-  // Units in production across the style's sizes (drives the "in production" pill).
-  const pipelineTotal = style.sizes.reduce((a, z) => a + z.pipelineQty, 0);
+  // Units in production across the style's sizes (drives the "in production"
+  // pill). Comes from the server, counted over every size in view BEFORE the
+  // lens trims rows — summing the rows on screen made the same style read
+  // 371 / 195 / 176 on All styles / Critical / Cut size.
+  const pipelineTotal = style.pipelineTotal;
   return (
     <div
       className={`overflow-hidden rounded-[var(--radius-md)] border border-neutral-200 bg-white shadow-sm ${
@@ -1031,7 +1034,7 @@ function StyleGroup({
             ) : (
               <span className={`truncate text-[15px] font-semibold ${codeColor}`}>{style.styleKey}</span>
             )}
-            <UrgencyPill urgency={style.worstUrgency} />
+            <UrgencyPill urgency={style.worstUrgency} stockout={style.stockout} />
             {style.isNew && (
               <span className="inline-flex items-center gap-1 rounded-full border border-[var(--color-primary)]/30 bg-[var(--color-primary)]/[0.08] px-1.5 py-0.5 text-[10px] font-semibold text-[var(--color-primary)]">
                 <Sparkles size={10} />
@@ -1366,8 +1369,22 @@ function SortHeader({
   );
 }
 
-export function UrgencyPill({ urgency }: { urgency: Urgency }): ReactNode {
-  const u = URG[urgency];
+/** Amber, matching the Cut size summary card — a broken size ladder is not the
+ *  same emergency as a style with nothing left, and must not look like one. */
+const CUT = { label: 'Cut size', color: AMBER, dot: AMBER };
+
+export function UrgencyPill({
+  urgency,
+  stockout,
+}: {
+  urgency: Urgency;
+  /** Style-level shortfall. Omit on a per-SIZE pill, where `urgency` is the whole story. */
+  stockout?: 'out' | 'cut' | null;
+}): ReactNode {
+  // The style's own shortfall beats the worst size's tier. One empty size in a
+  // four-size ladder is "Cut size" — the style still sells, and saying "Out of
+  // stock" contradicted both the Cut size tab and EasyEcom.
+  const u = stockout === 'cut' ? CUT : stockout === 'out' ? URG.out : URG[urgency];
   // Neutral chrome; the dot carries the meaning-colour (red/amber/grey).
   return (
     <span className="inline-flex items-center gap-1.5 rounded-full border border-neutral-200 bg-neutral-50 px-2 py-0.5 text-[11px] font-semibold text-neutral-600">

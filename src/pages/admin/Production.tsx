@@ -1186,7 +1186,7 @@ function ToStartTable({
               <HoverThumbnail src={s.imageUrl} alt={s.name ?? s.styleKey} size={40} />
               <div className="min-w-0">
                 <div className="mb-0.5">
-                  <UrgencyPill urgency={s.worstUrgency} />
+                  <UrgencyPill urgency={s.worstUrgency} stockout={s.stockout} />
                 </div>
                 <TruncText text={s.erpStyleId ?? s.styleKey} className="text-sm font-semibold" />
                 {meaningfulName(s) && (
