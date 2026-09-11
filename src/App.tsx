@@ -263,8 +263,9 @@ function App() {
               />
               {/* Sales analytics — the same SalesKpis view, filtered per section
                   (each route mounts its own instance, all hitting the 5-min-cached
-                  /sales-kpis). Guarded to admin + viewer (production_lead only sees
-                  Production KPIs); the BE re-checks the same roles. */}
+                  /sales-kpis, which is fed by the seller-report upload). Guarded to
+                  admin + viewer (production_lead only sees Production KPIs); the BE
+                  re-checks the same roles. */}
               <Route
                 path="sales-kpis"
                 element={
@@ -320,7 +321,7 @@ function App() {
                         buckets={['fulfilment']}
                         titleKey="admin.nav.analyticsFulfilment"
                         titleDefault="Fulfilment"
-                        subtitleDefault="Dispatch volume, TAT & SLA."
+                        subtitleDefault="Dispatch, cancellations & returns."
                       />
                     </S>
                   </ProtectedRoute>

@@ -1,27 +1,25 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
-import { RefreshCw, Info } from 'lucide-react';
+import { Info, Upload } from 'lucide-react';
 import { Skeleton } from '@/components/ui/skeleton';
 import { DatePicker } from '@/components/ui/DatePicker';
 import { FilterRail, FilterRailDivider, FilterRailSegments } from '@/components/ui/filter-rail';
 import { useToast } from '@/components/ui/toast';
 import { localISO, todayISO } from '@/lib/date';
 import { CARD_SHELL, DISPLAY, SANS, Sparkline } from '@/components/admin/kpiPrimitives';
+import { useAuth } from '@/context/auth';
+import { hasAnyRole } from '@/lib/userRoles';
 import {
+  getCancellations,
   getSalesKpis,
+  uploadSalesCsv,
+  type CancellationBreakdown,
   type SalesInventoryView,
-  refreshAllEasyEcom,
   type SalesBucket,
   type SalesFormat,
   type SalesKpisResponse,
   type SalesMetric,
 } from '@/api/salesKpis';
-
-/** Manual refresh is async: the POST starts a background sync, then we poll
- *  GET /sales-kpis every REFRESH_POLL_MS until `syncing` clears, giving up after
- *  REFRESH_MAX_WAIT_MS (kept above the backend's ~4-min report-poll ceiling). */
-const REFRESH_POLL_MS = 15_000;
-const REFRESH_MAX_WAIT_MS = 5 * 60_000;
 
 /** Per-bucket accent — cards in a bucket share a colour so groups read at a glance. */
 const BUCKET_ACCENT: Record<SalesBucket, string> = {
@@ -104,7 +102,13 @@ export default function SalesKpis({
   const [data, setData] = useState<SalesKpisResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [failed, setFailed] = useState(false);
-  const [refreshing, setRefreshing] = useState(false);
+  const { user } = useAuth();
+  const canUpload = hasAnyRole(user, ['admin']); // the upload endpoint is admin-only; viewers share this page
+  const [uploading, setUploading] = useState(false);
+  const fileRef = useRef<HTMLInputElement>(null);
+  // Why orders were cancelled, for the card the "our fault" figure summarises.
+  const [cancellations, setCancellations] = useState<CancellationBreakdown | null>(null);
+  const [cancellationsFailed, setCancellationsFailed] = useState(false);
   const today = todayISO();
   // Calendar yesterday (local) — so a back-dated pick of yesterday reads the
   // friendly word "Yesterday" (mirrors Production KPIs), not a raw date.
@@ -113,34 +117,17 @@ export default function SalesKpis({
     d.setDate(d.getDate() - 1);
     return localISO(d);
   })();
-  // undefined = default (BE anchors on today IST); a date = explicit pick.
+  // undefined = the BE default (last uploaded day); a date = explicit pick.
   const [sendAsOf, setSendAsOf] = useState<string | undefined>(undefined);
   const [displayAsOf, setDisplayAsOf] = useState(today);
-  // Real / virtual inventory view — the same split Inventory Health shows.
+  // Real / virtual view — by the warehouse that shipped each line.
   const [inventory, setInventory] = useState<SalesInventoryView>('all');
   const [tick, setTick] = useState(0);
-  // Guards the passive sync-watcher (below) against starting twice, and against
-  // colliding with the button's own poll loop in onRefresh.
-  const syncWatchRef = useRef(false);
-
-  // Is a source feeding one of THIS page's buckets currently syncing? Keeps the
-  // "fetching…" banner + poll scoped to this page, so a refresh on ANOTHER page
-  // (or a partial cron) doesn't spin this one. `buckets` undefined = the combined
-  // all-buckets page. Falls back to the legacy global `syncing` if an older BE
-  // didn't send `syncingBuckets`.
-  const pageSyncing = (d: SalesKpisResponse | null): boolean => {
-    if (!d) return false;
-    if (!d.syncingBuckets) return d.syncing ?? false;
-    return buckets
-      ? d.syncingBuckets.some((b) => buckets.includes(b))
-      : d.syncingBuckets.length > 0;
-  };
-  const mySyncing = pageSyncing(data);
 
   // Which query the screen is currently showing. The load effect bumps it on every
-  // as-of / view change; a Refresh compares against it before writing, so a poll
-  // that started minutes ago under the previous view can't paint over the new one
-  // (the epoch guard Production.tsx uses for the same hazard).
+  // as-of / view change and compares before writing, so a slow request issued
+  // under the previous view can't paint over the new one (the epoch guard
+  // Production.tsx uses for the same hazard).
   const queryRef = useRef(0);
 
   useEffect(() => {
@@ -167,49 +154,25 @@ export default function SalesKpis({
     };
   }, [sendAsOf, inventory, tick]);
 
-  // Passive sync watcher: if a load (or a prior poll) reports a sync still in
-  // flight — e.g. the page was reloaded mid-refresh, or the hourly cron is
-  // running — show the "fetching…" banner and poll until it clears, WITHOUT the
-  // user clicking Refresh. The button path (onRefresh) never writes `syncing:true`
-  // into `data`, so this only fires for background syncs; the ref stops it
-  // double-starting or overlapping the button's own loop. No result toast here —
-  // it's passive, so we just let the fresh data appear.
+  // Only the Fulfilment page shows the breakdown.
+  const showsFulfilment = !buckets || buckets.includes('fulfilment');
   useEffect(() => {
-    if (!mySyncing || syncWatchRef.current) return;
-    syncWatchRef.current = true;
-    setRefreshing(true);
+    if (!showsFulfilment) return;
     let cancelled = false;
-    void (async () => {
-      const startAt = Date.now();
-      let d = data;
-      while (!cancelled && pageSyncing(d) && Date.now() - startAt < REFRESH_MAX_WAIT_MS) {
-        await new Promise((r) => setTimeout(r, REFRESH_POLL_MS));
-        try {
-          d = await getSalesKpis(sendAsOf, inventory);
-        } catch {
-          continue;
-        }
-      }
-      if (!cancelled) {
-        setData(d);
-        setRefreshing(false);
-        syncWatchRef.current = false;
-      } else if (!syncWatchRef.current) {
-        // Cancelled (the view or date changed) and no replacement watcher took
-        // over — clear the spinner ourselves, or the "fetching…" banner stays up
-        // for good when the background sync happens to finish in that gap. The
-        // ref is NOT reset here: if a replacement DID start it owns the flag now.
-        setRefreshing(false);
-      }
-    })();
+    // Hide the previous view's breakdown until this one arrives, so it never sits under the wrong cards.
+    setCancellations(null);
+    setCancellationsFailed(false);
+    getCancellations(sendAsOf, inventory)
+      .then((c) => {
+        if (!cancelled) setCancellations(c);
+      })
+      .catch(() => {
+        if (!cancelled) setCancellationsFailed(true);
+      });
     return () => {
       cancelled = true;
-      syncWatchRef.current = false;
     };
-    // `tick` is a dep so a reload can RE-ARM the watcher after it times out:
-    // `mySyncing` stays true across that timeout, so without a dep that actually
-    // changes the effect would never run again and the poll would stay dead.
-  }, [mySyncing, sendAsOf, inventory, tick]);
+  }, [showsFulfilment, sendAsOf, inventory, tick]);
 
   // Switching into a scoped view while an older date is picked would land outside
   // the split's reach. Pull the date forward to the first day that HAS a split,
@@ -221,93 +184,71 @@ export default function SalesKpis({
     setDisplayAsOf(floor);
   }, [inventory, data?.splitFrom, displayAsOf]);
 
-  const onRefresh = async (): Promise<void> => {
-    if (refreshing) {
-      toast.show(
-        t('admin.salesKpis.refreshInProgress', {
-          defaultValue: 'Please wait — your data is still refreshing.',
-        }),
-        'info',
-      );
-      return;
-    }
-    setRefreshing(true);
-    // The query this refresh belongs to. Switch view or date mid-poll and it goes
-    // stale — we stop polling and drop the result rather than overwrite the screen.
-    const my = queryRef.current;
-    const current = (): boolean => queryRef.current === my;
-    // ONE pull refreshes EVERY EasyEcom read model (Sales KPI + Inventory Health),
-    // stamped with a single shared timestamp so every screen's "as of" matches.
-    // The POST returns fast; poll GET until `syncing` clears, keeping the current
-    // data + FetchingBanner on screen. No "started" toast — the banner covers the
-    // in-progress state; one toast on the result.
+  /** Sends the picked CSV; the dashboard is rebuilt before the upload returns. */
+  const onUpload = async (file: File): Promise<void> => {
+    setUploading(true);
     try {
-      await refreshAllEasyEcom();
-      let d = await getSalesKpis(sendAsOf, inventory);
-      const startAt = Date.now();
-      while (current() && pageSyncing(d) && Date.now() - startAt < REFRESH_MAX_WAIT_MS) {
-        await new Promise((r) => setTimeout(r, REFRESH_POLL_MS));
-        try {
-          d = await getSalesKpis(sendAsOf, inventory);
-        } catch {
-          // A transient blip while POLLING isn't a refresh failure — the
-          // background sync is still running and the current data is still
-          // valid. Keep waiting; if it never recovers we fall through to the
-          // "taking longer than usual" path, not "Refresh failed".
-          continue;
-        }
-      }
-      // Abandoned: the view or date moved on. The sync itself keeps running server
-      // side, and the new query's own load will pick its results up.
-      if (!current()) return;
-      if (pageSyncing(d)) {
-        // Still running server-side after our wait — the sync continues and the
-        // next page load / hourly cron will surface it. Don't claim success.
+      const res = await uploadSalesCsv(await file.text());
+      setSendAsOf(undefined); // back to the BE default, so the view lands on the new data
+      setDisplayAsOf(res.toDay);
+      setTick((x) => x + 1);
+      toast.show(
+        t('admin.salesKpis.uploaded', {
+          defaultValue: '{{count, number}} order lines imported, {{from}} to {{to}}.',
+          count: res.linesImported,
+          from: dayLabel(res.fromDay),
+          to: dayLabel(res.toDay),
+        }),
+        'success',
+      );
+      if (res.linesKeptNewer > 0) {
         toast.show(
-          t('admin.salesKpis.refreshSlow', {
+          t('admin.salesKpis.uploadKeptNewer', {
             defaultValue:
-              'Still fetching from EasyEcom — this is taking longer than usual. Refresh again in a minute to see it.',
+              '{{count, number}} lines already had a newer status from an earlier report and were left as they were.',
+            count: res.linesKeptNewer,
           }),
           'info',
         );
-        return;
       }
-      setData(d);
-      setDisplayAsOf(d.asOf);
-      setFailed(false);
-      toast.show(
-        d.stale
-          ? t('admin.salesKpis.refreshedStale', {
-              defaultValue: 'Couldn’t fetch new data from EasyEcom — showing the latest available.',
-            })
-          : t('admin.salesKpis.refreshed', { defaultValue: 'Sales data refreshed.' }),
-        d.stale ? 'info' : 'success',
-      );
-    } catch (err: unknown) {
-      const res = (err as { response?: { status?: number; data?: { message?: string } } }).response;
-      if (res?.status === 429) {
-        // Cooldown (non-admin refreshed too soon) — data is still valid, not a failure.
+      if (res.rowsSkipped > 0) {
         toast.show(
-          res.data?.message ??
-            t('admin.salesKpis.refreshCooldown', {
-              defaultValue: 'Refreshed recently — please try again soon.',
-            }),
+          t('admin.salesKpis.uploadSkipped', {
+            defaultValue: '{{count, number}} rows were skipped — no order line id or order date.',
+            count: res.rowsSkipped,
+          }),
           'info',
         );
-        return;
       }
-      setFailed(true);
-      toast.show(t('admin.salesKpis.refreshFailed', { defaultValue: 'Refresh failed. Please try again.' }), 'error');
+      if (res.unmappedLines > 0) {
+        toast.show(
+          t('admin.salesKpis.uploadUnmapped', {
+            defaultValue:
+              "{{count, number}} lines aren't mapped to Real or Virtual (warehouse {{codes}}) — they only count under All.",
+            count: res.unmappedLines,
+            codes: res.unmappedWarehouses.join(', '),
+          }),
+          'info',
+        );
+      }
+    } catch (err: unknown) {
+      const res = (err as { response?: { data?: { message?: string } } }).response;
+      toast.show(
+        res?.data?.message ??
+          t('admin.salesKpis.uploadFailed', { defaultValue: 'Could not import that file.' }),
+        'error',
+      );
     } finally {
-      setRefreshing(false);
+      setUploading(false);
+      // Lets the same file be picked again after a failure.
+      if (fileRef.current) fileRef.current.value = '';
     }
   };
 
   const live = data?.isLive ?? false;
   const stale = data?.stale ?? false;
-  // "As of when" is the last SUCCESSFUL sync. Absolute time answers "whose data is
-  // this?" precisely; relative gives freshness at a glance. Shown in every status
-  // state — a stale/older view needs the timestamp most of all.
+  // How far the data reaches, not when the file was uploaded.
+  const through = data?.dataThrough ? dayLabel(data.dataThrough) : null;
   const syncedRel = relativeTime(data?.lastSyncedAt);
   const syncedAbs = absTime(data?.lastSyncedAt);
   const synced = syncedAbs
@@ -341,17 +282,32 @@ export default function SalesKpis({
                 {t(subtitleKey, { defaultValue: subtitleDefault })}
               </p>
             </div>
-            <button
-              type="button"
-              onClick={onRefresh}
-              aria-busy={refreshing}
-              className="inline-flex items-center gap-1.5 rounded-lg border border-neutral-200 bg-white px-3 py-2 text-sm font-medium text-neutral-700 shadow-sm transition hover:bg-neutral-50"
-            >
-              <RefreshCw size={15} className={refreshing ? 'animate-spin' : ''} />
-              {refreshing
-                ? t('admin.salesKpis.syncing', { defaultValue: 'Syncing…' })
-                : t('admin.salesKpis.refresh', { defaultValue: 'Refresh' })}
-            </button>
+            {canUpload && (
+              <div>
+                <input
+                  ref={fileRef}
+                  type="file"
+                  accept=".csv,text/csv"
+                  className="hidden"
+                  onChange={(e) => {
+                    const file = e.target.files?.[0];
+                    if (file) void onUpload(file);
+                  }}
+                />
+                <button
+                  type="button"
+                  onClick={() => fileRef.current?.click()}
+                  disabled={uploading}
+                  aria-busy={uploading}
+                  className="inline-flex items-center gap-1.5 rounded-lg border border-neutral-200 bg-white px-3 py-2 text-sm font-medium text-neutral-700 shadow-sm transition hover:bg-neutral-50 disabled:opacity-60"
+                >
+                  <Upload size={15} className={uploading ? 'animate-pulse' : ''} />
+                  {uploading
+                    ? t('admin.salesKpis.uploading', { defaultValue: 'Importing…' })
+                    : t('admin.salesKpis.upload', { defaultValue: 'Upload report' })}
+                </button>
+              </div>
+            )}
           </div>
 
           {/* Same rail, same control, same labels as Inventory Health — the keys
@@ -396,19 +352,19 @@ export default function SalesKpis({
           <span className={!loading && stale ? 'font-medium text-amber-600' : 'text-neutral-500'}>
             {loading
               ? t('admin.salesKpis.loading', { defaultValue: 'Loading…' })
-              : stale
-                ? t('admin.salesKpis.stale', {
-                    defaultValue:
-                      'Showing data from {{when}} — couldn’t fetch the latest from EasyEcom.',
-                    when: synced ?? '—',
+              : !through
+                ? t('admin.salesKpis.noData', {
+                    defaultValue: 'No sales data yet — upload a seller orders report to begin.',
                   })
-                : live
-                  ? t('admin.salesKpis.liveSynced', {
-                      defaultValue: 'Live · synced {{when}}',
-                      when: synced ?? '—',
+                : stale
+                  ? t('admin.salesKpis.staleUpload', {
+                      defaultValue: 'Data through {{through}} — upload a newer report.',
+                      through,
                     })
-                  : t('admin.salesKpis.notConnected', {
-                      defaultValue: 'Sales not connected — showing what we have',
+                  : t('admin.salesKpis.dataThrough', {
+                      defaultValue: 'Data through {{through}} · imported {{when}}',
+                      through,
+                      when: synced ?? '—',
                     })}
           </span>
         </div>
@@ -426,10 +382,6 @@ export default function SalesKpis({
           <SkeletonGrid />
         ) : data ? (
           <>
-            {/* A manual refresh runs in the BACKGROUND for minutes; keep the
-                current data on screen with a "fetching…" banner on top, rather
-                than blanking it behind a skeleton for the whole wait. */}
-            {refreshing && <FetchingBanner t={t} />}
             <div className="flex flex-col gap-7">
               {data.buckets
                 .filter((bucket) => !buckets || buckets.includes(bucket.key))
@@ -455,6 +407,19 @@ export default function SalesKpis({
                 );
               })}
             </div>
+            {showsFulfilment && cancellations && (
+              <CancellationTable t={t} data={cancellations} />
+            )}
+            {showsFulfilment && cancellationsFailed && (
+              <div style={CARD_SHELL} className="mt-7 text-center text-sm text-amber-800">
+                {t('admin.salesKpis.cancellationsFailed', {
+                  defaultValue: 'Could not load the cancellation breakdown.',
+                })}{' '}
+                <button className="font-medium underline" onClick={() => setTick((x) => x + 1)}>
+                  {t('admin.salesKpis.retry', { defaultValue: 'Retry' })}
+                </button>
+              </div>
+            )}
             <UnavailableNote
               metrics={data.metrics.filter((m) => !buckets || buckets.includes(m.bucket))}
             />
@@ -642,19 +607,62 @@ function UnavailableNote({ metrics }: { metrics: SalesMetric[] }): ReactNode {
   );
 }
 
-/** Shown above the skeleton during a manual refresh: a fresh EasyEcom report
- *  takes a few minutes to generate, so tell the user to hang on. */
-function FetchingBanner({ t }: { t: ReturnType<typeof useTranslation>['t'] }): ReactNode {
+/** Why orders were cancelled, ranked, ours marked — the detail behind the "our fault" card. */
+function CancellationTable({
+  t,
+  data,
+}: {
+  t: ReturnType<typeof useTranslation>['t'];
+  data: CancellationBreakdown;
+}): ReactNode {
+  if (!data.reasons.length) return null;
+  // Server totals, not a sum of rows — one order can sit under two reasons.
+  const total = data.totalOrders;
+  const ours = data.ourFaultOrders;
+  const pctOurs = total ? Math.round((ours / total) * 100) : 0;
   return (
-    <div className="mb-4 flex items-center gap-3 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
-      <RefreshCw size={16} className="shrink-0 animate-spin" />
-      <span>
-        {t('admin.salesKpis.fetchingReport', {
-          defaultValue:
-            'Fetching your latest report from EasyEcom — this can take a few minutes. It runs in the background, so you can keep working.',
-        })}
-      </span>
-    </div>
+    <section className="mt-7">
+      <h2 className="mb-2.5 text-xs font-bold uppercase tracking-wider text-neutral-400">
+        {t('admin.salesKpis.whyCancelled', { defaultValue: 'Why orders were cancelled' })}
+      </h2>
+      <div style={CARD_SHELL}>
+        <p className="mb-3 text-sm text-neutral-600">
+          {t('admin.salesKpis.cancelSummary', {
+            defaultValue:
+              '{{ours}} of {{total}} cancellations ({{pct}}%) in the last 30 days were ours to prevent.',
+            ours: ours.toLocaleString('en-IN'),
+            total: total.toLocaleString('en-IN'),
+            pct: pctOurs,
+          })}
+        </p>
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm">
+            <tbody>
+              {data.reasons.map((r) => (
+                <tr key={r.reason} className="border-t border-neutral-100 first:border-t-0">
+                  <td className="py-1.5 pr-3">
+                    <span
+                      className={`mr-2 inline-block h-1.5 w-1.5 rounded-full align-middle ${
+                        r.ourFault ? 'bg-orange-500' : 'bg-neutral-300'
+                      }`}
+                    />
+                    <span className={r.ourFault ? 'text-neutral-900' : 'text-neutral-600'}>
+                      {r.reason}
+                    </span>
+                  </td>
+                  <td className="w-20 py-1.5 text-right tabular-nums text-neutral-900">
+                    {r.orders.toLocaleString('en-IN')}
+                  </td>
+                  <td className="w-14 py-1.5 text-right tabular-nums text-neutral-400">
+                    {total ? Math.round((r.orders / total) * 100) : 0}%
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </section>
   );
 }
 

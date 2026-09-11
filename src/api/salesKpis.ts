@@ -42,27 +42,20 @@ export interface SalesKpisResponse {
   generatedAt: string;
   /** Reference date the windows anchor on (YYYY-MM-DD, IST). */
   asOf: string;
-  /** True when the latest synced day pulled EasyEcom sales successfully. */
+  /** True when the anchored day holds imported sales data. */
   isLive: boolean;
-  /** ISO timestamp of the most recent sync covering the window. */
+  /** ISO timestamp of the upload that last rebuilt these days. */
   lastSyncedAt?: string | null;
-  /** True when the latest sync served STALE (cached) data — the live fetch failed. */
+  /** Last uploaded order day — what the dashboard is "as of". */
+  dataThrough?: string | null;
+  /** True when an upload looks missed. */
   stale?: boolean;
   /** Earliest day (YYYY-MM-DD) that has Real/Virtual data. Older history is
    *  whole-account only, so the As-of picker floors here in a scoped view. */
   splitFrom?: string | null;
-  /** True while a manual refresh is still generating reports in the background.
-   *  The FE keeps showing "fetching…" and polls until this flips to false. */
-  syncing?: boolean;
-  /** Dashboard buckets whose data is currently being refreshed. A page shows
-   *  "fetching…" only while one of ITS buckets appears here, so refreshes on
-   *  different pages stay independent. */
-  syncingBuckets?: SalesBucket[];
 }
 
-/** Real / virtual inventory view, matching Inventory Health: `virtual` = SKUs
- *  holding China-warehouse stock, `real` = the rest. RTO/RTV read whole-account
- *  in every view — a returned parcel can hold both kinds, so it cannot be split. */
+/** Real = shipped from the India warehouse, virtual = from China; an order with items from both counts in each. */
 export type SalesInventoryView = 'all' | 'real' | 'virtual';
 
 /** GET /api/sales-kpis — the bucketed dashboard metrics. */
@@ -78,10 +71,57 @@ export function getSalesKpis(
     .then((res) => res.data);
 }
 
-/** POST /api/sales-kpis/refresh-all — one pull refreshes EVERY EasyEcom-derived
- *  read model (Sales KPI + Inventory Health) in the background, stamped with one
- *  shared timestamp so every screen's "as of" matches. Returns immediately; poll
- *  {@link getSalesKpis} / the inventory-health endpoint until `syncing` clears. */
+export interface CancellationReason {
+  reason: string;
+  orders: number;
+  ourFault: boolean;
+}
+
+export interface CancellationBreakdown {
+  from: string;
+  to: string;
+  /** Per-reason counts can sum past totalOrders — one order can be cancelled for two reasons. */
+  reasons: CancellationReason[];
+  totalOrders: number;
+  ourFaultOrders: number;
+}
+
+/** GET /api/sales-kpis/cancellations — why orders were cancelled over the 30 days ending at asOf. */
+export function getCancellations(
+  asOf?: string,
+  inventory: SalesInventoryView = 'all',
+): Promise<CancellationBreakdown> {
+  const params: Record<string, string> = {};
+  if (asOf) params.asOf = asOf;
+  if (inventory !== 'all') params.inventory = inventory;
+  return apiClient
+    .get<CancellationBreakdown>('/api/sales-kpis/cancellations', { params })
+    .then((res) => res.data);
+}
+
+export interface SalesUploadResult {
+  linesImported: number;
+  /** Lines left as they were because an earlier upload came from a newer report. */
+  linesKeptNewer: number;
+  rowsSkipped: number;
+  fromDay: string;
+  toDay: string;
+  daysRebuilt: number;
+  /** Lines from a warehouse not mapped to Real or Virtual; they count under All only. */
+  unmappedLines: number;
+  unmappedWarehouses: string[];
+}
+
+/** POST /api/sales-kpis/upload — the dashboard is rebuilt before this resolves. */
+export function uploadSalesCsv(csv: string): Promise<SalesUploadResult> {
+  return apiClient
+    .post<SalesUploadResult>('/api/sales-kpis/upload', csv, {
+      headers: { 'Content-Type': 'text/csv' },
+    })
+    .then((res) => res.data);
+}
+
+/** POST /api/sales-kpis/refresh-all — refreshes Inventory Health from EasyEcom in the background. */
 export function refreshAllEasyEcom(): Promise<{ syncing: boolean }> {
   return apiClient
     .post<{ syncing: boolean }>('/api/sales-kpis/refresh-all', {})
