@@ -468,7 +468,8 @@
       "staleUpload": "Data through {{through}} — upload a newer report.",
       "dataThrough": "Data through {{through}} · imported {{when}}",
       "whyCancelled": "Why orders were cancelled",
-      "cancelSummary": "{{ours}} of {{total}} cancellations ({{pct}}%) in the last 30 days were ours to prevent."
+      "cancelSummary": "{{ours}} of {{total}} cancellations ({{pct}}%) in the last 30 days were ours to prevent.",
+      "cancellationsFailed": "Could not load the cancellation breakdown."
     },
     "home": {
       "approvalCta": {

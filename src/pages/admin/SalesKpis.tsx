@@ -8,7 +8,7 @@ import { useToast } from '@/components/ui/toast';
 import { localISO, todayISO } from '@/lib/date';
 import { CARD_SHELL, DISPLAY, SANS, Sparkline } from '@/components/admin/kpiPrimitives';
 import { useAuth } from '@/context/auth';
-import { hasRole } from '@/lib/userRoles';
+import { hasAnyRole } from '@/lib/userRoles';
 import {
   getCancellations,
   getSalesKpis,
@@ -103,11 +103,12 @@ export default function SalesKpis({
   const [loading, setLoading] = useState(true);
   const [failed, setFailed] = useState(false);
   const { user } = useAuth();
-  const canUpload = hasRole(user, 'admin'); // the upload endpoint is admin-only; viewers share this page
+  const canUpload = hasAnyRole(user, ['admin']); // the upload endpoint is admin-only; viewers share this page
   const [uploading, setUploading] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
   // Why orders were cancelled, for the card the "our fault" figure summarises.
   const [cancellations, setCancellations] = useState<CancellationBreakdown | null>(null);
+  const [cancellationsFailed, setCancellationsFailed] = useState(false);
   const today = todayISO();
   // Calendar yesterday (local) — so a back-dated pick of yesterday reads the
   // friendly word "Yesterday" (mirrors Production KPIs), not a raw date.
@@ -158,12 +159,15 @@ export default function SalesKpis({
   useEffect(() => {
     if (!showsFulfilment) return;
     let cancelled = false;
+    // Hide the previous view's breakdown until this one arrives, so it never sits under the wrong cards.
+    setCancellations(null);
+    setCancellationsFailed(false);
     getCancellations(sendAsOf, inventory)
       .then((c) => {
         if (!cancelled) setCancellations(c);
       })
       .catch(() => {
-        if (!cancelled) setCancellations(null); // the table just doesn't render
+        if (!cancelled) setCancellationsFailed(true);
       });
     return () => {
       cancelled = true;
@@ -405,6 +409,16 @@ export default function SalesKpis({
             </div>
             {showsFulfilment && cancellations && (
               <CancellationTable t={t} data={cancellations} />
+            )}
+            {showsFulfilment && cancellationsFailed && (
+              <div style={CARD_SHELL} className="mt-7 text-center text-sm text-amber-800">
+                {t('admin.salesKpis.cancellationsFailed', {
+                  defaultValue: 'Could not load the cancellation breakdown.',
+                })}{' '}
+                <button className="font-medium underline" onClick={() => setTick((x) => x + 1)}>
+                  {t('admin.salesKpis.retry', { defaultValue: 'Retry' })}
+                </button>
+              </div>
             )}
             <UnavailableNote
               metrics={data.metrics.filter((m) => !buckets || buckets.includes(m.bucket))}
