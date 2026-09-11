@@ -568,6 +568,9 @@ export default function InventoryHealth(): ReactNode {
         // Held for seller approval — unsellable, so off every other lens. This is
         // the only way back to them.
         { key: 'pending', label: t('admin.inventoryHealth.tab.pending', { defaultValue: 'Pending approval' }), count: kpis.pendingApproval },
+        // Same idea for products you switched off: they count nowhere else, so
+        // without this tab a disabled style could never be found again.
+        { key: 'disabled', label: t('admin.inventoryHealth.tab.disabled', { defaultValue: 'Disabled' }), count: kpis.disabled },
         // "What's new" is a sort preset (it reorders whichever lens is in focus),
         // not a lens of its own — no tab.
       ]

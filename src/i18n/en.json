@@ -395,7 +395,8 @@
         "slow": "Slow-movers",
         "dead": "Dead stock",
         "new": "New arrivals",
-        "pending": "Pending approval"
+        "pending": "Pending approval",
+        "disabled": "Disabled"
       },
       "newBadge": "New arrival",
       "col": {
