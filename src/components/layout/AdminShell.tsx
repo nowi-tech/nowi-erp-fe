@@ -121,7 +121,9 @@ const NAV_SECTIONS: NavSection[] = [
       // forecast → produce → ship flow, so it reads next to the forecast rather
       // than back up in Overview (where hiding Locator had orphaned it).
       { to: '/admin/dispatches', icon: <Container size={18} />, labelKey: 'admin.nav.dispatches', roles: [...DISPATCH_VIEW_ROLES] },
-      { to: '/admin/production-kpis', icon: <BarChart3 size={18} />, labelKey: 'admin.nav.productionKpis', roles: ['admin', 'viewer', 'production_lead'] },
+      // Hidden from the nav on request; the /admin/production-kpis route stays live for direct URLs.
+      // ponytail: empty roles = hidden from all (roles.some(...) is false).
+      { to: '/admin/production-kpis', icon: <BarChart3 size={18} />, labelKey: 'admin.nav.productionKpis', roles: [] },
       { to: '/admin/sales-kpis', icon: <TrendingUp size={18} />, labelKey: 'admin.nav.salesKpis', roles: ['admin', 'viewer'] },
       { to: '/admin/analytics/fulfilment', icon: <LineChart size={18} />, labelKey: 'admin.nav.analyticsFulfilment', roles: ['admin', 'viewer'] },
     ],

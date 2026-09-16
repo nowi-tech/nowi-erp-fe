@@ -127,3 +127,30 @@ export function refreshAllEasyEcom(): Promise<{ syncing: boolean }> {
     .post<{ syncing: boolean }>('/api/sales-kpis/refresh-all', {})
     .then((res) => res.data);
 }
+
+/** One summary row, given for each view. */
+export interface SummaryRow {
+  key: string;
+  label: string;
+  format: 'number' | 'currency' | 'percent';
+  /** Which page's section carries the row. */
+  bucket: SalesBucket;
+  /** real = India, virtual = China, all = both. */
+  real: number | null;
+  virtual: number | null;
+  all: number | null;
+}
+
+export interface SalesSummary {
+  from: string;
+  to: string;
+  rows: SummaryRow[];
+}
+
+/** GET /api/sales-kpis/summary — the detail rows for the window ending at asOf, each tagged with its page's bucket. */
+export function getSalesSummary(asOf?: string, days?: number): Promise<SalesSummary> {
+  const params: Record<string, string> = {};
+  if (asOf) params.asOf = asOf;
+  if (days) params.days = String(days);
+  return apiClient.get<SalesSummary>('/api/sales-kpis/summary', { params }).then((res) => res.data);
+}

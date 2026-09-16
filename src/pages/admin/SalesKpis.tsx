@@ -7,11 +7,13 @@ import { FilterRail, FilterRailDivider, FilterRailSegments } from '@/components/
 import { useToast } from '@/components/ui/toast';
 import { localISO, todayISO } from '@/lib/date';
 import { CARD_SHELL, DISPLAY, SANS, Sparkline } from '@/components/admin/kpiPrimitives';
+import { SummarySection } from '@/components/admin/SummarySection';
 import { useAuth } from '@/context/auth';
 import { hasAnyRole } from '@/lib/userRoles';
 import {
   getCancellations,
   getSalesKpis,
+  getSalesSummary,
   uploadSalesCsv,
   type CancellationBreakdown,
   type SalesInventoryView,
@@ -19,6 +21,7 @@ import {
   type SalesFormat,
   type SalesKpisResponse,
   type SalesMetric,
+  type SalesSummary,
 } from '@/api/salesKpis';
 
 /** Per-bucket accent — cards in a bucket share a colour so groups read at a glance. */
@@ -106,9 +109,12 @@ export default function SalesKpis({
   const canUpload = hasAnyRole(user, ['admin']); // the upload endpoint is admin-only; viewers share this page
   const [uploading, setUploading] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
-  // Why orders were cancelled, for the card the "our fault" figure summarises.
+  // Why orders were cancelled, ranked, with the share that was ours to prevent.
   const [cancellations, setCancellations] = useState<CancellationBreakdown | null>(null);
   const [cancellationsFailed, setCancellationsFailed] = useState(false);
+  // The workbook rows no card can carry, given for India / China / Combined.
+  const [summary, setSummary] = useState<SalesSummary | null>(null);
+  const [summaryFailed, setSummaryFailed] = useState(false);
   const today = todayISO();
   // Calendar yesterday (local) — so a back-dated pick of yesterday reads the
   // friendly word "Yesterday" (mirrors Production KPIs), not a raw date.
@@ -173,6 +179,23 @@ export default function SalesKpis({
       cancelled = true;
     };
   }, [showsFulfilment, sendAsOf, inventory, tick]);
+
+  // Every view is a column here, so the section doesn't reload when the view changes.
+  useEffect(() => {
+    let cancelled = false;
+    setSummary(null);
+    setSummaryFailed(false);
+    getSalesSummary(sendAsOf)
+      .then((r) => {
+        if (!cancelled) setSummary(r);
+      })
+      .catch(() => {
+        if (!cancelled) setSummaryFailed(true);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [sendAsOf, tick]);
 
   // Switching into a scoped view while an older date is picked would land outside
   // the split's reach. Pull the date forward to the first day that HAS a split,
@@ -407,6 +430,23 @@ export default function SalesKpis({
                 );
               })}
             </div>
+            {summary && (
+              <SummarySection
+                rows={summary.rows.filter((r) => !buckets || buckets.includes(r.bucket))}
+                from={summary.from}
+                to={summary.to}
+                active={inventory}
+                perItem={showsFulfilment}
+              />
+            )}
+            {summaryFailed && (
+              <div style={CARD_SHELL} className="mt-7 text-center text-sm text-amber-800">
+                {t('admin.salesSummary.failed', { defaultValue: 'Could not load the summary.' })}{' '}
+                <button className="font-medium underline" onClick={() => setTick((x) => x + 1)}>
+                  {t('admin.salesKpis.retry', { defaultValue: 'Retry' })}
+                </button>
+              </div>
+            )}
             {showsFulfilment && cancellations && (
               <CancellationTable t={t} data={cancellations} />
             )}
