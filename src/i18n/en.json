@@ -471,6 +471,16 @@
       "cancelSummary": "{{ours}} of {{total}} cancellations ({{pct}}%) in the last 30 days were ours to prevent.",
       "cancellationsFailed": "Could not load the cancellation breakdown."
     },
+    "salesSummary": {
+      "title": "Summary",
+      "caption": "Per item · {{from}} to {{to}}",
+      "captionPlain": "{{from}} to {{to}}",
+      "metric": "Metric",
+      "india": "India",
+      "china": "China",
+      "combined": "Combined",
+      "failed": "Could not load the summary."
+    },
     "home": {
       "approvalCta": {
         "title": "{{count}} styles awaiting your approval",
