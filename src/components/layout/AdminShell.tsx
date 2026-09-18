@@ -60,7 +60,7 @@ interface NavSection {
 
 /* Nav follows the simplified post-redesign IA (docs/DASHBOARD_REDESIGN.md):
    Dashboard · Sampling · Production · Users · Master Data, plus China Import +
-   Fabric Library, plus the floor/stage drop-in surfaces for admins. Dispatch
+   Fabric Library, plus the floor/stage drop-in surfaces for super_admin. Dispatch
    is its own top-level item again — it now hosts the production challans tab
    alongside the floor dispatch ledger. Role-gating is unchanged: an item only
    renders for roles its route's ProtectedRoute permits. */
@@ -149,12 +149,12 @@ const NAV_SECTIONS: NavSection[] = [
     id: 'production',
     titleKey: 'admin.nav.sections.production',
     items: [
-      // Floor surfaces — admins drop in to triage / receive / forward when
-      // a floor user is unavailable. Each route already permits 'admin' in
-      // ProtectedRoute.
-      { to: '/floor', icon: <Boxes size={18} />, labelKey: 'admin.nav.floor', roles: ['admin'] },
-      { to: '/stitching', icon: <Scissors size={18} />, labelKey: 'admin.nav.stitching', roles: ['admin'] },
-      { to: '/finishing', icon: <Sparkles size={18} />, labelKey: 'admin.nav.finishing', roles: ['admin'] },
+      // Floor surfaces — drop-in links for the owner only. The routes still
+      // permit 'admin' / floor roles in ProtectedRoute; this hides the nav
+      // entries (and with them the whole section) from everyone but super_admin.
+      { to: '/floor', icon: <Boxes size={18} />, labelKey: 'admin.nav.floor', roles: ['super_admin'] },
+      { to: '/stitching', icon: <Scissors size={18} />, labelKey: 'admin.nav.stitching', roles: ['super_admin'] },
+      { to: '/finishing', icon: <Sparkles size={18} />, labelKey: 'admin.nav.finishing', roles: ['super_admin'] },
     ],
   },
   {
