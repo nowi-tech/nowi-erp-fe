@@ -57,4 +57,16 @@ apiClient.interceptors.response.use(
   },
 );
 
+/** The server's own explanation of a refusal, when it sent one. */
+export function apiErrorMessage(e: unknown): string | null {
+  const raw = (e as { response?: { data?: { message?: string | string[] } } })?.response?.data
+    ?.message;
+  return (Array.isArray(raw) ? raw.join(', ') : raw) || null;
+}
+
+/** HTTP status of a failed request, if it got a response. */
+export function apiErrorStatus(e: unknown): number | undefined {
+  return (e as { response?: { status?: number } })?.response?.status;
+}
+
 export default apiClient;

@@ -1,6 +1,7 @@
 import { useTranslation } from 'react-i18next';
 import { Check } from 'lucide-react';
 import type { BatchStatus, ProductionBatch } from '@/api/production';
+import { hasLeftFloor } from '@/lib/production';
 
 const ORDER: BatchStatus[] = ['cutting', 'stitching', 'finishing'];
 
@@ -26,34 +27,24 @@ export default function LotStageStepper({ lot }: { lot: ProductionBatch }) {
   const altered = sum((s) => s.qtyAltered);
   const scrapped = sum((s) => s.qtyScrapped);
 
-  // `indexOf` is -1 both BEFORE the floor (planning) and after it (completed,
-  // dispatched). Treating them alike ticked every stage on a lot that had not
-  // started, so past-the-floor is named explicitly rather than inferred.
-  const at = ORDER.indexOf(lot.status);
-  const pastFloor = ['completed', 'dispatched'].includes(lot.status);
-  // Two different questions per stage. `value` is cumulative — everything that
-  // has ever passed through here. `here` is what is sitting at the station right
-  // now: a piece stays IN a stage until the next one takes it.
-  //
-  // Clamped at zero. `finished` is cumulative and counts a piece twice if it
-  // goes round again through alteration, so after a rework cycle the raw
-  // subtraction can go negative — and "-3 in stitching" reads as a fault.
-  // `value` is what the stage has RECORDED — the same number the edit dialog
-  // holds, so the two can never disagree. `pending` is the work still owed
-  // here, and it belongs to the stage that owes it: a stitched piece has
-  // ARRIVED at finishing, so it is pending there, not back at stitching.
-  //
-  // Clamped: `finished` is cumulative and counts a piece twice if it goes round
-  // again through alteration, so the subtraction can go negative after rework.
+  // -1 both before the floor (planning) and after it, so past-the-floor is named, not inferred.
+  // Alteration sits at finishing on the strip; a held lot shows where it was held.
+  const where = lot.status === 'on_hold' ? lot.heldFromStatus : lot.status;
+  const at = ORDER.indexOf(where === 'alteration' ? 'finishing' : (where ?? lot.status));
+  const pastFloor = hasLeftFloor(lot.status);
+  // `value` is what the stage recorded; `pending` is work owed at the stage that owes it —
+  // a stitched piece has arrived at finishing. Clamped: `finished` double-counts a rework round.
+  // A closed lot owes nothing.
+  const owed = (n: number) => (pastFloor ? 0 : Math.max(0, n));
   const steps = [
-    { key: 'cutting', label: 'cut', value: cut, pending: Math.max(0, planned - cut) },
-    { key: 'stitching', label: 'stitched', value: stitched, pending: Math.max(0, cut - stitched) },
+    { key: 'cutting', label: 'cut', value: cut, pending: owed(planned - cut) },
+    { key: 'stitching', label: 'stitched', value: stitched, pending: owed(cut - stitched) },
     {
       key: 'finishing',
       label: 'finished',
       value: finished,
       // Pieces at the tailor are pending nowhere — they are in alteration.
-      pending: Math.max(0, stitched - scrapped - altered - finished),
+      pending: owed(stitched - scrapped - altered - finished),
     },
   ];
 

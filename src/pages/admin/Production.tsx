@@ -1,13 +1,13 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useNavigate, useSearchParams } from 'react-router-dom';
-import { ChevronRight, Factory, Loader2, Search, Undo2, X } from 'lucide-react';
+import { ChevronRight, Factory, Loader2, Search, X } from 'lucide-react';
 import {
   QueueTabs,
   StyleQueueTable,
   type QueueColumn,
 } from '@/components/styles/StyleQueueTable';
-import { HoverThumbnail, HoverTip } from '@/components/dashboard/StylesInFlightTable';
+import { HoverThumbnail } from '@/components/dashboard/StylesInFlightTable';
 import { TruncText } from '@/components/ui/trunc-text';
 import { SummaryCard } from '@/components/ui/summary-card';
 import { ALL_TIME_FROM_ISO, DateRangePicker } from '@/components/ui/DateRangePicker';
@@ -24,24 +24,23 @@ import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 import { Skeleton } from '@/components/ui/skeleton';
 import RecordOutputDialog from '@/components/production/RecordOutputDialog';
 import StageQtyDialog from '@/components/production/StageQtyDialog';
-import AlterationReturnDialog from '@/components/production/AlterationReturnDialog';
+import EditLotDialog from '@/components/production/EditLotDialog';
 import StartProductionIntakeDialog from '@/components/production/StartProductionIntakeDialog';
 import DispatchBuilderDialog from '@/components/production/DispatchBuilderDialog';
 import CancelBatchDialog from '@/components/production/CancelBatchDialog';
+import ReasonDialog from '@/components/production/ReasonDialog';
 import { createDispatch, type CreateDispatchBody } from '@/api/productionDispatch';
 import { getBrands, type Brand } from '@/api/brands';
 import {
-  ADVANCEABLE_STATUSES,
-  advanceBatch,
   cancelBatch,
   completeBatch,
-  alterationReturn,
   createBatch,
   getBatches,
   parkStyle,
   sendToProduction,
   setFabricStatus,
   unparkStyle,
+  updateLot,
   FABRIC_STATUSES,
   type FabricStatus,
   type BatchOrigin,
@@ -49,7 +48,6 @@ import {
   type CreateBatchBody,
   type ProductionBatch,
   type ProductionKpis,
-  type AlterationReturnItem,
   type StageQtyItem,
 } from '@/api/production';
 import { getInventoryHealth, type InventoryStyle } from '@/api/inventoryHealth';
@@ -57,12 +55,14 @@ import {
   cleanName,
   coverTone,
   meaningfulName,
-  outstandingAlteration,
+  IN_PRODUCTION_STATUSES,
   pendingAtCurrentStage,
   statusLabel,
+  suggestedStage,
 } from '@/lib/production';
 import { UrgencyPill } from '@/pages/admin/InventoryHealth';
 import { useToast } from '@/components/ui/toast';
+import { apiErrorMessage, apiErrorStatus } from '@/api/apiClient';
 import { useAuth } from '@/context/auth';
 import { useDebounced } from '@/lib/useDebounced';
 import {
@@ -90,18 +90,6 @@ const FABRIC_TONE: Record<FabricStatus, string> = {
 
 const PAGE_SIZE = 50;
 
-/** Floor stage order, for direction only. Alteration is absent on purpose: it is
- *  a quantity recorded on a finishing entry, never a stage the lot moves INTO. */
-const STAGE_SEQUENCE: BatchStatus[] = ['planning', 'cutting', 'stitching', 'finishing'];
-
-/** Is this move going forward down the floor? Unknown stages count as forward,
- *  so a new stage defaults to capturing its quantity rather than silently not. */
-function isForward(from: BatchStatus, to: BatchStatus): boolean {
-  const a = STAGE_SEQUENCE.indexOf(from);
-  const b = STAGE_SEQUENCE.indexOf(to);
-  return a === -1 || b === -1 || b > a;
-}
-
 /** Units made but not yet shipped — what a challan can still draw from. */
 function remainingToDispatch(b: ProductionBatch): number {
   return b.sizes.reduce((n, s) => n + Math.max(0, (s.qtyProduced ?? 0) - s.qtyDispatched), 0);
@@ -112,24 +100,9 @@ function hasRemaining(b: ProductionBatch): boolean {
   return remainingToDispatch(b) > 0;
 }
 
-/** Which per-size figure each floor stage reports, and the word for it. */
-const STAGE_DONE: Record<string, { key: 'qtyCut' | 'qtyStitched' | 'qtyFinished'; label: string }> =
-  {
-    cutting: { key: 'qtyCut', label: 'cut' },
-    stitching: { key: 'qtyStitched', label: 'stitched' },
-    finishing: { key: 'qtyFinished', label: 'finished' },
-  };
-
-/**
- * Units recorded into the stage this lot is currently sitting in — "in stitching,
- * 460 stitched". Null off the floor (Planning has no stage) and for lots that ran
- * before stage entries existed, where every figure is a zero that means "unknown".
- */
-function stageTotal(b: ProductionBatch): { qty: number; label: string } | null {
-  const at = STAGE_DONE[b.status];
-  if (!at) return null;
-  const qty = b.sizes.reduce((sum, s) => sum + (s[at.key] ?? 0), 0);
-  return qty > 0 ? { qty, label: at.label } : null;
+/** Where Resume puts a lot: the stage it was held from, else wherever its figures say it is. */
+function resumeTo(b: ProductionBatch): BatchStatus {
+  return b.heldFromStatus ?? suggestedStage(b.sizes);
 }
 
 /** Amber past a week — a batch sitting in one stage is the thing to spot. */
@@ -151,10 +124,6 @@ function daysAgoISO(n: number): string {
  *  you must not hide, and the KPI cards above are unwindowed, so a default
  *  window would also make the cards and the table disagree. Narrowing is an
  *  explicit choice via the picker. */
-
-function fmtDate(iso: string): string {
-  return new Date(iso).toLocaleDateString(undefined, { day: '2-digit', month: 'short' });
-}
 
 export default function Production() {
   const { t } = useTranslation();
@@ -225,12 +194,10 @@ export default function Production() {
   const [intakeOpen, setIntakeOpen] = useState(false);
   const [outputTarget, setOutputTarget] = useState<ProductionBatch | null>(null);
   const [sendTarget, setSendTarget] = useState<ProductionBatch | null>(null);
-  const [stageTarget, setStageTarget] = useState<{ batch: ProductionBatch; status: BatchStatus } | null>(null);
+  const [updateTarget, setUpdateTarget] = useState<ProductionBatch | null>(null);
+  const [holdTarget, setHoldTarget] = useState<ProductionBatch | null>(null);
+  const [resumeTarget, setResumeTarget] = useState<ProductionBatch | null>(null);
   const [cancelTarget, setCancelTarget] = useState<ProductionBatch | null>(null);
-  const [alterTarget, setAlterTarget] = useState<ProductionBatch | null>(null);
-  const [backTarget, setBackTarget] = useState<{ batch: ProductionBatch; status: BatchStatus } | null>(
-    null,
-  );
   const [dropTarget, setDropTarget] = useState<InventoryStyle | null>(null);
   // Completed-tab multi-select → the one place a challan is built. Keyed
   // per-size (`${batchId}:${sku}`) so a challan can ship a subset of a batch's
@@ -425,9 +392,7 @@ export default function Production() {
           ? updated.status === 'planning'
           : tab === 'completed'
             ? updated.status === 'completed'
-            : updated.status === 'cutting' ||
-              updated.status === 'stitching' ||
-              updated.status === 'finishing';
+            : IN_PRODUCTION_STATUSES.includes(updated.status);
       let removed = false;
       setBatches((prev) => {
         if (!inTab) {
@@ -456,13 +421,12 @@ export default function Production() {
     try {
       applyBatch(await fn());
     } catch (e: unknown) {
+      // A refusal on stale figures means this board is behind — re-read it.
+      if (apiErrorStatus(e) === 409) void load();
       // The server explains refusals ("lot is dispatched — this action needs
       // …"); show that rather than burying it under the generic line.
-      const raw = (e as { response?: { data?: { message?: string | string[] } } })
-        ?.response?.data?.message;
-      const m = Array.isArray(raw) ? raw.join(', ') : raw;
       toast.show(
-        m ||
+        apiErrorMessage(e) ||
           t('admin.production.actionFailed', {
             defaultValue: "That didn't go through. Refresh and try again.",
           }),
@@ -534,12 +498,17 @@ export default function Production() {
       .finally(() => setBusy(false));
   };
 
-  const onRecordOutput = (items: { sku: string; qtyProduced: number }[], reason?: string) => {
+  const onRecordOutput = (
+    items: { sku: string; qtyProduced: number; qtyToSubLot?: number }[],
+    reason?: string,
+  ) => {
     const target = outputTarget;
     if (!target) return;
     return runAction(async () => {
       const updated = await completeBatch(target.id, items, reason);
       setOutputTarget(null);
+      // A new sub-lot hangs off the root lot, so re-read whenever this lot is part of a split.
+      if (updated.parentBatch || updated.subLots.length > 0) void load();
       return updated;
     });
   };
@@ -556,18 +525,6 @@ export default function Production() {
       // The batch just left Pipeline for the floor — follow it to the tab it's
       // now on (the send button only exists on Pipeline, so this always moves).
       selectTab('in_production');
-      return updated;
-    });
-  };
-
-  // A stage move records how many pieces reached that stage. It does NOT touch
-  // the plan — "planned 500, cut 480" has to survive the move.
-  const onStageQty = (items: StageQtyItem[]) => {
-    const tgt = stageTarget;
-    if (!tgt) return;
-    return runAction(async () => {
-      const updated = await advanceBatch(tgt.batch.id, tgt.status, items);
-      setStageTarget(null);
       return updated;
     });
   };
@@ -784,8 +741,9 @@ export default function Production() {
             options={[
               ...(tab === 'completed'
                 ? (['completed', 'dispatched'] as BatchStatus[])
-                : ADVANCEABLE_STATUSES.filter((x) => x !== 'dispatched')),
-              'cancelled' as BatchStatus,
+                : IN_PRODUCTION_STATUSES),
+              // Cancelled lots are the owner's to see, like cancelling them.
+              ...(canCancel ? ['cancelled' as BatchStatus] : []),
             ].map((x) => ({ value: x, label: statusLabel(t, x) }))}
             value={statusFilter ? [statusFilter] : []}
             onToggle={(x) => setStatusFilter(statusFilter === x ? '' : x)}
@@ -844,17 +802,9 @@ export default function Production() {
           allSelected={allSelected}
           onToggleLot={toggleLot}
           onToggleAll={toggleAllLots}
-          onStage={(b, status) => {
-            // Recording a quantity — into the stage the lot is in, or the one it
-            // is moving to. The server appends either way.
-            if (status === b.status || isForward(b.status, status)) {
-              setStageTarget({ batch: b, status });
-            } else {
-              // Going back records nothing and undoes nothing, which is exactly
-              // why it needs saying out loud before it happens.
-              setBackTarget({ batch: b, status });
-            }
-          }}
+          onUpdate={(b) => setUpdateTarget(b)}
+          onHold={(b) => setHoldTarget(b)}
+          onResume={(b) => setResumeTarget(b)}
           onComplete={(b) => setOutputTarget(b)}
           onOpen={(b) => navigate(`/admin/production/lots/${b.id}`)}
           onSend={(b) => setSendTarget(b)}
@@ -862,7 +812,6 @@ export default function Production() {
             void runAction(() => setFabricStatus(b.id, next))
           }
           onCancel={(b) => setCancelTarget(b)}
-          onAlterationReturn={(b) => setAlterTarget(b)}
         />
       )}
 
@@ -894,18 +843,66 @@ export default function Production() {
         open={sendTarget !== null}
         busy={busy}
         batch={sendTarget}
-        stage="cutting"
-        askTailor
         onClose={() => setSendTarget(null)}
         onConfirm={onSend}
       />
-      <StageQtyDialog
-        open={stageTarget !== null}
+      <EditLotDialog
+        open={updateTarget !== null}
+        lot={updateTarget}
+        onClose={() => setUpdateTarget(null)}
+        onSaved={(updated) => {
+          setUpdateTarget(null);
+          applyBatch(updated);
+        }}
+        onStale={() => void load()}
+      />
+      <ReasonDialog
+        open={holdTarget !== null}
         busy={busy}
-        batch={stageTarget?.batch ?? null}
-        stage={stageTarget?.status ?? 'stitching'}
-        onClose={() => setStageTarget(null)}
-        onConfirm={onStageQty}
+        destructive={false}
+        title={t('admin.production.hold.title', {
+          defaultValue: 'Put lot {{no}} on hold?',
+          no: holdTarget?.batchNo ?? '',
+        })}
+        confirmLabel={t('admin.production.hold.cta', { defaultValue: 'Hold' })}
+        cancelLabel={t('common.cancel', { defaultValue: 'Cancel' })}
+        placeholder={t('admin.production.hold.reasonPlaceholder', {
+          defaultValue: 'Why is this lot on hold?',
+        })}
+        maxLength={500}
+        onClose={() => setHoldTarget(null)}
+        onConfirm={(holdReason) => {
+          const target = holdTarget;
+          setHoldTarget(null);
+          if (target) {
+            void runAction(() =>
+              updateLot(target.id, { status: 'on_hold', holdReason, expectedStatus: target.status }),
+            );
+          }
+        }}
+      />
+      <ConfirmDialog
+        open={resumeTarget !== null}
+        title={t('admin.production.resume.title', {
+          defaultValue: 'Resume lot {{no}}?',
+          no: resumeTarget?.batchNo ?? '',
+        })}
+        message={t('admin.production.resume.message', {
+          defaultValue: 'It goes back to {{to}}.',
+          to: resumeTarget ? statusLabel(t, resumeTo(resumeTarget)) : '',
+        })}
+        confirmLabel={t('admin.production.resume.cta', { defaultValue: 'Resume' })}
+        cancelLabel={t('common.cancel', { defaultValue: 'Cancel' })}
+        onCancel={() => setResumeTarget(null)}
+        onConfirm={() => {
+          const target = resumeTarget;
+          setResumeTarget(null);
+          if (target) {
+            void runAction(() =>
+              updateLot(target.id, { status: resumeTo(target), expectedStatus: 'on_hold' }),
+            );
+          }
+        }}
       />
       <StartProductionIntakeDialog
         open={intakeOpen}
@@ -919,50 +916,6 @@ export default function Production() {
         batches={selectedBatches}
         onClose={() => setBuilderOpen(false)}
         onConfirm={onCreateDispatch}
-      />
-      {/* Going back is a status correction and nothing else: no quantity is
-          recorded, and none of the recorded work is undone. Said out loud,
-          because the numbers staying put surprises people. */}
-      <ConfirmDialog
-        open={backTarget !== null}
-        title={t('admin.production.moveBack.title', { defaultValue: 'Move this lot back?' })}
-        message={(() => {
-          if (!backTarget) return '';
-          const at = stageTotal(backTarget.batch);
-          const to = statusLabel(t, backTarget.status);
-          return at
-            ? t('admin.production.moveBack.recorded', {
-                defaultValue:
-                  '{{qty}} {{label}} is already recorded. Moving back does not undo that — the lot will simply show as {{to}}.',
-                qty: at.qty,
-                label: at.label,
-                to,
-              })
-            : t('admin.production.moveBack.plain', {
-                defaultValue:
-                  'Nothing is recorded or undone by this — the lot will simply show as {{to}}.',
-                to,
-              });
-        })()}
-        confirmLabel={t('admin.production.moveBack.cta', { defaultValue: 'Move back' })}
-        cancelLabel={t('common.cancel', { defaultValue: 'Cancel' })}
-        onCancel={() => setBackTarget(null)}
-        onConfirm={() => {
-          const target = backTarget;
-          setBackTarget(null);
-          if (target) void runAction(() => advanceBatch(target.batch.id, target.status));
-        }}
-      />
-      <AlterationReturnDialog
-        open={alterTarget !== null}
-        busy={busy}
-        batch={alterTarget}
-        onClose={() => setAlterTarget(null)}
-        onConfirm={(items: AlterationReturnItem[]) => {
-          const target = alterTarget;
-          setAlterTarget(null);
-          if (target) void runAction(() => alterationReturn(target.id, items));
-        }}
       />
       <CancelBatchDialog
         open={cancelTarget !== null}
@@ -1317,13 +1270,14 @@ function BatchTable({
   allSelected = false,
   onToggleLot,
   onToggleAll,
-  onStage,
+  onUpdate,
+  onHold,
+  onResume,
   onSend,
   onFabricStatus,
   onCancel,
   onComplete,
   onOpen,
-  onAlterationReturn,
 }: {
   rows: ProductionBatch[];
   tab: Tab;
@@ -1340,7 +1294,12 @@ function BatchTable({
   allSelected?: boolean;
   onToggleLot?: (id: number) => void;
   onToggleAll?: (on: boolean) => void;
-  onStage: (batch: ProductionBatch, status: BatchStatus) => void;
+  /** Opens the Update dialog — plan, stage totals, stage, remark, hold. */
+  onUpdate: (batch: ProductionBatch) => void;
+  /** Asks why, then puts the lot on hold. */
+  onHold: (batch: ProductionBatch) => void;
+  /** Returns a held lot to the stage it was held from. */
+  onResume: (batch: ProductionBatch) => void;
   onSend: (batch: ProductionBatch) => void;
   onFabricStatus: (batch: ProductionBatch, next: FabricStatus | null) => void;
   onCancel: (batch: ProductionBatch) => void;
@@ -1348,8 +1307,6 @@ function BatchTable({
   onComplete?: (batch: ProductionBatch) => void;
   /** Opens the lot's own page. */
   onOpen?: (batch: ProductionBatch) => void;
-  /** Fired by the "N in alteration" chip — records pieces coming back. */
-  onAlterationReturn?: (batch: ProductionBatch) => void;
 }) {
   const { t } = useTranslation();
 
@@ -1473,48 +1430,6 @@ function BatchTable({
       ),
     });
 
-    cols.push({
-      key: 'sizes',
-      width: '180px',
-      header: t('admin.production.sizes', { defaultValue: 'Sizes' }),
-      cell: (b) => (
-        // Circular chips: the size ladder at a glance, quantity one hover away.
-        // A rectangular "S 100" chip cost ~50px each and broke the column.
-        <div className="flex flex-wrap items-center gap-1">
-          {b.sizes.slice(0, 5).map((s) => (
-            <HoverTip
-              key={s.sku}
-              content={
-                <span className="whitespace-nowrap">
-                  {s.size} · {s.qtyPlanned}
-                </span>
-              }
-            >
-              <span className="flex h-6 w-6 items-center justify-center rounded-full bg-[var(--color-surface-2)] text-[10px] font-semibold text-[var(--color-foreground)]">
-                {s.size}
-              </span>
-            </HoverTip>
-          ))}
-          {b.sizes.length > 5 && (
-            <HoverTip
-              content={
-                <span className="whitespace-nowrap">
-                  {b.sizes
-                    .slice(5)
-                    .map((s) => `${s.size} · ${s.qtyPlanned}`)
-                    .join(', ')}
-                </span>
-              }
-            >
-              <span className="text-[11px] text-[var(--color-muted-foreground)]">
-                +{b.sizes.length - 5}
-              </span>
-            </HoverTip>
-          )}
-        </div>
-      ),
-    });
-
     // Pipeline only: once the lot is on the floor the cloth is demonstrably
     // there, and the BE refuses the edit anyway.
     if (tab === 'planning') {
@@ -1594,100 +1509,112 @@ function BatchTable({
       });
     }
 
+    // The current status and how long the lot has sat in it — amber past a week.
     cols.push({
-      key: 'stage',
-      width: '130px',
-      header: t('admin.production.stage', { defaultValue: 'Stage' }),
-      cell: (b) =>
-        // A lot listed here only because pieces are still out for alteration is
-        // already completed: reopening it would null the `qtyProduced` a challan
-        // may already have been built from. Badge only — the chip is its action.
-        canWrite && tab === 'in_production' && b.status !== 'completed' ? (
-          <select
-            value=""
-            disabled={busy}
-            onClick={stopRowClick}
-            onChange={(e) => {
-              if (e.target.value) onStage(b, e.target.value as BatchStatus);
-            }}
-            className="h-8 w-full rounded-[var(--radius-sm)] border border-[var(--color-border)] bg-white px-2 text-xs font-semibold focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-ring)]"
-          >
-            {/* Hidden, so it is what the closed select DISPLAYS without also
-                appearing in the list. The select never holds a stage as its
-                value: picking the stage the lot is already in has to stay a real
-                change, or the browser fires nothing at all. */}
-            <option value="" hidden>
-              {statusLabel(t, b.status)}
-            </option>
-            {/* Sourced from ADVANCEABLE_STATUSES rather than a literal list, so
-                the dropdown and the server's accepted set can't drift. */}
-            {ADVANCEABLE_STATUSES.filter((s) => s !== 'dispatched').map((s) => (
-              <option key={s} value={s}>
-                {statusLabel(t, s)}
-              </option>
-            ))}
-          </select>
-        ) : (
-          <Badge variant="outline">{statusLabel(t, b.status)}</Badge>
-        ),
+      key: 'status',
+      width: '170px',
+      header: t('admin.production.inStatus', { defaultValue: 'In status' }),
+      cell: (b) => (
+        <span className="flex items-center gap-2">
+          <Badge variant={b.status === 'on_hold' ? 'rework' : 'outline'}>
+            {statusLabel(t, b.status)}
+          </Badge>
+          <span className={ageTone(b.daysInStatus)}>{b.daysInStatus}d</span>
+        </span>
+      ),
     });
 
-    // "N in alteration" — the signal and the action are the same object: the
-    // number telling you work is outstanding IS the button that clears it, so
-    // there is nothing to hunt for. Never in the pipeline: nothing has reached
-    // a stage yet, so it only ever rendered a dash there.
+    // By status, not tab: the Cancelled filter lists lots here with nothing to act on.
+    const onFloor = (b: ProductionBatch) => IN_PRODUCTION_STATUSES.includes(b.status);
+
+    // An ordinary column so Remark can sit after it; left out where nobody can act.
+    const hasActions =
+      (canWrite && (tab === 'planning' || tab === 'in_production')) ||
+      (canCancel && tab !== 'completed');
+    if (hasActions) cols.push({
+      key: 'actions',
+      width: tab === 'planning' ? '260px' : '340px',
+      header: '',
+      cell: (b) => (
+            <span className="flex items-center gap-2" onClick={stopRowClick}>
+              {canWrite && tab === 'planning' && (
+                <Button
+                  size="sm"
+                  // The server refuses both, so the click was only going to fail.
+                  disabled={busy || b.fabricStatus == null || b.fabricStatus === 'not_available'}
+                  title={
+                    b.fabricStatus == null
+                      ? t('admin.production.blockedFabricUnset', {
+                          defaultValue: 'Set the fabric status first.',
+                        })
+                      : b.fabricStatus === 'not_available'
+                        ? t('admin.production.blockedNoFabric', {
+                            defaultValue: 'Fabric is marked not available.',
+                          })
+                        : undefined
+                  }
+                  onClick={() => onSend(b)}
+                >
+                  {t('admin.production.sendToProduction', { defaultValue: 'Send to production' })}
+                </Button>
+              )}
+              {canWrite && onFloor(b) && (
+                <Button size="sm" disabled={busy} onClick={() => onUpdate(b)}>
+                  {t('admin.production.update.cta', { defaultValue: 'Update' })}
+                </Button>
+              )}
+              {canWrite && onFloor(b) && (
+                b.status === 'on_hold' ? (
+                  <Button size="sm" variant="outline" disabled={busy} onClick={() => onResume(b)}>
+                    {t('admin.production.resume.cta', { defaultValue: 'Resume' })}
+                  </Button>
+                ) : (
+                  <Button size="sm" variant="warning" disabled={busy} onClick={() => onHold(b)}>
+                    {t('admin.production.hold.cta', { defaultValue: 'Hold' })}
+                  </Button>
+                )
+              )}
+              {/* Closing the lot is a deliberate click, never a side effect of
+                  reaching finishing — 10 of 14 made keeps the lot open. A held lot
+                  is resumed first. */}
+              {canWrite && onFloor(b) && b.status !== 'on_hold' && (
+                <Button size="sm" variant="success" disabled={busy} onClick={() => onComplete?.(b)}>
+                  {t('admin.production.completeCta', { defaultValue: 'Complete' })}
+                </Button>
+              )}
+              {/* Completed, dispatched or already cancelled — nothing left to cancel. */}
+              {canCancel && (onFloor(b) || b.status === 'planning') && (
+                <Button variant="destructive" size="sm" disabled={busy} onClick={() => onCancel(b)}>
+                  {t('admin.production.cancelCta', { defaultValue: 'Cancel' })}
+                </Button>
+              )}
+            </span>
+      ),
+    });
+
+    // Why it is held while it is held; otherwise the lot's own remark.
     if (tab !== 'planning') {
       cols.push({
-        key: 'alteration',
-        width: '132px',
-        header: t('admin.production.alteration', { defaultValue: 'Alteration' }),
+        key: 'remark',
+        width: '180px',
+        header: t('admin.production.remark', { defaultValue: 'Remark' }),
         cell: (b) => {
-          const out = outstandingAlteration(b);
-          if (out === 0) return <span className="text-[var(--color-muted-foreground)]">—</span>;
-          if (!canWrite || !onAlterationReturn) {
-            return (
-              <Badge variant="rework">
-                {t('admin.production.alterationOut', { defaultValue: '{{n}} out', n: out })}
-              </Badge>
-            );
-          }
+          const text = b.status === 'on_hold' ? b.holdReason : b.notes;
+          if (!text) return <span className="text-[var(--color-muted-foreground)]">—</span>;
           return (
-            <button
-              type="button"
-              onClick={(e) => {
-                e.stopPropagation();
-                onAlterationReturn(b);
-              }}
-              className="inline-flex items-center gap-1 rounded-full bg-amber-50 px-2 py-1 text-[11px] font-semibold text-amber-700 transition hover:bg-amber-100"
+            <div
+              title={text}
+              className={`line-clamp-3 whitespace-pre-line break-words text-[13px] ${
+                b.status === 'on_hold' ? 'font-semibold text-amber-700' : ''
+              }`}
             >
-              <Undo2 size={12} />
-              {t('admin.production.alterationOut', { defaultValue: '{{n}} out', n: out })}
-            </button>
+              {text}
+            </div>
           );
         },
       });
+
     }
-
-    cols.push({
-      key: 'age',
-      width: '82px',
-      header: t('admin.production.inStatus', { defaultValue: 'In status' }),
-      cell: (b) => <span className={ageTone(b.daysInStatus)}>{b.daysInStatus}d</span>,
-    });
-
-    cols.push({
-      key: 'started',
-      width: '116px',
-      header: t('admin.production.started', { defaultValue: 'Started' }),
-      cell: (b) => (
-        <div className="min-w-0">
-          <div className="truncate">{fmtDate(b.startedAt)}</div>
-          <div className="truncate text-[11px] text-[var(--color-muted-foreground)]">
-            {b.createdBy?.name ?? '—'}
-          </div>
-        </div>
-      ),
-    });
 
     return cols;
   }, [
@@ -1702,7 +1629,13 @@ function BatchTable({
     allSelected,
     onToggleLot,
     onToggleAll,
-    onStage,
+    onUpdate,
+    onHold,
+    onResume,
+    onSend,
+    onComplete,
+    onCancel,
+    canCancel,
     onOpen,
   ]);
 
@@ -1715,45 +1648,6 @@ function BatchTable({
       loadingLabel={t('common.loading', { defaultValue: 'Loading…' })}
       emptyLabel={t('admin.production.empty', { defaultValue: 'No batches here yet.' })}
       onRowClick={onOpen}
-      actionsWidth="200px"
-      renderActions={(b) => (
-        <span className="flex items-center gap-2" onClick={stopRowClick}>
-          {canWrite && tab === 'planning' && (
-            <Button
-              size="sm"
-              // The server refuses both, so the click was only going to fail.
-              disabled={busy || b.fabricStatus == null || b.fabricStatus === 'not_available'}
-              title={
-                b.fabricStatus == null
-                  ? t('admin.production.blockedFabricUnset', {
-                      defaultValue: 'Set the fabric status first.',
-                    })
-                  : b.fabricStatus === 'not_available'
-                    ? t('admin.production.blockedNoFabric', {
-                        defaultValue: 'Fabric is marked not available.',
-                      })
-                    : undefined
-              }
-              onClick={() => onSend(b)}
-            >
-              {t('admin.production.sendToProduction', { defaultValue: 'Send to production' })}
-            </Button>
-          )}
-          {/* Closing the lot is a deliberate click, never a side effect of
-              reaching finishing — 10 of 14 made keeps the lot open. */}
-          {canWrite && tab === 'in_production' && b.status !== 'completed' && (
-            <Button size="sm" disabled={busy} onClick={() => onComplete?.(b)}>
-              {t('admin.production.completeCta', { defaultValue: 'Complete' })}
-            </Button>
-          )}
-          {/* A completed batch is done — nothing to cancel — so it's hidden there. */}
-          {canCancel && b.status !== 'dispatched' && b.status !== 'completed' && (
-            <Button variant="destructive" size="sm" disabled={busy} onClick={() => onCancel(b)}>
-              {t('admin.production.cancelCta', { defaultValue: 'Cancel' })}
-            </Button>
-          )}
-        </span>
-      )}
     />
   );
 }

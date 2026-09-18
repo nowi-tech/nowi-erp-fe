@@ -16,6 +16,9 @@ export default function ReasonDialog({
   confirmLabel,
   placeholder,
   minLength = 3,
+  destructive = true,
+  cancelLabel,
+  maxLength,
   onClose,
   onConfirm,
 }: {
@@ -25,6 +28,11 @@ export default function ReasonDialog({
   confirmLabel: string;
   placeholder?: string;
   minLength?: number;
+  /** False for a non-destructive ask, like putting a lot on hold. */
+  destructive?: boolean;
+  cancelLabel?: string;
+  /** Mirrors the server's limit, so a long reason is stopped here rather than lost on save. */
+  maxLength?: number;
   onClose: () => void;
   onConfirm: (reason: string) => void;
 }) {
@@ -46,10 +54,10 @@ export default function ReasonDialog({
       footer={
         <>
           <Button variant="outline" size="sm" disabled={busy} onClick={onClose}>
-            {t('admin.production.cancel.keep', { defaultValue: 'Keep it' })}
+            {cancelLabel ?? t('admin.production.cancel.keep', { defaultValue: 'Keep it' })}
           </Button>
           <Button
-            variant="destructive"
+            variant={destructive ? 'destructive' : 'default'}
             size="sm"
             disabled={busy || !valid}
             onClick={() => onConfirm(reason.trim())}
@@ -65,6 +73,7 @@ export default function ReasonDialog({
       <Input
         autoFocus
         value={reason}
+        maxLength={maxLength}
         onChange={(e) => setReason(e.target.value)}
         placeholder={placeholder}
       />

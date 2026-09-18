@@ -9,16 +9,12 @@ import { useToast } from '@/components/ui/toast';
 import LotStageStepper from '@/components/production/LotStageStepper';
 import EditLotDialog from '@/components/production/EditLotDialog';
 import {
-  advanceBatch,
-  correctStageQuantities,
   getLot,
-  updateBatch,
-  type CorrectStageQtyItem,
-  type BatchStatus,
+  type BatchSizeLine,
   type LotDetail,
   type LotTimelineEntry,
 } from '@/api/production';
-import { pendingAt, statusLabel } from '@/lib/production';
+import { hasLeftFloor, IN_PRODUCTION_STATUSES, pendingAt, statusLabel } from '@/lib/production';
 import { hasAnyRole, PRODUCTION_WRITE_ROLES } from '@/lib/userRoles';
 import { useAuth } from '@/context/auth';
 
@@ -36,8 +32,6 @@ const STAGE_VARIANT: Record<
   scrapped: 'destructive',
 };
 
-/** Statuses the server will accept a plan edit on. */
-const ON_FLOOR: BatchStatus[] = ['cutting', 'stitching', 'finishing'];
 
 function fmtDate(iso: string | null): string {
   if (!iso) return '—';
@@ -61,8 +55,8 @@ function fmtDateTime(iso: string): string {
  * One production lot, end to end: what was planned, what each floor stage
  * actually recorded, and who recorded it.
  *
- * Read-only on purpose — every figure here is entered through the board's stage
- * dialogs, so there is exactly one way to write a lot's history.
+ * Every figure is written through the Update dialog — the same one the board
+ * opens — so there is exactly one way to change a lot's history.
  */
 export default function ProductionLotDetail() {
   const { t } = useTranslation();
@@ -73,10 +67,7 @@ export default function ProductionLotDetail() {
   const canWrite = hasAnyRole(user, PRODUCTION_WRITE_ROLES);
   const [lot, setLot] = useState<LotDetail | null>(null);
   const [loading, setLoading] = useState(true);
-  // The lot page is where a mis-click gets undone: the board only ever moves a
-  // lot forward, so a wrong stage — and the plan behind it — is corrected here.
   const [editOpen, setEditOpen] = useState(false);
-  const [saving, setSaving] = useState(false);
 
   const latestId = useRef(id);
   useEffect(() => {
@@ -124,43 +115,6 @@ export default function ProductionLotDetail() {
     const forId = id;
     const fresh = await getLot(Number(forId));
     if (forId === latestId.current) setLot(fresh);
-  };
-
-  const save = async (
-    planned: Record<string, number>,
-    corrections: CorrectStageQtyItem[],
-    status: BatchStatus,
-  ) => {
-    if (!lot) return;
-    setSaving(true);
-    try {
-      const plannedChanged = lot.sizes.some((s) => planned[s.sku] !== s.qtyPlanned);
-      // `items` REPLACES the size lines, so every size goes up, not just edits.
-      if (plannedChanged) {
-        await updateBatch(lot.id, {
-          items: lot.sizes.map((s) => ({
-            sku: s.sku,
-            size: s.size,
-            qtyPlanned: planned[s.sku] ?? s.qtyPlanned,
-          })),
-        });
-      }
-      // Before the stage move: a correction is refused once the lot is off the
-      // floor, so it has to land while the lot is still where it was.
-      if (corrections.length > 0) await correctStageQuantities(lot.id, corrections);
-      if (status !== lot.status) await advanceBatch(lot.id, status);
-      await reload();
-      setEditOpen(false);
-      toast.show(t('common.saved', { defaultValue: 'Saved.' }));
-    } catch {
-      // These are three separate calls, so a failure part-way leaves some of the
-      // edit applied. Re-read either way, or the page keeps showing figures the
-      // server no longer holds.
-      await reload().catch(() => undefined);
-      toast.show(t('common.error', { defaultValue: 'Something went wrong.' }), 'error');
-    } finally {
-      setSaving(false);
-    }
   };
 
   if (loading) {
@@ -218,7 +172,12 @@ export default function ProductionLotDetail() {
     preJourney ? '—' : qty;
 
   /** Off the floor there is nothing "at" a stage — the lot is closed. */
-  const pastFloor = ['completed', 'dispatched'].includes(lot.status);
+  const pastFloor = hasLeftFloor(lot.status);
+  // A closed lot owes nothing, even where a stage figure was never typed in.
+  const owed = (stage: 'cutting' | 'stitching' | 'finishing', s: BatchSizeLine) =>
+    pastFloor ? 0 : pendingAt[stage](s);
+  const owedTotal = (stage: 'cutting' | 'stitching' | 'finishing') =>
+    lot.sizes.reduce((n, s) => n + owed(stage, s), 0);
 
   /** The recorded figure — the same number the edit dialog holds — with the
    *  work still owed at this stage beneath it. */
@@ -273,14 +232,29 @@ export default function ProductionLotDetail() {
         {lot.brandName && <Badge variant="outline">{lot.brandName}</Badge>}
         {lot.colourName && <Badge variant="outline">{lot.colourName}</Badge>}
 
-        {/* The server only accepts a plan edit while the lot is on the floor,
-            so the button is absent rather than failing on save. */}
-        {canWrite && ON_FLOOR.includes(lot.status) && (
+        {/* Sub-lots link both ways: the rest of this lot, or where this one came from. */}
+        {[
+          ...(lot.parentBatch
+            ? [{ ...lot.parentBatch, label: t('admin.production.lot.splitFrom', { defaultValue: 'From {{no}}', no: lot.parentBatch.batchNo }) }]
+            : []),
+          ...lot.subLots.map((l) => ({ ...l, label: l.batchNo })),
+        ].map((l) => (
+          <button
+            key={l.id}
+            type="button"
+            onClick={() => navigate(`/admin/production/lots/${l.id}`)}
+            className="rounded-full border border-[var(--color-border)] px-2.5 py-0.5 font-mono text-xs text-[var(--color-primary)] hover:underline"
+          >
+            {l.label}
+          </button>
+        ))}
+
+        {/* Only where the server accepts an Update, so the button never fails on save. */}
+        {canWrite && IN_PRODUCTION_STATUSES.includes(lot.status) && (
           <Button
             variant="outline"
             size="sm"
             className="ml-auto"
-            disabled={saving}
             onClick={() => setEditOpen(true)}
           >
             {t('common.edit', { defaultValue: 'Edit' })}
@@ -340,11 +314,11 @@ export default function ProductionLotDetail() {
                     <td className="py-2 pr-3 font-semibold">{s.size}</td>
                     <td className="py-2 pr-3 text-right">{s.qtyPlanned}</td>
                     <td className="py-2 pr-3 text-right">
-                      {cell('cutting', s.qtyCut, pendingAt.cutting(s))}
+                      {cell('cutting', s.qtyCut, owed('cutting', s))}
                     </td>
 
                     <td className="py-2 pr-3 text-right">
-                      {cell('stitching', s.qtyStitched, pendingAt.stitching(s))}
+                      {cell('stitching', s.qtyStitched, owed('stitching', s))}
                     </td>
                     <td className="py-2 pr-3 text-right text-[var(--color-muted-foreground)]">
                       {stageCell('alteration', s.qtyAltered)}
@@ -356,7 +330,7 @@ export default function ProductionLotDetail() {
                           : 'text-[var(--color-muted-foreground)]'
                       }`}
                     >
-                      {cell('finishing', s.qtyFinished, pendingAt.finishing(s))}
+                      {cell('finishing', s.qtyFinished, owed('finishing', s))}
                     </td>
                     <td className="py-2 pr-3 text-right text-[var(--color-muted-foreground)]">
                       {s.qtyDispatched}
@@ -372,10 +346,10 @@ export default function ProductionLotDetail() {
                   </td>
                   <td className="py-2 pr-3 text-right">{totals.planned}</td>
                   <td className="py-2 pr-3 text-right">
-                    {cell('cutting', totals.cut, Math.max(0, totals.planned - totals.cut))}
+                    {cell('cutting', totals.cut, owedTotal('cutting'))}
                   </td>
                   <td className="py-2 pr-3 text-right">
-                    {cell('stitching', totals.stitched, Math.max(0, totals.cut - totals.stitched))}
+                    {cell('stitching', totals.stitched, owedTotal('stitching'))}
                   </td>
                   <td className="py-2 pr-3 text-right text-[var(--color-muted-foreground)]">
                     {stageCell('alteration', totals.altered)}
@@ -387,15 +361,8 @@ export default function ProductionLotDetail() {
                         : 'text-[var(--color-muted-foreground)]'
                     }`}
                   >
-                    {/* Summed from the SAME per-size helper the rows above use, so
-                        the total can't drift from them — subtracting `altered` here
-                        made it disagree with its own rows and with the board, which
-                        both keep pieces out for alteration pending. */}
-                    {cell(
-                      'finishing',
-                      totals.finished,
-                      lot.sizes.reduce((n, s) => n + pendingAt.finishing(s), 0),
-                    )}
+                    {/* Summed from the per-size helper, so the total can't drift from its rows. */}
+                    {cell('finishing', totals.finished, owedTotal('finishing'))}
                   </td>
                   <td className="py-2 pr-3 text-right text-[var(--color-muted-foreground)]">
                     {totals.dispatched}
@@ -484,10 +451,22 @@ export default function ProductionLotDetail() {
               label={t('admin.production.lot.createdBy', { defaultValue: 'Added by' })}
               value={lot.createdBy?.name ?? '—'}
             />
+            {lot.holdReason && (
+              <Field
+                label={t('admin.production.lot.holdReason', { defaultValue: 'On hold because' })}
+                value={lot.holdReason}
+              />
+            )}
             {lot.notes && (
               <Field
-                label={t('admin.production.lot.notes', { defaultValue: 'Notes' })}
+                label={t('admin.production.remark', { defaultValue: 'Remark' })}
                 value={lot.notes}
+              />
+            )}
+            {lot.lastUpdateSummary && (
+              <Field
+                label={t('admin.production.lastUpdate', { defaultValue: 'Last update' })}
+                value={`${lot.lastUpdateSummary} — ${lot.lastUpdatedBy?.name ?? '—'}, ${lot.lastUpdatedAt ? fmtDateTime(lot.lastUpdatedAt) : ''}`}
               />
             )}
             {lot.shortfallReason && (
@@ -531,10 +510,13 @@ export default function ProductionLotDetail() {
 
       <EditLotDialog
         open={editOpen}
-        busy={saving}
         lot={lot}
         onClose={() => setEditOpen(false)}
-        onSave={(planned, corrections, status) => void save(planned, corrections, status)}
+        onSaved={() => {
+          setEditOpen(false);
+          // The row has no timeline, so re-read the lot rather than merging it in.
+          void reload().catch(() => undefined);
+        }}
       />
     </div>
   );
@@ -554,7 +536,7 @@ function Field({ label, value }: { label: string; value: string }) {
   return (
     <div>
       <dt className="text-xs text-[var(--color-muted-foreground)]">{label}</dt>
-      <dd className="font-medium">{value}</dd>
+      <dd className="whitespace-pre-line break-words font-medium">{value}</dd>
     </div>
   );
 }

@@ -27,9 +27,17 @@ export function outstandingAlteration(b: { sizes: { qtyAltered: number }[] }): n
   return b.sizes.reduce((n, s) => n + outstandingAlterationFor(s), 0);
 }
 
-/** The three stages a lot physically passes through on the floor. */
-export const FLOOR_STAGES = ['cutting', 'stitching', 'finishing'] as const;
+/** The floor stages a lot is worked in. */
+export const FLOOR_STAGES = ['cutting', 'stitching', 'finishing', 'alteration'] as const;
 export type FloorStage = (typeof FLOOR_STAGES)[number];
+
+/** Closed for work: nothing is owed at a stage any more, whatever the figures read. */
+export function hasLeftFloor(status: BatchStatus): boolean {
+  return status === 'completed' || status === 'dispatched' || status === 'cancelled';
+}
+
+/** What the Production tab lists and the Update dialog accepts — mirrors BE `IN_PRODUCTION_STATUSES`. */
+export const IN_PRODUCTION_STATUSES: readonly BatchStatus[] = [...FLOOR_STAGES, 'on_hold'];
 
 function isFloorStage(s: BatchStatus): s is FloorStage {
   return (FLOOR_STAGES as readonly string[]).includes(s);
@@ -54,17 +62,18 @@ export const pendingAt: Record<FloorStage, (s: BatchSizeLine) => number> = {
   cutting: (s) => Math.max(0, s.qtyPlanned - s.qtyCut),
   stitching: (s) => Math.max(0, s.qtyCut - s.qtyStitched),
   finishing: (s) => Math.max(0, s.qtyStitched - s.qtyScrapped - s.qtyFinished),
+  alteration: (s) => outstandingAlterationFor(s),
 };
 
-/** Whole-lot work owed at the stage the lot is in RIGHT NOW. Null off the floor
- *  (planning / completed / dispatched / cancelled) — the lot is not at a stage,
- *  so nothing is owed at one. Shared by the board and the lot page. */
+/** Whole-lot work owed at the lot's stage (a held lot: the stage it was held from); null off the floor. */
 export function pendingAtCurrentStage(b: {
   status: BatchStatus;
+  heldFromStatus?: BatchStatus | null;
   sizes: BatchSizeLine[];
 }): number | null {
-  if (!isFloorStage(b.status)) return null;
-  const owed = pendingAt[b.status];
+  const at = b.status === 'on_hold' ? b.heldFromStatus : b.status;
+  if (!at || !isFloorStage(at)) return null;
+  const owed = pendingAt[at];
   return b.sizes.reduce((n, s) => n + owed(s), 0);
 }
 
@@ -72,6 +81,8 @@ const FLOOR_STAGE_LABEL: Partial<Record<BatchStatus, string>> = {
   cutting: 'In cutting',
   stitching: 'In stitching',
   finishing: 'In finishing',
+  alteration: 'In alteration',
+  on_hold: 'On hold',
 };
 
 /** Status label, shared so the board and the lot page can't word it differently. */
@@ -115,4 +126,23 @@ export function coverTone(days: number | null | undefined): string {
   if (days < 7) return 'text-[var(--color-destructive)]';
   if (days <= 15) return 'text-amber-600';
   return 'text-[var(--color-muted-foreground)]';
+}
+
+/** Latest stage with pieces recorded, or the next once it has nothing left — mirrors BE `stageFor`. */
+export function suggestedStage(sizes: BatchSizeLine[]): FloorStage {
+  const sum = (pick: (s: BatchSizeLine) => number) => sizes.reduce((n, s) => n + pick(s), 0);
+  const altered = sum(outstandingAlterationFor);
+  const owedFinishing = sum((s) =>
+    Math.max(0, s.qtyStitched - s.qtyScrapped - outstandingAlterationFor(s) - s.qtyFinished),
+  );
+  if (sum((s) => s.qtyFinished) > 0 || altered > 0) {
+    return owedFinishing === 0 && altered > 0 ? 'alteration' : 'finishing';
+  }
+  if (sum((s) => s.qtyStitched) > 0) {
+    return sum(pendingAt.stitching) === 0 ? 'finishing' : 'stitching';
+  }
+  if (sum((s) => s.qtyCut) > 0) {
+    return sum(pendingAt.cutting) === 0 ? 'stitching' : 'cutting';
+  }
+  return 'cutting';
 }
