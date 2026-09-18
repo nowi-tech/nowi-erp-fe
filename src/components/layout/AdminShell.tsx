@@ -366,24 +366,21 @@ function usePageContext(): { sectionKey: string; labelKey: string } | null {
   }, [location.pathname, location.search]);
 }
 
-/** Header breadcrumb — "Section / Page". The header's contextual half. */
+/** Header breadcrumb — "Section / Page". Hidden below `sm`: the mobile header keeps the logo alone. */
 function PageContext() {
   const { t } = useTranslation();
   const ctx = usePageContext();
   return (
     <nav
       aria-label={t('common.navigation')}
-      className="flex items-center gap-1.5 min-w-0 text-sm"
+      className="hidden sm:flex items-center gap-1.5 min-w-0 text-sm"
     >
       {ctx ? (
         <>
-          <span className="text-[var(--color-header-crumb)] truncate hidden sm:inline">
+          <span className="text-[var(--color-header-crumb)] truncate">
             {t(ctx.sectionKey)}
           </span>
-          <span
-            aria-hidden
-            className="text-[var(--color-header-crumb)] hidden sm:inline"
-          >
+          <span aria-hidden className="text-[var(--color-header-crumb)]">
             /
           </span>
           <span className="font-medium text-[var(--color-foreground)] truncate">
