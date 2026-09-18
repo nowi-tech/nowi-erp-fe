@@ -11,7 +11,6 @@ import {
   HeartPulse,
   Factory,
   LogOut,
-  FlaskConical,
   Inbox,
   Boxes,
   Scissors,
@@ -29,7 +28,6 @@ import {
 } from 'lucide-react';
 import { useAuth } from '@/context/auth';
 import { useLogoutConfirm } from '@/components/auth/useLogoutConfirm';
-import { useToast } from '@/components/ui/toast';
 import LanguageToggle from '@/components/LanguageToggle';
 import Logo from '@/components/Logo';
 import { cn } from '@/lib/utils';
@@ -170,7 +168,6 @@ const NAV_SECTIONS: NavSection[] = [
   },
 ];
 
-const TEST_DATA_KEY = 'nowi.showTestData';
 const SIDEBAR_KEY = 'nowi.sidebarCollapsed';
 const GROUPS_KEY = 'nowi.sidebarGroups';
 
@@ -192,59 +189,6 @@ function loadCollapsedGroups(): Set<string> {
   } catch {
     return new Set();
   }
-}
-
-function TrainingModeToggle() {
-  const { t } = useTranslation();
-  const toast = useToast();
-  const [on, setOn] = useState<boolean>(
-    () => localStorage.getItem(TEST_DATA_KEY) === '1',
-  );
-
-  useEffect(() => {
-    if (on) localStorage.setItem(TEST_DATA_KEY, '1');
-    else localStorage.removeItem(TEST_DATA_KEY);
-  }, [on]);
-
-  const onToggle = () => {
-    const next = !on;
-    setOn(next);
-    toast.show(
-      next ? t('admin.testData.toastOn') : t('admin.testData.toastOff'),
-      'info',
-    );
-  };
-
-  return (
-    <button
-      type="button"
-      onClick={onToggle}
-      className={cn(
-        'flex items-center gap-2 px-2 py-1 rounded-[var(--radius-sm)] text-xs border transition-colors',
-        on
-          ? 'border-[var(--color-primary)] bg-[var(--color-primary)] text-[var(--color-primary-foreground)]'
-          : 'border-[var(--color-border)] text-[var(--color-muted-foreground)] hover:bg-[var(--color-muted)]',
-      )}
-      aria-pressed={on}
-    >
-      <FlaskConical size={14} />
-      <span className="hidden sm:inline">{t('admin.testData.label')}</span>
-      <span
-        aria-hidden
-        className={cn(
-          'inline-block w-7 h-3.5 rounded-full relative transition-colors',
-          on ? 'bg-white/40' : 'bg-[var(--color-muted)]',
-        )}
-      >
-        <span
-          className={cn(
-            'absolute top-0.5 w-2.5 h-2.5 rounded-full bg-white transition-all',
-            on ? 'left-4' : 'left-0.5',
-          )}
-        />
-      </span>
-    </button>
-  );
 }
 
 /** A single nav row. Shared by the desktop rail and the mobile drawer. */
@@ -606,7 +550,6 @@ export default function AdminShell() {
   }, []);
 
   const location = useLocation();
-  const role: UserRole | undefined = user?.role;
   // Multi-role: union of primary + UserRoleAssignment.role rows. The
   // sidebar shows an item if any of these intersects the item's roles.
   const allRoles = useMemo(() => userAllRoles(user), [user]);
@@ -736,8 +679,8 @@ export default function AdminShell() {
         {/* ── Top header ──
             Global / contextual controls ONLY — no nav links (the sidebar
             owns navigation). Left: page-context breadcrumb (+ mobile menu
-            trigger / logo). Right: test-data toggle, language toggle, and
-            the account menu (the single home for identity + logout). */}
+            trigger / logo). Right: language toggle and the account menu
+            (the single home for identity + logout). */}
         <header className="sticky top-0 z-20 border-b border-[var(--color-border)] bg-[var(--color-surface)]/95 backdrop-blur px-3 sm:px-5 h-14">
           <div className="flex items-center justify-between gap-3 h-full">
             {/* Left — context */}
@@ -765,7 +708,6 @@ export default function AdminShell() {
 
             {/* Right — global controls */}
             <div className="flex items-center gap-2 sm:gap-3">
-              {role === 'admin' && <TrainingModeToggle />}
               <LanguageToggle />
               <span
                 aria-hidden

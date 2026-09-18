@@ -1070,11 +1070,6 @@
       "apply": "Apply",
       "appliedToast": "Applied to lot"
     },
-    "testData": {
-      "label": "Show test data",
-      "toastOn": "Now showing test data",
-      "toastOff": "Hiding test data"
-    },
     "dispatches": {
       "title": "Dispatches",
       "empty": "No dispatches found.",

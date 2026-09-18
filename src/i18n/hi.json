@@ -430,11 +430,6 @@
       "apply": "Apply करें",
       "appliedToast": "Lot पर apply हो गया"
     },
-    "testData": {
-      "label": "Test data दिखाएँ",
-      "toastOn": "Test data दिख रहा है",
-      "toastOff": "Test data छिपा दिया"
-    },
     "dispatches": {
       "title": "Dispatches",
       "empty": "कोई dispatch नहीं",
