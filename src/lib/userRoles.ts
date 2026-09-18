@@ -47,6 +47,8 @@ const IS_PD_WRITER: Record<UserRole, boolean> = {
   // `warehouse_manager` only accepts inbound challans (DISPATCH_ACCEPT_ROLES
   // below) — never PD data.
   warehouse_manager: false,
+  // Only ever an extra role on an admin, who already writes PD data.
+  super_admin: false,
   viewer: false,
   floor_manager: false,
   stitching_master: false,
@@ -170,14 +172,11 @@ export const FABRIC_STATUS_WRITE_ROLES: readonly UserRole[] = [
   'fabric_manager',
 ];
 
-/**
- * Cancelling destroys a plan, so it stays with admin + the production admin —
- * mirrors the BE `CANCEL` set on `production.controller.ts`.
- */
-export const PRODUCTION_CANCEL_ROLES: readonly UserRole[] = [
-  'admin',
-  'production_lead',
-];
+/** Cancelling lots and seeing cancelled ones — the owner only; mirrors BE `CANCEL` in production.controller.ts. */
+export const PRODUCTION_CANCEL_ROLES: readonly UserRole[] = ['super_admin'];
+
+/** Voiding a dispatch challan — mirrors BE `CANCEL` in production-dispatch.controller.ts. */
+export const CHALLAN_CANCEL_ROLES: readonly UserRole[] = ['admin', 'production_lead'];
 
 /**
  * Who may READ the Production board + the Inventory Health forecast feeding it.

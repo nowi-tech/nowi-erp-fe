@@ -21,7 +21,7 @@ import {
   hasAnyRole,
   DISPATCH_ACCEPT_ROLES,
   DISPATCH_VIEW_ROLES,
-  PRODUCTION_CANCEL_ROLES,
+  CHALLAN_CANCEL_ROLES,
 } from '@/lib/userRoles';
 import type { UserRole } from '@/api/types';
 import type {
@@ -77,7 +77,7 @@ export default function Dispatches() {
   const canViewFloor = hasAnyRole(user, FLOOR_ROLES);
   const canViewChallans = hasAnyRole(user, DISPATCH_VIEW_ROLES);
   const canAcceptChallans = hasAnyRole(user, DISPATCH_ACCEPT_ROLES);
-  const canCancelChallans = hasAnyRole(user, PRODUCTION_CANCEL_ROLES);
+  const canCancelChallans = hasAnyRole(user, CHALLAN_CANCEL_ROLES);
 
   // Production challans lead — they're the primary surface here now.
   const subtabs = useMemo(

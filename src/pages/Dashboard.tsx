@@ -27,6 +27,8 @@ const ROLE_HOMES: Record<UserRole, string> = {
   // The warehouse desk has one job — land it on Dispatches, where it sees only
   // the Production challans tab.
   warehouse_manager: '/admin/dispatches',
+  // Never a primary role — always an extra on an admin — but the record is total.
+  super_admin: '/',
 };
 
 export default function Dashboard() {

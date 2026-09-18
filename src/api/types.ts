@@ -18,7 +18,7 @@ export type UserRole =
   | 'production_lead'
   // Production desk: starts batches off the Inventory Health forecast (or a
   // live style) and walks them through the floor stages. Not a PD editor;
-  // cancelling a batch stays with admin + production_lead.
+  // cancelling a batch is super_admin only.
   | 'production_editor'
   // Narrow go-to-market role: create a design + do cataloguing (EasyEcom +
   // marketplace take-offline). No editing, approving, or going live.
@@ -30,7 +30,9 @@ export type UserRole =
   // Receiving warehouse desk: sees inbound production challans and accepts them
   // (records received-per-size, flags mismatches). Read-only on the rest of
   // production — cannot start batches, move stages, or create dispatches.
-  | 'warehouse_manager';
+  | 'warehouse_manager'
+  // The owner, as an extra role on admin; set by migration only, never offered in Users.
+  | 'super_admin';
 
 export interface User {
   id: string;

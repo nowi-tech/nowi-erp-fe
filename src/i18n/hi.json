@@ -104,7 +104,8 @@
     "production_editor": "Production editor",
     "cataloguer": "Cataloguer",
     "fabric_manager": "फ़ैब्रिक मैनेजर",
-    "warehouse_manager": "Warehouse manager"
+    "warehouse_manager": "Warehouse manager",
+    "super_admin": "Super admin"
   },
   "floor": {
     "title": "Floor",
