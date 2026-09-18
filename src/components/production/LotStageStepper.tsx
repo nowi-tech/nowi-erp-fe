@@ -43,8 +43,8 @@ export default function LotStageStepper({ lot }: { lot: ProductionBatch }) {
       key: 'finishing',
       label: 'finished',
       value: finished,
-      // Pieces at the tailor are pending nowhere — they are in alteration.
-      pending: owed(stitched - scrapped - altered - finished),
+      // Pieces at the tailor still owe finishing — same count as the table and the board.
+      pending: owed(stitched - scrapped - finished),
     },
   ];
 
