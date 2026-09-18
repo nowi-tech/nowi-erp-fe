@@ -32,11 +32,14 @@ shadcn/Radix primitives, Axios, React Router 7, react-i18next (en + hi). A
 - **Route guards via `ProtectedRouteV2`** with `allowedRoles`; checks use
   `hasAnyRole()` (primary role + `roleAssignments`). Don't add per-page role
   checks.
-- **Roles**: `UserRole` (14 values) in `api/types.ts` mirrors the BE. **`operator`**
-  must appear in every `UserRole` union / `App.tsx` guard / `AdminShell` nav /
-  PD write-gate — never in an approver set. Helpers in `lib/userRoles.ts`.
-- **i18n**: `t('a.b.c')` via `useTranslation`; keys in `i18n/{en,hi}.json` —
-  add to **both** locales, don't hardcode user-facing strings.
+- **Roles**: `UserRole` (14 values) in `api/types.ts` mirrors the BE enum;
+  capability sets live in `lib/userRoles.ts` and must mirror the BE constants.
+  **There is no `operator`** — the June 2026 consolidation removed it. `super_admin`
+  is the owner's extra role on top of admin (cancels lots, sees cancelled ones);
+  it is granted by migration/seed and never offered in the Users screen.
+- **i18n**: `t('a.b.c')` via `useTranslation`. Floor screens keep keys in **both**
+  `i18n/{en,hi}.json`. Admin / PD / production screens run on inline English
+  `defaultValue` text and skip Hindi. Never hardcode a bare string either way.
 - **Downloads** are blobs → object URL → synthetic `<a>` click.
 - **Native shell** behaviour (`src/native/`) is in this bundle and only takes
   effect once **deployed to Vercel**, not when the APK is built. APK is a thin
