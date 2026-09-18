@@ -19,17 +19,11 @@ export type BatchStatus =
   | 'cutting'
   | 'stitching'
   | 'finishing'
+  | 'alteration'
+  | 'on_hold'
   | 'completed'
   | 'dispatched'
   | 'cancelled';
-
-/** The stages the inline dropdown offers — mirrors BE `ADVANCEABLE_STATUSES`. */
-export const ADVANCEABLE_STATUSES: BatchStatus[] = [
-  'cutting',
-  'stitching',
-  'finishing',
-  'dispatched',
-];
 
 /** Stepper order for display. `cancelled` is an off-ramp, not a step. */
 export const BATCH_STAGE_ORDER: BatchStatus[] = [
@@ -111,12 +105,24 @@ export interface ProductionBatch {
   notes: string | null;
   shortfallReason: string | null;
   cancelReason: string | null;
+  holdReason: string | null;
+  heldAt: string | null;
+  /** Where Resume puts a held lot back. */
+  heldFromStatus: BatchStatus | null;
+  /** "Stitched 0 → 20 · Stage Cutting → Stitching" — the last Update. */
+  lastUpdateSummary: string | null;
+  lastUpdatedAt: string | null;
+  lastUpdatedBy: { id: number; name: string } | null;
+  /** The lot this one was split from, when it is a sub-lot. */
+  parentBatch: { id: number; batchNo: string } | null;
+  /** Sub-lots split from this one (only a root lot has them). */
+  subLots: { id: number; batchNo: string; status: BatchStatus }[];
 }
 
 export interface ProductionKpis {
   /** status=planning — what the "Planning" tab lists. */
   planningBatches: number;
-  /** cutting/stitching/finishing only — what the "Production" tab lists. */
+  /** Floor stages plus on hold — what the "Production" tab lists. */
   inProductionBatches: number;
   unitsInPipeline: number;
   /** Distinct styles across open batches — the "Styles in flight" card. Two
@@ -258,36 +264,11 @@ export function createBatch(body: CreateBatchBody): Promise<ProductionBatch> {
   return apiClient.post<ProductionBatch>('/api/production/batches', body).then((r) => r.data);
 }
 
-/** Sending `items` REPLACES the size lines wholesale. */
-export function updateBatch(
-  id: number,
-  body: { items?: CreateBatchItem[]; notes?: string },
-): Promise<ProductionBatch> {
-  return apiClient.patch<ProductionBatch>(`/api/production/batches/${id}`, body).then((r) => r.data);
-}
-
 /** Per-size line for a stage move: how many pieces reached that stage. It does
  *  NOT touch the plan — planned is fixed when the lot is created. */
 export interface StageQtyItem {
   sku: string;
   qty: number;
-  /** Of this size, how many went back for alteration instead of reaching the
-   *  target stage. Accepted ONLY on the stitching → finishing move; the server
-   *  refuses it elsewhere rather than dropping it. */
-  qtyToAlteration?: number;
-}
-
-export function advanceBatch(
-  id: number,
-  status: BatchStatus,
-  items?: StageQtyItem[],
-): Promise<ProductionBatch> {
-  return apiClient
-    .post<ProductionBatch>(`/api/production/batches/${id}/actions/advance`, {
-      status,
-      ...(items ? { items } : {}),
-    })
-    .then((r) => r.data);
 }
 
 /** Planning → floor. Records what went into cutting and names the tailor, whose
@@ -327,26 +308,36 @@ export interface CorrectStageQtyItem {
   /** Pieces OUT for alteration. A balance, not a running total — returns and
    *  scraps have already netted themselves off it. */
   alteration?: number;
+  scrapped?: number;
 }
 
-/**
- * Corrects what a stage RECORDED. Send the total each stage should read — the
- * server writes the adjusting entry, so the history keeps the original figure
- * and who changed it. This is the only path that can take a total DOWN; the
- * ordinary stage entry only ever adds.
- */
-export function correctStageQuantities(
-  id: number,
-  items: CorrectStageQtyItem[],
-): Promise<ProductionBatch> {
+/** Everything the Update dialog changes. Omit a field to leave it alone. */
+export interface UpdateLotBody {
+  /** Full set of size lines — replaces the plan. */
+  items?: CreateBatchItem[];
+  /** TOTAL each stage should read, for the sizes that changed. */
+  stages?: CorrectStageQtyItem[];
+  /** A stage, or `on_hold`. Leaving `on_hold` resumes the lot. */
+  status?: BatchStatus;
+  holdReason?: string;
+  /** Remark; empty string clears it. */
+  notes?: string;
+  /** The figures and stage the dialog opened with; a mismatch is refused (409). */
+  expected?: (CorrectStageQtyItem & { qtyPlanned?: number })[];
+  expectedStatus?: BatchStatus;
+}
+
+/** One save for the whole dialog — the server applies it all or none of it. */
+export function updateLot(id: number, body: UpdateLotBody): Promise<ProductionBatch> {
   return apiClient
-    .post<ProductionBatch>(`/api/production/batches/${id}/actions/correct`, { items })
+    .post<ProductionBatch>(`/api/production/batches/${id}/actions/update`, body)
     .then((r) => r.data);
 }
 
 export function completeBatch(
   id: number,
-  items: { sku: string; qtyProduced: number }[],
+  /** `qtyToSubLot`: unfinished pieces moving to the sub-lot; the rest are written off. */
+  items: { sku: string; qtyProduced: number; qtyToSubLot?: number }[],
   shortfallReason?: string,
 ): Promise<ProductionBatch> {
   return apiClient
@@ -388,26 +379,5 @@ export function unparkStyle(styleKey: string): Promise<void> {
 export function cancelBatch(id: number, reason: string): Promise<ProductionBatch> {
   return apiClient
     .post<ProductionBatch>(`/api/production/batches/${id}/actions/cancel`, { reason })
-    .then((r) => r.data);
-}
-
-/** One size's outcome when pieces come back from alteration. */
-export interface AlterationReturnItem {
-  sku: string;
-  qtyFinished: number;
-  qtyScrapped?: number;
-}
-
-/**
- * Record pieces coming BACK from alteration. Not a stage move — the lot is
- * already in finishing, so only the per-size counts change. The server rejects
- * returning more than is outstanding (`stitched - finished - scrapped`).
- */
-export function alterationReturn(
-  id: number,
-  items: AlterationReturnItem[],
-): Promise<ProductionBatch> {
-  return apiClient
-    .post<ProductionBatch>(`/api/production/batches/${id}/actions/alteration-return`, { items })
     .then((r) => r.data);
 }

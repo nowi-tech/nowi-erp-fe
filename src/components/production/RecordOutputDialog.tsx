@@ -6,12 +6,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import type { ProductionBatch } from '@/api/production';
 
-/**
- * Records what the floor actually made. This is the ONLY place per-size
- * produced quantities are captured, which is why `completed` is absent from the
- * inline stage dropdown — reaching it any other way would leave the batch
- * complete with no output recorded.
- */
+/** Records what was made per size — the only way a lot reaches `completed`; unfinished pieces go to a sub-lot. */
 export default function RecordOutputDialog({
   open,
   busy,
@@ -23,22 +18,26 @@ export default function RecordOutputDialog({
   busy: boolean;
   batch: ProductionBatch | null;
   onClose: () => void;
-  onConfirm: (items: { sku: string; qtyProduced: number }[], shortfallReason?: string) => void;
+  onConfirm: (
+    items: { sku: string; qtyProduced: number; qtyToSubLot?: number }[],
+    shortfallReason?: string,
+  ) => void;
 }) {
   const { t } = useTranslation();
   const [produced, setProduced] = useState<Record<string, number>>({});
+  // Per size, how many unfinished pieces move to the sub-lot; unset = all of them.
+  const [toSub, setToSub] = useState<Record<string, number>>({});
   const [reason, setReason] = useState('');
 
   useEffect(() => {
     if (!open || !batch) return;
     const seeded: Record<string, number> = {};
-    // Prefill with what finishing actually recorded — that IS the output. Falls
-    // back to the plan for a lot that never had finishing entered (including
-    // every lot that ran before the stage journey shipped).
+    // What finishing recorded is the output; only a lot with no stage history falls back to the plan.
     for (const s of batch.sizes) {
-      seeded[s.sku] = s.qtyProduced ?? (s.qtyFinished > 0 ? s.qtyFinished : s.qtyPlanned);
+      seeded[s.sku] = s.qtyProduced ?? (s.qtyCut > 0 ? s.qtyFinished : s.qtyPlanned);
     }
     setProduced(seeded);
+    setToSub({});
     setReason('');
   }, [open, batch]);
 
@@ -52,7 +51,17 @@ export default function RecordOutputDialog({
 
   if (!batch) return null;
 
-  const diff = totals.produced - totals.planned;
+  // Cut but not completed — same maths as the server's splitRemainder.
+  const remaining = (sku: string) => {
+    const s = batch.sizes.find((z) => z.sku === sku)!;
+    return Math.max(0, s.qtyCut - s.qtyScrapped - (produced[sku] ?? 0));
+  };
+  const movingFor = (sku: string) => Math.min(remaining(sku), toSub[sku] ?? remaining(sku));
+  const moving = batch.sizes.reduce((n, s) => n + movingFor(s.sku), 0);
+  const writtenOff = batch.sizes.reduce((n, s) => n + remaining(s.sku) - movingFor(s.sku), 0);
+  // Moving pieces aren't short; written-off ones are.
+  const diff = totals.produced + moving - totals.planned;
+  const short = writtenOff > 0 || diff < 0;
   const diffLabel =
     diff < 0
       ? t('admin.production.output.short', { defaultValue: '{{n}} short', n: Math.abs(diff) })
@@ -105,11 +114,15 @@ export default function RecordOutputDialog({
             size="sm"
             // Short of plan needs a reason — the server refuses it otherwise,
             // and the lot is meant to stay open until the rest is made.
-            disabled={busy || (diff < 0 && !reason.trim())}
+            disabled={busy || (short && !reason.trim())}
             onClick={() =>
               onConfirm(
-                batch.sizes.map((s) => ({ sku: s.sku, qtyProduced: produced[s.sku] ?? 0 })),
-                reason.trim() || undefined,
+                batch.sizes.map((s) => ({
+                  sku: s.sku,
+                  qtyProduced: produced[s.sku] ?? 0,
+                  ...(remaining(s.sku) > 0 ? { qtyToSubLot: movingFor(s.sku) } : {}),
+                })),
+                short ? reason.trim() || undefined : undefined,
               )
             }
           >
@@ -138,6 +151,9 @@ export default function RecordOutputDialog({
               <th className="py-2 pr-3 text-left font-semibold">
                 {t('admin.production.produced', { defaultValue: 'Produced' })}
               </th>
+              <th className="py-2 pr-3 text-left font-semibold">
+                {t('admin.production.output.toSubLot', { defaultValue: 'To sub-lot' })}
+              </th>
               <th className="py-2 text-left font-semibold">
                 {t('admin.production.variance', { defaultValue: 'Variance' })}
               </th>
@@ -145,7 +161,7 @@ export default function RecordOutputDialog({
           </thead>
           <tbody>
             {batch.sizes.map((s) => {
-              const v = (produced[s.sku] ?? 0) - s.qtyPlanned;
+              const v = (produced[s.sku] ?? 0) + movingFor(s.sku) - s.qtyPlanned;
               return (
                 <tr key={s.sku} className="border-b border-[var(--color-border)]/60">
                   <td className="py-2 pr-3 font-semibold">{s.size}</td>
@@ -168,6 +184,30 @@ export default function RecordOutputDialog({
                         size: s.size,
                       })}
                     />
+                  </td>
+                  <td className="py-2 pr-3">
+                    {remaining(s.sku) > 0 ? (
+                      <Input
+                        type="number"
+                        min={0}
+                        max={remaining(s.sku)}
+                        inputMode="numeric"
+                        className="h-9 w-24 text-center text-sm font-semibold"
+                        value={String(movingFor(s.sku))}
+                        onChange={(e) =>
+                          setToSub((p) => ({
+                            ...p,
+                            [s.sku]: Math.max(0, Number.parseInt(e.target.value, 10) || 0),
+                          }))
+                        }
+                        aria-label={t('admin.production.output.toSubLotFor', {
+                          defaultValue: 'Pieces moving to the sub-lot for size {{size}}',
+                          size: s.size,
+                        })}
+                      />
+                    ) : (
+                      <span className="text-[var(--color-muted-foreground)]">—</span>
+                    )}
                   </td>
                   <td className="py-2">
                     {v !== 0 && (
@@ -224,7 +264,39 @@ export default function RecordOutputDialog({
         </span>
       </div>
 
-      {diff < 0 && (
+      {/* Lots worked on the old board may never have had finishing recorded. */}
+      {batch.sizes.every((s) => s.qtyFinished === 0) &&
+        batch.sizes.some((s) => remaining(s.sku) > Math.max(0, s.qtyAltered)) && (
+        <div className="mt-3 rounded-[var(--radius-sm)] border border-red-300 bg-red-50 px-4 py-2 text-sm font-medium text-red-800">
+          {t('admin.production.output.nothingFinished', {
+            defaultValue:
+              'Nothing is recorded as finished on this lot — enter what was actually made before completing.',
+          })}
+        </div>
+      )}
+
+      {(moving > 0 || writtenOff > 0) && (
+        <div className="mt-3 space-y-0.5 rounded-[var(--radius-sm)] bg-amber-50 px-4 py-2 text-sm font-medium text-amber-800">
+          {moving > 0 && (
+            <div>
+              {t('admin.production.output.subLot', {
+                defaultValue: '{{n}} pcs not completed move to a new sub-lot',
+                n: moving,
+              })}
+            </div>
+          )}
+          {writtenOff > 0 && (
+            <div>
+              {t('admin.production.output.writtenOff', {
+                defaultValue: '{{n}} pcs written off as scrapped',
+                n: writtenOff,
+              })}
+            </div>
+          )}
+        </div>
+      )}
+
+      {short && (
         <div className="mt-4">
           <label className="mb-1 block text-xs text-[var(--color-muted-foreground)]">
             {t('admin.production.output.reason', {

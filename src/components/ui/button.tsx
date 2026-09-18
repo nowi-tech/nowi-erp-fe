@@ -17,6 +17,12 @@ const buttonVariants = cva(
         // Destructive: red gradient (design `C.danger` → `C.dangerDeep`).
         destructive:
           'text-white bg-gradient-to-b from-[var(--color-destructive)] to-[var(--color-destructive-strong)] shadow-[inset_0_1px_0_rgba(255,255,255,0.2),0_0_0_1px_#a8201d,0_4px_12px_rgba(220,38,38,0.32)]',
+        // Pausing, not destroying — amber so it can't be mistaken for a red Cancel.
+        warning:
+          'text-white bg-amber-500 shadow-[0_4px_12px_rgba(245,158,11,0.28)] hover:bg-amber-600',
+        // Positive completion (e.g. closing a production lot).
+        success:
+          'text-white bg-[var(--color-success)] shadow-[0_4px_12px_rgba(93,138,95,0.28)] hover:brightness-95',
         // Ghost-y outline with hairline border + subtle hover.
         outline:
           'border border-[var(--color-border)] bg-[var(--color-surface)] text-[var(--color-foreground)] shadow-[0_1px_1px_rgba(14,23,48,0.03)] hover:bg-[var(--color-muted)]',
