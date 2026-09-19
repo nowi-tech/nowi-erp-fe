@@ -346,7 +346,7 @@
       },
       "production": "Production",
       "productionPipeline": "Production",
-      "dispatches": "Dispatches",
+      "grn": "GRN",
       "analyticsFulfilment": "Fulfilment",
       "inventoryHealth": "Inventory Health"
     },

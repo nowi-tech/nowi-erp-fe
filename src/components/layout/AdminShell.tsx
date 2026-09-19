@@ -58,10 +58,10 @@ interface NavSection {
 
 /* Nav follows the simplified post-redesign IA (docs/DASHBOARD_REDESIGN.md):
    Dashboard · Sampling · Production · Users · Master Data, plus China Import +
-   Fabric Library, plus the floor/stage drop-in surfaces for super_admin. Dispatch
-   is its own top-level item again — it now hosts the production challans tab
-   alongside the floor dispatch ledger. Role-gating is unchanged: an item only
-   renders for roles its route's ProtectedRoute permits. */
+   Fabric Library, plus the floor/stage drop-in surfaces for super_admin. GRN
+   (the dispatch ledger + production challans tab) sits in Overview, not
+   Analytics — it is day-to-day work, not a report. Role-gating is unchanged: an
+   item only renders for roles its route's ProtectedRoute permits. */
 
 // Office roles that see the unified Home (`/`). Mirrors OFFICE_HOME_ROLES in
 // App.tsx and the Home allow-list in docs/DASHBOARD_REDESIGN.md.
@@ -92,6 +92,10 @@ const NAV_SECTIONS: NavSection[] = [
       // Sits directly under Sampling: production work starts from the
       // forecast, so it belongs in the main flow, not buried in Analytics.
       { to: '/admin/production', icon: <Factory size={18} />, labelKey: 'admin.nav.productionPipeline', roles: [...PRODUCTION_BOARD_READ_ROLES] },
+      // GRN (the /admin/dispatches surface — production challans tab + floor
+      // dispatch ledger). Kept above Inventory Health so it stays inside the
+      // mobile bottom nav's first 4 role-visible items.
+      { to: '/admin/dispatches', icon: <Container size={18} />, labelKey: 'admin.nav.grn', roles: [...DISPATCH_VIEW_ROLES] },
       // Old Sampling registry (the legacy Styles page). RETIRED from the nav —
       // the Dashboard ("Sampling") is now the single sampling surface. The
       // /styles ROUTE stays (the dashboard drill-down + intake still use it),
@@ -115,10 +119,6 @@ const NAV_SECTIONS: NavSection[] = [
       // bottom nav shows only the first 4 role-visible items across ALL sections,
       // so everything from Production KPIs down already lives in "More".
       { to: '/admin/analytics/inventory-health', icon: <HeartPulse size={18} />, labelKey: 'admin.nav.inventoryHealth', roles: [...PRODUCTION_READ_ROLES] },
-      // Sits directly under Inventory Health: a dispatch is the last step of the
-      // forecast → produce → ship flow, so it reads next to the forecast rather
-      // than back up in Overview (where hiding Locator had orphaned it).
-      { to: '/admin/dispatches', icon: <Container size={18} />, labelKey: 'admin.nav.dispatches', roles: [...DISPATCH_VIEW_ROLES] },
       // Hidden from the nav on request; the /admin/production-kpis route stays live for direct URLs.
       // ponytail: empty roles = hidden from all (roles.some(...) is false).
       { to: '/admin/production-kpis', icon: <BarChart3 size={18} />, labelKey: 'admin.nav.productionKpis', roles: [] },
