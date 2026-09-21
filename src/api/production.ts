@@ -264,10 +264,16 @@ export function createBatch(body: CreateBatchBody): Promise<ProductionBatch> {
   return apiClient.post<ProductionBatch>('/api/production/batches', body).then((r) => r.data);
 }
 
-/** Edit a lot's plan and remark. `items` replaces the size lines wholesale; a lot no longer at `expectedStatus` is refused (409). */
+/** Edit a lot's plan and remark. `items` replaces the size lines wholesale. */
 export function updateBatch(
   id: number,
-  body: { items?: CreateBatchItem[]; notes?: string; expectedStatus?: BatchStatus },
+  body: {
+    items?: CreateBatchItem[];
+    notes?: string;
+    /** The stage and plan the dialog opened with; a mismatch is refused (409). */
+    expectedStatus?: BatchStatus;
+    expected?: { sku: string; qtyPlanned: number }[];
+  },
 ): Promise<ProductionBatch> {
   return apiClient.patch<ProductionBatch>(`/api/production/batches/${id}`, body).then((r) => r.data);
 }

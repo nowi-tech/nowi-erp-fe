@@ -863,9 +863,19 @@ export default function Production() {
           const target = editTarget;
           if (!target) return;
           return runAction(async () => {
-            const updated = await updateBatch(target.id, { ...body, expectedStatus: 'planning' });
-            setEditTarget(null);
-            return updated;
+            try {
+              const updated = await updateBatch(target.id, {
+                ...body,
+                expectedStatus: 'planning',
+                expected: target.sizes.map((s) => ({ sku: s.sku, qtyPlanned: s.qtyPlanned })),
+              });
+              setEditTarget(null);
+              return updated;
+            } catch (e: unknown) {
+              // What was typed is against figures that have moved — reopen from the reloaded board.
+              if (apiErrorStatus(e) === 409) setEditTarget(null);
+              throw e;
+            }
           });
         }}
       />
@@ -1631,7 +1641,7 @@ function BatchTable({
       width: '180px',
       header: t('admin.production.remark', { defaultValue: 'Remark' }),
       cell: (b) => {
-        const text = b.status === 'on_hold' ? b.holdReason : b.notes;
+        const text = (b.status === 'on_hold' && b.holdReason) || b.notes;
         if (!text) return <span className="text-[var(--color-muted-foreground)]">—</span>;
         return (
           <div
