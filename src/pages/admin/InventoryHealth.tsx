@@ -16,7 +16,7 @@ import { todayISO } from '@/lib/date';
 import { meaningfulName } from '@/lib/production';
 import { useDebounced } from '@/lib/useDebounced';
 import { useAuth } from '@/context/auth';
-import { hasAnyRole, PRODUCTION_WRITE_ROLES } from '@/lib/userRoles';
+import { hasAnyRole, PRODUCTION_WRITE_ROLES, STYLE_DISABLE_ROLES } from '@/lib/userRoles';
 import { createBatch, type CreateBatchBody } from '@/api/production';
 import StartProductionDialog, {
   type StartProductionTarget,
@@ -79,14 +79,47 @@ const AGE: Record<Exclude<Aging, 'active'>, { label: string; dot: string }> = {
 };
 
 /** Sortable columns. `null` = the priority (urgency-first) default order. A
- *  column sorts the STYLES by that metric aggregated over their sizes. `newest`
- *  (arrival recency) is dropdown-only — it maps to no column header. */
-type SortKey = 'style' | 'cover' | 'drr' | 'stock' | 'atrisk' | 'make' | 'newest';
+ *  column sorts the STYLES by that metric aggregated over their sizes. `newest`,
+ *  `revenue` and `cancelrate` are dropdown-only — they map to no column header. */
+type SortKey =
+  | 'style' | 'cover' | 'drr' | 'stock' | 'atrisk' | 'make' | 'newest' | 'revenue' | 'cancelrate';
+
+/** Sort presets the dropdown offers, over the same (sortKey, sortDir) the column
+ *  headers write. Each is a "most first" ranking. */
+type SortPreset = 'default' | 'best' | 'newest' | 'revenue' | 'cancels';
+const PRESET_SORT: Record<Exclude<SortPreset, 'default'>, SortKey> = {
+  best: 'drr',
+  newest: 'newest',
+  revenue: 'revenue',
+  cancels: 'cancelrate',
+};
 
 const PAGE_SIZE = 50;
 
 function fmtN(n: number): string {
   return n.toLocaleString('en-IN', { maximumFractionDigits: 0 });
+}
+
+/** A fact chip on the style header — same shape as a channel chip, no link.
+ *  `tail` is the secondary half (window / rate), lightened so the pair reads as
+ *  one fact rather than two. Green = money earned, red = money lost. */
+function StatChip({ tone, label, tail }: { tone: 'earned' | 'lost'; label: string; tail: string }): ReactNode {
+  const earned = tone === 'earned';
+  return (
+    <span
+      className={`inline-flex shrink-0 items-center rounded border px-1.5 py-0.5 text-[10px] font-semibold tabular-nums ${
+        earned ? 'border-emerald-200 bg-emerald-50 text-emerald-700' : 'border-red-200 bg-red-50 text-red-600'
+      }`}
+    >
+      {label}
+      <span className={`ml-1 font-normal ${earned ? 'text-emerald-500' : 'text-red-400'}`}>· {tail}</span>
+    </span>
+  );
+}
+
+/** Whole rupees, Indian grouping — matches SummarySection's currency rows. */
+function fmtMoney(n: number): string {
+  return `₹${n.toLocaleString('en-IN', { maximumFractionDigits: 0 })}`;
 }
 
 /** LOCAL YYYY-MM-DD `n` days before today — seeds the date picker. */
@@ -187,8 +220,10 @@ export default function InventoryHealth(): ReactNode {
   const [searchText, setSearchText] = useState(() => searchParams.get('q') ?? '');
   const debouncedSearch = useDebounced(searchText, 300);
   const { user } = useAuth();
-  // Disable/enable is a merchandising action — admins + sampling editors.
+  // Holding a style for Myntra approval — the sampling desk's call.
   const canManage = hasAnyRole(user, ['admin', 'sampling_editor']);
+  // Disabling a style is the owner's alone — narrower than the hold button beside it.
+  const canDisable = hasAnyRole(user, STYLE_DISABLE_ROLES);
   // Sending a style to the pipeline is a production action — a different set
   // (the page itself is open to every production reader).
   const canProduce = hasAnyRole(user, PRODUCTION_WRITE_ROLES);
@@ -436,17 +471,24 @@ export default function InventoryHealth(): ReactNode {
   // Preset sort dropdown ↔ the same (sortKey, sortDir) state the column headers use.
   // A column-header sort (e.g. Cover) matches no preset and reads as Default here.
   // ponytail: that cosmetic fallback is fine — the dropdown is the primary control.
-  const sortPreset: 'default' | 'best' | 'newest' =
-    sortKey === 'newest' ? 'newest' : sortKey === 'drr' && sortDir === 'desc' ? 'best' : 'default';
-  const onSortPreset = useCallback((v: 'default' | 'best' | 'newest'): void => {
-    if (v === 'default') setSortKey(null);
-    else if (v === 'best') {
-      setSortKey('drr');
-      setSortDir('desc');
-    } else {
-      setSortKey('newest');
-      setSortDir('desc');
+  // Read back off PRESET_SORT so the two can't drift. `newest` carries its own
+  // direction; every other preset only reads back as one while descending.
+  const sortPreset: SortPreset =
+    sortKey === 'newest'
+      ? 'newest'
+      : sortDir !== 'desc'
+        ? 'default'
+        : (Object.keys(PRESET_SORT) as Exclude<SortPreset, 'default'>[]).find(
+            (k) => PRESET_SORT[k] === sortKey,
+          ) ?? 'default';
+  const onSortPreset = useCallback((v: SortPreset): void => {
+    if (v === 'default') {
+      setSortKey(null);
+      return;
     }
+    // Every preset is a "most first" ranking, so they all sort descending.
+    setSortKey(PRESET_SORT[v]);
+    setSortDir('desc');
   }, []);
 
   // Absolute IST clock + "· 5 min ago" relative, mirroring the Sales KPI line.
@@ -682,13 +724,15 @@ export default function InventoryHealth(): ReactNode {
             {/* Sort preset — writes the same sortKey/sortDir as the column headers. */}
             <select
               value={sortPreset}
-              onChange={(e) => onSortPreset(e.target.value as 'default' | 'best' | 'newest')}
+              onChange={(e) => onSortPreset(e.target.value as SortPreset)}
               className={RAIL_SELECT_CLASS}
               aria-label={t('admin.inventoryHealth.sortBy', { defaultValue: 'Sort by' })}
             >
               <option value="default">{t('admin.inventoryHealth.sort.default', { defaultValue: 'Sort: Default' })}</option>
               <option value="best">{t('admin.inventoryHealth.sort.best', { defaultValue: 'Best seller' })}</option>
               <option value="newest">{t('admin.inventoryHealth.sort.newest', { defaultValue: 'What’s new' })}</option>
+              <option value="revenue">{t('admin.inventoryHealth.sort.revenue', { defaultValue: 'Top revenue' })}</option>
+              <option value="cancels">{t('admin.inventoryHealth.sort.cancels', { defaultValue: 'Most cancelled' })}</option>
             </select>
             <FilterRailDivider />
             {/* DRR/cover window — same control the sampling dashboard uses. */}
@@ -827,6 +871,7 @@ export default function InventoryHealth(): ReactNode {
                         dates={trendDates}
                         onOpen={() => openStyle(style.linkedStyleId)}
                         canManage={canManage}
+                        canDisable={canDisable}
                         canProduce={canProduce}
                         onRequestDiscontinue={(styleKey, next) => setConfirmDisc({ styleKey, next })}
                         onRequestHold={(styleKey, next) => setConfirmHold({ styleKey, next })}
@@ -984,6 +1029,7 @@ function StyleGroup({
   dates,
   onOpen,
   canManage,
+  canDisable,
   canProduce,
   onRequestDiscontinue,
   onRequestHold,
@@ -995,6 +1041,7 @@ function StyleGroup({
   dates: string[];
   onOpen: () => void;
   canManage: boolean;
+  canDisable: boolean;
   canProduce: boolean;
   onRequestDiscontinue: (styleKey: string, next: boolean) => void;
   onRequestHold: (styleKey: string, next: boolean) => void;
@@ -1002,8 +1049,6 @@ function StyleGroup({
   t: ReturnType<typeof useTranslation>['t'];
 }): ReactNode {
   const linked = style.linkedStyleId != null;
-  const codeColor = style.lowVolume ? 'text-neutral-500' : 'text-neutral-900';
-  const showName = meaningfulName(style) != null;
   // Sizes soonest-to-run-out first within the group.
   const cover = (z: InventorySize): number => z.coverDays ?? Number.POSITIVE_INFINITY;
   const sizes = [...style.sizes].sort((a, b) => cover(a) - cover(b));
@@ -1035,7 +1080,7 @@ function StyleGroup({
                 <ArrowUpRight size={14} className="shrink-0" style={{ color: PRIMARY }} />
               </button>
             ) : (
-              <span className={`truncate text-[15px] font-semibold ${codeColor}`}>{style.styleKey}</span>
+              <span className="truncate text-[15px] font-semibold text-neutral-900">{style.styleKey}</span>
             )}
             <UrgencyPill urgency={style.worstUrgency} stockout={style.stockout} />
             {style.isNew && (
@@ -1055,11 +1100,6 @@ function StyleGroup({
                 {t('admin.inventoryHealth.pendingBadge', { defaultValue: 'pending approval' })}
               </span>
             )}
-            {style.lowVolume && (
-              <span className="inline-flex items-center rounded border border-neutral-200 px-1.5 py-0.5 text-[10px] font-semibold text-neutral-400">
-                {t('admin.inventoryHealth.lowVolume', { defaultValue: 'low volume' })}
-              </span>
-            )}
             {pipelineTotal > 0 && (
               <span className="inline-flex items-center gap-1 rounded-full border border-[var(--color-primary)]/30 bg-[var(--color-primary)]/[0.08] px-1.5 py-0.5 text-[10px] font-semibold text-[var(--color-primary)]">
                 <Factory size={10} />
@@ -1067,14 +1107,32 @@ function StyleGroup({
               </span>
             )}
           </div>
-          {(showName || style.marketplaceLinks.length > 0) && (
-            <div className="mt-0.5 flex min-w-0 items-center gap-2">
-              {showName && (
-                <span className="truncate font-mono text-[11px]" style={{ color: NEUTRAL_DOT }}>
-                  {style.name}
-                </span>
-              )}
+          {(style.marketplaceLinks.length > 0 || style.cancelRate != null) && (
+            <div className="mt-0.5 flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1">
               <ChannelChips links={style.marketplaceLinks} />
+              {/* Ordered money over the active window; hidden when nothing was
+                  ordered, where "₹0 · 0 of 0" would be noise, not a finding. */}
+              {style.cancelRate != null && (
+                <>
+                  <StatChip
+                    tone="earned"
+                    label={t('admin.inventoryHealth.revenueStat', {
+                      defaultValue: 'Revenue {{v}}',
+                      v: fmtMoney(style.revenue),
+                    })}
+                    tail={t('admin.inventoryHealth.windowDays', { defaultValue: '{{n}}d', n: dates.length })}
+                  />
+                  <StatChip
+                    tone="lost"
+                    label={t('admin.inventoryHealth.cancelledStat', {
+                      defaultValue: 'Cancelled {{n}} of {{total}}',
+                      n: fmtN(style.cancelledItems),
+                      total: fmtN(style.soldItems + style.cancelledItems),
+                    })}
+                    tail={`${style.cancelRate.toLocaleString('en-IN', { maximumFractionDigits: 1 })}%`}
+                  />
+                </>
+              )}
             </div>
           )}
         </div>
@@ -1111,7 +1169,7 @@ function StyleGroup({
             )}
           </button>
         )}
-        {canManage && (
+        {canDisable && (
           <button
             type="button"
             onClick={() => onRequestDiscontinue(style.styleKey, !style.discontinued)}

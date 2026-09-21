@@ -175,6 +175,11 @@ export const FABRIC_STATUS_WRITE_ROLES: readonly UserRole[] = [
 /** Cancelling lots and seeing cancelled ones — the owner only; mirrors BE `CANCEL` in production.controller.ts. */
 export const PRODUCTION_CANCEL_ROLES: readonly UserRole[] = ['super_admin'];
 
+/** Disabling a style on Inventory Health — the owner only; mirrors BE `DISABLE`
+ *  in inventory-health.controller.ts. Deliberately narrower than the hold /
+ *  pending-approval buttons beside it, which stay with the sampling desk. */
+export const STYLE_DISABLE_ROLES: readonly UserRole[] = ['super_admin'];
+
 /** Voiding a dispatch challan — mirrors BE `CANCEL` in production-dispatch.controller.ts. */
 export const CHALLAN_CANCEL_ROLES: readonly UserRole[] = ['admin', 'production_lead'];
 

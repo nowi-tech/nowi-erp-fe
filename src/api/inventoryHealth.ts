@@ -66,8 +66,15 @@ export interface InventoryStyle {
   pipelineTotal: number;
   /** Suggested units to make across its sizes. */
   makeTotal: number;
-  /** Tiny seller — de-emphasised in the list (shown, not hidden). */
-  lowVolume: boolean;
+  /** Ordered money over the active window (the date picker's range, else the
+   *  trailing 30 days) — from the Myntra upload + EasyEcom channel lines.
+   *  Cancelled lines earn no revenue but still count toward `cancelRate`. */
+  revenue: number;
+  soldItems: number;
+  cancelledItems: number;
+  /** Cancelled share of everything ordered, 1dp. Null when nothing was ordered
+   *  in the window — not the same as a clean 0%. */
+  cancelRate: number | null;
   /** Manually marked discontinued — still shown, but forced to the bottom. */
   discontinued: boolean;
   /** Waiting on Myntra seller approval — unsellable, so hidden from every lens

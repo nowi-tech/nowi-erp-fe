@@ -372,7 +372,9 @@
       "windowActive": "Window: {{from}} – {{to}}",
       "windowClear": "Reset to default window",
       "openStyle": "Open style workspace",
-      "lowVolume": "low volume",
+      "revenueStat": "Revenue {{v}}",
+      "cancelledStat": "Cancelled {{n}} of {{total}}",
+      "windowDays": "{{n}}d",
       "headlineUnits": "units",
       "filtering": "filtering · click to clear",
       "trendTitle": "Daily units — hover a day for its value",
@@ -421,7 +423,9 @@
       "sort": {
         "default": "Sort: Default",
         "best": "Best seller",
-        "newest": "What’s new"
+        "newest": "What’s new",
+        "revenue": "Top revenue",
+        "cancels": "Most cancelled"
       },
       "discontinuedBadge": "disabled",
       "disable": "Disable",
