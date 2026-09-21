@@ -194,7 +194,9 @@
     "gender": {
       "W": "Women's",
       "M": "Men's",
-      "U": "Unisex"
+      "U": "Unisex",
+      "B": "Boys'",
+      "G": "Girls'"
     },
     "receiveFromKotty": {
       "fab": "Receive from Kotty",
@@ -598,6 +600,8 @@
         "genderWomen": "Women",
         "genderMen": "Men",
         "genderUnisex": "Unisex",
+        "genderBoys": "Boys",
+        "genderGirls": "Girls",
         "category": "Category",
         "primaryColour": "Primary colour",
         "references": "References",

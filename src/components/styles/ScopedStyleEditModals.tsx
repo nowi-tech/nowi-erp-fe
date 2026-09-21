@@ -47,6 +47,8 @@ function toFormGender(g: unknown): Gender {
   if (g === 'W' || g === 'women') return 'women';
   if (g === 'M' || g === 'men') return 'men';
   if (g === 'U' || g === 'unisex') return 'unisex';
+  if (g === 'B' || g === 'boys') return 'boys';
+  if (g === 'G' || g === 'girls') return 'girls';
   return 'women';
 }
 
@@ -277,6 +279,8 @@ export function CoreSpecsEditModal({
               women: t('admin.styles.intake.genderWomen'),
               men: t('admin.styles.intake.genderMen'),
               unisex: t('admin.styles.intake.genderUnisex'),
+              boys: t('admin.styles.intake.genderBoys'),
+              girls: t('admin.styles.intake.genderGirls'),
             }}
           />
         </div>

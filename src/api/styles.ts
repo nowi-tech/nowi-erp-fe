@@ -16,6 +16,7 @@ import type {
   ChannelState,
   InspectionVerdict,
   Gender,
+  StyleGender,
   Fabric,
   FabricStockEntry,
   FabricStockEntryType,
@@ -145,8 +146,7 @@ export interface LinkExtractResult {
   price?: number;
   currency?: string;
   // AI-extracted, editable suggestions (best-effort):
-  /** NOWI StyleGender (W/M/U). */
-  gender?: 'W' | 'M' | 'U';
+  gender?: StyleGender;
   /** Category.styleCode the model picked. */
   categoryCode?: string;
   /** Resolved categoryId for the picked code (when known). */
@@ -595,6 +595,7 @@ export type {
   ChannelState,
   InspectionVerdict,
   Gender,
+  StyleGender,
   Fabric,
   FabricStockEntry,
   FabricStockEntryType,

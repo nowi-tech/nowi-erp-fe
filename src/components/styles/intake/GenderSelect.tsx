@@ -4,12 +4,12 @@ import type { Gender } from '@/api/types';
 interface Props {
   value: Gender;
   onChange: (next: Gender) => void;
-  /** Override the visible labels (i18n). Order: women, men, unisex. */
-  labels?: { women: string; men: string; unisex: string };
+  /** Override the visible labels (i18n). */
+  labels?: Record<Gender, string>;
   disabled?: boolean;
 }
 
-const OPTIONS: Gender[] = ['women', 'men', 'unisex'];
+const OPTIONS: Gender[] = ['women', 'men', 'unisex', 'boys', 'girls'];
 
 /**
  * Gender picker as a native dropdown. Replaces the older three-button
@@ -27,7 +27,7 @@ export default function GenderSelect({
   disabled = false,
 }: Props) {
   const text = (g: Gender) =>
-    labels?.[g] ?? (g === 'women' ? 'Women' : g === 'men' ? 'Men' : 'Unisex');
+    labels?.[g] ?? g.charAt(0).toUpperCase() + g.slice(1);
   return (
     <Select
       value={value}

@@ -22,6 +22,8 @@ export const GENDER_CATEGORIES: Record<Gender, FineCategoryCode[]> = {
   women: ['JACKET', 'PANT', 'TSHIRT', 'BLAZER', 'DRESS'],
   men: ['JACKET', 'PANT', 'TSHIRT', 'BLAZER'],
   unisex: ['JACKET', 'PANT', 'TSHIRT', 'BLAZER', 'DRESS'],
+  boys: ['JACKET', 'PANT', 'TSHIRT', 'BLAZER'],
+  girls: ['JACKET', 'PANT', 'TSHIRT', 'BLAZER', 'DRESS'],
 };
 
 /**
@@ -34,13 +36,13 @@ export function deriveArticleCategory(
   fine: FineCategoryCode | string,
 ): ArticleCategory {
   const code = String(fine).toUpperCase();
-  if (gender === 'men') {
+  if (gender === 'men' || gender === 'boys') {
     if (code === 'PANT') return 'mens_bottom_wear';
     if (code === 'BLAZER') return 'mens_suit';
     if (code === 'JACKET') return 'winterwear';
     return 'mens_top_wear';
   }
-  // women + unisex share the women's buckets (the fine code is what
+  // women + unisex + girls share the women's buckets (the fine code is what
   // anchors the style code on the BE).
   if (code === 'PANT') return 'womens_bottom_wear';
   if (code === 'JACKET') return 'winterwear';

@@ -76,16 +76,20 @@ import SampleApproveDialog from '@/components/styles/SampleApproveDialog';
 // editors. Mirrors the BE colour-variants @Roles (CATALOGUER_WRITE_ROLES).
 const COLOUR_WRITE = CATALOGUER_WRITE_ROLES;
 
-// Gender may arrive as a code (W/M/U) or long form (women/men/unisex)
+// Gender may arrive as a code (W/M/…) or long form (women/men/…)
 // depending on the row — render the human label either way so the header /
 // specs read "Women · Dress", never "W · JC".
 const GENDER_LABEL: Record<string, string> = {
   W: 'Women',
   M: 'Men',
   U: 'Unisex',
+  B: 'Boys',
+  G: 'Girls',
   women: 'Women',
   men: 'Men',
   unisex: 'Unisex',
+  boys: 'Boys',
+  girls: 'Girls',
 };
 const genderLabel = (g: string | null | undefined) =>
   (g ? GENDER_LABEL[g] : null) ?? g ?? '—';

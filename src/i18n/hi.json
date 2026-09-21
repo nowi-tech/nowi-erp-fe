@@ -189,7 +189,9 @@
     "gender": {
       "W": "Women",
       "M": "Men",
-      "U": "Unisex"
+      "U": "Unisex",
+      "B": "Boys",
+      "G": "Girls"
     },
     "receiveFromKotty": {
       "fab": "Kotty से माल लें",

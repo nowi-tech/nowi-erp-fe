@@ -163,7 +163,7 @@ export interface Lot {
   style?: {
     id: number;
     styleId: string;
-    gender: 'W' | 'M' | 'U';
+    gender: StyleGender;
     categoryCode: string;
     category?: { id: number; code: string; name: string };
   } | null;
@@ -172,8 +172,8 @@ export interface Lot {
 
 // ─── Styles ───────────────────────────────────────────────────────────────
 
-/** W = Women, M = Men, U = Unisex. Mirrors the BE enum. */
-export type StyleGender = 'W' | 'M' | 'U';
+/** W = Women, M = Men, U = Unisex, B = Boys, G = Girls. Mirrors the BE enum. */
+export type StyleGender = 'W' | 'M' | 'U' | 'B' | 'G';
 
 export interface CategoryWithStyleCode {
   id: number;
@@ -246,7 +246,7 @@ export type ChannelName =
   | 'other';
 export type ChannelState = 'off' | 'draft' | 'live';
 export type InspectionVerdict = 'pending' | 'corrections_needed' | 'approved';
-export type Gender = 'women' | 'men' | 'unisex';
+export type Gender = 'women' | 'men' | 'unisex' | 'boys' | 'girls';
 
 export type FabricUnitOfMeasure = 'meter' | 'kg' | 'oz';
 

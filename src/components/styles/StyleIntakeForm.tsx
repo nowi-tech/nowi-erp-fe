@@ -184,6 +184,8 @@ function toFormGender(g: unknown): Gender {
   if (g === 'W' || g === 'women') return 'women';
   if (g === 'M' || g === 'men') return 'men';
   if (g === 'U' || g === 'unisex') return 'unisex';
+  if (g === 'B' || g === 'boys') return 'boys';
+  if (g === 'G' || g === 'girls') return 'girls';
   return 'women';
 }
 
@@ -664,7 +666,11 @@ const StyleIntakeForm = forwardRef<StyleIntakeFormHandle, StyleIntakeFormProps>(
       if (origin !== 'image' && r.imageUrl) bits.push('image');
       if (r.name) bits.push(`“${r.name}”`);
       if (r.gender)
-        bits.push({ W: 'Women', M: 'Men', U: 'Unisex' }[r.gender]);
+        bits.push(
+          { W: 'Women', M: 'Men', U: 'Unisex', B: 'Boys', G: 'Girls' }[
+            r.gender
+          ],
+        );
       if (r.categoryId != null) {
         const c = categories.find((x) => x.id === r.categoryId);
         if (c) bits.push(c.name);
@@ -1168,6 +1174,8 @@ const StyleIntakeForm = forwardRef<StyleIntakeFormHandle, StyleIntakeFormProps>(
                         women: t('admin.styles.intake.genderWomen'),
                         men: t('admin.styles.intake.genderMen'),
                         unisex: t('admin.styles.intake.genderUnisex'),
+                        boys: t('admin.styles.intake.genderBoys'),
+                        girls: t('admin.styles.intake.genderGirls'),
                       }}
                     />
                   )}
