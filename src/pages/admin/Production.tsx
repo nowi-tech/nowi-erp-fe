@@ -41,7 +41,6 @@ import {
   sendToProduction,
   setFabricStatus,
   unparkStyle,
-  updateBatch,
   updateLot,
   FABRIC_STATUSES,
   type FabricStatus,
@@ -856,28 +855,13 @@ export default function Production() {
       />
       <EditPlanDialog
         open={editTarget !== null}
-        busy={busy}
-        batch={editTarget}
+        lot={editTarget}
         onClose={() => setEditTarget(null)}
-        onConfirm={(body) => {
-          const target = editTarget;
-          if (!target) return;
-          return runAction(async () => {
-            try {
-              const updated = await updateBatch(target.id, {
-                ...body,
-                expectedStatus: 'planning',
-                expected: target.sizes.map((s) => ({ sku: s.sku, qtyPlanned: s.qtyPlanned })),
-              });
-              setEditTarget(null);
-              return updated;
-            } catch (e: unknown) {
-              // What was typed is against figures that have moved — reopen from the reloaded board.
-              if (apiErrorStatus(e) === 409) setEditTarget(null);
-              throw e;
-            }
-          });
+        onSaved={(updated) => {
+          setEditTarget(null);
+          applyBatch(updated);
         }}
+        onStale={() => void load()}
       />
       <EditLotDialog
         open={updateTarget !== null}

@@ -1,38 +1,93 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Dialog } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
+import { useToast } from '@/components/ui/toast';
 import QtyTable from '@/components/production/QtyTable';
-import { type CreateBatchItem, type ProductionBatch } from '@/api/production';
+import { getLot, updateBatch, type ProductionBatch } from '@/api/production';
+import { apiErrorMessage, apiErrorStatus } from '@/api/apiClient';
 
 /** A Pipeline lot's plan: planned pieces per size and the remark. */
 export default function EditPlanDialog({
   open,
-  busy,
-  batch,
+  lot,
   onClose,
-  onConfirm,
+  onSaved,
+  onStale,
 }: {
   open: boolean;
-  busy: boolean;
-  batch: ProductionBatch | null;
+  lot: ProductionBatch | null;
   onClose: () => void;
-  onConfirm: (body: { items: CreateBatchItem[]; notes: string }) => void;
+  onSaved: (updated: ProductionBatch) => void;
+  /** The lot changed under the dialog; the caller may refresh its own copy (the dialog keeps what was typed). */
+  onStale?: () => void;
 }) {
   const { t } = useTranslation();
+  const toast = useToast();
   const [qty, setQty] = useState<Record<string, number>>({});
   const [notes, setNotes] = useState('');
+  const [busy, setBusy] = useState(false);
+  // The lot as the server last read it — replaces `lot` after a 409 so typed figures survive.
+  const [fresh, setFresh] = useState<ProductionBatch | null>(null);
 
   useEffect(() => {
-    if (!open || !batch) return;
-    setQty(Object.fromEntries(batch.sizes.map((s) => [s.sku, s.qtyPlanned])));
-    setNotes(batch.notes ?? '');
-  }, [open, batch]);
+    if (!open || !lot) return;
+    setQty(Object.fromEntries(lot.sizes.map((s) => [s.sku, s.qtyPlanned])));
+    setNotes(lot.notes ?? '');
+    setFresh(null);
+  }, [open, lot]);
 
-  const total = useMemo(() => Object.values(qty).reduce((a, b) => a + b, 0), [qty]);
+  if (!lot) return null;
+  const base = fresh ?? lot;
+  const total = Object.values(qty).reduce((a, b) => a + b, 0);
 
-  if (!batch) return null;
+  const save = async () => {
+    setBusy(true);
+    try {
+      const updated = await updateBatch(base.id, {
+        items: base.sizes.map((s) => ({ sku: s.sku, size: s.size, qtyPlanned: qty[s.sku] ?? 0 })),
+        notes,
+        // What the dialog is working from — the server refuses the save if the lot has moved on.
+        expectedStatus: base.status,
+        expected: base.sizes.map((s) => ({ sku: s.sku, qtyPlanned: s.qtyPlanned })),
+      });
+      toast.show(t('common.saved', { defaultValue: 'Saved.' }));
+      onSaved(updated);
+    } catch (e) {
+      const latest = apiErrorStatus(e) === 409 ? await getLot(base.id).catch(() => null) : null;
+      if (latest?.status === 'planning') {
+        // Untouched sizes take the latest figures; only what was typed is kept.
+        const was = new Map(base.sizes.map((z) => [z.sku, z.qtyPlanned]));
+        setQty((prev) =>
+          Object.fromEntries(
+            latest.sizes.map((z) => {
+              const typed = prev[z.sku];
+              return [z.sku, typed == null || typed === was.get(z.sku) ? z.qtyPlanned : typed];
+            }),
+          ),
+        );
+        setNotes((n) => (n.trim() === (base.notes ?? '') ? latest.notes ?? '' : n));
+        setFresh(latest);
+        toast.show(
+          t('admin.production.update.stale', {
+            defaultValue: 'Someone updated this lot. The figures are refreshed — check your changes and save again.',
+          }),
+          'error',
+        );
+      } else {
+        toast.show(
+          apiErrorMessage(e) ?? t('common.error', { defaultValue: 'Something went wrong.' }),
+          'error',
+        );
+        // Gone to the floor (or gone altogether) — its plan is no longer edited from here.
+        if (apiErrorStatus(e) === 409) onClose();
+      }
+      if (apiErrorStatus(e) === 409) onStale?.();
+    } finally {
+      setBusy(false);
+    }
+  };
 
   return (
     <Dialog
@@ -45,10 +100,10 @@ export default function EditPlanDialog({
             {t('admin.production.editPlan.title', { defaultValue: 'Edit plan' })}
           </div>
           <div className="truncate text-base font-semibold">
-            {batch.name ?? batch.styleRef ?? batch.batchNo}
+            {base.name ?? base.styleRef ?? base.batchNo}
           </div>
           <div className="truncate font-mono text-[11px] font-normal text-[var(--color-muted-foreground)]">
-            {batch.batchNo}
+            {base.batchNo}
           </div>
         </div>
       }
@@ -57,27 +112,14 @@ export default function EditPlanDialog({
           <Button variant="outline" size="sm" disabled={busy} onClick={onClose}>
             {t('common.cancel', { defaultValue: 'Cancel' })}
           </Button>
-          <Button
-            size="sm"
-            disabled={busy || total <= 0}
-            onClick={() =>
-              onConfirm({
-                items: batch.sizes.map((s) => ({
-                  sku: s.sku,
-                  size: s.size,
-                  qtyPlanned: qty[s.sku] ?? 0,
-                })),
-                notes,
-              })
-            }
-          >
+          <Button size="sm" disabled={busy || total <= 0} onClick={() => void save()}>
             {t('admin.production.editPlan.save', { defaultValue: 'Save · {{n}}', n: total })}
           </Button>
         </>
       }
     >
       <QtyTable
-        rows={batch.sizes.map((s) => ({ key: s.sku, size: s.size, sku: s.sku, qty: qty[s.sku] ?? 0 }))}
+        rows={base.sizes.map((s) => ({ key: s.sku, size: s.size, sku: s.sku, qty: qty[s.sku] ?? 0 }))}
         onQty={(sku, raw) =>
           setQty((p) => ({ ...p, [sku]: Math.max(0, Number.parseInt(raw, 10) || 0) }))
         }
