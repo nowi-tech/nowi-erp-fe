@@ -25,6 +25,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import RecordOutputDialog from '@/components/production/RecordOutputDialog';
 import StageQtyDialog from '@/components/production/StageQtyDialog';
 import EditLotDialog from '@/components/production/EditLotDialog';
+import EditPlanDialog from '@/components/production/EditPlanDialog';
 import StartProductionIntakeDialog from '@/components/production/StartProductionIntakeDialog';
 import DispatchBuilderDialog from '@/components/production/DispatchBuilderDialog';
 import CancelBatchDialog from '@/components/production/CancelBatchDialog';
@@ -40,6 +41,7 @@ import {
   sendToProduction,
   setFabricStatus,
   unparkStyle,
+  updateBatch,
   updateLot,
   FABRIC_STATUSES,
   type FabricStatus,
@@ -69,6 +71,8 @@ import {
   hasAnyRole,
   FABRIC_STATUS_WRITE_ROLES,
   PRODUCTION_CANCEL_ROLES,
+  PRODUCTION_CANCELLED_VIEW_ROLES,
+  PRODUCTION_FLOOR_CANCEL_ROLES,
   PRODUCTION_WRITE_ROLES,
 } from '@/lib/userRoles';
 import { Select } from '@/components/ui/select';
@@ -133,6 +137,8 @@ export default function Production() {
   const [searchParams, setSearchParams] = useSearchParams();
   const canWrite = hasAnyRole(user, PRODUCTION_WRITE_ROLES);
   const canCancel = hasAnyRole(user, PRODUCTION_CANCEL_ROLES);
+  const canCancelOnFloor = hasAnyRole(user, PRODUCTION_FLOOR_CANCEL_ROLES);
+  const canSeeCancelled = hasAnyRole(user, PRODUCTION_CANCELLED_VIEW_ROLES);
   const canSetFabric = hasAnyRole(user, FABRIC_STATUS_WRITE_ROLES);
 
   // Opens on the floor by default ("what's running right now?"), but honours
@@ -194,6 +200,7 @@ export default function Production() {
   const [intakeOpen, setIntakeOpen] = useState(false);
   const [outputTarget, setOutputTarget] = useState<ProductionBatch | null>(null);
   const [sendTarget, setSendTarget] = useState<ProductionBatch | null>(null);
+  const [editTarget, setEditTarget] = useState<ProductionBatch | null>(null);
   const [updateTarget, setUpdateTarget] = useState<ProductionBatch | null>(null);
   const [holdTarget, setHoldTarget] = useState<ProductionBatch | null>(null);
   const [resumeTarget, setResumeTarget] = useState<ProductionBatch | null>(null);
@@ -742,8 +749,7 @@ export default function Production() {
               ...(tab === 'completed'
                 ? (['completed', 'dispatched'] as BatchStatus[])
                 : IN_PRODUCTION_STATUSES),
-              // Cancelled lots are the owner's to see, like cancelling them.
-              ...(canCancel ? ['cancelled' as BatchStatus] : []),
+              ...(canSeeCancelled ? ['cancelled' as BatchStatus] : []),
             ].map((x) => ({ value: x, label: statusLabel(t, x) }))}
             value={statusFilter ? [statusFilter] : []}
             onToggle={(x) => setStatusFilter(statusFilter === x ? '' : x)}
@@ -796,12 +802,14 @@ export default function Production() {
           canWrite={canWrite}
           canSetFabric={canSetFabric}
           canCancel={canCancel}
+          canCancelOnFloor={canCancelOnFloor}
           busy={busy}
           selectable={canWrite && tab === 'completed'}
           selected={selected}
           allSelected={allSelected}
           onToggleLot={toggleLot}
           onToggleAll={toggleAllLots}
+          onEdit={(b) => setEditTarget(b)}
           onUpdate={(b) => setUpdateTarget(b)}
           onHold={(b) => setHoldTarget(b)}
           onResume={(b) => setResumeTarget(b)}
@@ -845,6 +853,21 @@ export default function Production() {
         batch={sendTarget}
         onClose={() => setSendTarget(null)}
         onConfirm={onSend}
+      />
+      <EditPlanDialog
+        open={editTarget !== null}
+        busy={busy}
+        batch={editTarget}
+        onClose={() => setEditTarget(null)}
+        onConfirm={(body) => {
+          const target = editTarget;
+          if (!target) return;
+          return runAction(async () => {
+            const updated = await updateBatch(target.id, { ...body, expectedStatus: 'planning' });
+            setEditTarget(null);
+            return updated;
+          });
+        }}
       />
       <EditLotDialog
         open={updateTarget !== null}
@@ -1263,6 +1286,7 @@ function BatchTable({
   canWrite,
   canSetFabric,
   canCancel,
+  canCancelOnFloor,
   busy,
   loading,
   selectable = false,
@@ -1270,6 +1294,7 @@ function BatchTable({
   allSelected = false,
   onToggleLot,
   onToggleAll,
+  onEdit,
   onUpdate,
   onHold,
   onResume,
@@ -1286,6 +1311,7 @@ function BatchTable({
    *  gaining any other batch edit. */
   canSetFabric: boolean;
   canCancel: boolean;
+  canCancelOnFloor: boolean;
   busy: boolean;
   loading?: boolean;
   /** Completed tab only: per-LOT checkboxes picking what goes on a challan. */
@@ -1295,6 +1321,7 @@ function BatchTable({
   onToggleLot?: (id: number) => void;
   onToggleAll?: (on: boolean) => void;
   /** Opens the Update dialog — plan, stage totals, stage, remark, hold. */
+  onEdit: (batch: ProductionBatch) => void;
   onUpdate: (batch: ProductionBatch) => void;
   /** Asks why, then puts the lot on hold. */
   onHold: (batch: ProductionBatch) => void;
@@ -1530,10 +1557,11 @@ function BatchTable({
     // An ordinary column so Remark can sit after it; left out where nobody can act.
     const hasActions =
       (canWrite && (tab === 'planning' || tab === 'in_production')) ||
-      (canCancel && tab !== 'completed');
+      (canCancel && tab === 'planning') ||
+      (canCancelOnFloor && tab === 'in_production');
     if (hasActions) cols.push({
       key: 'actions',
-      width: tab === 'planning' ? '260px' : '340px',
+      width: '340px',
       header: '',
       cell: (b) => (
             <span className="flex items-center gap-2" onClick={stopRowClick}>
@@ -1556,6 +1584,11 @@ function BatchTable({
                   onClick={() => onSend(b)}
                 >
                   {t('admin.production.sendToProduction', { defaultValue: 'Send to production' })}
+                </Button>
+              )}
+              {canWrite && tab === 'planning' && (
+                <Button size="sm" variant="outline" disabled={busy} onClick={() => onEdit(b)}>
+                  {t('common.edit', { defaultValue: 'Edit' })}
                 </Button>
               )}
               {canWrite && onFloor(b) && (
@@ -1583,7 +1616,7 @@ function BatchTable({
                 </Button>
               )}
               {/* Completed, dispatched or already cancelled — nothing left to cancel. */}
-              {canCancel && (onFloor(b) || b.status === 'planning') && (
+              {((canCancelOnFloor && onFloor(b)) || (canCancel && b.status === 'planning')) && (
                 <Button variant="destructive" size="sm" disabled={busy} onClick={() => onCancel(b)}>
                   {t('admin.production.cancelCta', { defaultValue: 'Cancel' })}
                 </Button>
@@ -1593,28 +1626,25 @@ function BatchTable({
     });
 
     // Why it is held while it is held; otherwise the lot's own remark.
-    if (tab !== 'planning') {
-      cols.push({
-        key: 'remark',
-        width: '180px',
-        header: t('admin.production.remark', { defaultValue: 'Remark' }),
-        cell: (b) => {
-          const text = b.status === 'on_hold' ? b.holdReason : b.notes;
-          if (!text) return <span className="text-[var(--color-muted-foreground)]">—</span>;
-          return (
-            <div
-              title={text}
-              className={`line-clamp-3 whitespace-pre-line break-words text-[13px] ${
-                b.status === 'on_hold' ? 'font-semibold text-amber-700' : ''
-              }`}
-            >
-              {text}
-            </div>
-          );
-        },
-      });
-
-    }
+    cols.push({
+      key: 'remark',
+      width: '180px',
+      header: t('admin.production.remark', { defaultValue: 'Remark' }),
+      cell: (b) => {
+        const text = b.status === 'on_hold' ? b.holdReason : b.notes;
+        if (!text) return <span className="text-[var(--color-muted-foreground)]">—</span>;
+        return (
+          <div
+            title={text}
+            className={`line-clamp-3 whitespace-pre-line break-words text-[13px] ${
+              b.status === 'on_hold' ? 'font-semibold text-amber-700' : ''
+            }`}
+          >
+            {text}
+          </div>
+        );
+      },
+    });
 
     return cols;
   }, [
@@ -1629,6 +1659,7 @@ function BatchTable({
     allSelected,
     onToggleLot,
     onToggleAll,
+    onEdit,
     onUpdate,
     onHold,
     onResume,
@@ -1636,6 +1667,7 @@ function BatchTable({
     onComplete,
     onCancel,
     canCancel,
+    canCancelOnFloor,
     onOpen,
   ]);
 

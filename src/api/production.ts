@@ -264,6 +264,14 @@ export function createBatch(body: CreateBatchBody): Promise<ProductionBatch> {
   return apiClient.post<ProductionBatch>('/api/production/batches', body).then((r) => r.data);
 }
 
+/** Edit a lot's plan and remark. `items` replaces the size lines wholesale; a lot no longer at `expectedStatus` is refused (409). */
+export function updateBatch(
+  id: number,
+  body: { items?: CreateBatchItem[]; notes?: string; expectedStatus?: BatchStatus },
+): Promise<ProductionBatch> {
+  return apiClient.patch<ProductionBatch>(`/api/production/batches/${id}`, body).then((r) => r.data);
+}
+
 /** Per-size line for a stage move: how many pieces reached that stage. It does
  *  NOT touch the plan — planned is fixed when the lot is created. */
 export interface StageQtyItem {
