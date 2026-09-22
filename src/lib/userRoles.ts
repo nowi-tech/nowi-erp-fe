@@ -172,8 +172,18 @@ export const FABRIC_STATUS_WRITE_ROLES: readonly UserRole[] = [
   'fabric_manager',
 ];
 
-/** Cancelling lots and seeing cancelled ones — the owner only; mirrors BE `CANCEL` in production.controller.ts. */
-export const PRODUCTION_CANCEL_ROLES: readonly UserRole[] = ['super_admin'];
+/** Cancelling a lot still in Planning — mirrors the BE `PRODUCTION_CANCEL_ROLES`. */
+export const PRODUCTION_CANCEL_ROLES: readonly UserRole[] = [
+  'super_admin',
+  'admin',
+  'production_lead',
+];
+
+/** Cancelling a lot already on the floor — the owner only; the BE re-checks in `cancel()`. */
+export const PRODUCTION_FLOOR_CANCEL_ROLES: readonly UserRole[] = ['super_admin'];
+
+/** Seeing cancelled lots, narrower than cancelling — mirrors the BE `PRODUCTION_CANCELLED_VIEW_ROLES`. */
+export const PRODUCTION_CANCELLED_VIEW_ROLES: readonly UserRole[] = ['super_admin', 'admin'];
 
 /** Disabling a style on Inventory Health — the owner only; mirrors BE `DISABLE`
  *  in inventory-health.controller.ts. Deliberately narrower than the hold /

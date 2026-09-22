@@ -35,8 +35,9 @@ shadcn/Radix primitives, Axios, React Router 7, react-i18next (en + hi). A
 - **Roles**: `UserRole` (14 values) in `api/types.ts` mirrors the BE enum;
   capability sets live in `lib/userRoles.ts` and must mirror the BE constants.
   **There is no `operator`** — the June 2026 consolidation removed it. `super_admin`
-  is the owner's extra role on top of admin (cancels lots, sees cancelled ones);
-  it is granted by migration/seed and never offered in the Users screen.
+  is the owner's extra role on top of admin (cancels lots already on the floor,
+  disables styles on Inventory Health); it is granted by migration/seed and
+  never offered in the Users screen.
 - **i18n**: `t('a.b.c')` via `useTranslation`. Floor screens keep keys in **both**
   `i18n/{en,hi}.json`. Admin / PD / production screens run on inline English
   `defaultValue` text and skip Hindi. Never hardcode a bare string either way.

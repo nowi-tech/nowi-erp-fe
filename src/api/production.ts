@@ -264,6 +264,20 @@ export function createBatch(body: CreateBatchBody): Promise<ProductionBatch> {
   return apiClient.post<ProductionBatch>('/api/production/batches', body).then((r) => r.data);
 }
 
+/** Edit a lot's plan and remark. `items` replaces the size lines wholesale. */
+export function updateBatch(
+  id: number,
+  body: {
+    items?: CreateBatchItem[];
+    notes?: string;
+    /** The stage and plan the dialog opened with; a mismatch is refused (409). */
+    expectedStatus?: BatchStatus;
+    expected?: { sku: string; qtyPlanned: number }[];
+  },
+): Promise<ProductionBatch> {
+  return apiClient.patch<ProductionBatch>(`/api/production/batches/${id}`, body).then((r) => r.data);
+}
+
 /** Per-size line for a stage move: how many pieces reached that stage. It does
  *  NOT touch the plan — planned is fixed when the lot is created. */
 export interface StageQtyItem {

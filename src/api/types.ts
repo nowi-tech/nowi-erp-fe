@@ -18,7 +18,7 @@ export type UserRole =
   | 'production_lead'
   // Production desk: starts batches off the Inventory Health forecast (or a
   // live style) and walks them through the floor stages. Not a PD editor;
-  // cancelling a batch is super_admin only.
+  // cannot cancel a batch.
   | 'production_editor'
   // Narrow go-to-market role: create a design + do cataloguing (EasyEcom +
   // marketplace take-offline). No editing, approving, or going live.
