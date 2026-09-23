@@ -215,17 +215,12 @@ export default function ProductionLotDetail() {
           {t('common.back', { defaultValue: 'Back' })}
         </Button>
         <h1 className="text-2xl font-bold tracking-tight">{lot.batchNo}</h1>
-        {/* The style's own reference, shown BESIDE the name rather than instead
-            of it — `name ?? styleRef` hid the identifier on every lot that had a
-            name, which is the one thing you search and cross-reference by. Same
-            mono treatment the board's Style column uses. */}
+        {/* Same mono treatment the board's Style column uses. The catalogue name is
+            left out: EasyEcom often holds a per-size code there, not a name. */}
         {(lot.styleRef || lot.styleKey) && (
           <span className="font-mono text-sm text-[var(--color-primary)]">
             {lot.styleRef ?? lot.styleKey}
           </span>
-        )}
-        {lot.name && (
-          <span className="text-base text-[var(--color-muted-foreground)]">{lot.name}</span>
         )}
         <Badge variant="outline">{statusLabel(t, lot.status)}</Badge>
         {lot.tailorName && <Badge variant="secondary">{lot.tailorName}</Badge>}
