@@ -597,22 +597,25 @@ export default function InventoryHealth(): ReactNode {
     }
   };
 
+  // A count belongs to the query that produced it: while the next one is in
+  // flight, show none rather than the last view's number.
+  const shown = (n: number): number | undefined => (loading ? undefined : n);
   // The lens tabs (Sampling-style) — urgency tiers, then the aging + new lenses.
   const lensTabs: QueueTab<FilterKey>[] = kpis
     ? [
-        { key: 'all', label: t('admin.inventoryHealth.tab.all', { defaultValue: 'All styles' }), count: kpis.totalStyles },
-        { key: 'cut', label: t('admin.inventoryHealth.tab.cut', { defaultValue: 'Cut size' }), count: kpis.cutSize },
-        { key: 'out', label: t('admin.inventoryHealth.tab.out', { defaultValue: 'Out of stock' }), count: kpis.outOfStock },
-        { key: 'critical', label: t('admin.inventoryHealth.tab.critical', { defaultValue: 'Critical' }), count: kpis.critical },
-        { key: 'watch', label: t('admin.inventoryHealth.tab.watch', { defaultValue: 'Watch' }), count: kpis.watch },
-        { key: 'slow', label: t('admin.inventoryHealth.tab.slow', { defaultValue: 'Slow-movers' }), count: kpis.slow },
-        { key: 'dead', label: t('admin.inventoryHealth.tab.dead', { defaultValue: 'Dead stock' }), count: kpis.dead },
+        { key: 'all', label: t('admin.inventoryHealth.tab.all', { defaultValue: 'All styles' }), count: shown(kpis.totalStyles) },
+        { key: 'cut', label: t('admin.inventoryHealth.tab.cut', { defaultValue: 'Cut size' }), count: shown(kpis.cutSize) },
+        { key: 'out', label: t('admin.inventoryHealth.tab.out', { defaultValue: 'Out of stock' }), count: shown(kpis.outOfStock) },
+        { key: 'critical', label: t('admin.inventoryHealth.tab.critical', { defaultValue: 'Critical' }), count: shown(kpis.critical) },
+        { key: 'watch', label: t('admin.inventoryHealth.tab.watch', { defaultValue: 'Watch' }), count: shown(kpis.watch) },
+        { key: 'slow', label: t('admin.inventoryHealth.tab.slow', { defaultValue: 'Slow-movers' }), count: shown(kpis.slow) },
+        { key: 'dead', label: t('admin.inventoryHealth.tab.dead', { defaultValue: 'Dead stock' }), count: shown(kpis.dead) },
         // Held for seller approval — unsellable, so off every other lens. This is
         // the only way back to them.
-        { key: 'pending', label: t('admin.inventoryHealth.tab.pending', { defaultValue: 'Pending approval' }), count: kpis.pendingApproval },
+        { key: 'pending', label: t('admin.inventoryHealth.tab.pending', { defaultValue: 'Pending approval' }), count: shown(kpis.pendingApproval) },
         // Same idea for products you switched off: they count nowhere else, so
         // without this tab a disabled style could never be found again.
-        { key: 'disabled', label: t('admin.inventoryHealth.tab.disabled', { defaultValue: 'Disabled' }), count: kpis.disabled },
+        { key: 'disabled', label: t('admin.inventoryHealth.tab.disabled', { defaultValue: 'Disabled' }), count: shown(kpis.disabled) },
         // "What's new" is a sort preset (it reorders whichever lens is in focus),
         // not a lens of its own — no tab.
       ]
@@ -774,7 +777,7 @@ export default function InventoryHealth(): ReactNode {
             <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
               <StatCard
                 label={t('admin.inventoryHealth.chip.cut', { defaultValue: 'Cut size' })}
-                value={kpis.cutSize}
+                value={loading ? null : kpis.cutSize}
                 dot={AMBER}
                 active={filter === 'cut'}
                 onClick={() => setFilter(filter === 'cut' ? 'all' : 'cut')}
@@ -782,7 +785,7 @@ export default function InventoryHealth(): ReactNode {
               />
               <StatCard
                 label={t('admin.inventoryHealth.chip.out', { defaultValue: 'Out of stock' })}
-                value={kpis.outOfStock}
+                value={loading ? null : kpis.outOfStock}
                 dot={RED}
                 active={filter === 'out'}
                 onClick={() => setFilter(filter === 'out' ? 'all' : 'out')}
@@ -790,7 +793,7 @@ export default function InventoryHealth(): ReactNode {
               />
               <StatCard
                 label={t('admin.inventoryHealth.toMake', { defaultValue: 'To make' })}
-                value={kpis.unitsToMake}
+                value={loading ? null : kpis.unitsToMake}
                 unit={t('admin.inventoryHealth.headlineUnits', { defaultValue: 'units' })}
               />
             </div>
@@ -816,7 +819,11 @@ export default function InventoryHealth(): ReactNode {
                   />
                 </div>
                 <span className="ml-auto shrink-0 text-[12px] tabular-nums text-[var(--color-muted-foreground)]">
-                  {t('admin.inventoryHealth.styleCount', { defaultValue: '{{n}} styles', n: total })}
+                  {loading ? (
+                    <Skeleton className="inline-block h-3.5 w-16 rounded align-middle" />
+                  ) : (
+                    t('admin.inventoryHealth.styleCount', { defaultValue: '{{n}} styles', n: total })
+                  )}
                 </span>
               </div>
 
@@ -1340,7 +1347,8 @@ function StatCard({
   t,
 }: {
   label: string;
-  value: number;
+  /** null while a new query is loading — renders a placeholder, never a stale number. */
+  value: number | null;
   unit?: string;
   dot?: string;
   active?: boolean;
@@ -1377,7 +1385,7 @@ function StatCard({
         {label}
       </span>
       <span className="mt-2 tabular-nums" style={{ color: INK, fontSize: 30, fontWeight: 700, lineHeight: 1 }}>
-        {fmtN(value)}
+        {value === null ? <Skeleton className="inline-block h-[30px] w-14 rounded align-middle" /> : fmtN(value)}
         {unit && (
           <span className="ml-1 text-sm font-medium" style={{ color: MUTED }}>
             {unit}
