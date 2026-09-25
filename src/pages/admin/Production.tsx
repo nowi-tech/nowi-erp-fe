@@ -24,7 +24,7 @@ import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 import { Skeleton } from '@/components/ui/skeleton';
 import RecordOutputDialog from '@/components/production/RecordOutputDialog';
 import StageQtyDialog from '@/components/production/StageQtyDialog';
-import EditLotDialog from '@/components/production/EditLotDialog';
+import DailyEntryDialog from '@/components/production/DailyEntryDialog';
 import EditPlanDialog from '@/components/production/EditPlanDialog';
 import StartProductionIntakeDialog from '@/components/production/StartProductionIntakeDialog';
 import DispatchBuilderDialog from '@/components/production/DispatchBuilderDialog';
@@ -124,9 +124,12 @@ function daysAgoISO(n: number): string {
 
 /** The board opens on ALL TIME, not a trailing window. It is an operational
  *  queue — a lot started 45 days ago and still on the floor is exactly the one
- *  you must not hide, and the KPI cards above are unwindowed, so a default
- *  window would also make the cards and the table disagree. Narrowing is an
- *  explicit choice via the picker. */
+ *  you must not hide. Narrowing is an explicit choice via the picker.
+ *
+ *  All time sends no window: the server's entry filter would otherwise drop lots with no entries yet. */
+function entryWindow(from: string, to: string): { from?: string; to?: string } {
+  return from === ALL_TIME_FROM_ISO ? {} : { from, to };
+}
 
 export default function Production() {
   const { t } = useTranslation();
@@ -251,8 +254,7 @@ export default function Production() {
       origin: f.originFilter || undefined,
       brand: f.brandFilter || undefined,
       search: f.search || undefined,
-      from: f.from,
-      to: f.to,
+      ...entryWindow(f.from, f.to),
     });
     setKpis(res.kpis);
     setTabCounts(res.kpis.tabCounts);
@@ -287,8 +289,7 @@ export default function Production() {
         origin: originFilter || undefined,
         brand: brandFilter || undefined,
         search: debouncedSearch || undefined,
-        from: dateFrom,
-        to: dateTo,
+        ...entryWindow(dateFrom, dateTo),
         skip,
         take: PAGE_SIZE,
       });
@@ -684,13 +685,13 @@ export default function Production() {
               ))}
             </select>
             <FilterRailDivider />
-            {/* Start-date window — the same shared picker the dashboard and
+            {/* Entry-date window — the same shared picker the dashboard and
                 Inventory Health use, so the presets and behaviour match. */}
             <DateRangePicker
               from={dateFrom}
               to={dateTo}
               maxDate={daysAgoISO(0)}
-              label={t('admin.production.startedWindow', { defaultValue: 'Started' })}
+              label={t('admin.production.entriesWindow', { defaultValue: 'Entries' })}
               onApply={(f, tt) => {
                 setDateFrom(f);
                 setDateTo(tt);
@@ -863,7 +864,7 @@ export default function Production() {
         }}
         onStale={() => void load()}
       />
-      <EditLotDialog
+      <DailyEntryDialog
         open={updateTarget !== null}
         lot={updateTarget}
         onClose={() => setUpdateTarget(null)}
@@ -1004,7 +1005,31 @@ function KpiRow({
   return (
     // Same card as the dashboard's summary row (shared SummaryCard) — production
     // numbers, sampling's design.
-    <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-5">
+    <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-6">
+      <SummaryCard
+        label={t('admin.production.kpi.entries', { defaultValue: 'Finished in window' })}
+        value={kpis?.entries.finishing ?? dash}
+        breakdown={
+          kpis
+            ? [
+                {
+                  label: t('admin.production.kpi.entriesStitched', { defaultValue: 'Stitched' }),
+                  value: kpis.entries.stitching,
+                },
+                {
+                  label: t('admin.production.kpi.entriesCut', { defaultValue: 'Cut' }),
+                  value: kpis.entries.cutting,
+                },
+                {
+                  label: t('admin.production.kpi.entriesLots', { defaultValue: 'Lots' }),
+                  value: kpis.entries.lots,
+                },
+              ]
+            : undefined
+        }
+        // Counts completed lots too, so no single tab lists what it counts.
+        hideView
+      />
       <SummaryCard
         label={t('admin.production.kpi.planning', { defaultValue: 'In pipeline' })}
         value={kpis?.planningBatches ?? dash}
