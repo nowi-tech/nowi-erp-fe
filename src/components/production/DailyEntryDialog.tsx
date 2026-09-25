@@ -50,6 +50,8 @@ export default function DailyEntryDialog({
   const toast = useToast();
   const [workDate, setWorkDate] = useState(todayISO());
   const [stage, setStage] = useState<FloorStage>('cutting');
+  // Only a stage picked by hand moves the lot; otherwise it just chooses the column.
+  const [stagePicked, setStagePicked] = useState(false);
   const [added, setAdded] = useState<Record<string, number>>({});
   const [notes, setNotes] = useState('');
   const [reviewing, setReviewing] = useState(false);
@@ -61,6 +63,7 @@ export default function DailyEntryDialog({
     if (!open || !lot) return;
     const at = lot.status === 'on_hold' ? lot.heldFromStatus : lot.status;
     setStage((FLOOR_STAGES as readonly string[]).includes(at ?? '') ? (at as FloorStage) : 'cutting');
+    setStagePicked(false);
     setWorkDate(todayISO());
     setAdded({});
     setNotes(lot.notes ?? '');
@@ -77,7 +80,7 @@ export default function DailyEntryDialog({
   });
   const soFar = (s: BatchSizeLine) => s[col.field] as number;
   const nextNotes = notes.trim();
-  const statusChanged = !held && stage !== base.status;
+  const statusChanged = !held && stagePicked && stage !== base.status;
   const notesChanged = nextNotes !== (base.notes ?? '');
 
   // Totals, not deltas: the server writes the difference, and refuses if the lot moved meanwhile.
@@ -161,7 +164,11 @@ export default function DailyEntryDialog({
       setReviewing(false);
       if (apiErrorStatus(e) === 409) {
         const latest = await getLot(base.id).catch(() => null);
-        if (latest) setFresh(latest);
+        if (latest) {
+          // An untouched remark takes the latest one, so a retry can't undo someone else's.
+          setNotes((n) => (n.trim() === (base.notes ?? '') ? (latest.notes ?? '') : n));
+          setFresh(latest);
+        }
         onStale?.();
         toast.show(
           t('admin.production.update.stale', {
@@ -236,6 +243,7 @@ export default function DailyEntryDialog({
               disabled={held}
               onChange={(e) => {
                 setStage(e.target.value as FloorStage);
+                setStagePicked(true);
                 setAdded({});
               }}
               className={fieldClass}

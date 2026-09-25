@@ -372,6 +372,8 @@ export interface LotTimelineEntry {
   qty: number;
   note: string | null;
   recordedAt: string;
+  /** `YYYY-MM-DD` the pieces were made; can differ from the day it was typed. */
+  workDate: string;
   recordedBy: { id: number; name: string } | null;
 }
 
