@@ -138,6 +138,8 @@ export interface ProductionKpis {
   /** Completed batches still holding units no challan has shipped. */
   dueToDispatchBatches: number;
   dueToDispatchUnits: number;
+  /** Net pieces entered per stage, and lots touched, on work dates inside the date window. */
+  entries: { cutting: number; stitching: number; finishing: number; lots: number };
   /** Row count per board tab — the chips on the tab strip. */
   tabCounts: {
     planning: number;
@@ -336,6 +338,8 @@ export interface UpdateLotBody {
   holdReason?: string;
   /** Remark; empty string clears it. */
   notes?: string;
+  /** `YYYY-MM-DD` the stage entries count on; the server defaults to today. */
+  workDate?: string;
   /** The figures and stage the dialog opened with; a mismatch is refused (409). */
   expected?: (CorrectStageQtyItem & { qtyPlanned?: number })[];
   expectedStatus?: BatchStatus;
@@ -368,6 +372,8 @@ export interface LotTimelineEntry {
   qty: number;
   note: string | null;
   recordedAt: string;
+  /** `YYYY-MM-DD` the pieces were made; can differ from the day it was typed. */
+  workDate: string;
   recordedBy: { id: number; name: string } | null;
 }
 

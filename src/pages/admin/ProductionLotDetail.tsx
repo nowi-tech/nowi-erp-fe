@@ -16,6 +16,7 @@ import {
 } from '@/api/production';
 import { hasLeftFloor, IN_PRODUCTION_STATUSES, pendingAt, statusLabel } from '@/lib/production';
 import { hasAnyRole, PRODUCTION_WRITE_ROLES } from '@/lib/userRoles';
+import { localISO } from '@/lib/date';
 import { useAuth } from '@/context/auth';
 
 /** Stage pill colours, reusing the badge variants the floor screens already use. */
@@ -400,6 +401,15 @@ export default function ProductionLotDetail() {
                   <span className="text-[var(--color-muted-foreground)]">
                     {fmtDateTime(e.recordedAt)}
                   </span>
+                  {e.workDate !== localISO(new Date(e.recordedAt)) && (
+                    <span className="text-[var(--color-muted-foreground)]">
+                      ·{' '}
+                      {t('admin.production.lot.forDay', {
+                        defaultValue: 'for {{date}}',
+                        date: fmtDate(`${e.workDate}T00:00:00`),
+                      })}
+                    </span>
+                  )}
                   {e.recordedBy && (
                     <span className="text-[var(--color-muted-foreground)]">
                       · {e.recordedBy.name}
