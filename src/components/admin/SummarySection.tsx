@@ -3,13 +3,6 @@ import { useTranslation } from 'react-i18next';
 import { CARD_SHELL } from '@/components/admin/kpiPrimitives';
 import type { SalesInventoryView, SummaryRow } from '@/api/salesKpis';
 
-/** "29 Jun" for a YYYY-MM-DD. */
-function dayLabel(iso: string): string {
-  const [y, m, d] = iso.split('-').map(Number);
-  if (!y || !m || !d) return iso;
-  return new Date(y, m - 1, d).toLocaleDateString('en-GB', { day: '2-digit', month: 'short' });
-}
-
 function fmt(v: number | null, format: SummaryRow['format']): string {
   if (v === null || v === undefined) return '—';
   if (format === 'currency') return `₹${v.toLocaleString('en-IN', { maximumFractionDigits: 0 })}`;
@@ -21,14 +14,13 @@ function fmt(v: number | null, format: SummaryRow['format']): string {
  *  Shows all three whatever the view is; the picked one is tinted. */
 export function SummarySection({
   rows,
-  from,
-  to,
+  range,
   active,
   perItem,
 }: {
   rows: SummaryRow[];
-  from: string;
-  to: string;
+  /** The page's range, worded as the cards word it. */
+  range: string;
   active: SalesInventoryView;
   /** Fulfilment rows count items, so they read differently from the cards, which count orders. */
   perItem: boolean;
@@ -50,14 +42,12 @@ export function SummarySection({
       <p className="mb-2.5 text-xs text-neutral-500">
         {perItem
           ? t('admin.salesSummary.caption', {
-              defaultValue: 'Per item · {{from}} to {{to}}',
-              from: dayLabel(from),
-              to: dayLabel(to),
+              defaultValue: 'Per item · {{range}}',
+              range,
             })
           : t('admin.salesSummary.captionPlain', {
-              defaultValue: '{{from}} to {{to}}',
-              from: dayLabel(from),
-              to: dayLabel(to),
+              defaultValue: '{{range}}',
+              range,
             })}
       </p>
       <div style={CARD_SHELL} className="overflow-x-auto">

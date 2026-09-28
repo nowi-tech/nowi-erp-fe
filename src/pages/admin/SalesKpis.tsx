@@ -2,18 +2,21 @@ import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Info, Upload } from 'lucide-react';
 import { Skeleton } from '@/components/ui/skeleton';
-import { DatePicker } from '@/components/ui/DatePicker';
+import { DateRangePicker } from '@/components/ui/DateRangePicker';
 import { FilterRail, FilterRailDivider, FilterRailSegments } from '@/components/ui/filter-rail';
 import { useToast } from '@/components/ui/toast';
 import { localISO, todayISO } from '@/lib/date';
 import { CARD_SHELL, DISPLAY, SANS, Sparkline } from '@/components/admin/kpiPrimitives';
 import { SummarySection } from '@/components/admin/SummarySection';
 import { useAuth } from '@/context/auth';
+import { useSignedUrls } from '@/hooks/useSignedUrls';
+import { HoverThumbnail } from '@/components/dashboard/StylesInFlightTable';
 import { hasAnyRole } from '@/lib/userRoles';
 import {
   getCancellations,
   getSalesKpis,
   getSalesSummary,
+  getTopItems,
   uploadSalesCsv,
   type CancellationBreakdown,
   type SalesInventoryView,
@@ -22,6 +25,7 @@ import {
   type SalesKpisResponse,
   type SalesMetric,
   type SalesSummary,
+  type TopItems,
 } from '@/api/salesKpis';
 
 /** Per-bucket accent — cards in a bucket share a colour so groups read at a glance. */
@@ -44,6 +48,11 @@ function dayLabel(iso: string): string {
   const [y, m, d] = iso.split('-').map(Number);
   if (!y || !m || !d) return iso;
   return new Date(y, m - 1, d).toLocaleDateString('en-GB', { day: '2-digit', month: 'short' });
+}
+
+/** "3 Sept" for one day, "17 Aug – 15 Sept" for a range. */
+function rangeLabel(from: string, to: string): string {
+  return from === to ? dayLabel(from) : `${dayLabel(from)} – ${dayLabel(to)}`;
 }
 
 /** "5 min ago" style relative label for the last sync. */
@@ -116,16 +125,13 @@ export default function SalesKpis({
   const [summary, setSummary] = useState<SalesSummary | null>(null);
   const [summaryFailed, setSummaryFailed] = useState(false);
   const today = todayISO();
-  // Calendar yesterday (local) — so a back-dated pick of yesterday reads the
-  // friendly word "Yesterday" (mirrors Production KPIs), not a raw date.
-  const yesterday = (() => {
+  // One range drives every section on the page; opens on the last 30 days.
+  const [from, setFrom] = useState(() => {
     const d = new Date();
-    d.setDate(d.getDate() - 1);
+    d.setDate(d.getDate() - 29);
     return localISO(d);
-  })();
-  // undefined = the BE default (last uploaded day); a date = explicit pick.
-  const [sendAsOf, setSendAsOf] = useState<string | undefined>(undefined);
-  const [displayAsOf, setDisplayAsOf] = useState(today);
+  });
+  const [to, setTo] = useState(today);
   // Real / virtual view — by the warehouse that shipped each line.
   const [inventory, setInventory] = useState<SalesInventoryView>('all');
   const [tick, setTick] = useState(0);
@@ -141,11 +147,10 @@ export default function SalesKpis({
     let cancelled = false;
     setLoading(true);
     setFailed(false);
-    getSalesKpis(sendAsOf, inventory)
+    getSalesKpis(from, to, inventory)
       .then((d) => {
         if (cancelled || queryRef.current !== my) return;
         setData(d);
-        setDisplayAsOf(d.asOf);
       })
       .catch(() => {
         if (cancelled || queryRef.current !== my) return;
@@ -158,7 +163,7 @@ export default function SalesKpis({
     return () => {
       cancelled = true;
     };
-  }, [sendAsOf, inventory, tick]);
+  }, [from, to, inventory, tick]);
 
   // Only the Fulfilment page shows the breakdown.
   const showsFulfilment = !buckets || buckets.includes('fulfilment');
@@ -168,7 +173,7 @@ export default function SalesKpis({
     // Hide the previous view's breakdown until this one arrives, so it never sits under the wrong cards.
     setCancellations(null);
     setCancellationsFailed(false);
-    getCancellations(sendAsOf, inventory)
+    getCancellations(from, to, inventory)
       .then((c) => {
         if (!cancelled) setCancellations(c);
       })
@@ -178,14 +183,14 @@ export default function SalesKpis({
     return () => {
       cancelled = true;
     };
-  }, [showsFulfilment, sendAsOf, inventory, tick]);
+  }, [showsFulfilment, from, to, inventory, tick]);
 
   // Every view is a column here, so the section doesn't reload when the view changes.
   useEffect(() => {
     let cancelled = false;
     setSummary(null);
     setSummaryFailed(false);
-    getSalesSummary(sendAsOf)
+    getSalesSummary(from, to)
       .then((r) => {
         if (!cancelled) setSummary(r);
       })
@@ -195,25 +200,13 @@ export default function SalesKpis({
     return () => {
       cancelled = true;
     };
-  }, [sendAsOf, tick]);
-
-  // Switching into a scoped view while an older date is picked would land outside
-  // the split's reach. Pull the date forward to the first day that HAS a split,
-  // so the view change never leaves the page reading N/A.
-  useEffect(() => {
-    const floor = data?.splitFrom;
-    if (inventory === 'all' || !floor || displayAsOf >= floor) return;
-    setSendAsOf(floor);
-    setDisplayAsOf(floor);
-  }, [inventory, data?.splitFrom, displayAsOf]);
+  }, [from, to, tick]);
 
   /** Sends the picked CSV; the dashboard is rebuilt before the upload returns. */
   const onUpload = async (file: File): Promise<void> => {
     setUploading(true);
     try {
       const res = await uploadSalesCsv(await file.text());
-      setSendAsOf(undefined); // back to the BE default, so the view lands on the new data
-      setDisplayAsOf(res.toDay);
       setTick((x) => x + 1);
       toast.show(
         t('admin.salesKpis.uploaded', {
@@ -279,16 +272,8 @@ export default function SalesKpis({
       ? `${syncedAbs} · ${syncedRel}`
       : syncedAbs
     : syncedRel;
-  // Headline column label: "Today" / "Yesterday" when the resolved as-of IS the
-  // real today / yesterday; otherwise the actual picked date, so a back-dated
-  // view reads the friendly day word when it applies and a plain date otherwise.
-  const resolvedAsOf = data?.asOf ?? displayAsOf;
-  const headlineLabel =
-    resolvedAsOf === today
-      ? t('admin.salesKpis.today', { defaultValue: 'Today' })
-      : resolvedAsOf === yesterday
-        ? t('admin.salesKpis.yesterday', { defaultValue: 'Yesterday' })
-        : dayLabel(resolvedAsOf);
+  // The range actually measured — "All time" starts at the first day with data.
+  const headlineLabel = data ? rangeLabel(data.from, data.to) : '';
 
   return (
     <div style={{ minHeight: '100%', background: '#f6f7f9', fontFamily: SANS }} className="p-4 sm:p-6 lg:p-8">
@@ -349,18 +334,15 @@ export default function SalesKpis({
               }))}
             />
             <FilterRailDivider />
-            <DatePicker
-              value={displayAsOf}
-              onChange={(d) => {
-                setSendAsOf(d);
-                setDisplayAsOf(d);
-              }}
+            <DateRangePicker
+              from={from}
+              to={to}
               maxDate={today}
-              // Sales history predates the Real/Virtual split and is whole-account
-              // only, so a scoped view can't answer for those days — bar the picker
-              // there rather than show a page of N/A under a false stale banner.
-              minDate={inventory === 'all' ? undefined : (data?.splitFrom ?? undefined)}
-              label={t('admin.salesKpis.asOf', { defaultValue: 'As of' })}
+              label={t('dashboard.dateFilter.label', { defaultValue: 'Showing' })}
+              onApply={(f, t2) => {
+                setFrom(f);
+                setTo(t2);
+              }}
             />
           </FilterRail>
         </div>
@@ -430,11 +412,13 @@ export default function SalesKpis({
                 );
               })}
             </div>
+            {(!buckets || buckets.includes('sales')) && (
+              <TopItemsTable from={from} to={to} inventory={inventory} tick={tick} />
+            )}
             {summary && (
               <SummarySection
                 rows={summary.rows.filter((r) => !buckets || buckets.includes(r.bucket))}
-                from={summary.from}
-                to={summary.to}
+                range={headlineLabel}
                 active={inventory}
                 perItem={showsFulfilment}
               />
@@ -448,7 +432,7 @@ export default function SalesKpis({
               </div>
             )}
             {showsFulfilment && cancellations && (
-              <CancellationTable t={t} data={cancellations} />
+              <CancellationTable t={t} data={cancellations} range={headlineLabel} />
             )}
             {showsFulfilment && cancellationsFailed && (
               <div style={CARD_SHELL} className="mt-7 text-center text-sm text-amber-800">
@@ -494,7 +478,7 @@ function InfoDot({ text }: { text?: string }): ReactNode {
  *  a single current value — no Today/Yesterday/7d/Month breakdown or trend. */
 function SnapshotCard({ metric, accent }: { metric: SalesMetric; accent: string }): ReactNode {
   const { t } = useTranslation();
-  const current = metric.today ?? metric.last7Days ?? metric.last30Days;
+  const current = metric.value;
   return (
     <div style={{ ...CARD_SHELL, display: 'flex', flexDirection: 'column' }}>
       <div className="mb-3.5 flex min-w-0 items-center gap-2.5">
@@ -533,16 +517,11 @@ function SalesCard({
   accent: string;
   headlineLabel: string;
 }): ReactNode {
-  const { t } = useTranslation();
   if (metric.kind === 'snapshot') return <SnapshotCard metric={metric} accent={accent} />;
-  const naAll =
-    metric.today == null &&
-    metric.yesterday == null &&
-    metric.last7Days == null &&
-    metric.last30Days == null;
-  const showSpark = !naAll && metric.spark.some((v) => v !== 0);
-  const muted = naAll || metric.today == null;
-  const up = metric.trendPct >= 0;
+  const showSpark = metric.spark.some((v) => v !== 0);
+  const trend = metric.trendPct;
+  const muted = metric.value == null || trend == null;
+  const up = (trend ?? 0) >= 0;
 
   return (
     <div style={{ ...CARD_SHELL, display: 'flex', flexDirection: 'column' }}>
@@ -562,11 +541,11 @@ function SalesCard({
             color: muted ? '#9ca3af' : up ? '#0f7a52' : '#c4322a',
           }}
         >
-          {muted ? '–' : up ? '▲' : '▼'} {muted ? '—' : `${Math.abs(metric.trendPct).toFixed(1)}%`}
+          {muted ? '–' : up ? '▲' : '▼'} {muted ? '—' : `${Math.abs(trend ?? 0).toFixed(1)}%`}
         </span>
       </div>
 
-      {/* Headline: Today */}
+      {/* Headline: the picked range */}
       <div
         style={{
           fontFamily: DISPLAY,
@@ -574,11 +553,11 @@ function SalesCard({
           lineHeight: 1,
           fontWeight: 600,
           letterSpacing: '-0.02em',
-          color: metric.today == null ? '#c0c4cc' : '#11151f',
+          color: metric.value == null ? '#c0c4cc' : '#11151f',
           fontFeatureSettings: "'tnum' 1",
         }}
       >
-        {formatValue(metric.today, metric.format)}
+        {formatValue(metric.value, metric.format)}
       </div>
       <div className="mt-1.5 text-xs font-semibold text-neutral-400">{headlineLabel}</div>
 
@@ -592,39 +571,6 @@ function SalesCard({
         />
       )}
 
-      <div style={{ height: 1, background: '#eef0f3', margin: '13px 0 12px' }} />
-
-      {/* Footer: Yesterday / Last 7 days / Last 30 days */}
-      <div className="grid grid-cols-3 gap-2">
-        <FooterCell
-          label={t('admin.salesKpis.yesterday', { defaultValue: 'Yesterday' })}
-          value={formatValue(metric.yesterday, metric.format)}
-        />
-        <FooterCell
-          label={t('admin.salesKpis.last7Days', { defaultValue: 'Last 7 days' })}
-          value={formatValue(metric.last7Days, metric.format)}
-        />
-        <FooterCell
-          label={t('admin.salesKpis.last30Days', { defaultValue: 'Last 30 days' })}
-          value={formatValue(metric.last30Days, metric.format)}
-        />
-      </div>
-    </div>
-  );
-}
-
-function FooterCell({ label, value }: { label: string; value: string }): ReactNode {
-  const na = value === 'N/A';
-  return (
-    <div className="min-w-0">
-      <div
-        style={{ fontFamily: DISPLAY, fontFeatureSettings: "'tnum' 1" }}
-        className={`truncate text-[13.5px] font-semibold ${na ? 'text-neutral-300' : 'text-neutral-800'}`}
-        title={value}
-      >
-        {value}
-      </div>
-      <div className="mt-1 text-[10px] font-bold uppercase tracking-wider text-neutral-400">{label}</div>
     </div>
   );
 }
@@ -651,9 +597,11 @@ function UnavailableNote({ metrics }: { metrics: SalesMetric[] }): ReactNode {
 function CancellationTable({
   t,
   data,
+  range,
 }: {
   t: ReturnType<typeof useTranslation>['t'];
   data: CancellationBreakdown;
+  range: string;
 }): ReactNode {
   if (!data.reasons.length) return null;
   // Server totals, not a sum of rows — one order can sit under two reasons.
@@ -669,7 +617,8 @@ function CancellationTable({
         <p className="mb-3 text-sm text-neutral-600">
           {t('admin.salesKpis.cancelSummary', {
             defaultValue:
-              '{{ours}} of {{total}} cancellations ({{pct}}%) in the last 30 days were ours to prevent.',
+              '{{ours}} of {{total}} cancellations ({{pct}}%) in {{range}} were ours to prevent.',
+            range,
             ours: ours.toLocaleString('en-IN'),
             total: total.toLocaleString('en-IN'),
             pct: pctOurs,
@@ -706,6 +655,111 @@ function CancellationTable({
   );
 }
 
+/** Top 10 SKUs by revenue over the page's range. */
+function TopItemsTable({
+  from,
+  to,
+  inventory,
+  tick,
+}: {
+  from: string;
+  to: string;
+  inventory: SalesInventoryView;
+  tick: number;
+}): ReactNode {
+  const { t } = useTranslation();
+  const [data, setData] = useState<TopItems | null>(null);
+  const [failed, setFailed] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    setData(null);
+    setFailed(false);
+    getTopItems(from, to, inventory)
+      .then((r) => {
+        if (!cancelled) setData(r);
+      })
+      .catch(() => {
+        if (!cancelled) setFailed(true);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [from, to, inventory, tick]);
+
+  const signed = useSignedUrls((data?.items ?? []).map((it) => it.imageUrl));
+  return (
+    <section className="mt-7">
+      <h2 className="mb-2.5 text-xs font-bold uppercase tracking-wider text-neutral-400">
+        {t('admin.salesKpis.topItems', { defaultValue: 'Top 10 selling items' })}
+      </h2>
+      <div style={CARD_SHELL}>
+        {failed ? (
+          <p className="text-center text-sm text-amber-800">
+            {t('admin.salesKpis.topItemsFailed', { defaultValue: 'Could not load the top items.' })}
+          </p>
+        ) : !data ? (
+          <Skeleton className="h-40 w-full rounded-md" />
+        ) : !data.items.length ? (
+          <p className="text-center text-sm text-neutral-400">
+            {t('admin.salesKpis.topItemsEmpty', { defaultValue: 'No sales in this range.' })}
+          </p>
+        ) : (
+          <ol className="flex flex-col">
+            {data.items.map((it, i) => (
+              <li
+                key={it.sku}
+                className="flex items-center gap-3 border-t border-neutral-100 py-2.5 first:border-t-0 first:pt-0 last:pb-0 sm:gap-4"
+              >
+                <span
+                  className={`w-5 flex-none text-right text-sm font-semibold tabular-nums ${
+                    i < 3 ? 'text-neutral-900' : 'text-neutral-400'
+                  }`}
+                >
+                  {i + 1}
+                </span>
+                <HoverThumbnail
+                  src={(it.imageUrl && signed[it.imageUrl]) || null}
+                  alt={it.styleName ?? it.sku}
+                  size={44}
+                  radius="8px"
+                />
+                <div className="min-w-0 flex-1">
+                  <div className="truncate text-sm font-semibold text-neutral-900" title={it.styleName ?? it.sku}>
+                    {it.styleName ?? it.sku}
+                  </div>
+                  <div className="mt-0.5 flex min-w-0 items-center gap-1.5 text-xs text-neutral-500">
+                    <span className="truncate font-mono">{it.sku}</span>
+                    {it.size && (
+                      <span className="flex-none rounded bg-neutral-100 px-1.5 py-px text-[10px] font-semibold text-neutral-600">
+                        {it.size}
+                      </span>
+                    )}
+                  </div>
+                </div>
+                <div className="w-24 flex-none text-right">
+                  <div
+                    style={{ fontFamily: DISPLAY, fontFeatureSettings: "'tnum' 1" }}
+                    className="text-sm font-semibold text-neutral-900"
+                  >
+                    {formatValue(it.revenue, 'currency')}
+                  </div>
+                  <div className="mt-0.5 text-xs tabular-nums text-neutral-500">
+                    {t('admin.salesKpis.unitsCount', {
+                      defaultValue: '{{count, number}} units',
+                      count: it.units,
+                    })}
+                  </div>
+                </div>
+              </li>
+            ))}
+          </ol>
+        )}
+      </div>
+    </section>
+  );
+}
+
 function SkeletonGrid(): ReactNode {
   return (
     <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3 lg:gap-[18px]">
@@ -715,15 +769,6 @@ function SkeletonGrid(): ReactNode {
           <Skeleton className="mt-4 h-8 w-24 rounded-md" />
           <Skeleton className="mt-2 h-3 w-12 rounded-md" />
           <Skeleton className="mt-4 h-[30px] w-full rounded-md" />
-          <div style={{ height: 1, background: '#eef0f3', margin: '13px 0 12px' }} />
-          <div className="grid grid-cols-3 gap-2">
-            {[0, 1, 2].map((j) => (
-              <div key={j}>
-                <Skeleton className="h-4 w-12 rounded-md" />
-                <Skeleton className="mt-1.5 h-2.5 w-14 rounded-md" />
-              </div>
-            ))}
-          </div>
         </div>
       ))}
     </div>

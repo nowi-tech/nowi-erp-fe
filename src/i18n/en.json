@@ -460,6 +460,11 @@
       "holdFailed": "Couldn’t update. Please try again."
     },
     "salesKpis": {
+      "topItems": "Top 10 selling items",
+      "unitsCount_one": "{{count, number}} unit",
+      "unitsCount_other": "{{count, number}} units",
+      "topItemsEmpty": "No sales in this range.",
+      "topItemsFailed": "Could not load the top items.",
       "upload": "Upload report",
       "uploading": "Importing…",
       "uploaded_one": "{{count, number}} order line imported, {{from}} to {{to}}.",
@@ -475,13 +480,13 @@
       "staleUpload": "Data through {{through}} — upload a newer report.",
       "dataThrough": "Data through {{through}} · imported {{when}}",
       "whyCancelled": "Why orders were cancelled",
-      "cancelSummary": "{{ours}} of {{total}} cancellations ({{pct}}%) in the last 30 days were ours to prevent.",
+      "cancelSummary": "{{ours}} of {{total}} cancellations ({{pct}}%) in {{range}} were ours to prevent.",
       "cancellationsFailed": "Could not load the cancellation breakdown."
     },
     "salesSummary": {
       "title": "Summary",
-      "caption": "Per item · {{from}} to {{to}}",
-      "captionPlain": "{{from}} to {{to}}",
+      "caption": "Per item · {{range}}",
+      "captionPlain": "{{range}}",
       "metric": "Metric",
       "india": "India",
       "china": "China",
