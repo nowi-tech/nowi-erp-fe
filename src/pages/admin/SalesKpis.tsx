@@ -5,7 +5,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { DateRangePicker } from '@/components/ui/DateRangePicker';
 import { FilterRail, FilterRailDivider, FilterRailSegments } from '@/components/ui/filter-rail';
 import { useToast } from '@/components/ui/toast';
-import { localISO, todayISO } from '@/lib/date';
+import { todayISO } from '@/lib/date';
 import { CARD_SHELL, DISPLAY, SANS, Sparkline } from '@/components/admin/kpiPrimitives';
 import { SummarySection } from '@/components/admin/SummarySection';
 import { useAuth } from '@/context/auth';
@@ -125,13 +125,9 @@ export default function SalesKpis({
   const [summary, setSummary] = useState<SalesSummary | null>(null);
   const [summaryFailed, setSummaryFailed] = useState(false);
   const today = todayISO();
-  // One range drives every section on the page; opens on the last 30 days.
-  const [from, setFrom] = useState(() => {
-    const d = new Date();
-    d.setDate(d.getDate() - 29);
-    return localISO(d);
-  });
-  const [to, setTo] = useState(today);
+  // One range drives every section on the page; empty until the first load adopts the server's default (the last day with data).
+  const [from, setFrom] = useState('');
+  const [to, setTo] = useState('');
   // Real / virtual view — by the warehouse that shipped each line.
   const [inventory, setInventory] = useState<SalesInventoryView>('all');
   const [tick, setTick] = useState(0);
@@ -151,6 +147,10 @@ export default function SalesKpis({
       .then((d) => {
         if (cancelled || queryRef.current !== my) return;
         setData(d);
+        if (!from) {
+          setFrom(d.from);
+          setTo(d.to);
+        }
       })
       .catch(() => {
         if (cancelled || queryRef.current !== my) return;
@@ -168,7 +168,7 @@ export default function SalesKpis({
   // Only the Fulfilment page shows the breakdown.
   const showsFulfilment = !buckets || buckets.includes('fulfilment');
   useEffect(() => {
-    if (!showsFulfilment) return;
+    if (!showsFulfilment || !from) return;
     let cancelled = false;
     // Hide the previous view's breakdown until this one arrives, so it never sits under the wrong cards.
     setCancellations(null);
@@ -187,6 +187,7 @@ export default function SalesKpis({
 
   // Every view is a column here, so the section doesn't reload when the view changes.
   useEffect(() => {
+    if (!from) return;
     let cancelled = false;
     setSummary(null);
     setSummaryFailed(false);
@@ -334,16 +335,18 @@ export default function SalesKpis({
               }))}
             />
             <FilterRailDivider />
-            <DateRangePicker
-              from={from}
-              to={to}
-              maxDate={today}
-              label={t('dashboard.dateFilter.label', { defaultValue: 'Showing' })}
-              onApply={(f, t2) => {
-                setFrom(f);
-                setTo(t2);
-              }}
-            />
+            {from && (
+              <DateRangePicker
+                from={from}
+                to={to}
+                maxDate={today}
+                label={t('dashboard.dateFilter.label', { defaultValue: 'Showing' })}
+                onApply={(f, t2) => {
+                  setFrom(f);
+                  setTo(t2);
+                }}
+              />
+            )}
           </FilterRail>
         </div>
 
@@ -412,7 +415,7 @@ export default function SalesKpis({
                 );
               })}
             </div>
-            {(!buckets || buckets.includes('sales')) && (
+            {from && (!buckets || buckets.includes('sales')) && (
               <TopItemsTable from={from} to={to} inventory={inventory} tick={tick} />
             )}
             {summary && (
