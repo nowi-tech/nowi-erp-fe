@@ -80,6 +80,8 @@ export interface InventoryStyle {
   /** Waiting on Myntra seller approval — unsellable, so hidden from every lens
    *  but `pending`, where it can be brought back. */
   pendingApproval: boolean;
+  /** Maps to a style we own. False = search-only row, counted nowhere. */
+  tracked: boolean;
   /** Linked ERP style went live within the last 7 days — drives the new-arrivals
    *  tab + badge. False when the style isn't linked to the ERP catalog. */
   isNew: boolean;
@@ -146,6 +148,8 @@ export interface InventoryHealthParams {
   sortDir?: 'asc' | 'desc';
   /** Production Suggested tab: hide styles that already have an open batch. */
   excludeInProduction?: boolean;
+  /** A search also matches untracked, pending and disabled styles (within the lens). */
+  includeHidden?: boolean;
 }
 
 /** GET /api/inventory-health — one page of the per-size stockout forecast.
@@ -163,6 +167,7 @@ export function getInventoryHealth(params: InventoryHealthParams = {}): Promise<
   if (params.sortKey) q.sortKey = params.sortKey;
   if (params.sortDir) q.sortDir = params.sortDir;
   if (params.excludeInProduction) q.excludeInProduction = '1';
+  if (params.includeHidden) q.includeHidden = '1';
   return apiClient.get<InventoryHealthResponse>('/api/inventory-health', { params: q }).then((r) => r.data);
 }
 

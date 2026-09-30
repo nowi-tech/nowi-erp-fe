@@ -249,6 +249,7 @@ export default function InventoryHealth(): ReactNode {
         category: category || undefined,
         sortKey: sortKey ?? undefined,
         sortDir,
+        includeHidden: true,
       }),
     [windowActive, dateFrom, dateTo, filter, inventory, debouncedSearch, category, sortKey, sortDir],
   );
@@ -880,6 +881,7 @@ export default function InventoryHealth(): ReactNode {
                         canManage={canManage}
                         canDisable={canDisable}
                         canProduce={canProduce}
+                        dimPending={filter !== 'pending'}
                         onRequestDiscontinue={(styleKey, next) => setConfirmDisc({ styleKey, next })}
                         onRequestHold={(styleKey, next) => setConfirmHold({ styleKey, next })}
                         onProduce={() => openProduce(style, img)}
@@ -1038,6 +1040,7 @@ function StyleGroup({
   canManage,
   canDisable,
   canProduce,
+  dimPending,
   onRequestDiscontinue,
   onRequestHold,
   onProduce,
@@ -1050,6 +1053,8 @@ function StyleGroup({
   canManage: boolean;
   canDisable: boolean;
   canProduce: boolean;
+  /** Pending rows are the list on their own tab; elsewhere they only arrive via search. */
+  dimPending: boolean;
   onRequestDiscontinue: (styleKey: string, next: boolean) => void;
   onRequestHold: (styleKey: string, next: boolean) => void;
   onProduce: () => void;
@@ -1067,7 +1072,7 @@ function StyleGroup({
   return (
     <div
       className={`overflow-hidden rounded-[var(--radius-md)] border border-neutral-200 bg-white shadow-sm ${
-        style.discontinued ? 'opacity-60' : ''
+        style.discontinued || !style.tracked || (style.pendingApproval && dimPending) ? 'opacity-60' : ''
       }`}
     >
       {/* Style header — product image + code + status pills, over its (always
@@ -1099,6 +1104,13 @@ function StyleGroup({
             {style.discontinued && (
               <span className="inline-flex items-center rounded border border-neutral-300 bg-neutral-100 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-neutral-500">
                 {t('admin.inventoryHealth.discontinuedBadge', { defaultValue: 'disabled' })}
+              </span>
+            )}
+            {!style.tracked && (
+              <span className="inline-flex items-center rounded border border-neutral-300 bg-neutral-100 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-neutral-500">
+                {linked
+                  ? t('admin.inventoryHealth.notTrackedBadge', { defaultValue: 'not tracked' })
+                  : t('admin.inventoryHealth.notLinkedBadge', { defaultValue: 'not linked in ERP' })}
               </span>
             )}
             {style.pendingApproval && (
@@ -1143,7 +1155,7 @@ function StyleGroup({
             </div>
           )}
         </div>
-        {canProduce && !style.discontinued && !style.pendingApproval && (
+        {canProduce && style.tracked && !style.discontinued && !style.pendingApproval && (
           <button
             type="button"
             onClick={onProduce}
@@ -1153,7 +1165,7 @@ function StyleGroup({
             {t('admin.inventoryHealth.addToPipeline', { defaultValue: 'Add to pipeline' })}
           </button>
         )}
-        {canManage && (
+        {canManage && style.tracked && (
           <button
             type="button"
             onClick={() => onRequestHold(style.styleKey, !style.pendingApproval)}
@@ -1176,7 +1188,7 @@ function StyleGroup({
             )}
           </button>
         )}
-        {canDisable && (
+        {canDisable && style.tracked && (
           <button
             type="button"
             onClick={() => onRequestDiscontinue(style.styleKey, !style.discontinued)}

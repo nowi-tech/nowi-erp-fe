@@ -430,6 +430,8 @@
         "cancels": "Most cancelled"
       },
       "discontinuedBadge": "disabled",
+      "notLinkedBadge": "not linked in ERP",
+      "notTrackedBadge": "not tracked",
       "disable": "Disable",
       "enable": "Enable",
       "discontinueTitle": "Disable product?",
