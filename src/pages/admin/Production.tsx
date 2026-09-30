@@ -1482,7 +1482,7 @@ function BatchTable({
       cols.push({
         key: 'fabric',
         width: '150px',
-        header: t('admin.production.fabric', { defaultValue: 'Fabric' }),
+        header: t('admin.production.fabric', { defaultValue: 'Fabric + trim' }),
         cell: (b) =>
           canSetFabric ? (
             <span onClick={stopRowClick}>
@@ -1592,11 +1592,11 @@ function BatchTable({
                   title={
                     b.fabricStatus == null
                       ? t('admin.production.blockedFabricUnset', {
-                          defaultValue: 'Set the fabric status first.',
+                          defaultValue: 'Set the fabric + trim status first.',
                         })
                       : b.fabricStatus === 'not_available'
                         ? t('admin.production.blockedNoFabric', {
-                            defaultValue: 'Fabric is marked not available.',
+                            defaultValue: 'Fabric + trim is marked not available.',
                           })
                         : undefined
                   }
