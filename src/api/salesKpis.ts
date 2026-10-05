@@ -106,7 +106,7 @@ export interface TopStyle {
   revenue: number;
   /** GCS path or absolute URL; resolve with useSignedUrls. */
   imageUrl: string | null;
-  myntraStyleId: string | null;
+  myntraUrl: string | null;
   /** The style has a row on the Inventory Health page. */
   inInventoryHealth: boolean;
 }

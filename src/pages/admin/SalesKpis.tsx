@@ -821,9 +821,9 @@ function TopStyleLinks({ style }: { style: TopStyle }): ReactNode {
   const health = t('admin.salesKpis.openInventoryHealth', { defaultValue: 'Inventory health' });
   return (
     <div className="flex flex-none items-center gap-1.5">
-      {style.myntraStyleId && (
+      {style.myntraUrl && (
         <a
-          href={`https://www.myntra.com/${encodeURIComponent(style.myntraStyleId)}`}
+          href={style.myntraUrl}
           target="_blank"
           rel="noopener noreferrer"
           aria-label={myntra}
