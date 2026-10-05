@@ -462,9 +462,12 @@
       "holdFailed": "Couldn’t update. Please try again."
     },
     "salesKpis": {
-      "topItems": "Top 10 selling items",
-      "unitsCount_one": "{{count, number}} unit",
-      "unitsCount_other": "{{count, number}} units",
+      "topItems": "Top 10 selling styles",
+      "coloursCount_one": "{{count, number}} colour",
+      "coloursCount_other": "{{count, number}} colours",
+      "openMyntra": "Myntra",
+      "openInventoryHealth": "Inventory health",
+      "col": { "style": "Style", "units": "Units", "revenue": "Revenue" },
       "topItemsEmpty": "No sales in this range.",
       "topItemsFailed": "Could not load the top items.",
       "upload": "Upload report",

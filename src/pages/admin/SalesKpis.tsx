@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Info, Upload } from 'lucide-react';
+import { Link } from 'react-router-dom';
+import { ArrowUpRight, HeartPulse, Info, Upload } from 'lucide-react';
 import { Skeleton } from '@/components/ui/skeleton';
 import { DateRangePicker } from '@/components/ui/DateRangePicker';
 import { FilterRail, FilterRailDivider, FilterRailSegments } from '@/components/ui/filter-rail';
@@ -26,6 +27,7 @@ import {
   type SalesMetric,
   type SalesSummary,
   type TopItems,
+  type TopStyle,
 } from '@/api/salesKpis';
 
 /** Per-bucket accent — cards in a bucket share a colour so groups read at a glance. */
@@ -658,7 +660,7 @@ function CancellationTable({
   );
 }
 
-/** Top 10 SKUs by revenue over the page's range. */
+/** Top 10 designs by revenue over the page's range, colours grouped under each. */
 function TopItemsTable({
   from,
   to,
@@ -690,76 +692,158 @@ function TopItemsTable({
     };
   }, [from, to, inventory, tick]);
 
-  const signed = useSignedUrls((data?.items ?? []).map((it) => it.imageUrl));
+  const signed = useSignedUrls((data?.items ?? []).flatMap((it) => it.styles.map((s) => s.imageUrl)));
+  const img = (path: string | null): string | null => (path && signed[path]) || null;
   return (
     <section className="mt-7">
       <h2 className="mb-2.5 text-xs font-bold uppercase tracking-wider text-neutral-400">
-        {t('admin.salesKpis.topItems', { defaultValue: 'Top 10 selling items' })}
+        {t('admin.salesKpis.topItems', { defaultValue: 'Top 10 selling styles' })}
       </h2>
-      <div style={CARD_SHELL}>
-        {failed ? (
-          <p className="text-center text-sm text-amber-800">
-            {t('admin.salesKpis.topItemsFailed', { defaultValue: 'Could not load the top items.' })}
-          </p>
-        ) : !data ? (
+      {failed ? (
+        <p style={CARD_SHELL} className="text-center text-sm text-amber-800">
+          {t('admin.salesKpis.topItemsFailed', { defaultValue: 'Could not load the top items.' })}
+        </p>
+      ) : !data ? (
+        <div style={CARD_SHELL}>
           <Skeleton className="h-40 w-full rounded-md" />
-        ) : !data.items.length ? (
-          <p className="text-center text-sm text-neutral-400">
-            {t('admin.salesKpis.topItemsEmpty', { defaultValue: 'No sales in this range.' })}
-          </p>
-        ) : (
-          <ol className="flex flex-col">
-            {data.items.map((it, i) => (
-              <li
-                key={it.sku}
-                className="flex items-center gap-3 border-t border-neutral-100 py-2.5 first:border-t-0 first:pt-0 last:pb-0 sm:gap-4"
-              >
-                <span
-                  className={`w-5 flex-none text-right text-sm font-semibold tabular-nums ${
-                    i < 3 ? 'text-neutral-900' : 'text-neutral-400'
-                  }`}
+        </div>
+      ) : !data.items.length ? (
+        <p style={CARD_SHELL} className="text-center text-sm text-neutral-400">
+          {t('admin.salesKpis.topItemsEmpty', { defaultValue: 'No sales in this range.' })}
+        </p>
+      ) : (
+        // Same shape as Inventory Health: column labels over white style cards on a grey bed.
+        <div className="space-y-2.5 rounded-2xl bg-neutral-100 p-2.5">
+          <div className={`${TOP_GRID} px-4 pb-0.5 text-[11px] font-semibold uppercase tracking-wide text-slate-700`}>
+            <span>{t('admin.salesKpis.col.style', { defaultValue: 'Style' })}</span>
+            <span className="text-right">{t('admin.salesKpis.col.units', { defaultValue: 'Units' })}</span>
+            <span className="text-right">{t('admin.salesKpis.col.revenue', { defaultValue: 'Revenue' })}</span>
+          </div>
+          <ol className="space-y-2.5">
+            {data.items.map((it, i) => {
+              const top = it.styles[0];
+              const grouped = it.styles.length > 1;
+              return (
+                <li
+                  key={it.key}
+                  className="overflow-hidden rounded-[var(--radius-md)] border border-neutral-200 bg-white shadow-sm"
                 >
-                  {i + 1}
-                </span>
-                <HoverThumbnail
-                  src={(it.imageUrl && signed[it.imageUrl]) || null}
-                  alt={it.styleName ?? it.sku}
-                  size={44}
-                  radius="8px"
-                />
-                <div className="min-w-0 flex-1">
-                  <div className="truncate text-sm font-semibold text-neutral-900" title={it.styleName ?? it.sku}>
-                    {it.styleName ?? it.sku}
-                  </div>
-                  <div className="mt-0.5 flex min-w-0 items-center gap-1.5 text-xs text-neutral-500">
-                    <span className="truncate font-mono">{it.sku}</span>
-                    {it.size && (
-                      <span className="flex-none rounded bg-neutral-100 px-1.5 py-px text-[10px] font-semibold text-neutral-600">
-                        {it.size}
+                  <div className={`${TOP_GRID} px-4 py-3.5`}>
+                    <div className="flex min-w-0 items-center gap-3">
+                      <span
+                        className={`w-5 flex-none text-center text-sm font-semibold tabular-nums ${
+                          i < 3 ? 'text-neutral-900' : 'text-neutral-400'
+                        }`}
+                      >
+                        {i + 1}
                       </span>
-                    )}
+                      <HoverThumbnail src={img(top.imageUrl)} alt={it.name ?? top.styleKey} size={48} radius="10px" />
+                      <div className="min-w-0 flex-1">
+                        <div
+                          className="truncate text-[15px] font-semibold text-neutral-900"
+                          title={it.name ?? top.styleKey}
+                        >
+                          {it.name ?? top.styleKey}
+                        </div>
+                        <div className="mt-0.5 truncate text-xs text-neutral-500">
+                          {grouped ? (
+                            t('admin.salesKpis.coloursCount', {
+                              defaultValue: '{{count, number}} colours',
+                              count: it.styles.length,
+                            })
+                          ) : (
+                            <>
+                              <span className="font-mono font-medium text-neutral-600">{top.styleKey}</span>
+                              {top.colour && ` · ${top.colour}`}
+                            </>
+                          )}
+                        </div>
+                      </div>
+                      {!grouped && <TopStyleLinks style={top} />}
+                    </div>
+                    <span className="text-right text-sm font-semibold tabular-nums text-neutral-900">
+                      {formatValue(it.units, 'number')}
+                    </span>
+                    <span
+                      style={{ fontFamily: DISPLAY, fontFeatureSettings: "'tnum' 1" }}
+                      className="text-right text-[15px] font-semibold text-neutral-900"
+                    >
+                      {formatValue(it.revenue, 'currency')}
+                    </span>
                   </div>
-                </div>
-                <div className="w-24 flex-none text-right">
-                  <div
-                    style={{ fontFamily: DISPLAY, fontFeatureSettings: "'tnum' 1" }}
-                    className="text-sm font-semibold text-neutral-900"
-                  >
-                    {formatValue(it.revenue, 'currency')}
-                  </div>
-                  <div className="mt-0.5 text-xs tabular-nums text-neutral-500">
-                    {t('admin.salesKpis.unitsCount', {
-                      defaultValue: '{{count, number}} units',
-                      count: it.units,
-                    })}
-                  </div>
-                </div>
-              </li>
-            ))}
+                  {grouped &&
+                    it.styles.map((s) => (
+                      <div
+                        key={s.styleKey}
+                        className={`${TOP_GRID} border-t border-neutral-100 px-4 py-2.5 transition hover:bg-neutral-50/60`}
+                      >
+                        <div className="flex min-w-0 items-center gap-3 pl-8">
+                          <HoverThumbnail src={img(s.imageUrl)} alt={s.colour ?? s.styleKey} size={32} radius="8px" />
+                          <div className="flex min-w-0 flex-1 items-baseline gap-2">
+                            <span className="flex-none text-[14px] font-semibold text-neutral-800">
+                              {s.colour ?? s.styleKey}
+                            </span>
+                            {s.colour && (
+                              <span className="truncate font-mono text-[11px] font-medium text-neutral-600">
+                                {s.styleKey}
+                              </span>
+                            )}
+                          </div>
+                          <TopStyleLinks style={s} />
+                        </div>
+                        <span className="text-right text-sm tabular-nums text-neutral-700">
+                          {formatValue(s.units, 'number')}
+                        </span>
+                        <span className="text-right text-sm font-medium tabular-nums text-neutral-700">
+                          {formatValue(s.revenue, 'currency')}
+                        </span>
+                      </div>
+                    ))}
+                </li>
+              );
+            })}
           </ol>
-        )}
-      </div>
+        </div>
+      )}
     </section>
+  );
+}
+
+// Style (thumb + name + links) · Units · Revenue
+const TOP_GRID = 'grid grid-cols-[minmax(0,1fr)_3.5rem_6rem] items-center gap-3 sm:grid-cols-[minmax(0,1fr)_5rem_7.5rem]';
+const TOP_BTN =
+  'inline-flex shrink-0 items-center gap-1 rounded-md border px-2 py-1 text-[11px] font-semibold transition';
+
+/** A style's Myntra and Inventory Health buttons. */
+function TopStyleLinks({ style }: { style: TopStyle }): ReactNode {
+  const { t } = useTranslation();
+  const myntra = t('admin.salesKpis.openMyntra', { defaultValue: 'Myntra' });
+  const health = t('admin.salesKpis.openInventoryHealth', { defaultValue: 'Inventory health' });
+  return (
+    <div className="flex flex-none items-center gap-1.5">
+      {style.myntraStyleId && (
+        <a
+          href={`https://www.myntra.com/${encodeURIComponent(style.myntraStyleId)}`}
+          target="_blank"
+          rel="noopener noreferrer"
+          aria-label={myntra}
+          className={`${TOP_BTN} border-neutral-300 bg-white text-neutral-700 hover:bg-neutral-100`}
+        >
+          <span className="hidden sm:inline">{myntra}</span>
+          <ArrowUpRight size={12} className="text-neutral-400" />
+        </a>
+      )}
+      {style.inInventoryHealth && (
+        <Link
+          to={`/admin/analytics/inventory-health?q=${encodeURIComponent(style.styleKey)}`}
+          aria-label={health}
+          className={`${TOP_BTN} border-[var(--color-primary)]/30 bg-[var(--color-primary)]/[0.08] text-[var(--color-primary)] hover:bg-[var(--color-primary)]/[0.14]`}
+        >
+          <HeartPulse size={12} />
+          <span className="hidden sm:inline">{health}</span>
+        </Link>
+      )}
+    </div>
   );
 }
 

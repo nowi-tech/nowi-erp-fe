@@ -98,14 +98,27 @@ export function getCancellations(
     .then((res) => res.data);
 }
 
-export interface TopItem {
-  sku: string;
+export interface TopStyle {
+  styleKey: string;
   styleName: string | null;
-  size: string | null;
+  colour: string | null;
   units: number;
   revenue: number;
   /** GCS path or absolute URL; resolve with useSignedUrls. */
   imageUrl: string | null;
+  myntraStyleId: string | null;
+  /** The style has a row on the Inventory Health page. */
+  inInventoryHealth: boolean;
+}
+
+/** One design: an ERP colour family, or a lone style. */
+export interface TopItem {
+  key: string;
+  name: string | null;
+  units: number;
+  revenue: number;
+  /** Colours that sold in the range, best first. */
+  styles: TopStyle[];
 }
 
 export interface TopItems {
@@ -114,7 +127,7 @@ export interface TopItems {
   items: TopItem[];
 }
 
-/** GET /api/sales-kpis/top-items — top 10 SKUs by revenue over [from, to]. */
+/** GET /api/sales-kpis/top-items — top 10 designs by revenue over [from, to]. */
 export function getTopItems(from: string, to: string, inventory: SalesInventoryView = 'all'): Promise<TopItems> {
   return apiClient
     .get<TopItems>('/api/sales-kpis/top-items', { params: rangeParams(from, to, inventory) })
