@@ -712,40 +712,31 @@ function TopItemsTable({
           {t('admin.salesKpis.topItemsEmpty', { defaultValue: 'No sales in this range.' })}
         </p>
       ) : (
-        // Same shape as Inventory Health: column labels over white style cards on a grey bed.
-        <div className="space-y-2.5 rounded-2xl bg-neutral-100 p-2.5">
-          <div className={`${TOP_GRID} px-4 pb-0.5 text-[11px] font-semibold uppercase tracking-wide text-slate-700`}>
+        <div className="overflow-hidden rounded-2xl border border-neutral-200 bg-white">
+          <div
+            className={`${TOP_GRID} border-b border-neutral-200 bg-neutral-50 px-4 py-2.5 text-[11px] font-semibold uppercase tracking-wide text-slate-700`}
+          >
             <span>{t('admin.salesKpis.col.style', { defaultValue: 'Style' })}</span>
             <span className="text-right">{t('admin.salesKpis.col.units', { defaultValue: 'Units' })}</span>
             <span className="text-right">{t('admin.salesKpis.col.revenue', { defaultValue: 'Revenue' })}</span>
           </div>
-          <ol className="space-y-2.5">
+          <ol className="divide-y divide-neutral-200">
             {data.items.map((it, i) => {
               const top = it.styles[0];
               const grouped = it.styles.length > 1;
               return (
-                <li
-                  key={it.key}
-                  className="overflow-hidden rounded-[var(--radius-md)] border border-neutral-200 bg-white shadow-sm"
-                >
-                  <div className={`${TOP_GRID} px-4 py-3.5`}>
+                <li key={it.key}>
+                  <div className={`${TOP_GRID} px-4 py-2.5`}>
                     <div className="flex min-w-0 items-center gap-3">
-                      <span
-                        className={`w-5 flex-none text-center text-sm font-semibold tabular-nums ${
-                          i < 3 ? 'text-neutral-900' : 'text-neutral-400'
-                        }`}
-                      >
-                        {i + 1}
-                      </span>
-                      <HoverThumbnail src={img(top.imageUrl)} alt={it.name ?? top.styleKey} size={48} radius="10px" />
+                      <span className="w-5 flex-none text-sm font-semibold tabular-nums text-neutral-400">{i + 1}</span>
+                      {!grouped && (
+                        <HoverThumbnail src={img(top.imageUrl)} alt={it.name ?? top.styleKey} size={32} radius="8px" />
+                      )}
                       <div className="min-w-0 flex-1">
-                        <div
-                          className="truncate text-[15px] font-semibold text-neutral-900"
-                          title={it.name ?? top.styleKey}
-                        >
+                        <div className="truncate text-sm font-semibold text-neutral-900" title={it.name ?? top.styleKey}>
                           {it.name ?? top.styleKey}
                         </div>
-                        <div className="mt-0.5 truncate text-xs text-neutral-500">
+                        <div className="truncate text-xs text-neutral-500">
                           {grouped ? (
                             t('admin.salesKpis.coloursCount', {
                               defaultValue: '{{count, number}} colours',
@@ -753,7 +744,7 @@ function TopItemsTable({
                             })
                           ) : (
                             <>
-                              <span className="font-mono font-medium text-neutral-600">{top.styleKey}</span>
+                              <span className="font-mono">{top.styleKey}</span>
                               {top.colour && ` · ${top.colour}`}
                             </>
                           )}
@@ -764,37 +755,27 @@ function TopItemsTable({
                     <span className="text-right text-sm font-semibold tabular-nums text-neutral-900">
                       {formatValue(it.units, 'number')}
                     </span>
-                    <span
-                      style={{ fontFamily: DISPLAY, fontFeatureSettings: "'tnum' 1" }}
-                      className="text-right text-[15px] font-semibold text-neutral-900"
-                    >
+                    <span className="text-right text-sm font-semibold tabular-nums text-neutral-900">
                       {formatValue(it.revenue, 'currency')}
                     </span>
                   </div>
                   {grouped &&
                     it.styles.map((s) => (
-                      <div
-                        key={s.styleKey}
-                        className={`${TOP_GRID} border-t border-neutral-100 px-4 py-2.5 transition hover:bg-neutral-50/60`}
-                      >
+                      <div key={s.styleKey} className={`${TOP_GRID} border-t border-neutral-100 px-4 py-2`}>
                         <div className="flex min-w-0 items-center gap-3 pl-8">
                           <HoverThumbnail src={img(s.imageUrl)} alt={s.colour ?? s.styleKey} size={32} radius="8px" />
                           <div className="flex min-w-0 flex-1 items-baseline gap-2">
-                            <span className="flex-none text-[14px] font-semibold text-neutral-800">
-                              {s.colour ?? s.styleKey}
-                            </span>
+                            <span className="flex-none text-sm text-neutral-800">{s.colour ?? s.styleKey}</span>
                             {s.colour && (
-                              <span className="truncate font-mono text-[11px] font-medium text-neutral-600">
-                                {s.styleKey}
-                              </span>
+                              <span className="truncate font-mono text-[11px] text-neutral-500">{s.styleKey}</span>
                             )}
                           </div>
                           <TopStyleLinks style={s} />
                         </div>
-                        <span className="text-right text-sm tabular-nums text-neutral-700">
+                        <span className="text-right text-sm tabular-nums text-neutral-600">
                           {formatValue(s.units, 'number')}
                         </span>
-                        <span className="text-right text-sm font-medium tabular-nums text-neutral-700">
+                        <span className="text-right text-sm tabular-nums text-neutral-600">
                           {formatValue(s.revenue, 'currency')}
                         </span>
                       </div>
