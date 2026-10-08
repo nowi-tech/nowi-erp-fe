@@ -1556,21 +1556,27 @@ function BatchTable({
       });
     }
 
+    // Pipeline lots are uncut, so Planned is the only figure they have.
+    const showCut = tab !== 'planning';
     cols.push({
-      key: 'planned',
+      key: 'qty',
       // Wider than a bare count: the pending line sits under it. Matches the
       // Produced column beside it.
       width: '96px',
       align: 'right',
-      header: t('admin.production.planned', { defaultValue: 'Planned' }),
-      // Planned, with the work still owed AT THE LOT'S CURRENT STAGE beneath it —
-      // the same figure the lot page shows per stage, from the same helper. Off
-      // the floor there is no stage, so nothing is shown.
+      header: showCut
+        ? t('admin.production.cut', { defaultValue: 'Cut' })
+        : t('admin.production.planned', { defaultValue: 'Planned' }),
+      // The work still owed AT THE LOT'S CURRENT STAGE sits beneath — the same
+      // figure the lot page shows per stage, from the same helper. Off the
+      // floor there is no stage, so nothing is shown.
       cell: (b) => {
         const owed = pendingAtCurrentStage(b);
         return (
           <>
-            <div className="font-semibold">{b.qtyPlanned}</div>
+            <div className="font-semibold">
+              {showCut ? b.sizes.reduce((n, s) => n + s.qtyCut, 0) : b.qtyPlanned}
+            </div>
             {owed != null && owed > 0 && (
               <div className="text-[11px] font-semibold text-amber-700">
                 {t('admin.production.lot.pendingNow', { defaultValue: '{{n}} pending', n: owed })}
