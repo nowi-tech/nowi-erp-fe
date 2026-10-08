@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { useNavigate, useParams } from 'react-router-dom';
+import { useLocation, useNavigate, useParams } from 'react-router-dom';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Badge } from '@/components/ui/badge';
@@ -63,6 +63,9 @@ export default function ProductionLotDetail() {
   const { t } = useTranslation();
   const { id = '' } = useParams();
   const navigate = useNavigate();
+  const location = useLocation();
+  // The board as the user left it; a deep link or refresh has no state.
+  const backTo = (location.state as { from?: string } | null)?.from ?? '/admin/production';
   const toast = useToast();
   const { user } = useAuth();
   const canWrite = hasAnyRole(user, PRODUCTION_WRITE_ROLES);
@@ -131,7 +134,7 @@ export default function ProductionLotDetail() {
   if (!lot) {
     return (
       <div className="space-y-3">
-        <Button variant="outline" onClick={() => navigate('/admin/production')}>
+        <Button variant="outline" onClick={() => navigate(backTo)}>
           {t('common.back', { defaultValue: 'Back' })}
         </Button>
         <div className="text-sm text-[var(--color-muted-foreground)]">
@@ -212,7 +215,7 @@ export default function ProductionLotDetail() {
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-center gap-2">
-        <Button variant="outline" onClick={() => navigate('/admin/production')}>
+        <Button variant="outline" onClick={() => navigate(backTo)}>
           {t('common.back', { defaultValue: 'Back' })}
         </Button>
         <h1 className="text-2xl font-bold tracking-tight">{lot.batchNo}</h1>
@@ -238,7 +241,7 @@ export default function ProductionLotDetail() {
           <button
             key={l.id}
             type="button"
-            onClick={() => navigate(`/admin/production/lots/${l.id}`)}
+            onClick={() => navigate(`/admin/production/lots/${l.id}`, { state: location.state })}
             className="rounded-full border border-[var(--color-border)] px-2.5 py-0.5 font-mono text-xs text-[var(--color-primary)] hover:underline"
           >
             {l.label}

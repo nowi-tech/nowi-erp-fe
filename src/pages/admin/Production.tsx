@@ -78,6 +78,17 @@ import { Select } from '@/components/ui/select';
 
 type Tab = 'to_start' | 'planning' | 'in_production' | 'completed' | 'parked';
 
+/** The status chips a tab offers — none on tabs whose list isn't status-filterable. */
+function statusOptions(tab: Tab, canSeeCancelled: boolean): BatchStatus[] {
+  if (tab !== 'in_production' && tab !== 'completed') return [];
+  return [
+    ...(tab === 'completed'
+      ? (['completed', 'dispatched'] as BatchStatus[])
+      : IN_PRODUCTION_STATUSES),
+    ...(canSeeCancelled ? ['cancelled' as BatchStatus] : []),
+  ];
+}
+
 /** Fallback labels — the Production page runs on inline defaultValues, not
  *  locale files, so these are the strings unless a key is added later. */
 const FABRIC_LABEL: Record<FabricStatus, string> = {
@@ -156,17 +167,48 @@ export default function Production() {
   // out of order and render a stale result set.
   const debouncedSearch = useDebounced(search, 300);
 
-  // Mirror the (debounced) search into ?q= so back-navigation restores it —
-  // the same system the dashboard Sampling tab and Inventory Health use.
+  const [statusFilter, setStatusFilter] = useState<BatchStatus | ''>(() => {
+    const s = searchParams.get('status') as BatchStatus | null;
+    return s && statusOptions(tab, canSeeCancelled).includes(s) ? s : '';
+  });
+  const [originFilter, setOriginFilter] = useState<BatchOrigin | ''>(() => {
+    const o = searchParams.get('origin');
+    return o === 'forecast' || o === 'style' ? o : '';
+  });
+  // Brand: '' = all · 'own' = Nowi's own goods (no brand) · a brand id as a string.
+  const [brandFilter, setBrandFilter] = useState(() => {
+    const b = searchParams.get('brand') ?? '';
+    return b === 'own' || /^\d+$/.test(b) ? b : '';
+  });
+
+  // Mirror the tab, filters and (debounced) search into the URL so
+  // back-navigation restores them — the same system the dashboard Sampling tab
+  // and Inventory Health use.
   useEffect(() => {
     const params = new URLSearchParams(searchParams);
-    const q = debouncedSearch.trim();
-    if (q) params.set('q', q);
-    else params.delete('q');
+    const mirrored = {
+      tab,
+      status: statusFilter,
+      origin: originFilter,
+      brand: brandFilter,
+      q: debouncedSearch.trim(),
+    };
+    for (const [key, value] of Object.entries(mirrored)) {
+      if (value) params.set(key, value);
+      else params.delete(key);
+    }
     if (params.toString() !== searchParams.toString()) {
       setSearchParams(params, { replace: true });
     }
-  }, [debouncedSearch, searchParams, setSearchParams]);
+  }, [
+    tab,
+    statusFilter,
+    originFilter,
+    brandFilter,
+    debouncedSearch,
+    searchParams,
+    setSearchParams,
+  ]);
   const [batches, setBatches] = useState<ProductionBatch[]>([]);
   const [suggestions, setSuggestions] = useState<InventoryStyle[]>([]);
   const [kpis, setKpis] = useState<ProductionKpis | null>(null);
@@ -180,10 +222,6 @@ export default function Production() {
   /** RAW rows fetched (pre client-side trim) — what the "more pages?" test uses. */
   const [loaded, setLoaded] = useState(0);
   const [loadMoreError, setLoadMoreError] = useState(false);
-  const [statusFilter, setStatusFilter] = useState<BatchStatus | ''>('');
-  const [originFilter, setOriginFilter] = useState<BatchOrigin | ''>('');
-  // Brand: '' = all · 'own' = Nowi's own goods (no brand) · a brand id as a string.
-  const [brandFilter, setBrandFilter] = useState('');
   const [brands, setBrands] = useState<Brand[]>([]);
   // Every tab change goes through here: each tab offers its own statuses, so a
   // carried-over one would filter with no chip lit to explain the empty list.
@@ -745,12 +783,10 @@ export default function Production() {
         {tab !== 'to_start' && tab !== 'parked' && tab !== 'planning' && (
           <FilterChips
             ariaLabel={t('admin.production.filterStatus', { defaultValue: 'Status' })}
-            options={[
-              ...(tab === 'completed'
-                ? (['completed', 'dispatched'] as BatchStatus[])
-                : IN_PRODUCTION_STATUSES),
-              ...(canSeeCancelled ? ['cancelled' as BatchStatus] : []),
-            ].map((x) => ({ value: x, label: statusLabel(t, x) }))}
+            options={statusOptions(tab, canSeeCancelled).map((x) => ({
+              value: x,
+              label: statusLabel(t, x),
+            }))}
             value={statusFilter ? [statusFilter] : []}
             onToggle={(x) => setStatusFilter(statusFilter === x ? '' : x)}
             onClear={() => setStatusFilter('')}
@@ -814,7 +850,11 @@ export default function Production() {
           onHold={(b) => setHoldTarget(b)}
           onResume={(b) => setResumeTarget(b)}
           onComplete={(b) => setOutputTarget(b)}
-          onOpen={(b) => navigate(`/admin/production/lots/${b.id}`)}
+          onOpen={(b) =>
+            navigate(`/admin/production/lots/${b.id}`, {
+              state: { from: `/admin/production?${searchParams}` },
+            })
+          }
           onSend={(b) => setSendTarget(b)}
           onFabricStatus={(b, next) =>
             void runAction(() => setFabricStatus(b.id, next))
