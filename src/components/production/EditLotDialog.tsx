@@ -216,10 +216,16 @@ export default function EditLotDialog({
   };
 
   const setStage = (sku: string, stage: STAGE, raw: string) =>
-    setStages((p) => ({
-      ...p,
-      [sku]: { ...p[sku], [stage]: Math.max(0, Number.parseInt(raw, 10) || 0) },
-    }));
+    setStages((p) => {
+      const n = Math.max(0, Number.parseInt(raw, 10) || 0);
+      const row = { ...p[sku], [stage]: n };
+      // Finished pieces were cut and stitched, so neither may trail finished.
+      if (stage === 'finishing') {
+        row.cutting = Math.max(row.cutting, n);
+        row.stitching = Math.max(row.stitching, n);
+      }
+      return { ...p, [sku]: row };
+    });
 
   const selectClass =
     'h-9 w-full rounded-[var(--radius-sm)] border border-[var(--color-border)] bg-white px-2 text-sm font-medium focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-ring)] disabled:opacity-60';
