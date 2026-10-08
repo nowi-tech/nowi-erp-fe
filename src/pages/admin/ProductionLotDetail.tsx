@@ -64,7 +64,7 @@ export default function ProductionLotDetail() {
   const { id = '' } = useParams();
   const navigate = useNavigate();
   const location = useLocation();
-  // The board as the user left it; a deep link or refresh has no state.
+  // The board as the user left it; a deep link has no state.
   const backTo = (location.state as { from?: string } | null)?.from ?? '/admin/production';
   const toast = useToast();
   const { user } = useAuth();
