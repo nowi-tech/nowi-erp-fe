@@ -418,7 +418,8 @@ export default function SalesKpis({
             {from && (!buckets || buckets.includes('sales')) && (
               <TopItemsTable from={from} to={to} inventory={inventory} channel={channel} tick={tick} />
             )}
-            {showsFulfilment && cancellations && (
+            {/* An older API sends no slices; skip the section rather than crash the page. */}
+            {showsFulfilment && cancellations?.slices && (
               <Suspense fallback={null}>
                 <CancellationSection data={cancellations} range={rangeLabel(cancellations.from, cancellations.to)} />
               </Suspense>
@@ -555,7 +556,7 @@ function SalesCard({
           {metric.breakdown.map((p) => `${p.label} ${p.value.toLocaleString('en-IN')}`).join(' · ')}
         </div>
       ) : null}
-      {metric.sharePct != null && (
+      {metric.sharePct != null && metric.shareOf && (
         <div className="mt-1 text-xs font-semibold tabular-nums text-neutral-600">
           {t('admin.salesKpis.shareOf', {
             defaultValue: '{{pct}}% of {{base}}',
