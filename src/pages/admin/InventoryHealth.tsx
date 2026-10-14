@@ -117,7 +117,7 @@ function StatChip({ tone, label, tail }: { tone: 'earned' | 'lost'; label: strin
   );
 }
 
-/** Whole rupees, Indian grouping — matches SummarySection's currency rows. */
+/** Whole rupees, Indian grouping. */
 function fmtMoney(n: number): string {
   return `₹${n.toLocaleString('en-IN', { maximumFractionDigits: 0 })}`;
 }

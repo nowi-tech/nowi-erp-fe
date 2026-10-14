@@ -27,6 +27,11 @@ export interface SalesMetric {
   sparkDates: string[];
   /** Signed % change of `value` vs `previous`; null when there is nothing to compare. */
   trendPct: number | null;
+  /** `value` as a % of the base named in `shareOf`. */
+  sharePct?: number | null;
+  shareOf?: string;
+  /** Parts of `value`, shown on a line under it. */
+  breakdown?: { label: string; value: number }[];
 }
 
 export interface SalesBucketInfo {
@@ -57,8 +62,21 @@ export interface SalesKpisResponse {
 /** Real = shipped from the India warehouse, virtual = from China; an order with items from both counts in each. */
 export type SalesInventoryView = 'all' | 'real' | 'virtual';
 
-function rangeParams(from: string, to: string, inventory: SalesInventoryView = 'all'): Record<string, string> {
-  return inventory === 'all' ? { from, to } : { from, to, inventory };
+/** One marketplace, or all of them. */
+export type SalesChannel = 'all' | 'myntra' | 'shopify' | 'wishlink' | 'flipkart';
+
+function rangeParams(
+  from: string,
+  to: string,
+  inventory: SalesInventoryView = 'all',
+  channel: SalesChannel = 'all',
+): Record<string, string> {
+  return {
+    from,
+    to,
+    ...(inventory === 'all' ? {} : { inventory }),
+    ...(channel === 'all' ? {} : { channel }),
+  };
 }
 
 /** GET /api/sales-kpis — the bucketed dashboard metrics over [from, to]. */
@@ -66,35 +84,37 @@ export function getSalesKpis(
   from: string,
   to: string,
   inventory: SalesInventoryView = 'all',
+  channel: SalesChannel = 'all',
 ): Promise<SalesKpisResponse> {
   return apiClient
-    .get<SalesKpisResponse>('/api/sales-kpis', { params: rangeParams(from, to, inventory) })
+    .get<SalesKpisResponse>('/api/sales-kpis', { params: rangeParams(from, to, inventory, channel) })
     .then((res) => res.data);
 }
 
-export interface CancellationReason {
-  reason: string;
-  orders: number;
-  ourFault: boolean;
-}
+/** Who a cancellation blames. */
+export type CancellationFault = 'ours' | 'customer' | 'platform' | 'unknown';
 
-export interface CancellationBreakdown {
+export interface CancellationSection {
   from: string;
   to: string;
-  /** Per-reason counts can sum past totalOrders — one order can be cancelled for two reasons. */
-  reasons: CancellationReason[];
-  totalOrders: number;
-  ourFaultOrders: number;
+  /** Orders with a line cancelled before dispatch. */
+  cancelled: number;
+  ours: number;
+  notOurs: number;
+  slices: { key: string; label: string; fault: CancellationFault; orders: number }[];
+  /** Per-reason counts can sum past `cancelled` — one order can be cancelled for two reasons. */
+  reasons: { reason: string; fault: CancellationFault; orders: number }[];
 }
 
-/** GET /api/sales-kpis/cancellations — why orders were cancelled over [from, to]. */
+/** GET /api/sales-kpis/cancellations — cancellations before dispatch of orders placed in [from, to]. */
 export function getCancellations(
   from: string,
   to: string,
   inventory: SalesInventoryView = 'all',
-): Promise<CancellationBreakdown> {
+  channel: SalesChannel = 'all',
+): Promise<CancellationSection> {
   return apiClient
-    .get<CancellationBreakdown>('/api/sales-kpis/cancellations', { params: rangeParams(from, to, inventory) })
+    .get<CancellationSection>('/api/sales-kpis/cancellations', { params: rangeParams(from, to, inventory, channel) })
     .then((res) => res.data);
 }
 
@@ -128,9 +148,14 @@ export interface TopItems {
 }
 
 /** GET /api/sales-kpis/top-items — top 10 designs by revenue over [from, to]. */
-export function getTopItems(from: string, to: string, inventory: SalesInventoryView = 'all'): Promise<TopItems> {
+export function getTopItems(
+  from: string,
+  to: string,
+  inventory: SalesInventoryView = 'all',
+  channel: SalesChannel = 'all',
+): Promise<TopItems> {
   return apiClient
-    .get<TopItems>('/api/sales-kpis/top-items', { params: rangeParams(from, to, inventory) })
+    .get<TopItems>('/api/sales-kpis/top-items', { params: rangeParams(from, to, inventory, channel) })
     .then((res) => res.data);
 }
 
@@ -160,31 +185,5 @@ export function uploadSalesCsv(csv: string): Promise<SalesUploadResult> {
 export function refreshAllEasyEcom(): Promise<{ syncing: boolean }> {
   return apiClient
     .post<{ syncing: boolean }>('/api/sales-kpis/refresh-all', {})
-    .then((res) => res.data);
-}
-
-/** One summary row, given for each view. */
-export interface SummaryRow {
-  key: string;
-  label: string;
-  format: 'number' | 'currency' | 'percent';
-  /** Which page's section carries the row. */
-  bucket: SalesBucket;
-  /** real = India, virtual = China, all = both. */
-  real: number | null;
-  virtual: number | null;
-  all: number | null;
-}
-
-export interface SalesSummary {
-  from: string;
-  to: string;
-  rows: SummaryRow[];
-}
-
-/** GET /api/sales-kpis/summary — the detail rows over [from, to], each tagged with its page's bucket. */
-export function getSalesSummary(from: string, to: string): Promise<SalesSummary> {
-  return apiClient
-    .get<SalesSummary>('/api/sales-kpis/summary', { params: rangeParams(from, to) })
     .then((res) => res.data);
 }

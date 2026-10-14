@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type ReactNode } from 'react';
+import { lazy, Suspense, useEffect, useRef, useState, type ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Link } from 'react-router-dom';
 import { ArrowUpRight, HeartPulse, Info, Upload } from 'lucide-react';
@@ -8,7 +8,6 @@ import { FilterRail, FilterRailDivider, FilterRailSegments } from '@/components/
 import { useToast } from '@/components/ui/toast';
 import { todayISO } from '@/lib/date';
 import { CARD_SHELL, DISPLAY, SANS, Sparkline } from '@/components/admin/kpiPrimitives';
-import { SummarySection } from '@/components/admin/SummarySection';
 import { useAuth } from '@/context/auth';
 import { useSignedUrls } from '@/hooks/useSignedUrls';
 import { HoverThumbnail } from '@/components/dashboard/StylesInFlightTable';
@@ -16,19 +15,23 @@ import { hasAnyRole } from '@/lib/userRoles';
 import {
   getCancellations,
   getSalesKpis,
-  getSalesSummary,
   getTopItems,
   uploadSalesCsv,
-  type CancellationBreakdown,
+  type CancellationSection as CancellationData,
+  type SalesChannel,
   type SalesInventoryView,
   type SalesBucket,
   type SalesFormat,
   type SalesKpisResponse,
   type SalesMetric,
-  type SalesSummary,
   type TopItems,
   type TopStyle,
 } from '@/api/salesKpis';
+
+// Recharts ships only with the Fulfilment page.
+const CancellationSection = lazy(() => import('@/components/admin/CancellationSection'));
+
+const CHANNELS: SalesChannel[] = ['all', 'myntra', 'shopify', 'wishlink', 'flipkart'];
 
 /** Per-bucket accent — cards in a bucket share a colour so groups read at a glance. */
 const BUCKET_ACCENT: Record<SalesBucket, string> = {
@@ -120,18 +123,16 @@ export default function SalesKpis({
   const canUpload = hasAnyRole(user, ['admin']); // the upload endpoint is admin-only; viewers share this page
   const [uploading, setUploading] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
-  // Why orders were cancelled, ranked, with the share that was ours to prevent.
-  const [cancellations, setCancellations] = useState<CancellationBreakdown | null>(null);
+  // Cancellations before dispatch: totals, whose fault, and why.
+  const [cancellations, setCancellations] = useState<CancellationData | null>(null);
   const [cancellationsFailed, setCancellationsFailed] = useState(false);
-  // The workbook rows no card can carry, given for India / China / Combined.
-  const [summary, setSummary] = useState<SalesSummary | null>(null);
-  const [summaryFailed, setSummaryFailed] = useState(false);
   const today = todayISO();
   // One range drives every section on the page; empty until the first load adopts the server's default (the last day with data).
   const [from, setFrom] = useState('');
   const [to, setTo] = useState('');
   // Real / virtual view — by the warehouse that shipped each line.
   const [inventory, setInventory] = useState<SalesInventoryView>('all');
+  const [channel, setChannel] = useState<SalesChannel>('all');
   const [tick, setTick] = useState(0);
 
   // Which query the screen is currently showing. The load effect bumps it on every
@@ -145,7 +146,7 @@ export default function SalesKpis({
     let cancelled = false;
     setLoading(true);
     setFailed(false);
-    getSalesKpis(from, to, inventory)
+    getSalesKpis(from, to, inventory, channel)
       .then((d) => {
         if (cancelled || queryRef.current !== my) return;
         setData(d);
@@ -165,7 +166,7 @@ export default function SalesKpis({
     return () => {
       cancelled = true;
     };
-  }, [from, to, inventory, tick]);
+  }, [from, to, inventory, channel, tick]);
 
   // Only the Fulfilment page shows the breakdown.
   const showsFulfilment = !buckets || buckets.includes('fulfilment');
@@ -175,7 +176,7 @@ export default function SalesKpis({
     // Hide the previous view's breakdown until this one arrives, so it never sits under the wrong cards.
     setCancellations(null);
     setCancellationsFailed(false);
-    getCancellations(from, to, inventory)
+    getCancellations(from, to, inventory, channel)
       .then((c) => {
         if (!cancelled) setCancellations(c);
       })
@@ -185,25 +186,7 @@ export default function SalesKpis({
     return () => {
       cancelled = true;
     };
-  }, [showsFulfilment, from, to, inventory, tick]);
-
-  // Every view is a column here, so the section doesn't reload when the view changes.
-  useEffect(() => {
-    if (!from) return;
-    let cancelled = false;
-    setSummary(null);
-    setSummaryFailed(false);
-    getSalesSummary(from, to)
-      .then((r) => {
-        if (!cancelled) setSummary(r);
-      })
-      .catch(() => {
-        if (!cancelled) setSummaryFailed(true);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [from, to, tick]);
+  }, [showsFulfilment, from, to, inventory, channel, tick]);
 
   /** Sends the picked CSV; the dashboard is rebuilt before the upload returns. */
   const onUpload = async (file: File): Promise<void> => {
@@ -324,32 +307,47 @@ export default function SalesKpis({
           {/* Same rail, same control, same labels as Inventory Health — the keys
               are ITS keys on purpose, so the two pages can never word the same
               filter differently. */}
-          <FilterRail className="mt-4">
-            <FilterRailSegments
-              value={inventory}
-              onChange={setInventory}
-              ariaLabel={t('admin.salesKpis.inv.group', { defaultValue: 'Stock type' })}
-              options={(['all', 'real', 'virtual'] as const).map((v) => ({
-                value: v,
-                label: t(`admin.inventoryHealth.inv.${v}`, {
-                  defaultValue: v === 'all' ? 'All stock' : v === 'real' ? 'Real' : 'Virtual',
-                }),
-              }))}
-            />
-            <FilterRailDivider />
-            {from && (
-              <DateRangePicker
-                from={from}
-                to={to}
-                maxDate={today}
-                label={t('dashboard.dateFilter.label', { defaultValue: 'Showing' })}
-                onApply={(f, t2) => {
-                  setFrom(f);
-                  setTo(t2);
-                }}
+          <div className="mt-4 flex flex-wrap items-start justify-between gap-3">
+            <FilterRail>
+              <FilterRailSegments
+                value={inventory}
+                onChange={setInventory}
+                ariaLabel={t('admin.salesKpis.inv.group', { defaultValue: 'Stock type' })}
+                options={(['all', 'real', 'virtual'] as const).map((v) => ({
+                  value: v,
+                  label: t(`admin.inventoryHealth.inv.${v}`, {
+                    defaultValue: v === 'all' ? 'All stock' : v === 'real' ? 'Real' : 'Virtual',
+                  }),
+                }))}
               />
-            )}
-          </FilterRail>
+              <FilterRailDivider />
+              {from && (
+                <DateRangePicker
+                  from={from}
+                  to={to}
+                  maxDate={today}
+                  label={t('dashboard.dateFilter.label', { defaultValue: 'Showing' })}
+                  onApply={(f, t2) => {
+                    setFrom(f);
+                    setTo(t2);
+                  }}
+                />
+              )}
+            </FilterRail>
+            <FilterRail>
+              <FilterRailSegments
+                value={channel}
+                onChange={setChannel}
+                ariaLabel={t('admin.salesKpis.channel.group', { defaultValue: 'Channel' })}
+                options={CHANNELS.map((c) => ({
+                  value: c,
+                  label: t(`admin.salesKpis.channel.${c}`, {
+                    defaultValue: c === 'all' ? 'All channels' : c[0].toUpperCase() + c.slice(1),
+                  }),
+                }))}
+              />
+            </FilterRail>
+          </div>
         </div>
 
         {/* Status line */}
@@ -418,26 +416,12 @@ export default function SalesKpis({
               })}
             </div>
             {from && (!buckets || buckets.includes('sales')) && (
-              <TopItemsTable from={from} to={to} inventory={inventory} tick={tick} />
-            )}
-            {summary && (
-              <SummarySection
-                rows={summary.rows.filter((r) => !buckets || buckets.includes(r.bucket))}
-                range={headlineLabel}
-                active={inventory}
-                perItem={showsFulfilment}
-              />
-            )}
-            {summaryFailed && (
-              <div style={CARD_SHELL} className="mt-7 text-center text-sm text-amber-800">
-                {t('admin.salesSummary.failed', { defaultValue: 'Could not load the summary.' })}{' '}
-                <button className="font-medium underline" onClick={() => setTick((x) => x + 1)}>
-                  {t('admin.salesKpis.retry', { defaultValue: 'Retry' })}
-                </button>
-              </div>
+              <TopItemsTable from={from} to={to} inventory={inventory} channel={channel} tick={tick} />
             )}
             {showsFulfilment && cancellations && (
-              <CancellationTable t={t} data={cancellations} range={headlineLabel} />
+              <Suspense fallback={null}>
+                <CancellationSection data={cancellations} range={rangeLabel(cancellations.from, cancellations.to)} />
+              </Suspense>
             )}
             {showsFulfilment && cancellationsFailed && (
               <div style={CARD_SHELL} className="mt-7 text-center text-sm text-amber-800">
@@ -522,6 +506,7 @@ function SalesCard({
   accent: string;
   headlineLabel: string;
 }): ReactNode {
+  const { t } = useTranslation();
   if (metric.kind === 'snapshot') return <SnapshotCard metric={metric} accent={accent} />;
   const showSpark = metric.spark.some((v) => v !== 0);
   const trend = metric.trendPct;
@@ -565,6 +550,20 @@ function SalesCard({
         {formatValue(metric.value, metric.format)}
       </div>
       <div className="mt-1.5 text-xs font-semibold text-neutral-400">{headlineLabel}</div>
+      {metric.breakdown?.length ? (
+        <div className="mt-1 text-xs font-semibold tabular-nums text-neutral-600">
+          {metric.breakdown.map((p) => `${p.label} ${p.value.toLocaleString('en-IN')}`).join(' · ')}
+        </div>
+      ) : null}
+      {metric.sharePct != null && (
+        <div className="mt-1 text-xs font-semibold tabular-nums text-neutral-600">
+          {t('admin.salesKpis.shareOf', {
+            defaultValue: '{{pct}}% of {{base}}',
+            pct: metric.sharePct,
+            base: metric.shareOf,
+          })}
+        </div>
+      )}
 
       {/* Sparkline */}
       {showSpark && (
@@ -598,78 +597,18 @@ function UnavailableNote({ metrics }: { metrics: SalesMetric[] }): ReactNode {
   );
 }
 
-/** Why orders were cancelled, ranked, ours marked — the detail behind the "our fault" card. */
-function CancellationTable({
-  t,
-  data,
-  range,
-}: {
-  t: ReturnType<typeof useTranslation>['t'];
-  data: CancellationBreakdown;
-  range: string;
-}): ReactNode {
-  if (!data.reasons.length) return null;
-  // Server totals, not a sum of rows — one order can sit under two reasons.
-  const total = data.totalOrders;
-  const ours = data.ourFaultOrders;
-  const pctOurs = total ? Math.round((ours / total) * 100) : 0;
-  return (
-    <section className="mt-7">
-      <h2 className="mb-2.5 text-xs font-bold uppercase tracking-wider text-neutral-400">
-        {t('admin.salesKpis.whyCancelled', { defaultValue: 'Why orders were cancelled' })}
-      </h2>
-      <div style={CARD_SHELL}>
-        <p className="mb-3 text-sm text-neutral-600">
-          {t('admin.salesKpis.cancelSummary', {
-            defaultValue:
-              '{{ours}} of {{total}} cancellations ({{pct}}%) in {{range}} were ours to prevent.',
-            range,
-            ours: ours.toLocaleString('en-IN'),
-            total: total.toLocaleString('en-IN'),
-            pct: pctOurs,
-          })}
-        </p>
-        <div className="overflow-x-auto">
-          <table className="w-full text-sm">
-            <tbody>
-              {data.reasons.map((r) => (
-                <tr key={r.reason} className="border-t border-neutral-100 first:border-t-0">
-                  <td className="py-1.5 pr-3">
-                    <span
-                      className={`mr-2 inline-block h-1.5 w-1.5 rounded-full align-middle ${
-                        r.ourFault ? 'bg-orange-500' : 'bg-neutral-300'
-                      }`}
-                    />
-                    <span className={r.ourFault ? 'text-neutral-900' : 'text-neutral-600'}>
-                      {r.reason}
-                    </span>
-                  </td>
-                  <td className="w-20 py-1.5 text-right tabular-nums text-neutral-900">
-                    {r.orders.toLocaleString('en-IN')}
-                  </td>
-                  <td className="w-14 py-1.5 text-right tabular-nums text-neutral-400">
-                    {total ? Math.round((r.orders / total) * 100) : 0}%
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      </div>
-    </section>
-  );
-}
-
 /** Top 10 designs by revenue over the page's range, colours grouped under each. */
 function TopItemsTable({
   from,
   to,
   inventory,
+  channel,
   tick,
 }: {
   from: string;
   to: string;
   inventory: SalesInventoryView;
+  channel: SalesChannel;
   tick: number;
 }): ReactNode {
   const { t } = useTranslation();
@@ -680,7 +619,7 @@ function TopItemsTable({
     let cancelled = false;
     setData(null);
     setFailed(false);
-    getTopItems(from, to, inventory)
+    getTopItems(from, to, inventory, channel)
       .then((r) => {
         if (!cancelled) setData(r);
       })
@@ -690,7 +629,7 @@ function TopItemsTable({
     return () => {
       cancelled = true;
     };
-  }, [from, to, inventory, tick]);
+  }, [from, to, inventory, channel, tick]);
 
   const signed = useSignedUrls((data?.items ?? []).flatMap((it) => it.styles.map((s) => s.imageUrl)));
   const img = (path: string | null): string | null => (path && signed[path]) || null;

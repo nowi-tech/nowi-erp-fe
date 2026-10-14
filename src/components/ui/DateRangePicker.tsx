@@ -15,7 +15,7 @@ import { cn } from '@/lib/utils';
 /**
  * Polished date-range picker for the dashboard activity window. Replaces the
  * two native `<input type="date">` + reset button with one trigger + popover:
- * a presets sidebar (Today / Yesterday / Last 7·30·90 days / This year / This
+ * a presets sidebar (Today / Yesterday / Last 7·30·90 days / This month / This year / This
  * financial year) and a dual-month react-day-picker range calendar.
  * AUTO-APPLIES: a preset click, or the second click that completes a range,
  * commits and closes — there is no Apply button.
@@ -131,6 +131,14 @@ function buildPresets(t: ReturnType<typeof useTranslation>['t']): PresetRange[] 
         defaultValue: 'Last 90 days',
       }),
       from: daysAgo(89),
+      to: today,
+    },
+    {
+      key: 'thisMonth',
+      label: t('dashboard.dateFilter.presets.thisMonth', {
+        defaultValue: 'This month',
+      }),
+      from: new Date(today.getFullYear(), today.getMonth(), 1),
       to: today,
     },
     {
