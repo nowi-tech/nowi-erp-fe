@@ -97,7 +97,7 @@ export type CancellationFault = 'ours' | 'customer' | 'platform' | 'unknown';
 export interface CancellationSection {
   from: string;
   to: string;
-  /** Orders with nothing left to send. */
+  /** Orders with a line cancelled before dispatch. */
   cancelled: number;
   ours: number;
   notOurs: number;
