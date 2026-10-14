@@ -522,6 +522,7 @@ function SalesCard({
   accent: string;
   headlineLabel: string;
 }): ReactNode {
+  const { t } = useTranslation();
   if (metric.kind === 'snapshot') return <SnapshotCard metric={metric} accent={accent} />;
   const showSpark = metric.spark.some((v) => v !== 0);
   const trend = metric.trendPct;
@@ -565,6 +566,15 @@ function SalesCard({
         {formatValue(metric.value, metric.format)}
       </div>
       <div className="mt-1.5 text-xs font-semibold text-neutral-400">{headlineLabel}</div>
+      {metric.sharePct != null && (
+        <div className="mt-1 text-xs font-semibold tabular-nums text-neutral-600">
+          {t('admin.salesKpis.shareOf', {
+            defaultValue: '{{pct}}% of {{base}}',
+            pct: metric.sharePct,
+            base: metric.shareOf,
+          })}
+        </div>
+      )}
 
       {/* Sparkline */}
       {showSpark && (

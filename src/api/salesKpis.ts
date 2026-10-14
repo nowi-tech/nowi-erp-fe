@@ -27,6 +27,9 @@ export interface SalesMetric {
   sparkDates: string[];
   /** Signed % change of `value` vs `previous`; null when there is nothing to compare. */
   trendPct: number | null;
+  /** `value` as a % of the base named in `shareOf`. */
+  sharePct?: number | null;
+  shareOf?: string;
 }
 
 export interface SalesBucketInfo {
