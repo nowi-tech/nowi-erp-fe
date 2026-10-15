@@ -32,6 +32,9 @@ export interface SalesMetric {
   shareOf?: string;
   /** Parts of `value`, shown on a line under it. */
   breakdown?: { label: string; value: number }[];
+  /** Days the value actually covers, when narrower than the range asked for. */
+  fromDay?: string;
+  toDay?: string;
 }
 
 export interface SalesBucketInfo {
