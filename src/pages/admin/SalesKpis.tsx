@@ -550,7 +550,9 @@ function SalesCard({
       >
         {formatValue(metric.value, metric.format)}
       </div>
-      <div className="mt-1.5 text-xs font-semibold text-neutral-400">{headlineLabel}</div>
+      <div className="mt-1.5 text-xs font-semibold text-neutral-400">
+        {metric.fromDay ? rangeLabel(metric.fromDay, metric.toDay ?? metric.fromDay) : headlineLabel}
+      </div>
       {metric.breakdown?.length ? (
         <div className="mt-1 text-xs font-semibold tabular-nums text-neutral-600">
           {metric.breakdown.map((p) => `${p.label} ${p.value.toLocaleString('en-IN')}`).join(' · ')}
