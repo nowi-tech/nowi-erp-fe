@@ -1223,7 +1223,7 @@ function ToStartTable({
                 <div className="mb-0.5">
                   <UrgencyPill urgency={s.worstUrgency} stockout={s.stockout} />
                 </div>
-                <TruncText text={s.erpStyleId ?? s.styleKey} className="text-sm font-semibold" />
+                <TruncText text={s.displayKey !== s.styleKey ? s.displayKey : (s.erpStyleId ?? s.styleKey)} className="text-sm font-semibold" />
                 {meaningfulName(s) && (
                   <TruncText
                     text={meaningfulName(s)!}
