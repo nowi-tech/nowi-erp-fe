@@ -600,3 +600,20 @@ export type {
   FabricStockEntry,
   FabricStockEntryType,
 };
+
+/** Payload for POST /api/styles/from-listing. */
+export interface CreateFromListingRequest {
+  styleKey: string;
+  gender: Gender;
+  categoryId: number;
+  collectionId: number;
+  workingName?: string;
+  imageUrl?: string;
+  myntraUrl?: string;
+}
+
+/** Bring an EasyEcom listing with no ERP style into the ERP as a 3rd-party style. */
+export async function createStyleFromListing(body: CreateFromListingRequest): Promise<Style> {
+  const res = await apiClient.post<Style>('/api/styles/from-listing', body);
+  return res.data;
+}
