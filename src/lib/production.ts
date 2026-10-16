@@ -115,7 +115,7 @@ export function cleanName(
 export function meaningfulName(style: InventoryStyle): string | null {
   return cleanName(
     style.name,
-    style.styleKey,
+    style.displayKey,
     style.sizes.map((z) => z.sku),
   );
 }
