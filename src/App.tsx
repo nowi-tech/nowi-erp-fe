@@ -33,6 +33,7 @@ const DispatchDetail = lazy(() => import('./pages/admin/DispatchDetail'));
 const Warehouses = lazy(() => import('./pages/admin/Warehouses'));
 const ProductionKpis = lazy(() => import('./pages/admin/ProductionKpis'));
 const SalesKpis = lazy(() => import('./pages/admin/SalesKpis'));
+const InventoryKpis = lazy(() => import('./pages/admin/InventoryKpis'));
 const InventoryHealth = lazy(() => import('./pages/admin/InventoryHealth'));
 const Production = lazy(() => import('./pages/admin/Production'));
 const ProductionLotDetail = lazy(() => import('./pages/admin/ProductionLotDetail'));
@@ -277,6 +278,16 @@ function App() {
                         titleDefault="Sales KPIs"
                         subtitleDefault="Revenue, orders, AOV/ASP & returns — all warehouses."
                       />
+                    </S>
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="inventory-kpis"
+                element={
+                  <ProtectedRoute allowedRoles={['admin', 'viewer']}>
+                    <S>
+                      <InventoryKpis />
                     </S>
                   </ProtectedRoute>
                 }
