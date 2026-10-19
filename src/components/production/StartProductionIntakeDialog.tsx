@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Factory, X, AlertTriangle, ArrowLeft, Loader2, Upload } from 'lucide-react';
 import { Dialog } from '@/components/ui/dialog';
@@ -39,19 +39,31 @@ interface ExistingSel {
  * and its "+ Add" row switches to the new-item (another brand's SKU) form,
  * carrying the typed text over as the SKU. Quantities are captured here;
  * "Add to pipeline" stages it, "Send to production" opens it on the floor.
+ * `purpose="alteration"` hides the production-only parts; the caller supplies title, footer and `children`.
  */
 export default function StartProductionIntakeDialog({
   open,
   busy,
   onClose,
   onConfirm,
+  purpose = 'production',
+  title,
+  renderFooter,
+  children,
+  extraValid = true,
 }: {
   open: boolean;
   busy: boolean;
   onClose: () => void;
   onConfirm: (body: CreateBatchBody) => void;
+  purpose?: 'production' | 'alteration';
+  title?: string;
+  renderFooter?: (ctx: { canSubmit: boolean; total: number; confirm: () => void }) => ReactNode;
+  children?: ReactNode;
+  extraValid?: boolean;
 }) {
   const { t } = useTranslation();
+  const isAlt = purpose === 'alteration';
   const toast = useToast();
   const [mode, setMode] = useState<Mode>('existing');
 
@@ -228,6 +240,8 @@ export default function StartProductionIntakeDialog({
       );
   };
 
+  const qtyLabel = isAlt ? t('admin.alteration.qtyIn', { defaultValue: 'Pieces' }) : undefined;
+
   const setQtyFor = (sku: string, raw: string) =>
     setQty((prev) => ({ ...prev, [sku]: Math.max(0, Number.parseInt(raw, 10) || 0) }));
 
@@ -252,6 +266,7 @@ export default function StartProductionIntakeDialog({
   const canSubmit =
     total > 0 &&
     !uploading &&
+    extraValid &&
     (mode === 'existing'
       ? sel != null && (sel.sizes.length > 0 || extActiveSizes.length > 0)
       : brandId !== '' &&
@@ -310,43 +325,48 @@ export default function StartProductionIntakeDialog({
       maxWidthClassName="max-w-2xl"
       title={
         <div className="text-[11px] font-semibold uppercase tracking-wider text-[var(--color-primary)]">
-          {t('admin.production.intake.title', { defaultValue: 'Start production' })}
+          {title ?? t('admin.production.intake.title', { defaultValue: 'Start production' })}
         </div>
       }
       footer={
-        <>
-          <Button variant="outline" size="sm" disabled={busy} onClick={onClose}>
-            {t('common.cancel', { defaultValue: 'Cancel' })}
-          </Button>
-          <Button
-            variant="outline"
-            size="sm"
-            disabled={busy || !canSubmit}
-            onClick={() => submit(false)}
-          >
-            {t('admin.production.intake.addToPlanning', {
-              defaultValue: 'Add to pipeline · {{n}}',
-              n: total,
-            })}
-          </Button>
-          {/* Straight to the floor needs the tailor — their code is minted into
-              the lot number, so it can't be filled in afterwards. */}
-          <Button
-            size="sm"
-            disabled={busy || !canSubmit || tailorId === ''}
-            onClick={() => submit(true)}
-          >
-            <Factory size={14} />
-            <span className="ml-1">
-              {t('admin.production.intake.sendDirect', {
-                defaultValue: 'Send to production · {{n}}',
+        renderFooter ? (
+          renderFooter({ canSubmit, total, confirm: () => submit(false) })
+        ) : (
+          <>
+            <Button variant="outline" size="sm" disabled={busy} onClick={onClose}>
+              {t('common.cancel', { defaultValue: 'Cancel' })}
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              disabled={busy || !canSubmit}
+              onClick={() => submit(false)}
+            >
+              {t('admin.production.intake.addToPlanning', {
+                defaultValue: 'Add to pipeline · {{n}}',
                 n: total,
               })}
-            </span>
-          </Button>
-        </>
+            </Button>
+            {/* Straight to the floor needs the tailor — their code is minted into
+                the lot number, so it can't be filled in afterwards. */}
+            <Button
+              size="sm"
+              disabled={busy || !canSubmit || tailorId === ''}
+              onClick={() => submit(true)}
+            >
+              <Factory size={14} />
+              <span className="ml-1">
+                {t('admin.production.intake.sendDirect', {
+                  defaultValue: 'Send to production · {{n}}',
+                  n: total,
+                })}
+              </span>
+            </Button>
+          </>
+        )
       }
     >
+      {children}
       {mode === 'existing' ? (
         <div className="space-y-3">
           {!sel && (
@@ -411,7 +431,7 @@ export default function StartProductionIntakeDialog({
                 </button>
               </div>
 
-              {sel.alreadyInProduction && (
+              {!isAlt && sel.alreadyInProduction && (
                 <div className="flex items-center gap-2 rounded-[var(--radius-sm)] border border-amber-300 bg-amber-50 px-3 py-1.5 text-xs font-medium text-amber-800">
                   <AlertTriangle size={14} className="shrink-0" />
                   {t('admin.production.intake.alreadyInProduction', {
@@ -422,7 +442,8 @@ export default function StartProductionIntakeDialog({
 
               {sel.sizes.length > 0 ? (
                 <QtyTable
-                  showInFlight
+                  showInFlight={!isAlt}
+                  qtyLabel={qtyLabel}
                   rows={sel.sizes.map((z) => ({
                     key: z.sku,
                     size: z.size,
@@ -461,6 +482,7 @@ export default function StartProductionIntakeDialog({
                   </div>
                   {extActiveSizes.length > 0 && (
                     <QtyTable
+                      qtyLabel={qtyLabel}
                       rows={extActiveSizes.map((s) => ({
                         key: s,
                         size: s,
@@ -522,36 +544,38 @@ export default function StartProductionIntakeDialog({
             />
           </div>
 
-          <div>
-            <Label>{t('admin.production.intake.image', { defaultValue: 'Image (optional)' })}</Label>
-            <div className="flex items-center gap-3">
-              {imagePreview ? (
-                <img
-                  src={imagePreview}
-                  alt=""
-                  className="h-14 w-14 shrink-0 rounded-[var(--radius-sm)] object-cover"
-                />
-              ) : (
-                <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-[var(--radius-sm)] bg-[var(--color-muted)] text-[var(--color-muted-foreground)]">
-                  {uploading ? <Loader2 size={16} className="animate-spin" /> : <Upload size={16} />}
-                </div>
-              )}
-              <label className="cursor-pointer text-sm font-semibold text-[var(--color-primary)] hover:underline">
-                <input
-                  type="file"
-                  accept="image/*"
-                  className="hidden"
-                  disabled={uploading}
-                  onChange={(e) => onImageFile(e.target.files?.[0])}
-                />
-                {uploading
-                  ? t('common.uploading', { defaultValue: 'Uploading…' })
-                  : imagePath
-                    ? t('admin.production.intake.changeImage', { defaultValue: 'Change image' })
-                    : t('admin.production.intake.uploadImage', { defaultValue: 'Upload image' })}
-              </label>
+          {!isAlt && (
+            <div>
+              <Label>{t('admin.production.intake.image', { defaultValue: 'Image (optional)' })}</Label>
+              <div className="flex items-center gap-3">
+                {imagePreview ? (
+                  <img
+                    src={imagePreview}
+                    alt=""
+                    className="h-14 w-14 shrink-0 rounded-[var(--radius-sm)] object-cover"
+                  />
+                ) : (
+                  <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-[var(--radius-sm)] bg-[var(--color-muted)] text-[var(--color-muted-foreground)]">
+                    {uploading ? <Loader2 size={16} className="animate-spin" /> : <Upload size={16} />}
+                  </div>
+                )}
+                <label className="cursor-pointer text-sm font-semibold text-[var(--color-primary)] hover:underline">
+                  <input
+                    type="file"
+                    accept="image/*"
+                    className="hidden"
+                    disabled={uploading}
+                    onChange={(e) => onImageFile(e.target.files?.[0])}
+                  />
+                  {uploading
+                    ? t('common.uploading', { defaultValue: 'Uploading…' })
+                    : imagePath
+                      ? t('admin.production.intake.changeImage', { defaultValue: 'Change image' })
+                      : t('admin.production.intake.uploadImage', { defaultValue: 'Upload image' })}
+                </label>
+              </div>
             </div>
-          </div>
+          )}
 
           <div>
             <Label>{t('admin.production.intake.sku', { defaultValue: 'SKU code' })}</Label>
@@ -565,7 +589,11 @@ export default function StartProductionIntakeDialog({
           </div>
 
           <div>
-            <Label>{t('admin.production.intake.sizes', { defaultValue: 'Sizes to make' })}</Label>
+            <Label>
+              {isAlt
+                ? t('admin.alteration.sizes', { defaultValue: 'Sizes' })
+                : t('admin.production.intake.sizes', { defaultValue: 'Sizes to make' })}
+            </Label>
             <div className="flex flex-wrap gap-1.5">
               {SIZE_PRESETS.map((s) => (
                 <button
@@ -586,6 +614,7 @@ export default function StartProductionIntakeDialog({
 
           {extActiveSizes.length > 0 && (
             <QtyTable
+              qtyLabel={qtyLabel}
               rows={extActiveSizes.map((s) => ({
                 key: s,
                 size: s,
@@ -603,7 +632,7 @@ export default function StartProductionIntakeDialog({
           to the pipeline is named on its way out — so it shows as soon as
           there's something to make, not once quantities are typed: the button
           it gates would otherwise sit disabled with no visible cause. */}
-      {(mode === 'external' || sel) && (
+      {!isAlt && (mode === 'external' || sel) && (
         <div className="mt-4">
           <Label>
             {t('admin.production.intake.tailorLabel', {
