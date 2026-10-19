@@ -13,7 +13,7 @@ export type Aging = 'active' | 'slow' | 'dead';
 /** Every list lens the server accepts: urgency tiers + aging + new arrivals.
  *  `out` = every size gone; `cut` = only some (a broken size ladder). */
 export type FilterKey =
-  | 'all' | 'out' | 'cut' | 'critical' | 'watch' | 'slow' | 'dead' | 'new' | 'pending' | 'disabled';
+  | 'all' | 'out' | 'cut' | 'critical' | 'watch' | 'slow' | 'dead' | 'new' | 'pending' | 'disabled' | 'paused';
 
 /** One size row (per SKU). */
 export interface InventorySize {
@@ -45,8 +45,13 @@ export interface InventorySize {
 
 /** A style group — an expandable parent row (summary) over its at-risk `sizes`. */
 export interface InventoryStyle {
+  /** The card's identity: the base code, or an older version's own code (`X(0)` for the original). */
   styleKey: string;
+  /** The code of the version on show — `NOWIWTP1178(1)` under base `NOWIWTP1178`. */
+  displayKey: string;
   name: string | null;
+  /** EasyEcom's category text for the listing. */
+  category: string | null;
   /** Signed URL or GCS object path or null (shown on each size child row). */
   imageUrl: string | null;
   linkedStyleId: number | null;
@@ -80,8 +85,12 @@ export interface InventoryStyle {
   /** Waiting on Myntra seller approval — unsellable, so hidden from every lens
    *  but `pending`, where it can be brought back. */
   pendingApproval: boolean;
+  /** An admin paused tracking it: off every tab but Paused and out of every count. */
+  paused: boolean;
   /** Maps to a style we own. False = search-only row, counted nowhere. */
   tracked: boolean;
+  /** An older version of a style that has a newer one. Search-only, counted nowhere. */
+  superseded: boolean;
   /** Linked ERP style went live within the last 7 days — drives the new-arrivals
    *  tab + badge. False when the style isn't linked to the ERP catalog. */
   isNew: boolean;
@@ -108,6 +117,8 @@ export interface InventoryKpis {
   /** Manually disabled styles. Off every other tab including All styles, so the
    *  Disabled tab is the only way back to one. */
   disabled: number;
+  /** Styles an admin paused tracking for. */
+  paused: number;
   totalStyles: number;
   totalSkus: number;
 }
@@ -174,6 +185,11 @@ export function getInventoryHealth(params: InventoryHealthParams = {}): Promise<
 /** Mark / unmark a product (by styleKey) discontinued — sinks it to the bottom. */
 export function setStyleDiscontinued(styleKey: string, discontinued: boolean): Promise<void> {
   return apiClient.post('/api/inventory-health/discontinued', { styleKey, discontinued }).then(() => undefined);
+}
+
+/** Pause / resume tracking one product (by styleKey). */
+export function setStylePaused(styleKey: string, paused: boolean): Promise<void> {
+  return apiClient.post('/api/inventory-health/paused', { styleKey, paused }).then(() => undefined);
 }
 
 /** Mark / unmark one product (by styleKey) as awaiting Myntra seller approval. */

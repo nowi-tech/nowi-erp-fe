@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useLocation, useNavigate, useSearchParams } from 'react-router-dom';
-import { RefreshCw, Search, ArrowUp, ArrowDown, ArrowUpDown, ArrowUpRight, Minus, Ban, RotateCcw, X, Sparkles, Copy, Check, Factory, Clock, CheckCircle2 } from 'lucide-react';
+import { RefreshCw, Search, ArrowUp, ArrowDown, ArrowUpDown, ArrowUpRight, Minus, Ban, RotateCcw, X, Sparkles, Copy, Check, Factory, Clock, CheckCircle2, Plus, Pause, Play } from 'lucide-react';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useToast } from '@/components/ui/toast';
 import { ConfirmDialog } from '@/components/ui/confirm-dialog';
@@ -16,7 +16,8 @@ import { todayISO } from '@/lib/date';
 import { meaningfulName } from '@/lib/production';
 import { useDebounced } from '@/lib/useDebounced';
 import { useAuth } from '@/context/auth';
-import { hasAnyRole, PRODUCTION_WRITE_ROLES, STYLE_DISABLE_ROLES } from '@/lib/userRoles';
+import { ADMIN_ROLES, APPROVER_ROLES, hasAnyRole, PRODUCTION_WRITE_ROLES, STYLE_DISABLE_ROLES } from '@/lib/userRoles';
+import CreateFromListingDialog from '@/components/admin/CreateFromListingDialog';
 import { createBatch, type CreateBatchBody } from '@/api/production';
 import StartProductionDialog, {
   type StartProductionTarget,
@@ -29,6 +30,7 @@ import {
   getInventoryHealth,
   setStyleDiscontinued,
   setStylePendingApproval,
+  setStylePaused,
   type Aging,
   type FilterKey,
   type InventoryHealthResponse,
@@ -224,6 +226,9 @@ export default function InventoryHealth(): ReactNode {
   const canManage = hasAnyRole(user, ['admin', 'sampling_editor']);
   // Disabling a style is the owner's alone — narrower than the hold button beside it.
   const canDisable = hasAnyRole(user, STYLE_DISABLE_ROLES);
+  const canCreateErp = hasAnyRole(user, APPROVER_ROLES);
+  const canPause = hasAnyRole(user, ADMIN_ROLES);
+  const [createFor, setCreateFor] = useState<InventoryStyle | null>(null);
   // Sending a style to the pipeline is a production action — a different set
   // (the page itself is open to every production reader).
   const canProduce = hasAnyRole(user, PRODUCTION_WRITE_ROLES);
@@ -231,6 +236,7 @@ export default function InventoryHealth(): ReactNode {
   const [confirmDisc, setConfirmDisc] = useState<{ styleKey: string; next: boolean } | null>(null);
   // Seller-approval hold confirmation (per style).
   const [confirmHold, setConfirmHold] = useState<{ styleKey: string; next: boolean } | null>(null);
+  const [confirmPause, setConfirmPause] = useState<{ styleKey: string; next: boolean } | null>(null);
   // Style queued for the "add to pipeline" dialog (quantities are editable there).
   const [produceTarget, setProduceTarget] = useState<StartProductionTarget | null>(null);
   const [produceBusy, setProduceBusy] = useState(false);
@@ -533,6 +539,25 @@ export default function InventoryHealth(): ReactNode {
     }
   };
 
+  // Confirm → pause tracking the style (or resume it), then reload.
+  const onConfirmPause = async (): Promise<void> => {
+    if (!confirmPause) return;
+    const { styleKey, next } = confirmPause;
+    setConfirmPause(null);
+    try {
+      await setStylePaused(styleKey, next);
+      toast.show(
+        next
+          ? t('admin.inventoryHealth.pauseDone', { defaultValue: 'Tracking paused.' })
+          : t('admin.inventoryHealth.resumeDone', { defaultValue: 'Back on the list.' }),
+        'success',
+      );
+      setReloadTick((n) => n + 1);
+    } catch {
+      toast.show(t('admin.inventoryHealth.holdFailed', { defaultValue: 'Couldn’t update. Please try again.' }), 'error');
+    }
+  };
+
   // Confirm → hold the style for seller approval (or release it), then reload.
   const onConfirmHold = async (): Promise<void> => {
     if (!confirmHold) return;
@@ -608,7 +633,6 @@ export default function InventoryHealth(): ReactNode {
         { key: 'cut', label: t('admin.inventoryHealth.tab.cut', { defaultValue: 'Cut size' }), count: shown(kpis.cutSize) },
         { key: 'out', label: t('admin.inventoryHealth.tab.out', { defaultValue: 'Out of stock' }), count: shown(kpis.outOfStock) },
         { key: 'critical', label: t('admin.inventoryHealth.tab.critical', { defaultValue: 'Critical' }), count: shown(kpis.critical) },
-        { key: 'watch', label: t('admin.inventoryHealth.tab.watch', { defaultValue: 'Watch' }), count: shown(kpis.watch) },
         { key: 'slow', label: t('admin.inventoryHealth.tab.slow', { defaultValue: 'Slow-movers' }), count: shown(kpis.slow) },
         { key: 'dead', label: t('admin.inventoryHealth.tab.dead', { defaultValue: 'Dead stock' }), count: shown(kpis.dead) },
         // Held for seller approval — unsellable, so off every other lens. This is
@@ -617,6 +641,7 @@ export default function InventoryHealth(): ReactNode {
         // Same idea for products you switched off: they count nowhere else, so
         // without this tab a disabled style could never be found again.
         { key: 'disabled', label: t('admin.inventoryHealth.tab.disabled', { defaultValue: 'Disabled' }), count: shown(kpis.disabled) },
+        { key: 'paused', label: t('admin.inventoryHealth.tab.paused', { defaultValue: 'Paused' }), count: shown(kpis.paused) },
         // "What's new" is a sort preset (it reorders whichever lens is in focus),
         // not a lens of its own — no tab.
       ]
@@ -881,6 +906,11 @@ export default function InventoryHealth(): ReactNode {
                         canManage={canManage}
                         canDisable={canDisable}
                         canProduce={canProduce}
+                        canCreateErp={canCreateErp}
+                        canPause={canPause}
+                        dimPaused={filter !== 'paused'}
+                        onRequestPause={(styleKey, next) => setConfirmPause({ styleKey, next })}
+                        onCreateErp={() => setCreateFor(style)}
                         dimPending={filter !== 'pending'}
                         onRequestDiscontinue={(styleKey, next) => setConfirmDisc({ styleKey, next })}
                         onRequestHold={(styleKey, next) => setConfirmHold({ styleKey, next })}
@@ -936,6 +966,15 @@ export default function InventoryHealth(): ReactNode {
           </div>
         ) : null}
 
+      <CreateFromListingDialog
+        style={createFor}
+        onClose={() => setCreateFor(null)}
+        onCreated={(code) => {
+          setCreateFor(null);
+          toast.show(t('admin.inventoryHealth.createErp.done', { defaultValue: '{{code}} created in ERP', code }), 'success');
+          setReloadTick((n) => n + 1);
+        }}
+      />
       <ConfirmDialog
         open={confirmDisc != null}
         destructive={confirmDisc?.next === true}
@@ -965,6 +1004,33 @@ export default function InventoryHealth(): ReactNode {
         onCancel={() => setConfirmDisc(null)}
       />
 
+      <ConfirmDialog
+        open={confirmPause != null}
+        title={
+          confirmPause?.next
+            ? t('admin.inventoryHealth.pauseTitle', { defaultValue: 'Pause tracking?' })
+            : t('admin.inventoryHealth.resumeTitle', { defaultValue: 'Resume tracking?' })
+        }
+        message={
+          confirmPause?.next
+            ? t('admin.inventoryHealth.pauseMsg', {
+                defaultValue: '“{{style}}” leaves the forecast, every count and the production queue. You’ll find it under Paused.',
+                style: confirmPause?.styleKey ?? '',
+              })
+            : t('admin.inventoryHealth.resumeMsg', {
+                defaultValue: '“{{style}}” goes back on the list and is tracked again.',
+                style: confirmPause?.styleKey ?? '',
+              })
+        }
+        confirmLabel={
+          confirmPause?.next
+            ? t('admin.inventoryHealth.pauseConfirm', { defaultValue: 'Pause' })
+            : t('admin.inventoryHealth.resumeConfirm', { defaultValue: 'Resume' })
+        }
+        cancelLabel={t('common.cancel', { defaultValue: 'Cancel' })}
+        onConfirm={() => void onConfirmPause()}
+        onCancel={() => setConfirmPause(null)}
+      />
       <ConfirmDialog
         open={confirmHold != null}
         title={
@@ -1040,6 +1106,11 @@ function StyleGroup({
   canManage,
   canDisable,
   canProduce,
+  canCreateErp,
+  canPause,
+  dimPaused,
+  onRequestPause,
+  onCreateErp,
   dimPending,
   onRequestDiscontinue,
   onRequestHold,
@@ -1053,6 +1124,12 @@ function StyleGroup({
   canManage: boolean;
   canDisable: boolean;
   canProduce: boolean;
+  canCreateErp: boolean;
+  canPause: boolean;
+  /** Paused rows are the list on their own tab; elsewhere they only arrive via search. */
+  dimPaused: boolean;
+  onRequestPause: (styleKey: string, next: boolean) => void;
+  onCreateErp: () => void;
   /** Pending rows are the list on their own tab; elsewhere they only arrive via search. */
   dimPending: boolean;
   onRequestDiscontinue: (styleKey: string, next: boolean) => void;
@@ -1061,6 +1138,8 @@ function StyleGroup({
   t: ReturnType<typeof useTranslation>['t'];
 }): ReactNode {
   const linked = style.linkedStyleId != null;
+  // Search-only cards (not ours, or an older version) carry no actions.
+  const listed = style.tracked && !style.superseded;
   // Sizes soonest-to-run-out first within the group.
   const cover = (z: InventorySize): number => z.coverDays ?? Number.POSITIVE_INFINITY;
   const sizes = [...style.sizes].sort((a, b) => cover(a) - cover(b));
@@ -1072,13 +1151,13 @@ function StyleGroup({
   return (
     <div
       className={`overflow-hidden rounded-[var(--radius-md)] border border-neutral-200 bg-white shadow-sm ${
-        style.discontinued || !style.tracked || (style.pendingApproval && dimPending) ? 'opacity-60' : ''
+        style.discontinued || !listed || (style.pendingApproval && dimPending) || (style.paused && dimPaused) ? 'opacity-60' : ''
       }`}
     >
       {/* Style header — product image + code + status pills, over its (always
           visible) size rows. Reads as a product card. */}
       <div className="flex items-center gap-3 border-b border-neutral-100 bg-white px-4 py-3.5">
-        <HoverThumbnail src={imageUrl} alt={style.styleKey} size={48} radius="10px" />
+        <HoverThumbnail src={imageUrl} alt={style.displayKey} size={48} radius="10px" />
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
             {linked ? (
@@ -1088,11 +1167,11 @@ function StyleGroup({
                 title={t('admin.inventoryHealth.openStyle', { defaultValue: 'Open style workspace' })}
                 className="inline-flex min-w-0 items-center gap-1 text-[15px] font-semibold text-[var(--color-primary)] underline decoration-dotted underline-offset-4 hover:decoration-solid"
               >
-                <span className="truncate">{style.styleKey}</span>
+                <span className="truncate">{style.displayKey}</span>
                 <ArrowUpRight size={14} className="shrink-0" style={{ color: PRIMARY }} />
               </button>
             ) : (
-              <span className="truncate text-[15px] font-semibold text-neutral-900">{style.styleKey}</span>
+              <span className="truncate text-[15px] font-semibold text-neutral-900">{style.displayKey}</span>
             )}
             <UrgencyPill urgency={style.worstUrgency} stockout={style.stockout} />
             {style.isNew && (
@@ -1106,11 +1185,22 @@ function StyleGroup({
                 {t('admin.inventoryHealth.discontinuedBadge', { defaultValue: 'disabled' })}
               </span>
             )}
+            {style.superseded && (
+              <span className="inline-flex items-center rounded border border-neutral-300 bg-neutral-100 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-neutral-500">
+                {t('admin.inventoryHealth.supersededBadge', { defaultValue: 'older version' })}
+              </span>
+            )}
             {!style.tracked && (
               <span className="inline-flex items-center rounded border border-neutral-300 bg-neutral-100 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-neutral-500">
                 {linked
                   ? t('admin.inventoryHealth.notTrackedBadge', { defaultValue: 'not tracked' })
                   : t('admin.inventoryHealth.notLinkedBadge', { defaultValue: 'not linked in ERP' })}
+              </span>
+            )}
+            {style.paused && (
+              <span className="inline-flex items-center gap-1 rounded border border-neutral-300 bg-neutral-100 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-neutral-600">
+                <Pause size={10} />
+                {t('admin.inventoryHealth.pausedBadge', { defaultValue: 'paused' })}
               </span>
             )}
             {style.pendingApproval && (
@@ -1155,7 +1245,17 @@ function StyleGroup({
             </div>
           )}
         </div>
-        {canProduce && style.tracked && !style.discontinued && !style.pendingApproval && (
+        {canCreateErp && !style.tracked && !linked && !style.superseded && (
+          <button
+            type="button"
+            onClick={onCreateErp}
+            className="inline-flex shrink-0 items-center gap-1 rounded-md border border-neutral-300 px-2.5 py-1.5 text-xs font-semibold text-neutral-700 transition hover:bg-neutral-50"
+          >
+            <Plus size={13} />
+            {t('admin.inventoryHealth.createErp.button', { defaultValue: 'Create in ERP' })}
+          </button>
+        )}
+        {canProduce && listed && !style.discontinued && !style.pendingApproval && !style.paused && (
           <button
             type="button"
             onClick={onProduce}
@@ -1165,7 +1265,7 @@ function StyleGroup({
             {t('admin.inventoryHealth.addToPipeline', { defaultValue: 'Add to pipeline' })}
           </button>
         )}
-        {canManage && style.tracked && (
+        {canManage && listed && (
           <button
             type="button"
             onClick={() => onRequestHold(style.styleKey, !style.pendingApproval)}
@@ -1188,7 +1288,30 @@ function StyleGroup({
             )}
           </button>
         )}
-        {canDisable && style.tracked && (
+        {canPause && (listed || (style.paused && !style.superseded)) && (
+          <button
+            type="button"
+            onClick={() => onRequestPause(style.styleKey, !style.paused)}
+            className={`inline-flex shrink-0 items-center gap-1 rounded-md border px-2.5 py-1.5 text-xs font-semibold transition ${
+              style.paused
+                ? 'border-emerald-200 text-emerald-700 hover:bg-emerald-50'
+                : 'border-neutral-300 text-neutral-700 hover:bg-neutral-50'
+            }`}
+          >
+            {style.paused ? (
+              <>
+                <Play size={13} />
+                {t('admin.inventoryHealth.resume', { defaultValue: 'Resume tracking' })}
+              </>
+            ) : (
+              <>
+                <Pause size={13} />
+                {t('admin.inventoryHealth.pause', { defaultValue: 'Pause tracking' })}
+              </>
+            )}
+          </button>
+        )}
+        {canDisable && listed && (
           <button
             type="button"
             onClick={() => onRequestDiscontinue(style.styleKey, !style.discontinued)}

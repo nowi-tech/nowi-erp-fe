@@ -113,10 +113,11 @@ export function cleanName(
 }
 
 export function meaningfulName(style: InventoryStyle): string | null {
+  // The base code, alone or with a size, is no name either; the card shows the newest version's.
   return cleanName(
     style.name,
-    style.styleKey,
-    style.sizes.map((z) => z.sku),
+    style.displayKey,
+    [style.styleKey, ...style.sizes.flatMap((z) => [z.sku, `${style.styleKey}_${z.size}`])],
   );
 }
 
