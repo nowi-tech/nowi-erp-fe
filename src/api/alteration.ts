@@ -117,3 +117,20 @@ export function completeAlteration(
 export function cancelAlteration(id: number): Promise<AlterationEntry> {
   return apiClient.post<AlterationEntry>(`/api/alteration/${id}/cancel`).then((r) => r.data);
 }
+
+export interface AlterationTimelineEntry {
+  id: number;
+  at: string;
+  by: string | null;
+  /** null on the create step. */
+  from: AlterationStatus | null;
+  to: AlterationStatus;
+  holdReason: string | null;
+  qtyOut: number | null;
+}
+
+export function getAlteration(
+  id: number,
+): Promise<{ entry: AlterationEntry; timeline: AlterationTimelineEntry[] }> {
+  return apiClient.get(`/api/alteration/${id}`).then((r) => r.data);
+}

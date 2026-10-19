@@ -38,6 +38,7 @@ const InventoryHealth = lazy(() => import('./pages/admin/InventoryHealth'));
 const Production = lazy(() => import('./pages/admin/Production'));
 const ProductionLotDetail = lazy(() => import('./pages/admin/ProductionLotDetail'));
 const Alteration = lazy(() => import('./pages/admin/Alteration'));
+const AlterationDetail = lazy(() => import('./pages/admin/AlterationDetail'));
 const StitchingHome = lazy(() => import('./pages/stitching/StitchingHome'));
 const StitchingReceiveLot = lazy(
   () => import('./pages/stitching/StitchingReceiveLot'),
@@ -309,6 +310,16 @@ function App() {
                   <ProtectedRoute allowedRoles={[...ALTERATION_READ_ROLES]}>
                     <S>
                       <Alteration />
+                    </S>
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="returns/alteration/:id"
+                element={
+                  <ProtectedRoute allowedRoles={[...ALTERATION_READ_ROLES]}>
+                    <S>
+                      <AlterationDetail />
                     </S>
                   </ProtectedRoute>
                 }

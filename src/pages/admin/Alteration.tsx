@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { useSearchParams } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { Scissors, Search, X } from 'lucide-react';
 import {
   QueueTabs,
@@ -23,6 +23,7 @@ import ReasonDialog from '@/components/production/ReasonDialog';
 import CompleteAlterationDialog from '@/components/alteration/CompleteAlterationDialog';
 import SendAlterationDialog from '@/components/alteration/SendAlterationDialog';
 import { useAuth } from '@/context/auth';
+import { useAlterationLabels } from '@/lib/alteration';
 import { hasAnyRole, ALTERATION_WRITE_ROLES } from '@/lib/userRoles';
 import { apiErrorMessage } from '@/api/apiClient';
 import type { CreateBatchBody } from '@/api/production';
@@ -53,25 +54,10 @@ export default function Alteration() {
   const { t } = useTranslation();
   const { user } = useAuth();
   const toast = useToast();
+  const navigate = useNavigate();
   const canWrite = hasAnyRole(user, ALTERATION_WRITE_ROLES);
 
-  const statusLabel = (s: Tab) =>
-    ({
-      received: t('admin.alteration.status.received', { defaultValue: 'Received' }),
-      in_alteration: t('admin.alteration.status.inAlteration', { defaultValue: 'In alteration' }),
-      completed: t('admin.alteration.status.completed', { defaultValue: 'Completed' }),
-      cancelled: t('admin.alteration.status.cancelled', { defaultValue: 'Cancelled' }),
-    })[s];
-  const sourceLabel = (s: AlterationSource) =>
-    ({
-      customer_return: t('admin.alteration.source.customerReturn', { defaultValue: 'Customer return' }),
-      rto: t('admin.alteration.source.rto', { defaultValue: 'RTO' }),
-      warehouse: t('admin.alteration.source.warehouse', { defaultValue: 'Warehouse' }),
-      production: t('admin.alteration.source.production', { defaultValue: 'Production' }),
-      other: t('admin.alteration.source.other', { defaultValue: 'Other' }),
-    })[s];
-  const channelLabel = (c: AlterationChannel) =>
-    ({ myntra: 'Myntra', flipkart: 'Flipkart', shopify: 'Shopify', wishlink: 'Wishlink' })[c];
+  const { statusLabel, sourceLabel, channelLabel } = useAlterationLabels();
 
   // ── tab, search and filters, mirrored into the URL ───────────────
   const [searchParams, setSearchParams] = useSearchParams();
@@ -315,7 +301,8 @@ export default function Alteration() {
   ];
 
   const actions = (e: AlterationEntry) => (
-    <div className="flex flex-wrap justify-end gap-1.5">
+    // Buttons act on the row; the click must not also open the entry.
+    <div className="flex flex-wrap justify-end gap-1.5" onClick={(ev) => ev.stopPropagation()}>
       {e.status === 'on_hold' && (
         <Button variant="outline" size="sm" disabled={busy} onClick={() => open('resume', e)}>
           {t('admin.production.resume.cta', { defaultValue: 'Resume' })}
@@ -425,6 +412,11 @@ export default function Alteration() {
         columns={columns}
         rows={rows}
         getRowKey={(e) => e.id}
+        onRowClick={(e) =>
+          navigate(`/admin/returns/alteration/${e.id}`, {
+            state: { from: `/admin/returns/alteration?${searchParams}` },
+          })
+        }
         loading={loading}
         loadingLabel={t('common.loading', { defaultValue: 'Loading…' })}
         emptyLabel={t('admin.alteration.empty', { defaultValue: 'Nothing here.' })}
