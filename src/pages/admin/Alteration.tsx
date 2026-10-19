@@ -217,6 +217,11 @@ export default function Alteration() {
       .finally(() => setBusy(false));
   };
 
+  const openEntry = (e: AlterationEntry) =>
+    navigate(`/admin/returns/alteration/${e.id}`, {
+      state: { from: `/admin/returns/alteration?${searchParams}` },
+    });
+
   const columns: QueueColumn<AlterationEntry>[] = [
     {
       key: 'img',
@@ -230,14 +235,22 @@ export default function Alteration() {
       header: t('admin.production.style', { defaultValue: 'Style' }),
       cell: (e) => (
         <div className="min-w-0">
-          <TruncText text={e.styleRef ?? '—'} className="text-sm font-semibold" />
+          {/* Primary-coloured like production's style link, so the row reads as leading somewhere. */}
+          <button
+            type="button"
+            title={e.styleRef ?? e.entryNo}
+            onClick={(ev) => {
+              ev.stopPropagation();
+              openEntry(e);
+            }}
+            className="block max-w-full truncate text-left font-mono text-[13px] text-[var(--color-primary)] hover:underline"
+          >
+            {e.styleRef ?? e.entryNo}
+          </button>
           <TruncText
             text={[e.brandName, e.colourName, e.name !== e.styleRef ? e.name : null].filter(Boolean).join(' · ')}
             className="text-[11px] text-[var(--color-muted-foreground)]"
           />
-          {e.tailorName && (
-            <TruncText text={e.tailorName} className="text-[11px] font-semibold text-[var(--color-primary)]" />
-          )}
         </div>
       ),
     },
@@ -248,6 +261,9 @@ export default function Alteration() {
       cell: (e) => (
         <div className="space-y-1">
           <div className="font-mono text-xs">{e.entryNo}</div>
+          {e.tailorName && (
+            <div className="truncate text-[11px] text-[var(--color-muted-foreground)]">{e.tailorName}</div>
+          )}
           {e.status === 'on_hold' && (
             <Badge variant="rework">{t('admin.alteration.status.onHold', { defaultValue: 'On hold' })}</Badge>
           )}
@@ -412,11 +428,7 @@ export default function Alteration() {
         columns={columns}
         rows={rows}
         getRowKey={(e) => e.id}
-        onRowClick={(e) =>
-          navigate(`/admin/returns/alteration/${e.id}`, {
-            state: { from: `/admin/returns/alteration?${searchParams}` },
-          })
-        }
+        onRowClick={openEntry}
         loading={loading}
         loadingLabel={t('common.loading', { defaultValue: 'Loading…' })}
         emptyLabel={t('admin.alteration.empty', { defaultValue: 'Nothing here.' })}
