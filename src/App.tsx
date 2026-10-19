@@ -17,6 +17,7 @@ import { useAuth } from './context/auth';
 import {
   hasAnyRole,
   hasRole,
+  ALTERATION_READ_ROLES,
   DESIGN_SUBMIT_ROLES,
   DISPATCH_VIEW_ROLES,
   PRODUCTION_BOARD_READ_ROLES,
@@ -36,6 +37,7 @@ const SalesKpis = lazy(() => import('./pages/admin/SalesKpis'));
 const InventoryHealth = lazy(() => import('./pages/admin/InventoryHealth'));
 const Production = lazy(() => import('./pages/admin/Production'));
 const ProductionLotDetail = lazy(() => import('./pages/admin/ProductionLotDetail'));
+const Alteration = lazy(() => import('./pages/admin/Alteration'));
 const StitchingHome = lazy(() => import('./pages/stitching/StitchingHome'));
 const StitchingReceiveLot = lazy(
   () => import('./pages/stitching/StitchingReceiveLot'),
@@ -213,7 +215,7 @@ function App() {
                 // production_editor + warehouse_manager must be here too: this
                 // parent guard runs BEFORE any child's allowedRoles, so a
                 // child-only widening (production, inventory-health) never gets
-                // reached. warehouse_manager reaches ONLY the production child.
+                // reached. warehouse_manager reaches the production and returns/alteration children.
                 <ProtectedRoute
                   allowedRoles={[
                     'admin',
@@ -297,6 +299,16 @@ function App() {
                   <ProtectedRoute allowedRoles={[...PRODUCTION_BOARD_READ_ROLES]}>
                     <S>
                       <Production />
+                    </S>
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="returns/alteration"
+                element={
+                  <ProtectedRoute allowedRoles={[...ALTERATION_READ_ROLES]}>
+                    <S>
+                      <Alteration />
                     </S>
                   </ProtectedRoute>
                 }
