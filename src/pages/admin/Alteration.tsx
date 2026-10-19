@@ -436,7 +436,8 @@ export default function Alteration() {
         renderActions={canWrite && (tab === 'received' || tab === 'in_alteration') ? actions : undefined}
       />
 
-      {rows.length < total && (
+      {/* Hidden mid-reload: the old row count would be the wrong offset for the new query. */}
+      {!loading && rows.length < total && (
         <div className="flex justify-center">
           <Button variant="outline" size="sm" disabled={loadingMore} onClick={loadMore}>
             {t('common.loadMore', { defaultValue: 'Load more' })}
