@@ -13,7 +13,7 @@ export type Aging = 'active' | 'slow' | 'dead';
 /** Every list lens the server accepts: urgency tiers + aging + new arrivals.
  *  `out` = every size gone; `cut` = only some (a broken size ladder). */
 export type FilterKey =
-  | 'all' | 'out' | 'cut' | 'critical' | 'watch' | 'slow' | 'dead' | 'new' | 'pending' | 'disabled' | 'unlinked' | 'paused';
+  | 'all' | 'out' | 'cut' | 'critical' | 'watch' | 'slow' | 'dead' | 'new' | 'pending' | 'disabled' | 'paused';
 
 /** One size row (per SKU). */
 export interface InventorySize {
@@ -117,8 +117,6 @@ export interface InventoryKpis {
   /** Manually disabled styles. Off every other tab including All styles, so the
    *  Disabled tab is the only way back to one. */
   disabled: number;
-  /** Listings no ERP style claims — the Not in ERP tab. */
-  notInErp: number;
   /** Styles an admin paused tracking for. */
   paused: number;
   totalStyles: number;

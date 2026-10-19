@@ -401,7 +401,6 @@
         "new": "New arrivals",
         "pending": "Pending approval",
         "disabled": "Disabled",
-        "unlinked": "Not in ERP",
         "paused": "Paused"
       },
       "newBadge": "New arrival",

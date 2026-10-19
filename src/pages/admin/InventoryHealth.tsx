@@ -642,7 +642,6 @@ export default function InventoryHealth(): ReactNode {
         // without this tab a disabled style could never be found again.
         { key: 'disabled', label: t('admin.inventoryHealth.tab.disabled', { defaultValue: 'Disabled' }), count: shown(kpis.disabled) },
         { key: 'paused', label: t('admin.inventoryHealth.tab.paused', { defaultValue: 'Paused' }), count: shown(kpis.paused) },
-        { key: 'unlinked', label: t('admin.inventoryHealth.tab.unlinked', { defaultValue: 'Not in ERP' }), count: shown(kpis.notInErp) },
         // "What's new" is a sort preset (it reorders whichever lens is in focus),
         // not a lens of its own — no tab.
       ]
