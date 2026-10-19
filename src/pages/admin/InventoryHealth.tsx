@@ -1288,7 +1288,7 @@ function StyleGroup({
             )}
           </button>
         )}
-        {canPause && listed && (
+        {canPause && (listed || (style.paused && !style.superseded)) && (
           <button
             type="button"
             onClick={() => onRequestPause(style.styleKey, !style.paused)}

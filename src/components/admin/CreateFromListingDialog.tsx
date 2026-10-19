@@ -14,6 +14,7 @@ import { meaningfulName } from '@/lib/production';
 const GENDERS: Gender[] = ['women', 'men', 'unisex', 'boys', 'girls'];
 
 function guessGender(text: string): Gender {
+  if (/\bunisex\b/.test(text)) return 'unisex';
   if (/\b(wom[ae]ns?|ladies)\b/.test(text)) return 'women';
   if (/\bgirls?\b/.test(text)) return 'girls';
   if (/\bboys?\b/.test(text)) return 'boys';
@@ -61,6 +62,10 @@ export default function CreateFromListingDialog({
     if (!style) return;
     const text = `${style.category ?? ''} ${style.name ?? ''}`.toLowerCase();
     setGender(guessGender(text));
+    // Nothing from the previous listing survives until this one's lists load.
+    setCats([]);
+    setCollections([]);
+    setCategoryId(null);
     setCollectionId(null);
     setMyntraUrl(style.marketplaceLinks.find((l) => l.channel === 'Myntra')?.url ?? '');
     setError(null);
