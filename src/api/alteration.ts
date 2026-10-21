@@ -32,9 +32,12 @@ export interface AlterationEntry {
   styleRef: string | null;
   name: string | null;
   imageUrl: string | null;
-  sizes: { sku: string; size: string; qtyIn: number; qtyOut: number | null }[];
+  sizes: { sku: string; size: string; qtyIn: number; qtyOut: number | null; qtyScrapped: number | null }[];
   qtyIn: number;
   qtyOut: number | null;
+  qtyScrapped: number | null;
+  /** Why pieces were scrapped or missing at completion. */
+  closeReason: string | null;
   receivedAt: string;
   sentAt: string | null;
   completedAt: string | null;
@@ -107,10 +110,11 @@ export function resumeAlteration(id: number): Promise<AlterationEntry> {
 
 export function completeAlteration(
   id: number,
-  items: { sku: string; qtyOut: number }[],
+  items: { sku: string; qtyOut: number; qtyScrapped: number }[],
+  reason?: string,
 ): Promise<AlterationEntry> {
   return apiClient
-    .post<AlterationEntry>(`/api/alteration/${id}/complete`, { items })
+    .post<AlterationEntry>(`/api/alteration/${id}/complete`, { items, reason })
     .then((r) => r.data);
 }
 
@@ -127,6 +131,8 @@ export interface AlterationTimelineEntry {
   to: AlterationStatus;
   holdReason: string | null;
   qtyOut: number | null;
+  qtyScrapped: number | null;
+  reason: string | null;
 }
 
 export function getAlteration(

@@ -191,7 +191,7 @@ export default function Alteration() {
   };
 
   // ── row actions ──────────────────────────────────────────────────
-  type Pending = { kind: 'send' | 'complete' | 'hold' | 'resume' | 'cancel'; entry: AlterationEntry };
+  type Pending = { kind: 'send' | 'complete' | 'scrap' | 'hold' | 'resume' | 'cancel'; entry: AlterationEntry };
   const [pending, setPending] = useState<Pending | null>(null);
   const open = (kind: Pending['kind'], entry: AlterationEntry) => setPending({ kind, entry });
   const target = (kind: Pending['kind']) => (pending?.kind === kind ? pending.entry : null);
@@ -293,26 +293,34 @@ export default function Alteration() {
       cell: (e) => (
         <span className="text-xs">
           {e.sizes
-            .map((s) => (s.qtyOut != null ? `${s.size} ${s.qtyOut}/${s.qtyIn}` : `${s.size} ${s.qtyIn}`))
+            .map((s) =>
+              s.qtyOut != null
+                ? `${s.size} ${s.qtyOut}/${s.qtyIn}${s.qtyScrapped ? ` (${s.qtyScrapped} scr)` : ''}`
+                : `${s.size} ${s.qtyIn}`,
+            )
             .join(' · ')}
         </span>
       ),
     },
-    // The remark is the hold reason, shown while the entry is held.
+    // The hold reason while held (amber); why pieces were scrapped or missing once completed.
     {
       key: 'remark',
       header: t('admin.production.remark', { defaultValue: 'Remark' }),
-      cell: (e) =>
-        e.status === 'on_hold' && e.holdReason ? (
+      cell: (e) => {
+        const held = e.status === 'on_hold' ? e.holdReason : null;
+        const text = held ?? e.closeReason;
+        if (!text) return <span className="text-[var(--color-muted-foreground)]">—</span>;
+        return (
           <div
-            title={e.holdReason}
-            className="line-clamp-3 whitespace-pre-line break-words text-[13px] font-semibold text-amber-700"
+            title={text}
+            className={`line-clamp-3 whitespace-pre-line break-words text-[13px] ${
+              held ? 'font-semibold text-amber-700' : 'text-[var(--color-muted-foreground)]'
+            }`}
           >
-            {e.holdReason}
+            {text}
           </div>
-        ) : (
-          <span className="text-[var(--color-muted-foreground)]">—</span>
-        ),
+        );
+      },
     },
   ];
 
@@ -340,9 +348,14 @@ export default function Alteration() {
         </>
       )}
       {e.status === 'in_alteration' && (
-        <Button variant="success" size="sm" disabled={busy} onClick={() => open('complete', e)}>
-          {t('admin.alteration.complete', { defaultValue: 'Complete' })}
-        </Button>
+        <>
+          <Button variant="destructive" size="sm" disabled={busy} onClick={() => open('scrap', e)}>
+            {t('admin.alteration.scrap', { defaultValue: 'Scrap' })}
+          </Button>
+          <Button variant="success" size="sm" disabled={busy} onClick={() => open('complete', e)}>
+            {t('admin.alteration.complete', { defaultValue: 'Complete' })}
+          </Button>
+        </>
       )}
     </div>
   );
@@ -432,7 +445,7 @@ export default function Alteration() {
         loading={loading}
         loadingLabel={t('common.loading', { defaultValue: 'Loading…' })}
         emptyLabel={t('admin.alteration.empty', { defaultValue: 'Nothing here.' })}
-        actionsWidth="230px"
+        actionsWidth="260px"
         renderActions={canWrite && (tab === 'received' || tab === 'in_alteration') ? actions : undefined}
       />
 
@@ -448,13 +461,13 @@ export default function Alteration() {
       <StartProductionIntakeDialog
         purpose="alteration"
         title={t('admin.alteration.startCta', { defaultValue: 'Start alteration' })}
-        renderFooter={({ canSubmit, total: n, confirm }) => (
+        renderFooter={({ canSubmit, confirm }) => (
           <>
             <Button variant="outline" size="sm" disabled={busy} onClick={() => setIntakeOpen(false)}>
               {t('common.cancel', { defaultValue: 'Cancel' })}
             </Button>
             <Button size="sm" disabled={busy || !canSubmit} onClick={confirm}>
-              {t('admin.alteration.confirm', { defaultValue: 'Receive · {{n}}', n })}
+              {t('admin.alteration.receive', { defaultValue: 'Receive' })}
             </Button>
           </>
         )}
@@ -519,15 +532,16 @@ export default function Alteration() {
       />
 
       <CompleteAlterationDialog
-        entry={target('complete')}
+        entry={pending?.kind === 'complete' || pending?.kind === 'scrap' ? pending.entry : null}
+        mode={pending?.kind === 'scrap' ? 'scrap' : 'complete'}
         busy={busy}
         onClose={close}
-        onConfirm={(items) => {
-          const e = target('complete');
+        onConfirm={(items, reason) => {
+          const e = pending?.entry;
           if (e) {
             runAction(
               e,
-              completeAlteration(e.id, items),
+              completeAlteration(e.id, items, reason),
               t('admin.alteration.completed', { defaultValue: '{{no}} completed.', no: e.entryNo }),
             );
           }

@@ -95,11 +95,18 @@ export default function AlterationDetail() {
     if (s.to === 'on_hold') return t('admin.alteration.step.held', { defaultValue: 'On hold' });
     if (s.from === 'on_hold') return t('admin.alteration.step.resumed', { defaultValue: 'Resumed' });
     if (s.to === 'completed') {
-      return t('admin.alteration.step.completed', {
-        defaultValue: 'Completed · {{n}} of {{of}} back',
-        n: s.qtyOut ?? 0,
-        of: e.qtyIn,
-      });
+      return s.qtyScrapped
+        ? t('admin.alteration.step.completedScrapped', {
+            defaultValue: 'Completed · {{n}} altered, {{scr}} scrapped of {{of}}',
+            n: s.qtyOut ?? 0,
+            scr: s.qtyScrapped,
+            of: e.qtyIn,
+          })
+        : t('admin.alteration.step.completed', {
+            defaultValue: 'Completed · {{n}} of {{of}} altered',
+            n: s.qtyOut ?? 0,
+            of: e.qtyIn,
+          });
     }
     return statusLabel(s.to);
   };
@@ -168,8 +175,11 @@ export default function AlterationDetail() {
                   <th className="py-2 pr-3 text-right font-semibold">
                     {t('admin.alteration.in', { defaultValue: 'In' })}
                   </th>
+                  <th className="py-2 pr-3 text-right font-semibold">
+                    {t('admin.alteration.altered', { defaultValue: 'Altered' })}
+                  </th>
                   <th className="py-2 text-right font-semibold">
-                    {t('admin.alteration.out', { defaultValue: 'Back' })}
+                    {t('admin.alteration.scrapped', { defaultValue: 'Scrapped' })}
                   </th>
                 </tr>
               </thead>
@@ -179,7 +189,8 @@ export default function AlterationDetail() {
                     <td className="py-2 pr-3 font-semibold">{s.size}</td>
                     <td className="py-2 pr-3 font-mono text-xs text-[var(--color-muted-foreground)]">{s.sku}</td>
                     <td className="py-2 pr-3 text-right">{s.qtyIn}</td>
-                    <td className="py-2 text-right">{s.qtyOut ?? '—'}</td>
+                    <td className="py-2 pr-3 text-right">{s.qtyOut ?? '—'}</td>
+                    <td className="py-2 text-right">{s.qtyScrapped ?? '—'}</td>
                   </tr>
                 ))}
               </tbody>
@@ -201,6 +212,7 @@ export default function AlterationDetail() {
               >
                 <span className="font-semibold">{stepLabel(s)}</span>
                 {s.holdReason && <span className="font-semibold text-amber-700">· {s.holdReason}</span>}
+                {s.reason && <span>· {s.reason}</span>}
                 <span className="text-[var(--color-muted-foreground)]">· {fmtDateTime(s.at)}</span>
                 {s.by && <span className="text-[var(--color-muted-foreground)]">· {s.by}</span>}
               </li>
