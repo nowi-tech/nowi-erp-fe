@@ -220,7 +220,13 @@ export default function InventoryHealth(): ReactNode {
   const windowActive = !!(dateFrom && dateTo);
   // Seed search from ?q= so it survives navigating into a style and back.
   const [searchText, setSearchText] = useState(() => searchParams.get('q') ?? '');
-  const debouncedSearch = useDebounced(searchText, 300);
+  const typedSearch = useDebounced(searchText, 300);
+  // An emptied box applies at once; only typing waits for the debounce.
+  const debouncedSearch = searchText ? typedSearch : '';
+  const selectFilter = (f: FilterKey): void => {
+    setFilter(f);
+    setSearchText('');
+  };
   const { user } = useAuth();
   // Holding a style for Myntra approval — the sampling desk's call.
   const canManage = hasAnyRole(user, ['admin', 'sampling_editor']);
@@ -806,7 +812,7 @@ export default function InventoryHealth(): ReactNode {
                 value={loading ? null : kpis.cutSize}
                 dot={AMBER}
                 active={filter === 'cut'}
-                onClick={() => setFilter(filter === 'cut' ? 'all' : 'cut')}
+                onClick={() => selectFilter(filter === 'cut' ? 'all' : 'cut')}
                 t={t}
               />
               <StatCard
@@ -814,7 +820,7 @@ export default function InventoryHealth(): ReactNode {
                 value={loading ? null : kpis.outOfStock}
                 dot={RED}
                 active={filter === 'out'}
-                onClick={() => setFilter(filter === 'out' ? 'all' : 'out')}
+                onClick={() => selectFilter(filter === 'out' ? 'all' : 'out')}
                 t={t}
               />
               <StatCard
@@ -830,7 +836,7 @@ export default function InventoryHealth(): ReactNode {
             <section className="overflow-hidden rounded-[var(--radius-md)] border border-[var(--color-border)] bg-[var(--color-surface)] shadow-sm">
               {/* Tabs row — QueueTabs' own bottom border is the divider. */}
               <div className="px-4 pt-3">
-                <QueueTabs tabs={lensTabs} active={filter} onSelect={setFilter} />
+                <QueueTabs tabs={lensTabs} active={filter} onSelect={selectFilter} />
               </div>
 
               {/* Search · count. Category + sort live in the top-right controls row. */}
@@ -841,8 +847,18 @@ export default function InventoryHealth(): ReactNode {
                     value={searchText}
                     onChange={(e) => setSearchText(e.target.value)}
                     placeholder={t('admin.inventoryHealth.search', { defaultValue: 'Search style, size or name…' })}
-                    className="h-9 w-full rounded-md border border-[var(--color-primary)]/40 bg-[var(--color-primary-soft)]/30 pl-9 pr-3 text-[13px] text-[var(--color-foreground)] outline-none focus-visible:border-[var(--color-primary)] focus-visible:ring-2 focus-visible:ring-[var(--color-primary)]/25"
+                    className="h-9 w-full rounded-md border border-[var(--color-primary)]/40 bg-[var(--color-primary-soft)]/30 pl-9 pr-9 text-[13px] text-[var(--color-foreground)] outline-none focus-visible:border-[var(--color-primary)] focus-visible:ring-2 focus-visible:ring-[var(--color-primary)]/25"
                   />
+                  {searchText && (
+                    <button
+                      type="button"
+                      onClick={() => setSearchText('')}
+                      aria-label={t('common.clear', { defaultValue: 'Clear' })}
+                      className="absolute right-2.5 top-1/2 -translate-y-1/2 text-[var(--color-muted-foreground)] hover:text-[var(--color-foreground)]"
+                    >
+                      <X size={15} />
+                    </button>
+                  )}
                 </div>
                 <span className="ml-auto shrink-0 text-[12px] tabular-nums text-[var(--color-muted-foreground)]">
                   {loading ? (
