@@ -758,7 +758,7 @@ function StyleTitle({ style, label }: { style: TopStyle; label: string }): React
           target="_blank"
           rel="noopener noreferrer"
           title={health}
-          className="inline-flex min-w-0 items-center gap-1 hover:text-[var(--color-primary)] hover:underline"
+          className="inline-flex min-w-0 items-center gap-1 text-[var(--color-primary)] hover:underline"
         >
           <span className="truncate">{label}</span>
           <HeartPulse size={12} className="flex-none text-[var(--color-primary)]" />
