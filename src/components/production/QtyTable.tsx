@@ -20,10 +20,13 @@ export default function QtyTable({
   rows,
   onQty,
   showInFlight = false,
+  qtyLabel,
 }: {
   rows: QtyRow[];
   onQty: (key: string, raw: string) => void;
   showInFlight?: boolean;
+  /** Header for the entry column; defaults to "Qty to make". */
+  qtyLabel?: string;
 }) {
   const { t } = useTranslation();
   // Copy one size's number onto every other size — the common case is the same
@@ -47,7 +50,7 @@ export default function QtyTable({
               </th>
             )}
             <th className="py-2 text-left font-semibold">
-              {t('admin.production.send.qtyToMake', { defaultValue: 'Qty to make' })}
+              {qtyLabel ?? t('admin.production.send.qtyToMake', { defaultValue: 'Qty to make' })}
             </th>
           </tr>
         </thead>

@@ -25,6 +25,7 @@ import {
   MoreHorizontal,
   X,
   ChevronDown,
+  Undo2,
 } from 'lucide-react';
 import { useAuth } from '@/context/auth';
 import { useLogoutConfirm } from '@/components/auth/useLogoutConfirm';
@@ -33,6 +34,7 @@ import Logo from '@/components/Logo';
 import { cn } from '@/lib/utils';
 import {
   userAllRoles,
+  ALTERATION_READ_ROLES,
   DISPATCH_VIEW_ROLES,
   PRODUCTION_BOARD_READ_ROLES,
   PRODUCTION_READ_ROLES,
@@ -124,6 +126,13 @@ const NAV_SECTIONS: NavSection[] = [
       { to: '/admin/production-kpis', icon: <BarChart3 size={18} />, labelKey: 'admin.nav.productionKpis', roles: [] },
       { to: '/admin/sales-kpis', icon: <TrendingUp size={18} />, labelKey: 'admin.nav.salesKpis', roles: ['admin', 'viewer'] },
       { to: '/admin/analytics/fulfilment', icon: <LineChart size={18} />, labelKey: 'admin.nav.analyticsFulfilment', roles: ['admin', 'viewer'] },
+    ],
+  },
+  {
+    id: 'returns',
+    titleKey: 'admin.nav.sections.returns',
+    items: [
+      { to: '/admin/returns/alteration', icon: <Undo2 size={18} />, labelKey: 'admin.nav.alteration', roles: [...ALTERATION_READ_ROLES] },
     ],
   },
   {
