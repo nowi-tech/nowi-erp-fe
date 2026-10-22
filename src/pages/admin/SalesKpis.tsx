@@ -11,6 +11,7 @@ import { CARD_SHELL, DISPLAY, SANS, Sparkline } from '@/components/admin/kpiPrim
 import { useAuth } from '@/context/auth';
 import { useSignedUrls } from '@/hooks/useSignedUrls';
 import { HoverThumbnail } from '@/components/dashboard/StylesInFlightTable';
+import { UrgencyPill } from '@/pages/admin/InventoryHealth';
 import { hasAnyRole } from '@/lib/userRoles';
 import {
   getCancellations,
@@ -675,8 +676,14 @@ function TopItemsTable({
                         <HoverThumbnail src={img(top.imageUrl)} alt={it.name ?? top.styleKey} size={32} radius="8px" />
                       )}
                       <div className="min-w-0 flex-1">
-                        <div className="truncate text-sm font-semibold text-neutral-900" title={it.name ?? top.styleKey}>
-                          {it.name ?? top.styleKey}
+                        <div className="flex min-w-0 items-center gap-2 text-sm font-semibold text-neutral-900">
+                          {grouped ? (
+                            <span className="truncate" title={it.name ?? top.styleKey}>
+                              {it.name ?? top.styleKey}
+                            </span>
+                          ) : (
+                            <StyleTitle style={top} label={it.name ?? top.styleKey} />
+                          )}
                         </div>
                         <div className="truncate text-xs text-neutral-500">
                           {grouped ? (
@@ -707,7 +714,9 @@ function TopItemsTable({
                         <div className="flex min-w-0 items-center gap-3 pl-8">
                           <HoverThumbnail src={img(s.imageUrl)} alt={s.colour ?? s.styleKey} size={32} radius="8px" />
                           <div className="flex min-w-0 flex-1 items-baseline gap-2">
-                            <span className="flex-none text-sm text-neutral-800">{s.colour ?? s.styleKey}</span>
+                            <span className="flex flex-none items-center gap-2 text-sm text-neutral-800">
+                              <StyleTitle style={s} label={s.colour ?? s.styleKey} />
+                            </span>
                             {s.colour && (
                               <span className="truncate font-mono text-[11px] text-neutral-500">{s.styleKey}</span>
                             )}
@@ -737,36 +746,49 @@ const TOP_GRID = 'grid grid-cols-[minmax(0,1fr)_3.5rem_6rem] items-center gap-3 
 const TOP_BTN =
   'inline-flex shrink-0 items-center gap-1 rounded-md border px-2 py-1 text-[11px] font-semibold transition';
 
-/** A style's Myntra and Inventory Health buttons. */
+/** A style's name, linking to its Inventory Health row in a new tab, plus its stockout tag. */
+function StyleTitle({ style, label }: { style: TopStyle; label: string }): ReactNode {
+  const { t } = useTranslation();
+  const health = t('admin.salesKpis.openInventoryHealth', { defaultValue: 'Inventory health' });
+  return (
+    <>
+      {style.inInventoryHealth ? (
+        <Link
+          to={`/admin/analytics/inventory-health?q=${encodeURIComponent(style.styleKey)}`}
+          target="_blank"
+          rel="noopener noreferrer"
+          title={health}
+          className="inline-flex min-w-0 items-center gap-1 hover:text-[var(--color-primary)] hover:underline"
+        >
+          <span className="truncate">{label}</span>
+          <HeartPulse size={12} className="flex-none text-[var(--color-primary)]" />
+        </Link>
+      ) : (
+        <span className="truncate" title={label}>
+          {label}
+        </span>
+      )}
+      {style.stockout && <UrgencyPill urgency="healthy" stockout={style.stockout} />}
+    </>
+  );
+}
+
+/** A style's Myntra button. */
 function TopStyleLinks({ style }: { style: TopStyle }): ReactNode {
   const { t } = useTranslation();
   const myntra = t('admin.salesKpis.openMyntra', { defaultValue: 'Myntra' });
-  const health = t('admin.salesKpis.openInventoryHealth', { defaultValue: 'Inventory health' });
+  if (!style.myntraUrl) return null;
   return (
-    <div className="flex flex-none items-center gap-1.5">
-      {style.myntraUrl && (
-        <a
-          href={style.myntraUrl}
-          target="_blank"
-          rel="noopener noreferrer"
-          aria-label={myntra}
-          className={`${TOP_BTN} border-neutral-300 bg-white text-neutral-700 hover:bg-neutral-100`}
-        >
-          <span className="hidden sm:inline">{myntra}</span>
-          <ArrowUpRight size={12} className="text-neutral-400" />
-        </a>
-      )}
-      {style.inInventoryHealth && (
-        <Link
-          to={`/admin/analytics/inventory-health?q=${encodeURIComponent(style.styleKey)}`}
-          aria-label={health}
-          className={`${TOP_BTN} border-[var(--color-primary)]/30 bg-[var(--color-primary)]/[0.08] text-[var(--color-primary)] hover:bg-[var(--color-primary)]/[0.14]`}
-        >
-          <HeartPulse size={12} />
-          <span className="hidden sm:inline">{health}</span>
-        </Link>
-      )}
-    </div>
+    <a
+      href={style.myntraUrl}
+      target="_blank"
+      rel="noopener noreferrer"
+      aria-label={myntra}
+      className={`${TOP_BTN} flex-none border-neutral-300 bg-white text-neutral-700 hover:bg-neutral-100`}
+    >
+      <span className="hidden sm:inline">{myntra}</span>
+      <ArrowUpRight size={12} className="text-neutral-400" />
+    </a>
   );
 }
 

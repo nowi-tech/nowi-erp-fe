@@ -132,6 +132,8 @@ export interface TopStyle {
   myntraUrl: string | null;
   /** The style has a row on the Inventory Health page. */
   inInventoryHealth: boolean;
+  /** Every size at zero stock = `out`, only some = `cut`. */
+  stockout: 'out' | 'cut' | null;
 }
 
 /** One design: an ERP colour family, or a lone style. */
