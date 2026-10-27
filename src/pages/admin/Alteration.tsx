@@ -295,7 +295,7 @@ export default function Alteration() {
           {e.sizes
             .map((s) =>
               s.qtyOut != null
-                ? `${s.size} ${s.qtyOut}/${s.qtyIn}${s.qtyScrapped ? ` (${s.qtyScrapped} scr)` : ''}`
+                ? `${s.size} ${s.qtyOut}/${s.qtyIn}${s.qtyScrapped ? ` (${t('admin.alteration.scrShort', { defaultValue: '{{n}} scr', n: s.qtyScrapped })})` : ''}`
                 : `${s.size} ${s.qtyIn}`,
             )
             .join(' · ')}
@@ -598,7 +598,7 @@ export default function Alteration() {
         destructive={confirming?.kind === 'cancel'}
         onCancel={close}
         onConfirm={() => {
-          if (!confirming) return;
+          if (!confirming || busy) return;
           const { kind, entry } = confirming;
           runAction(
             entry,

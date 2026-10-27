@@ -8,6 +8,7 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { HoverThumbnail } from '@/components/dashboard/StylesInFlightTable';
 import { useAlterationLabels } from '@/lib/alteration';
+import { is404 } from '@/api/_errors';
 import {
   getAlteration,
   type AlterationEntry,
@@ -36,23 +37,28 @@ export default function AlterationDetail() {
     null,
   );
   const [loading, setLoading] = useState(true);
+  const [failed, setFailed] = useState(false);
+  const [attempt, setAttempt] = useState(0);
 
   useEffect(() => {
     let cancelled = false;
     setLoading(true);
     setData(null);
+    setFailed(false);
     getAlteration(Number(id))
       .then((res) => {
         if (!cancelled) setData(res);
       })
-      .catch(() => undefined)
+      .catch((err) => {
+        if (!cancelled && !is404(err)) setFailed(true);
+      })
       .finally(() => {
         if (!cancelled) setLoading(false);
       });
     return () => {
       cancelled = true;
     };
-  }, [id]);
+  }, [id, attempt]);
 
   const back = (
     <Button variant="outline" size="sm" onClick={() => navigate(backTo)}>
@@ -75,8 +81,15 @@ export default function AlterationDetail() {
     return (
       <div className="space-y-3">
         {back}
-        <div className="text-sm text-[var(--color-muted-foreground)]">
-          {t('admin.alteration.notFound', { defaultValue: "That entry doesn't exist." })}
+        <div className="flex items-center gap-3 text-sm text-[var(--color-muted-foreground)]">
+          {failed
+            ? t('admin.alteration.loadFailed', { defaultValue: "Couldn't load it." })
+            : t('admin.alteration.notFound', { defaultValue: "That entry doesn't exist." })}
+          {failed && (
+            <Button variant="outline" size="sm" onClick={() => setAttempt((n) => n + 1)}>
+              {t('common.retry', { defaultValue: 'Retry' })}
+            </Button>
+          )}
         </div>
       </div>
     );
@@ -171,7 +184,9 @@ export default function AlterationDetail() {
                   <th className="py-2 pr-3 text-left font-semibold">
                     {t('admin.production.size', { defaultValue: 'Size' })}
                   </th>
-                  <th className="py-2 pr-3 text-left font-semibold">SKU</th>
+                  <th className="py-2 pr-3 text-left font-semibold">
+                    {t('admin.alteration.sku', { defaultValue: 'SKU' })}
+                  </th>
                   <th className="py-2 pr-3 text-right font-semibold">
                     {t('admin.alteration.in', { defaultValue: 'In' })}
                   </th>
