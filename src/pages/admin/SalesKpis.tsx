@@ -154,7 +154,10 @@ export default function SalesKpis({
     let cancelled = false;
     setLoading(true);
     setFailed(false);
-    if (byActivity) setCancellations(null);
+    if (byActivity) {
+      setCancellations(null);
+      setCancellationsFailed(false);
+    }
     Promise.all([getSalesKpis(from, to, inventory, channel), byActivity ? getFulfilmentActivity(from, to, inventory, channel) : null])
       .then(([kpis, activity]) => {
         if (cancelled || queryRef.current !== my) return;
