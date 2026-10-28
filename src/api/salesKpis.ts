@@ -104,6 +104,8 @@ export interface CancellationSection {
   cancelled: number;
   ours: number;
   notOurs: number;
+  /** Cancelled because we did not pack or hand over in time; absent from an older API. */
+  failedHandover?: { orders: number; notPacked: number; packed: number };
   slices: { key: string; label: string; fault: CancellationFault; orders: number }[];
   /** Per-reason counts can sum past `cancelled` — one order can be cancelled for two reasons. */
   reasons: { reason: string; fault: CancellationFault; orders: number }[];
@@ -118,6 +120,24 @@ export function getCancellations(
 ): Promise<CancellationSection> {
   return apiClient
     .get<CancellationSection>('/api/sales-kpis/cancellations', { params: rangeParams(from, to, inventory, channel) })
+    .then((res) => res.data);
+}
+
+/** The Fulfilment page's "By day's activity" view. */
+export interface FulfilmentActivity {
+  metrics: SalesMetric[];
+  cancellations: CancellationSection;
+}
+
+/** GET /api/sales-kpis/activity — what happened on each day in [from, to], whatever day the order was placed. */
+export function getFulfilmentActivity(
+  from: string,
+  to: string,
+  inventory: SalesInventoryView = 'all',
+  channel: SalesChannel = 'all',
+): Promise<FulfilmentActivity> {
+  return apiClient
+    .get<FulfilmentActivity>('/api/sales-kpis/activity', { params: rangeParams(from, to, inventory, channel) })
     .then((res) => res.data);
 }
 

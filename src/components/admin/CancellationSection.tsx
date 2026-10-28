@@ -42,7 +42,21 @@ export default function CancellationSection({ data, range }: { data: Section; ra
 
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-3 lg:gap-[18px]">
         <Total label={t('admin.salesKpis.cancel.total', { defaultValue: 'Cancelled before dispatch' })} value={data.cancelled} range={range} />
-        <Total label={t('admin.salesKpis.cancel.ours', { defaultValue: 'Our fault' })} value={data.ours} range={range} tone="#c4322a" />
+        {data.failedHandover ? (
+          <Total
+            label={t('admin.salesKpis.cancel.failedHandover', { defaultValue: 'Failed to handover' })}
+            value={data.failedHandover.orders}
+            range={range}
+            tone="#c4322a"
+            sub={t('admin.salesKpis.cancel.handoverSplit', {
+              defaultValue: 'Not packed {{notPacked}} · Packed {{packed}}',
+              notPacked: fmt(data.failedHandover.notPacked),
+              packed: fmt(data.failedHandover.packed),
+            })}
+          />
+        ) : (
+          <Total label={t('admin.salesKpis.cancel.ours', { defaultValue: 'Our fault' })} value={data.ours} range={range} tone="#c4322a" />
+        )}
         <Total label={t('admin.salesKpis.cancel.notOurs', { defaultValue: 'Not our fault' })} value={data.notOurs} range={range} />
       </div>
 
@@ -82,7 +96,7 @@ function dot(fault: CancellationFault): string {
   return 'bg-neutral-300';
 }
 
-function Total({ label, value, range, tone }: { label: string; value: number; range: string; tone?: string }): ReactNode {
+function Total({ label, value, range, tone, sub }: { label: string; value: number; range: string; tone?: string; sub?: string }): ReactNode {
   return (
     <div style={CARD_SHELL}>
       <div className="mb-3 text-xs font-bold uppercase tracking-wider text-neutral-500">{label}</div>
@@ -90,6 +104,7 @@ function Total({ label, value, range, tone }: { label: string; value: number; ra
         {fmt(value)}
       </div>
       <div className="mt-1.5 text-xs font-semibold text-neutral-400">{range}</div>
+      {sub && <div className="mt-1 text-xs text-neutral-500">{sub}</div>}
     </div>
   );
 }
