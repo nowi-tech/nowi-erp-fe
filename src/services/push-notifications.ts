@@ -33,8 +33,9 @@ function handleDeepLink(data: Record<string, unknown> | undefined): void {
   if (!data) return;
   const type = String(data.type ?? '');
   let path = '/';
-  if (type === 'dispatch' && data.dispatchId) {
-    path = `/admin/dispatches/${String(data.dispatchId)}`;
+  if (type === 'dispatch') {
+    // Floor dispatch detail is super_admin-only; land everyone on the list.
+    path = '/admin/dispatches';
   } else if (type === 'order_status') {
     // Finishing masters land on home, which routes them to their
     // pending-finishing queue by role.
