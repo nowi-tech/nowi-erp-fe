@@ -7,7 +7,6 @@ import type { CancellationFault, CancellationSection as Section } from '@/api/sa
 /** Our-fault slices in warm tones, the rest cool, unknown grey. */
 const SLICE_COLOUR: Record<string, string> = {
   failedHandover: '#c4322a',
-  failedSupply: '#e8590c',
   oursOther: '#f59f00',
   customer: '#4c6ef5',
   platform: '#7950f2',
