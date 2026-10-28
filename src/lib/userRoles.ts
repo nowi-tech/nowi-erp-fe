@@ -203,6 +203,13 @@ export const PRODUCTION_READ_ROLES: readonly UserRole[] = [
   'viewer',
 ];
 
+/** Returns → Alteration — mirrors the BE `ALTERATION_WRITE_ROLES` / `ALTERATION_READ_ROLES`. */
+export const ALTERATION_WRITE_ROLES: readonly UserRole[] = [
+  ...PRODUCTION_WRITE_ROLES,
+  'warehouse_manager',
+];
+export const ALTERATION_READ_ROLES: readonly UserRole[] = [...ALTERATION_WRITE_ROLES, 'viewer'];
+
 /**
  * Who may READ the production board itself — the read set plus the fabric desk,
  * which sets each lot's fabric status there. Mirrors the BE
