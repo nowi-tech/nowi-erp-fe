@@ -104,6 +104,8 @@ export interface CancellationSection {
   cancelled: number;
   ours: number;
   notOurs: number;
+  /** Cancelled because we did not pack or hand over in time; absent from an older API. */
+  failedHandover?: { orders: number; notPacked: number; packed: number };
   slices: { key: string; label: string; fault: CancellationFault; orders: number }[];
   /** Per-reason counts can sum past `cancelled` — one order can be cancelled for two reasons. */
   reasons: { reason: string; fault: CancellationFault; orders: number }[];
