@@ -15,6 +15,7 @@ import { UrgencyPill } from '@/pages/admin/InventoryHealth';
 import { hasAnyRole } from '@/lib/userRoles';
 import {
   getCancellations,
+  getFulfilmentActivity,
   getSalesKpis,
   getTopItems,
   uploadSalesCsv,
@@ -134,6 +135,8 @@ export default function SalesKpis({
   // Real / virtual view — by the warehouse that shipped each line.
   const [inventory, setInventory] = useState<SalesInventoryView>('all');
   const [channel, setChannel] = useState<SalesChannel>('all');
+  // Fulfilment only: count by the day the order was placed, or by the day each thing happened.
+  const [view, setView] = useState<'orders' | 'activity'>('orders');
   const [tick, setTick] = useState(0);
 
   // Which query the screen is currently showing. The load effect bumps it on every
@@ -142,15 +145,26 @@ export default function SalesKpis({
   // Production.tsx uses for the same hazard).
   const queryRef = useRef(0);
 
+  // Only the Fulfilment page shows the breakdown.
+  const showsFulfilment = !buckets || buckets.includes('fulfilment');
+  const byActivity = showsFulfilment && view === 'activity';
+
   useEffect(() => {
     const my = ++queryRef.current;
     let cancelled = false;
     setLoading(true);
     setFailed(false);
-    getSalesKpis(from, to, inventory, channel)
-      .then((d) => {
+    if (byActivity) setCancellations(null);
+    Promise.all([getSalesKpis(from, to, inventory, channel), byActivity ? getFulfilmentActivity(from, to, inventory, channel) : null])
+      .then(([kpis, activity]) => {
         if (cancelled || queryRef.current !== my) return;
+        // The activity view swaps in its own Fulfilment cards; RTO and RTV are dated by event already, so they stay.
+        const returns = kpis.metrics.filter((m) => m.key === 'rto' || m.key === 'rtv');
+        const d = activity
+          ? { ...kpis, metrics: [...kpis.metrics.filter((m) => m.bucket !== 'fulfilment'), ...activity.metrics, ...returns] }
+          : kpis;
         setData(d);
+        if (activity) setCancellations(activity.cancellations);
         if (!from) {
           setFrom(d.from);
           setTo(d.to);
@@ -167,12 +181,11 @@ export default function SalesKpis({
     return () => {
       cancelled = true;
     };
-  }, [from, to, inventory, channel, tick]);
+  }, [from, to, inventory, channel, tick, byActivity]);
 
-  // Only the Fulfilment page shows the breakdown.
-  const showsFulfilment = !buckets || buckets.includes('fulfilment');
   useEffect(() => {
-    if (!showsFulfilment || !from) return;
+    // The activity view brings its own breakdown with its cards.
+    if (!showsFulfilment || byActivity || !from) return;
     let cancelled = false;
     // Hide the previous view's breakdown until this one arrives, so it never sits under the wrong cards.
     setCancellations(null);
@@ -187,7 +200,7 @@ export default function SalesKpis({
     return () => {
       cancelled = true;
     };
-  }, [showsFulfilment, from, to, inventory, channel, tick]);
+  }, [showsFulfilment, byActivity, from, to, inventory, channel, tick]);
 
   /** Sends the picked CSV; the dashboard is rebuilt before the upload returns. */
   const onUpload = async (file: File): Promise<void> => {
@@ -349,6 +362,21 @@ export default function SalesKpis({
               />
             </FilterRail>
           </div>
+          {showsFulfilment && (
+            <div className="mt-3 flex justify-center">
+              <FilterRail>
+                <FilterRailSegments
+                  value={view}
+                  onChange={setView}
+                  ariaLabel={t('admin.salesKpis.view.group', { defaultValue: 'Count by' })}
+                  options={[
+                    { value: 'orders' as const, label: t('admin.salesKpis.view.orders', { defaultValue: 'By order date' }) },
+                    { value: 'activity' as const, label: t('admin.salesKpis.view.activity', { defaultValue: "By day's activity" }) },
+                  ]}
+                />
+              </FilterRail>
+            </div>
+          )}
         </div>
 
         {/* Status line */}

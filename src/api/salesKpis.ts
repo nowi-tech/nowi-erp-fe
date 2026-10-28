@@ -123,6 +123,24 @@ export function getCancellations(
     .then((res) => res.data);
 }
 
+/** The Fulfilment page's "By day's activity" view. */
+export interface FulfilmentActivity {
+  metrics: SalesMetric[];
+  cancellations: CancellationSection;
+}
+
+/** GET /api/sales-kpis/activity — what happened on each day in [from, to], whatever day the order was placed. */
+export function getFulfilmentActivity(
+  from: string,
+  to: string,
+  inventory: SalesInventoryView = 'all',
+  channel: SalesChannel = 'all',
+): Promise<FulfilmentActivity> {
+  return apiClient
+    .get<FulfilmentActivity>('/api/sales-kpis/activity', { params: rangeParams(from, to, inventory, channel) })
+    .then((res) => res.data);
+}
+
 export interface TopStyle {
   styleKey: string;
   styleName: string | null;
