@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Link } from 'react-router-dom';
 import { Capacitor } from '@capacitor/core';
@@ -91,26 +91,27 @@ export default function DispatchTab({
   const [cancelTarget, setCancelTarget] = useState<ProductionDispatch | null>(null);
   const [busy, setBusy] = useState(false);
 
-  const load = useCallback(async () => {
+  useEffect(() => {
+    // A newer search/filter supersedes this one; drop its late response.
+    let ignore = false;
     setLoading(true);
     setError(false);
-    try {
-      const res = await getDispatches({
-        status: statusFilter || undefined,
-        search: debouncedSearch || undefined,
+    getDispatches({ status: statusFilter || undefined, search: debouncedSearch || undefined })
+      .then((res) => {
+        if (ignore) return;
+        setRows(res.rows);
+        setKpis(res.kpis);
+      })
+      .catch(() => {
+        if (!ignore) setError(true);
+      })
+      .finally(() => {
+        if (!ignore) setLoading(false);
       });
-      setRows(res.rows);
-      setKpis(res.kpis);
-    } catch {
-      setError(true);
-    } finally {
-      setLoading(false);
-    }
+    return () => {
+      ignore = true;
+    };
   }, [statusFilter, debouncedSearch]);
-
-  useEffect(() => {
-    void load();
-  }, [load]);
 
   /** ERP style → its workspace; EasyEcom-only → Inventory Health on that style; off-system → none. */
   const styleHref = (it: DispatchItemRow): string | null => {
@@ -248,7 +249,7 @@ export default function DispatchTab({
           {t('admin.production.dispatch.empty', { defaultValue: 'No challans yet.' })}
         </div>
       ) : (
-        <div className="overflow-hidden rounded-[var(--radius-md)] border border-[var(--color-border)] bg-[var(--color-surface)]">
+        <div className="@container overflow-hidden rounded-[var(--radius-md)] border border-[var(--color-border)] bg-[var(--color-surface)]">
           {rows.map((d) => {
             const isOpen = !!expanded[d.id];
             const groups = groupLines(d.items);
@@ -256,7 +257,7 @@ export default function DispatchTab({
             return (
               <div key={d.id} className="border-b border-[var(--color-border)] last:border-b-0">
                 <div
-                  className="flex cursor-pointer items-center gap-3 px-4 py-2.5 hover:bg-[var(--color-surface-2)]/50"
+                  className="flex cursor-pointer flex-wrap items-center gap-x-3 gap-y-2 px-4 py-2.5 hover:bg-[var(--color-surface-2)]/50 @3xl:flex-nowrap"
                   onClick={toggle}
                 >
                   <button
@@ -291,13 +292,15 @@ export default function DispatchTab({
                       → {d.destWarehouseName}
                     </div>
                   </div>
-                  <div className="w-20 shrink-0 text-right text-sm">
+                  {/* Narrow list: qty, status and actions drop to a second line. */}
+                  <div className="basis-full @3xl:hidden" />
+                  <div className="shrink-0 pl-7 text-sm @3xl:w-20 @3xl:pl-0 @3xl:text-right">
                     <span className="font-semibold tabular-nums">{d.qtySent}</span>{' '}
                     <span className="text-[11px] text-[var(--color-muted-foreground)]">
                       {t('admin.production.dispatch.pcs', { defaultValue: 'pcs' })}
                     </span>
                   </div>
-                  <div className="flex w-28 shrink-0 items-center gap-1.5">
+                  <div className="flex shrink-0 items-center gap-1.5 @3xl:w-28">
                     <span className={`rounded-full px-2 py-0.5 text-[11px] font-semibold ${statusTone[d.status]}`}>
                       {t(`admin.production.dispatch.status.${d.status}`, { defaultValue: statusLabel[d.status] })}
                     </span>
@@ -305,7 +308,10 @@ export default function DispatchTab({
                       <AlertTriangle size={14} className="text-amber-600" aria-label="mismatch" />
                     )}
                   </div>
-                  <div className="flex w-52 shrink-0 items-center justify-end gap-1.5" onClick={(e) => e.stopPropagation()}>
+                  <div
+                    className="ml-auto flex shrink-0 items-center justify-end gap-1.5 @3xl:ml-0 @3xl:w-52"
+                    onClick={(e) => e.stopPropagation()}
+                  >
                     <Button variant="outline" size="sm" onClick={() => printChallan(d)}>
                       <Printer size={14} />
                     </Button>
