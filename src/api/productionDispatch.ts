@@ -10,6 +10,11 @@ export interface DispatchItemRow {
   batchNo: string | null;
   /** Display name: the batch's style/SKU, or the off-system label. */
   name: string;
+  imageUrl: string | null;
+  /** ERP style (row id + human code) — null for EasyEcom-only and off-system lines. */
+  styleId: number | null;
+  styleRef: string | null;
+  styleKey: string | null;
   brandName: string | null;
   sku: string;
   sizeLabel: string;

@@ -365,8 +365,7 @@ function App() {
               <Route
                 path="dispatches"
                 element={
-                  // Floor ledger (admin/viewer/production_lead) + Production
-                  // challans tab (adds production_editor + warehouse_manager).
+                  // Production challans; the floor ledger tab is super_admin-only.
                   <ProtectedRoute allowedRoles={[...DISPATCH_VIEW_ROLES]}>
                   <S>
                     <Dispatches />
@@ -377,9 +376,8 @@ function App() {
               <Route
                 path="dispatches/:id"
                 element={
-                  // Re-gated: the /admin parent was widened for production_editor,
-                  // which must NOT inherit unrelated surfaces.
-                  <ProtectedRoute allowedRoles={['admin', 'viewer', 'production_lead']}>
+                  // Floor ledger detail — hidden with its tab, super_admin only.
+                  <ProtectedRoute allowedRoles={['super_admin']}>
                   <S>
                     <DispatchDetail />
                   </S>

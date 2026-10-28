@@ -193,6 +193,16 @@ export const STYLE_DISABLE_ROLES: readonly UserRole[] = ['super_admin'];
 /** Voiding a dispatch challan — mirrors BE `CANCEL` in production-dispatch.controller.ts. */
 export const CHALLAN_CANCEL_ROLES: readonly UserRole[] = ['admin', 'production_lead'];
 
+/** Can open any style workspace (`/styles/:id`) — the route's set minus submit-only. */
+export const STYLE_VIEW_ROLES: readonly UserRole[] = [
+  'admin',
+  'sampling_editor',
+  'sampling_lead',
+  'viewer',
+  'production_lead',
+  'cataloguer',
+];
+
 /**
  * Who may READ the Production board + the Inventory Health forecast feeding it.
  * Mirrors the BE `PRODUCTION_READ_ROLES` — the write set plus the read-only

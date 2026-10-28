@@ -63,9 +63,8 @@ function paramsFromUrl(sp: URLSearchParams): ListDispatchesParams {
   };
 }
 
-// Floor (EasyEcom) dispatches — the original ledger. Production challans are a
-// separate internal system shown alongside as a second tab.
-const FLOOR_ROLES: UserRole[] = ['admin', 'viewer', 'production_lead'];
+// Floor (EasyEcom) dispatches — the legacy ledger, kept reachable for super_admin only.
+const FLOOR_ROLES: UserRole[] = ['super_admin'];
 
 export default function Dispatches() {
   const { t } = useTranslation();
