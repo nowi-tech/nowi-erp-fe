@@ -391,33 +391,43 @@ export default function SalesKpis({
           <SkeletonGrid />
         ) : data ? (
           <>
-            <div className="flex flex-col gap-7">
-              {data.buckets
-                .filter((bucket) => !buckets || buckets.includes(bucket.key))
-                .map((bucket) => {
-                const cards = data.metrics.filter((m) => m.bucket === bucket.key && m.available);
-                if (!cards.length) return null;
-                return (
-                  <section key={bucket.key}>
-                    <h2 className="mb-2.5 text-xs font-bold uppercase tracking-wider text-neutral-400">
-                      {bucket.label}
-                    </h2>
-                    <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3 lg:gap-[18px]">
-                      {cards.map((m) => (
-                        <SalesCard
-                          key={m.key}
-                          metric={m}
-                          accent={BUCKET_ACCENT[bucket.key]}
-                          headlineLabel={headlineLabel}
-                        />
-                      ))}
-                    </div>
-                  </section>
-                );
-              })}
-            </div>
+            {/* Old numbers never sit under a new filter. */}
+            {loading ? (
+              <SkeletonGrid />
+            ) : (
+              <div className="flex flex-col gap-7">
+                {data.buckets
+                  .filter((bucket) => !buckets || buckets.includes(bucket.key))
+                  .map((bucket) => {
+                  const cards = data.metrics.filter((m) => m.bucket === bucket.key && m.available);
+                  if (!cards.length) return null;
+                  return (
+                    <section key={bucket.key}>
+                      <h2 className="mb-2.5 text-xs font-bold uppercase tracking-wider text-neutral-400">
+                        {bucket.label}
+                      </h2>
+                      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3 lg:gap-[18px]">
+                        {cards.map((m) => (
+                          <SalesCard
+                            key={m.key}
+                            metric={m}
+                            accent={BUCKET_ACCENT[bucket.key]}
+                            headlineLabel={headlineLabel}
+                          />
+                        ))}
+                      </div>
+                    </section>
+                  );
+                })}
+              </div>
+            )}
             {from && (!buckets || buckets.includes('sales')) && (
               <TopItemsTable from={from} to={to} inventory={inventory} channel={channel} tick={tick} />
+            )}
+            {showsFulfilment && !cancellations && !cancellationsFailed && (
+              <div style={CARD_SHELL} className="mt-7">
+                <Skeleton className="h-40 w-full rounded-md" />
+              </div>
             )}
             {/* An older API sends no slices; skip the section rather than crash the page. */}
             {showsFulfilment && cancellations?.slices && (
