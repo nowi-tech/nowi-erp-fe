@@ -161,10 +161,9 @@ export default function SalesKpis({
     Promise.all([getSalesKpis(from, to, inventory, channel), byActivity ? getFulfilmentActivity(from, to, inventory, channel) : null])
       .then(([kpis, activity]) => {
         if (cancelled || queryRef.current !== my) return;
-        // The activity view swaps in its own Fulfilment cards; RTO and RTV are dated by event already, so they stay.
-        const returns = kpis.metrics.filter((m) => m.key === 'rto' || m.key === 'rtv');
+        // The activity view swaps in its own Fulfilment cards.
         const d = activity
-          ? { ...kpis, metrics: [...kpis.metrics.filter((m) => m.bucket !== 'fulfilment'), ...activity.metrics, ...returns] }
+          ? { ...kpis, metrics: [...kpis.metrics.filter((m) => m.bucket !== 'fulfilment'), ...activity.metrics] }
           : kpis;
         setData(d);
         if (activity) setCancellations(activity.cancellations);
