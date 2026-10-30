@@ -1152,6 +1152,8 @@ export default function StyleWorkspace() {
         open={sampleApproveOpen}
         busy={busy !== null}
         costPrice={style.costPrice}
+        styleId={style.id}
+        image={style.referenceImages?.[0] ?? style.referenceImage ?? style.referenceImageUrl ?? null}
         onClose={() => setSampleApproveOpen(false)}
         onConfirm={(body) => {
           setSampleApproveOpen(false);

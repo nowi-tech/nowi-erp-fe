@@ -1799,6 +1799,8 @@ export default function StylesInFlightTable({
         open={sampleApproveTarget !== null}
         busy={sampleApproveBusy}
         costPrice={sampleApproveTarget?.costPrice ?? null}
+        styleId={sampleApproveTarget?.id ?? null}
+        image={sampleApproveTarget?.thumbnail ?? null}
         onClose={() =>
           sampleApproveBusy ? undefined : setSampleApproveTarget(null)
         }

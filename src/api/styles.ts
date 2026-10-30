@@ -290,6 +290,9 @@ export interface SampleApproveStyleBody {
   /** Per-style cost price. Required by the BE when the verdict advances the
    *  lifecycle (an approved sample must carry its cost). */
   costPrice?: number;
+  /** Approving needs one: the current main image confirmed, or a new upload. */
+  imageConfirmed?: boolean;
+  newImagePath?: string;
 }
 
 export async function approveStyle(

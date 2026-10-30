@@ -618,6 +618,15 @@ export default function StylesRegistry() {
         open={sampleApproveTarget !== null}
         busy={sampleApproveBusy}
         costPrice={sampleApproveTarget?.costPrice ?? null}
+        styleId={sampleApproveTarget?.id ?? null}
+        image={
+          sampleApproveTarget
+            ? (sampleApproveTarget.referenceImages?.[0] ??
+              sampleApproveTarget.referenceImage ??
+              sampleApproveTarget.referenceImageUrl ??
+              null)
+            : null
+        }
         onClose={() =>
           sampleApproveBusy ? undefined : setSampleApproveTarget(null)
         }
