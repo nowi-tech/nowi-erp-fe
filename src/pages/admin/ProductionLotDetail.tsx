@@ -134,10 +134,9 @@ export default function ProductionLotDetail() {
     if (forId === latestId.current) setLot(fresh);
   };
 
-  // Show the saved lot at once; the refresh only adds the timeline, so its failure is harmless.
+  // The save returns the whole lot; image and run type don't touch the timeline, so no refetch.
   const applySaved = (row: ProductionBatch) => {
     setLot((prev) => (prev && prev.id === row.id ? { ...prev, ...row } : prev));
-    void reload().catch(() => undefined);
   };
 
   const changeType = (next: ProductionType) => {
