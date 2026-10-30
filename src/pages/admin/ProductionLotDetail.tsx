@@ -14,6 +14,7 @@ import {
   getLot,
   setBatchImage,
   setProductionType,
+  type ProductionBatch,
   type ProductionType,
   type BatchSizeLine,
   type LotDetail,
@@ -133,13 +134,18 @@ export default function ProductionLotDetail() {
     if (forId === latestId.current) setLot(fresh);
   };
 
-  // A failed refresh after a good save must not read as a failed save.
+  // Show the saved lot at once; the refresh only adds the timeline, so its failure is harmless.
+  const applySaved = (row: ProductionBatch) => {
+    setLot((prev) => (prev && prev.id === row.id ? { ...prev, ...row } : prev));
+    void reload().catch(() => undefined);
+  };
+
   const changeType = (next: ProductionType) => {
     if (!lot || next === lot.productionType) return;
     setSaving(true);
     void setProductionType(lot.id, next)
       .then(
-        () => reload().catch(() => undefined),
+        applySaved,
         () =>
           toast.show(
             t('admin.production.type.saveFailed', { defaultValue: "Couldn't change the run type." }),
@@ -155,7 +161,7 @@ export default function ProductionLotDetail() {
     void uploadPhoto('production_batch', lot.id, file)
       .then(({ objectPath }) => setBatchImage(lot.id, objectPath))
       .then(
-        () => reload().catch(() => undefined),
+        applySaved,
         () =>
           toast.show(
             t('admin.production.intake.imageFailed', { defaultValue: "Couldn't upload that image." }),

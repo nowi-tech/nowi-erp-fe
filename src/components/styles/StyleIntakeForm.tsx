@@ -15,6 +15,7 @@ import { Label } from '@/components/ui/label';
 import { Select } from '@/components/ui/select';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Combobox, type ComboboxOption } from '@/components/ui/combobox';
+import { useToast } from '@/components/ui/toast';
 
 import PatternCadInput from '@/components/shared/PatternCadInput';
 import IntakeCard from '@/components/styles/intake/IntakeCard';
@@ -539,6 +540,7 @@ const StyleIntakeForm = forwardRef<StyleIntakeFormHandle, StyleIntakeFormProps>(
     handleRef,
   ) {
     const { t } = useTranslation();
+    const toast = useToast();
     const isChinaImport = source === 'china_import';
     const isEdit = !!style;
     // The A/B/C submission fork only applies to a NEW sampling intake.
@@ -563,7 +565,7 @@ const StyleIntakeForm = forwardRef<StyleIntakeFormHandle, StyleIntakeFormProps>(
       // Style.id is the stable identity; falsy when create mode.
     }, [style?.id]);
 
-    // One fetch per mount; a failure leaves the picker empty rather than breaking the form.
+    // One fetch per mount; a failure says so, since a required brand would otherwise block silently.
     useEffect(() => {
       let live = true;
       void getBrands()
@@ -571,7 +573,15 @@ const StyleIntakeForm = forwardRef<StyleIntakeFormHandle, StyleIntakeFormProps>(
           // Keep the saved brand listed even if it was deactivated since.
           if (live) setBrands(rows.filter((b) => b.isActive || b.id === style?.brandId));
         })
-        .catch(() => {});
+        .catch(() => {
+          if (live)
+            toast.show(
+              t('admin.styles.intake.fork.brandsFailed', {
+                defaultValue: "Couldn't load brands. Reload the page to try again.",
+              }),
+              'error',
+            );
+        });
       return () => {
         live = false;
       };

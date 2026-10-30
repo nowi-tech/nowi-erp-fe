@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, type ReactNode } from 'react';
+import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Factory, X, AlertTriangle, ArrowLeft, Loader2, Upload } from 'lucide-react';
 import { Dialog } from '@/components/ui/dialog';
@@ -90,6 +90,14 @@ export default function StartProductionIntakeDialog({
   const [imagePath, setImagePath] = useState('');
   const [imagePreview, setImagePreview] = useState('');
   const [uploading, setUploading] = useState(false);
+  // Bumped on every reset, so an upload finishing after it can't land on the next lot.
+  const uploadSeq = useRef(0);
+  const clearImage = () => {
+    uploadSeq.current += 1;
+    setUploading(false);
+    setImagePath('');
+    setImagePreview('');
+  };
 
   // ── shared qty map (keyed by item sku) ───────────────────────────
   const [qty, setQty] = useState<Record<string, number>>({});
@@ -107,8 +115,7 @@ export default function StartProductionIntakeDialog({
     setColourId('');
     setExternalSku('');
     setExtSizes({});
-    setImagePath('');
-    setImagePreview('');
+    clearImage();
     setQty({});
     setQuery('');
     setTailorId('');
@@ -189,8 +196,7 @@ export default function StartProductionIntakeDialog({
     setExtSizes({});
     setBrandId('');
     setColourId('');
-    setImagePath('');
-    setImagePreview('');
+    clearImage();
     setQty({});
   };
 
@@ -215,20 +221,26 @@ export default function StartProductionIntakeDialog({
 
   const onImageFile = (file: File | undefined) => {
     if (!file) return;
+    const seq = ++uploadSeq.current;
     // A failed re-upload falls back to the last good image, which imagePath still holds.
     const previous = imagePreview;
     setUploading(true);
     setImagePreview(URL.createObjectURL(file));
     void uploadPhoto('production_batch', 'new', file)
-      .then(({ objectPath }) => setImagePath(objectPath))
+      .then(({ objectPath }) => {
+        if (seq === uploadSeq.current) setImagePath(objectPath);
+      })
       .catch(() => {
+        if (seq !== uploadSeq.current) return;
         setImagePreview(previous);
         toast.show(
           t('admin.production.intake.imageFailed', { defaultValue: "Couldn't upload that image." }),
           'error',
         );
       })
-      .finally(() => setUploading(false));
+      .finally(() => {
+        if (seq === uploadSeq.current) setUploading(false);
+      });
   };
 
   // "+ Add" inside the brand dropdown creates the typed brand and selects it.

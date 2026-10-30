@@ -83,8 +83,16 @@ export default function SampleApproveDialog({
     else if (ABSOLUTE.test(image)) setCurrent(image);
     else
       void getReadUrls([image])
-        .then((m) => live && setCurrent(m[image] ?? null))
-        .catch(() => live && setCurrent(null));
+        .then((m) => {
+          if (!live) return;
+          setCurrent(m[image] ?? null);
+          if (!m[image]) setImageFinal(false);
+        })
+        .catch(() => {
+          if (!live) return;
+          setCurrent(null);
+          setImageFinal(false);
+        });
     return () => {
       live = false;
     };
@@ -186,7 +194,7 @@ export default function SampleApproveDialog({
         {advancing && (
           <div>
             <label className="block text-xs text-[var(--color-muted-foreground)] mb-1">
-              {image
+              {current
                 ? t('admin.styles.approval2.imageQuestion', { defaultValue: 'Is this the final image?' })
                 : t('admin.styles.approval2.imageUpload', { defaultValue: 'Upload the final image' })}
               <span className="text-[var(--color-destructive)]"> *</span>
@@ -195,6 +203,13 @@ export default function SampleApproveDialog({
               {(imageFinal === false ? newPreview : current) ? (
                 <img
                   src={imageFinal === false ? newPreview : current!}
+                  // An image that won't load can't be confirmed — ask for an upload instead.
+                  onError={() => {
+                    if (imageFinal !== false) {
+                      setCurrent(null);
+                      setImageFinal(false);
+                    }
+                  }}
                   alt=""
                   className="h-20 w-20 shrink-0 rounded-[var(--radius-sm)] object-cover"
                 />
@@ -204,7 +219,7 @@ export default function SampleApproveDialog({
                 </div>
               )}
               <div className="flex flex-wrap items-center gap-2">
-                {image && (
+                {current && (
                   <>
                     <Button
                       size="sm"

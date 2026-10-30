@@ -727,6 +727,7 @@
           "brandLabel": "Brand",
           "brandNone": "No brand",
           "brandPick": "Choose a brand…",
+          "brandsFailed": "Couldn't load brands. Reload the page to try again.",
           "needsBrandAndFields": "Choose a brand and complete the required fields to submit.",
           "colourPickLabel": "Parent style",
           "basedOnPickLabel": "Source style",
