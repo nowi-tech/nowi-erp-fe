@@ -352,12 +352,6 @@ export default function AddColourModal({
                   defaultValue: 'e.g. NOWIDRESS585-BLUE',
                 })}
               />
-              <p className="mt-1 text-[12px] text-[var(--color-muted-foreground)]">
-                {t('admin.styles.addColour.thirdPartyCodeHelp', {
-                  defaultValue:
-                    "Stored verbatim as this colour's Style # (no minting), so its per-size SKUs match the partner's EasyEcom catalog.",
-                })}
-              </p>
             </div>
           )}
 

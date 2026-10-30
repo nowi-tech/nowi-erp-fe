@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Factory, X, AlertTriangle, ArrowLeft, Loader2, Upload } from 'lucide-react';
+import { Factory, X, AlertTriangle, ArrowLeft } from 'lucide-react';
 import { Dialog } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -19,6 +19,7 @@ import {
 import { getBrands, createBrand, type Brand } from '@/api/brands';
 import TailorPicker from '@/components/production/TailorPicker';
 import { uploadPhoto } from '@/api/storage';
+import ImageUploadTile from '@/components/shared/ImageUploadTile';
 import ProductionTypeToggle from '@/components/production/ProductionTypeToggle';
 import type { Colour } from '@/api/types';
 
@@ -580,33 +581,7 @@ export default function StartProductionIntakeDialog({
           {!isAlt && (
             <div>
               <Label>{t('admin.production.intake.imageRequired', { defaultValue: 'Image *' })}</Label>
-              <div className="flex items-center gap-3">
-                {imagePreview ? (
-                  <img
-                    src={imagePreview}
-                    alt=""
-                    className="h-14 w-14 shrink-0 rounded-[var(--radius-sm)] object-cover"
-                  />
-                ) : (
-                  <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-[var(--radius-sm)] bg-[var(--color-muted)] text-[var(--color-muted-foreground)]">
-                    {uploading ? <Loader2 size={16} className="animate-spin" /> : <Upload size={16} />}
-                  </div>
-                )}
-                <label className="cursor-pointer text-sm font-semibold text-[var(--color-primary)] hover:underline">
-                  <input
-                    type="file"
-                    accept="image/*"
-                    className="hidden"
-                    disabled={uploading}
-                    onChange={(e) => onImageFile(e.target.files?.[0])}
-                  />
-                  {uploading
-                    ? t('common.uploading', { defaultValue: 'Uploading…' })
-                    : imagePath
-                      ? t('admin.production.intake.changeImage', { defaultValue: 'Change image' })
-                      : t('admin.production.intake.uploadImage', { defaultValue: 'Upload image' })}
-                </label>
-              </div>
+              <ImageUploadTile preview={imagePreview} uploading={uploading} onFile={onImageFile} />
             </div>
           )}
 

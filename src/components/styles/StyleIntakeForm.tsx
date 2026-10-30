@@ -1091,9 +1091,6 @@ const StyleIntakeForm = forwardRef<StyleIntakeFormHandle, StyleIntakeFormProps>(
                       placeholder={t('admin.styles.intake.fork.thirdPartyPlaceholder')}
                       autoCapitalize="characters"
                     />
-                    <p className="mt-1.5 text-[12px] text-[var(--color-muted-foreground)]">
-                      {t('admin.styles.intake.fork.thirdPartyHelp')}
-                    </p>
                   </div>
                 </div>
               )}

@@ -20,7 +20,7 @@ export default function ProductionTypeToggle({
     <div
       role="radiogroup"
       aria-label={t('admin.production.type.label', { defaultValue: 'Run type' })}
-      className="inline-flex gap-1 rounded-[var(--radius-md)] bg-[var(--color-muted)] p-1"
+      className="inline-flex gap-2"
     >
       {TYPES.map((v) => (
         <button
@@ -31,10 +31,10 @@ export default function ProductionTypeToggle({
           disabled={disabled}
           onClick={() => onChange(v)}
           className={cn(
-            'rounded-[var(--radius-sm)] px-4 py-1.5 text-sm transition-colors',
+            'rounded-full border px-4 py-1.5 text-sm font-semibold transition-colors',
             value === v
-              ? 'bg-[var(--color-surface)] font-medium text-[var(--color-foreground)] shadow-sm'
-              : 'text-[var(--color-muted-foreground)] hover:text-[var(--color-foreground)]',
+              ? 'border-[var(--color-primary)] bg-[var(--color-primary)] text-white'
+              : 'border-[var(--color-border)] bg-[var(--color-surface)] text-[var(--color-foreground)] hover:border-[var(--color-primary)]',
             disabled && 'cursor-not-allowed opacity-50',
           )}
         >

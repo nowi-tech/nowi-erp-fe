@@ -1,11 +1,12 @@
 import { useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { CheckCircle2, Loader2, Upload } from 'lucide-react';
+import { CheckCircle2 } from 'lucide-react';
 import { Dialog } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { useToast } from '@/components/ui/toast';
+import ImageUploadTile from '@/components/shared/ImageUploadTile';
 import { getReadUrls, uploadPhoto } from '@/api/storage';
 import type { SampleApprovalStatus, SampleApproveStyleBody } from '@/api/styles';
 
@@ -199,65 +200,44 @@ export default function SampleApproveDialog({
                 : t('admin.styles.approval2.imageUpload', { defaultValue: 'Upload the final image' })}
               <span className="text-[var(--color-destructive)]"> *</span>
             </label>
-            <div className="flex items-center gap-3">
-              {(imageFinal === false ? newPreview : current) ? (
+            {current && (
+              <div className="flex items-center gap-3">
                 <img
-                  src={imageFinal === false ? newPreview : current!}
+                  src={current}
                   // An image that won't load can't be confirmed — ask for an upload instead.
                   onError={() => {
-                    if (imageFinal !== false) {
-                      setCurrent(null);
-                      setImageFinal(false);
-                    }
+                    setCurrent(null);
+                    setImageFinal(false);
                   }}
                   alt=""
                   className="h-20 w-20 shrink-0 rounded-[var(--radius-sm)] object-cover"
                 />
-              ) : (
-                <div className="flex h-20 w-20 shrink-0 items-center justify-center rounded-[var(--radius-sm)] bg-[var(--color-muted)] text-[var(--color-muted-foreground)]">
-                  {uploading ? <Loader2 size={16} className="animate-spin" /> : <Upload size={16} />}
-                </div>
-              )}
-              <div className="flex flex-wrap items-center gap-2">
-                {current && (
-                  <>
-                    <Button
-                      size="sm"
-                      variant={imageFinal === true ? 'default' : 'outline'}
-                      onClick={() => setImageFinal(true)}
-                    >
-                      {t('common.yes', { defaultValue: 'Yes' })}
-                    </Button>
-                    <Button
-                      size="sm"
-                      variant={imageFinal === false ? 'default' : 'outline'}
-                      onClick={() => setImageFinal(false)}
-                    >
-                      {t('common.no', { defaultValue: 'No' })}
-                    </Button>
-                  </>
-                )}
-                {imageFinal === false && (
-                  <label className="cursor-pointer text-sm font-semibold text-[var(--color-primary)] hover:underline">
-                    <input
-                      type="file"
-                      accept="image/*"
-                      className="hidden"
-                      disabled={uploading || styleId == null}
-                      onChange={(e) => {
-                        onImageFile(e.target.files?.[0]);
-                        e.target.value = '';
-                      }}
-                    />
-                    {uploading
-                      ? t('common.uploading', { defaultValue: 'Uploading…' })
-                      : newImagePath
-                        ? t('admin.production.intake.changeImage', { defaultValue: 'Change image' })
-                        : t('admin.production.intake.uploadImage', { defaultValue: 'Upload image' })}
-                  </label>
-                )}
+                <Button
+                  size="sm"
+                  variant={imageFinal === true ? 'default' : 'outline'}
+                  onClick={() => setImageFinal(true)}
+                >
+                  {t('common.yes', { defaultValue: 'Yes' })}
+                </Button>
+                <Button
+                  size="sm"
+                  variant={imageFinal === false ? 'default' : 'outline'}
+                  onClick={() => setImageFinal(false)}
+                >
+                  {t('common.no', { defaultValue: 'No' })}
+                </Button>
               </div>
-            </div>
+            )}
+            {imageFinal === false && (
+              <div className={current ? 'mt-3' : undefined}>
+                <ImageUploadTile
+                  preview={newPreview}
+                  uploading={uploading}
+                  onFile={onImageFile}
+                  disabled={styleId == null}
+                />
+              </div>
+            )}
           </div>
         )}
         {/* Cost price — required to approve (the advancing verdict). For a
