@@ -8,8 +8,11 @@ import { Button } from '@/components/ui/button';
 import { useToast } from '@/components/ui/toast';
 import LotStageStepper from '@/components/production/LotStageStepper';
 import EditLotDialog from '@/components/production/EditLotDialog';
+import { HoverThumbnail } from '@/components/dashboard/StylesInFlightTable';
+import { uploadPhoto } from '@/api/storage';
 import {
   getLot,
+  setBatchImage,
   type BatchSizeLine,
   type LotDetail,
   type LotTimelineEntry,
@@ -72,6 +75,7 @@ export default function ProductionLotDetail() {
   const [lot, setLot] = useState<LotDetail | null>(null);
   const [loading, setLoading] = useState(true);
   const [editOpen, setEditOpen] = useState(false);
+  const [saving, setSaving] = useState(false);
 
   const latestId = useRef(id);
   useEffect(() => {
@@ -119,6 +123,23 @@ export default function ProductionLotDetail() {
     const forId = id;
     const fresh = await getLot(Number(forId));
     if (forId === latestId.current) setLot(fresh);
+  };
+
+  // A failed refresh after a good save must not read as a failed save.
+  const replaceImage = (file: File | undefined) => {
+    if (!file || !lot) return;
+    setSaving(true);
+    void uploadPhoto('production_batch', lot.id, file)
+      .then(({ objectPath }) => setBatchImage(lot.id, objectPath))
+      .then(
+        () => reload().catch(() => undefined),
+        () =>
+          toast.show(
+            t('admin.production.intake.imageFailed', { defaultValue: "Couldn't upload that image." }),
+            'error',
+          ),
+      )
+      .finally(() => setSaving(false));
   };
 
   if (loading) {
@@ -218,6 +239,26 @@ export default function ProductionLotDetail() {
         <Button variant="outline" onClick={() => navigate(backTo)}>
           {t('common.back', { defaultValue: 'Back' })}
         </Button>
+        {/* Keyed on the URL so a replaced image clears an earlier load failure. */}
+        <HoverThumbnail key={lot.imageUrl ?? ''} src={lot.imageUrl} alt={lot.styleRef ?? lot.batchNo} size={48} />
+        {/* A brand lot owns its image; a style lot shows the style's, changed there. */}
+        {canWrite && lot.origin === 'external' && lot.status !== 'cancelled' && (
+          <label className="cursor-pointer text-sm font-semibold text-[var(--color-primary)] hover:underline">
+            <input
+              type="file"
+              accept="image/*"
+              className="hidden"
+              disabled={saving}
+              onChange={(e) => {
+                replaceImage(e.target.files?.[0]);
+                e.target.value = '';
+              }}
+            />
+            {saving
+              ? t('common.uploading', { defaultValue: 'Uploading…' })
+              : t('admin.production.lot.replaceImage', { defaultValue: 'Replace image' })}
+          </label>
+        )}
         <h1 className="text-2xl font-bold tracking-tight">{lot.batchNo}</h1>
         {/* Same mono treatment the board's Style column uses. The catalogue name is
             left out: EasyEcom often holds a per-size code there, not a name. */}

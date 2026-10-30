@@ -251,7 +251,7 @@ export interface CreateBatchBody {
   externalSku?: string;
   /** Colour master FK — REQUIRED on an external (brand) batch. */
   colourId?: number;
-  /** Uploaded image (GCS object path) for an external batch. */
+  /** Uploaded image (GCS object path) — required on an external batch. */
   imagePath?: string;
   /** Skip Planning and open on the floor (cutting); stamps both timestamps. */
   directToProduction?: boolean;
@@ -312,6 +312,13 @@ export function setFabricStatus(
 ): Promise<ProductionBatch> {
   return apiClient
     .patch<ProductionBatch>(`/api/production/batches/${id}/fabric-status`, { fabricStatus })
+    .then((r) => r.data);
+}
+
+/** Replace a brand (external) lot's own image. */
+export function setBatchImage(id: number, imagePath: string): Promise<ProductionBatch> {
+  return apiClient
+    .patch<ProductionBatch>(`/api/production/batches/${id}/image`, { imagePath })
     .then((r) => r.data);
 }
 

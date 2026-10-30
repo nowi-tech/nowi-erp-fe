@@ -207,12 +207,14 @@ export default function StartProductionIntakeDialog({
 
   const onImageFile = (file: File | undefined) => {
     if (!file) return;
+    // A failed re-upload falls back to the last good image, which imagePath still holds.
+    const previous = imagePreview;
     setUploading(true);
     setImagePreview(URL.createObjectURL(file));
     void uploadPhoto('production_batch', 'new', file)
       .then(({ objectPath }) => setImagePath(objectPath))
       .catch(() => {
-        setImagePreview('');
+        setImagePreview(previous);
         toast.show(
           t('admin.production.intake.imageFailed', { defaultValue: "Couldn't upload that image." }),
           'error',
@@ -272,6 +274,7 @@ export default function StartProductionIntakeDialog({
       : brandId !== '' &&
         colourId !== '' &&
         externalSku.trim().length > 0 &&
+        (isAlt || imagePath !== '') &&
         extActiveSizes.length > 0);
 
   const build = (directToProduction: boolean): CreateBatchBody | null => {
@@ -546,7 +549,7 @@ export default function StartProductionIntakeDialog({
 
           {!isAlt && (
             <div>
-              <Label>{t('admin.production.intake.image', { defaultValue: 'Image (optional)' })}</Label>
+              <Label>{t('admin.production.intake.imageRequired', { defaultValue: 'Image *' })}</Label>
               <div className="flex items-center gap-3">
                 {imagePreview ? (
                   <img
