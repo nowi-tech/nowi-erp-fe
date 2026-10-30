@@ -10,10 +10,16 @@ import QtyTable from '@/components/production/QtyTable';
 import { useToast } from '@/components/ui/toast';
 import { useDebounced } from '@/lib/useDebounced';
 import { listColourMaster, createColourMaster } from '@/api/styles';
-import { searchCatalog, type CatalogStyle, type CreateBatchBody } from '@/api/production';
+import {
+  searchCatalog,
+  type CatalogStyle,
+  type CreateBatchBody,
+  type ProductionType,
+} from '@/api/production';
 import { getBrands, createBrand, type Brand } from '@/api/brands';
 import TailorPicker from '@/components/production/TailorPicker';
 import { uploadPhoto } from '@/api/storage';
+import ProductionTypeToggle from '@/components/production/ProductionTypeToggle';
 import type { Colour } from '@/api/types';
 
 type Mode = 'existing' | 'external';
@@ -90,6 +96,7 @@ export default function StartProductionIntakeDialog({
   // Only used when the lot opens straight on the floor — that's when the lot
   // number gains its `-RAJ`. A lot going to the pipeline is named later.
   const [tailorId, setTailorId] = useState<number | ''>('');
+  const [productionType, setProductionType] = useState<ProductionType | null>(null);
 
   // Reset everything when the dialog opens; load the picker's data once.
   useEffect(() => {
@@ -105,6 +112,7 @@ export default function StartProductionIntakeDialog({
     setQty({});
     setQuery('');
     setTailorId('');
+    setProductionType(null);
     void getBrands().then(setBrands).catch(() => undefined);
     void listColourMaster().then(setColours).catch(() => undefined);
   }, [open]);
@@ -270,7 +278,9 @@ export default function StartProductionIntakeDialog({
     !uploading &&
     extraValid &&
     (mode === 'existing'
-      ? sel != null && (sel.sizes.length > 0 || extActiveSizes.length > 0)
+      ? sel != null &&
+        (isAlt || productionType != null) &&
+        (sel.sizes.length > 0 || extActiveSizes.length > 0)
       : brandId !== '' &&
         colourId !== '' &&
         externalSku.trim().length > 0 &&
@@ -296,6 +306,7 @@ export default function StartProductionIntakeDialog({
         origin: 'style',
         styleKey: sel.styleKey,
         styleId: sel.styleId ?? undefined,
+        productionType: productionType ?? undefined,
         directToProduction,
         tailorId: directToProduction && tailorId !== '' ? tailorId : undefined,
         items,
@@ -433,6 +444,13 @@ export default function StartProductionIntakeDialog({
                   <X size={16} />
                 </button>
               </div>
+
+              {!isAlt && (
+                <div>
+                  <Label>{t('admin.production.type.labelRequired', { defaultValue: 'Run type *' })}</Label>
+                  <ProductionTypeToggle value={productionType} onChange={setProductionType} />
+                </div>
+              )}
 
               {!isAlt && sel.alreadyInProduction && (
                 <div className="flex items-center gap-2 rounded-[var(--radius-sm)] border border-amber-300 bg-amber-50 px-3 py-1.5 text-xs font-medium text-amber-800">

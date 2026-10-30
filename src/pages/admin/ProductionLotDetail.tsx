@@ -13,11 +13,19 @@ import { uploadPhoto } from '@/api/storage';
 import {
   getLot,
   setBatchImage,
+  setProductionType,
+  type ProductionType,
   type BatchSizeLine,
   type LotDetail,
   type LotTimelineEntry,
 } from '@/api/production';
-import { hasLeftFloor, IN_PRODUCTION_STATUSES, pendingAt, statusLabel } from '@/lib/production';
+import {
+  hasLeftFloor,
+  IN_PRODUCTION_STATUSES,
+  pendingAt,
+  productionTypeLabel,
+  statusLabel,
+} from '@/lib/production';
 import { hasAnyRole, PRODUCTION_WRITE_ROLES } from '@/lib/userRoles';
 import { localISO } from '@/lib/date';
 import { useAuth } from '@/context/auth';
@@ -126,6 +134,21 @@ export default function ProductionLotDetail() {
   };
 
   // A failed refresh after a good save must not read as a failed save.
+  const changeType = (next: ProductionType) => {
+    if (!lot || next === lot.productionType) return;
+    setSaving(true);
+    void setProductionType(lot.id, next)
+      .then(
+        () => reload().catch(() => undefined),
+        () =>
+          toast.show(
+            t('admin.production.type.saveFailed', { defaultValue: "Couldn't change the run type." }),
+            'error',
+          ),
+      )
+      .finally(() => setSaving(false));
+  };
+
   const replaceImage = (file: File | undefined) => {
     if (!file || !lot) return;
     setSaving(true);
@@ -271,6 +294,22 @@ export default function ProductionLotDetail() {
         {lot.tailorName && <Badge variant="secondary">{lot.tailorName}</Badge>}
         {lot.brandName && <Badge variant="outline">{lot.brandName}</Badge>}
         {lot.colourName && <Badge variant="outline">{lot.colourName}</Badge>}
+        {/* Brand lots are always bulk, so only Nowi-style lots show or change it. */}
+        {lot.origin !== 'external' &&
+          (canWrite && lot.status !== 'cancelled' ? (
+            <select
+              value={lot.productionType}
+              disabled={saving}
+              onChange={(e) => changeType(e.target.value as ProductionType)}
+              aria-label={t('admin.production.type.label', { defaultValue: 'Run type' })}
+              className="h-7 rounded-full border border-[var(--color-border)] bg-transparent px-2.5 text-xs font-semibold"
+            >
+              <option value="low_moq">{productionTypeLabel(t, 'low_moq')}</option>
+              <option value="bulk">{productionTypeLabel(t, 'bulk')}</option>
+            </select>
+          ) : (
+            <Badge variant="outline">{productionTypeLabel(t, lot.productionType)}</Badge>
+          ))}
 
         {/* Sub-lots link both ways: the rest of this lot, or where this one came from. */}
         {[
