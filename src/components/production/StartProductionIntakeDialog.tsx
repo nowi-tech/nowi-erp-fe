@@ -1,6 +1,6 @@
-import { useEffect, useMemo, useState, type ReactNode } from 'react';
+import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Factory, X, AlertTriangle, ArrowLeft, Loader2, Upload } from 'lucide-react';
+import { Factory, X, AlertTriangle, ArrowLeft } from 'lucide-react';
 import { Dialog } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -10,10 +10,17 @@ import QtyTable from '@/components/production/QtyTable';
 import { useToast } from '@/components/ui/toast';
 import { useDebounced } from '@/lib/useDebounced';
 import { listColourMaster, createColourMaster } from '@/api/styles';
-import { searchCatalog, type CatalogStyle, type CreateBatchBody } from '@/api/production';
+import {
+  searchCatalog,
+  type CatalogStyle,
+  type CreateBatchBody,
+  type ProductionType,
+} from '@/api/production';
 import { getBrands, createBrand, type Brand } from '@/api/brands';
 import TailorPicker from '@/components/production/TailorPicker';
 import { uploadPhoto } from '@/api/storage';
+import ImageUploadTile from '@/components/shared/ImageUploadTile';
+import ProductionTypeToggle from '@/components/production/ProductionTypeToggle';
 import type { Colour } from '@/api/types';
 
 type Mode = 'existing' | 'external';
@@ -84,12 +91,21 @@ export default function StartProductionIntakeDialog({
   const [imagePath, setImagePath] = useState('');
   const [imagePreview, setImagePreview] = useState('');
   const [uploading, setUploading] = useState(false);
+  // Bumped on every reset, so an upload finishing after it can't land on the next lot.
+  const uploadSeq = useRef(0);
+  const clearImage = () => {
+    uploadSeq.current += 1;
+    setUploading(false);
+    setImagePath('');
+    setImagePreview('');
+  };
 
   // ── shared qty map (keyed by item sku) ───────────────────────────
   const [qty, setQty] = useState<Record<string, number>>({});
   // Only used when the lot opens straight on the floor — that's when the lot
   // number gains its `-RAJ`. A lot going to the pipeline is named later.
   const [tailorId, setTailorId] = useState<number | ''>('');
+  const [productionType, setProductionType] = useState<ProductionType | null>(null);
 
   // Reset everything when the dialog opens; load the picker's data once.
   useEffect(() => {
@@ -100,11 +116,11 @@ export default function StartProductionIntakeDialog({
     setColourId('');
     setExternalSku('');
     setExtSizes({});
-    setImagePath('');
-    setImagePreview('');
+    clearImage();
     setQty({});
     setQuery('');
     setTailorId('');
+    setProductionType(null);
     void getBrands().then(setBrands).catch(() => undefined);
     void listColourMaster().then(setColours).catch(() => undefined);
   }, [open]);
@@ -181,8 +197,7 @@ export default function StartProductionIntakeDialog({
     setExtSizes({});
     setBrandId('');
     setColourId('');
-    setImagePath('');
-    setImagePreview('');
+    clearImage();
     setQty({});
   };
 
@@ -207,18 +222,26 @@ export default function StartProductionIntakeDialog({
 
   const onImageFile = (file: File | undefined) => {
     if (!file) return;
+    const seq = ++uploadSeq.current;
+    // A failed re-upload falls back to the last good image, which imagePath still holds.
+    const previous = imagePreview;
     setUploading(true);
     setImagePreview(URL.createObjectURL(file));
     void uploadPhoto('production_batch', 'new', file)
-      .then(({ objectPath }) => setImagePath(objectPath))
+      .then(({ objectPath }) => {
+        if (seq === uploadSeq.current) setImagePath(objectPath);
+      })
       .catch(() => {
-        setImagePreview('');
+        if (seq !== uploadSeq.current) return;
+        setImagePreview(previous);
         toast.show(
           t('admin.production.intake.imageFailed', { defaultValue: "Couldn't upload that image." }),
           'error',
         );
       })
-      .finally(() => setUploading(false));
+      .finally(() => {
+        if (seq === uploadSeq.current) setUploading(false);
+      });
   };
 
   // "+ Add" inside the brand dropdown creates the typed brand and selects it.
@@ -268,10 +291,13 @@ export default function StartProductionIntakeDialog({
     !uploading &&
     extraValid &&
     (mode === 'existing'
-      ? sel != null && (sel.sizes.length > 0 || extActiveSizes.length > 0)
+      ? sel != null &&
+        (isAlt || productionType != null) &&
+        (sel.sizes.length > 0 || extActiveSizes.length > 0)
       : brandId !== '' &&
         colourId !== '' &&
         externalSku.trim().length > 0 &&
+        (isAlt || imagePath !== '') &&
         extActiveSizes.length > 0);
 
   const build = (directToProduction: boolean): CreateBatchBody | null => {
@@ -293,6 +319,7 @@ export default function StartProductionIntakeDialog({
         origin: 'style',
         styleKey: sel.styleKey,
         styleId: sel.styleId ?? undefined,
+        productionType: productionType ?? undefined,
         directToProduction,
         tailorId: directToProduction && tailorId !== '' ? tailorId : undefined,
         items,
@@ -431,6 +458,13 @@ export default function StartProductionIntakeDialog({
                 </button>
               </div>
 
+              {!isAlt && (
+                <div>
+                  <Label>{t('admin.production.type.labelRequired', { defaultValue: 'Run type *' })}</Label>
+                  <ProductionTypeToggle value={productionType} onChange={setProductionType} />
+                </div>
+              )}
+
               {!isAlt && sel.alreadyInProduction && (
                 <div className="flex items-center gap-2 rounded-[var(--radius-sm)] border border-amber-300 bg-amber-50 px-3 py-1.5 text-xs font-medium text-amber-800">
                   <AlertTriangle size={14} className="shrink-0" />
@@ -546,34 +580,8 @@ export default function StartProductionIntakeDialog({
 
           {!isAlt && (
             <div>
-              <Label>{t('admin.production.intake.image', { defaultValue: 'Image (optional)' })}</Label>
-              <div className="flex items-center gap-3">
-                {imagePreview ? (
-                  <img
-                    src={imagePreview}
-                    alt=""
-                    className="h-14 w-14 shrink-0 rounded-[var(--radius-sm)] object-cover"
-                  />
-                ) : (
-                  <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-[var(--radius-sm)] bg-[var(--color-muted)] text-[var(--color-muted-foreground)]">
-                    {uploading ? <Loader2 size={16} className="animate-spin" /> : <Upload size={16} />}
-                  </div>
-                )}
-                <label className="cursor-pointer text-sm font-semibold text-[var(--color-primary)] hover:underline">
-                  <input
-                    type="file"
-                    accept="image/*"
-                    className="hidden"
-                    disabled={uploading}
-                    onChange={(e) => onImageFile(e.target.files?.[0])}
-                  />
-                  {uploading
-                    ? t('common.uploading', { defaultValue: 'Uploading…' })
-                    : imagePath
-                      ? t('admin.production.intake.changeImage', { defaultValue: 'Change image' })
-                      : t('admin.production.intake.uploadImage', { defaultValue: 'Upload image' })}
-                </label>
-              </div>
+              <Label>{t('admin.production.intake.imageRequired', { defaultValue: 'Image *' })}</Label>
+              <ImageUploadTile preview={imagePreview} uploading={uploading} onFile={onImageFile} />
             </div>
           )}
 

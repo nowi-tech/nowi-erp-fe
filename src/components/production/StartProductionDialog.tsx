@@ -4,7 +4,8 @@ import { Factory } from 'lucide-react';
 import { Dialog } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import type { BatchOrigin, CreateBatchBody } from '@/api/production';
+import type { BatchOrigin, CreateBatchBody, ProductionType } from '@/api/production';
+import ProductionTypeToggle from '@/components/production/ProductionTypeToggle';
 import { coverTone } from '@/lib/production';
 
 /** One seed row. Cover/stock/suggested exist only when the seed is a forecast. */
@@ -53,6 +54,7 @@ export default function StartProductionDialog({
   const { t } = useTranslation();
   const [qty, setQty] = useState<Record<string, number>>({});
   const [notes, setNotes] = useState('');
+  const [productionType, setProductionType] = useState<ProductionType | null>(null);
 
   useEffect(() => {
     if (!open || !target) return;
@@ -60,6 +62,7 @@ export default function StartProductionDialog({
     for (const s of target.sizes) seeded[s.sku] = s.suggestedQty ?? 0;
     setQty(seeded);
     setNotes('');
+    setProductionType(null);
   }, [open, target]);
 
   const totals = useMemo(() => {
@@ -126,12 +129,13 @@ export default function StartProductionDialog({
           </Button>
           <Button
             size="sm"
-            disabled={busy || totals.planned <= 0}
+            disabled={busy || totals.planned <= 0 || productionType == null}
             onClick={() =>
               onConfirm({
                 origin: target.origin,
                 styleKey: target.styleKey,
                 styleId: target.styleId,
+                productionType: productionType ?? undefined,
                 notes: notes.trim() || undefined,
                 items: target.sizes
                   .filter((s) => (qty[s.sku] ?? 0) > 0)
@@ -297,6 +301,13 @@ export default function StartProductionDialog({
             </span>
           </span>
         )}
+      </div>
+
+      <div className="mt-4">
+        <label className="mb-1 block text-xs text-[var(--color-muted-foreground)]">
+          {t('admin.production.type.labelRequired', { defaultValue: 'Run type *' })}
+        </label>
+        <ProductionTypeToggle value={productionType} onChange={setProductionType} />
       </div>
 
       <div className="mt-4">

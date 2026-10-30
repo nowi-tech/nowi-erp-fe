@@ -213,12 +213,9 @@ export type StyleSource =
   | 'sampling'
   | 'china_import'
   | 'legacy_floor_intake'
-  // 3rd-party finished goods — the partner's own style code is typed at intake
-  // and stored verbatim as the Style # (no NOWI minting). Skips sampling.
+  // RETIRED — merged into `third_party_manufactured`; no row carries it.
   | 'third_party'
-  // Manufactured by a 3rd party to our spec — the system mints the Style #
-  // (NOWI prefix) at Approval #1, like sampling. Skips sampling, goes to
-  // cataloguing like china_import.
+  // Bought in (3rd party): skips sampling; Style # is the typed code, else minted at Approval #1.
   | 'third_party_manufactured';
 
 export type StyleLifecycle =
@@ -612,6 +609,9 @@ export interface Style {
   productionStatus: string | null;
   productionTimeline: string | null;
   factoryId: number | null;
+  /** Whose label it carries — the two 3rd-party paths. */
+  brandId: number | null;
+  brand?: { id: number; name: string } | null;
   pdNote: string | null;
 
   // Approval #1

@@ -103,7 +103,7 @@ export default function NewIntake() {
   // Submit verb reacts to the fork. The colour / based-on paths spell out
   // what they do; new-design / china just submit for approval.
   const submitLabel =
-    source === 'china_import' || forkMode === 'new'
+    source === 'china_import' || forkMode === 'new' || forkMode === 'for_brand'
       ? t('admin.styles.intake.submitForApproval')
       : forkMode === 'colour'
         ? t('admin.styles.intake.fork.submitColour')
@@ -117,12 +117,14 @@ export default function NewIntake() {
     : // A relive asks for nothing else — the old style # IS the submission.
       forkMode === 'relive'
       ? t('admin.styles.intake.fork.needsRelive')
-      : forkMode !== 'new' && source !== 'china_import'
-        ? t('admin.styles.intake.fork.needsTargetAndFields', {
-            defaultValue:
-              'Pick the source style and complete the required fields to submit.',
-          })
-        : t('admin.styles.intake.needsName');
+      : forkMode === 'third_party_manufactured' || forkMode === 'for_brand'
+        ? t('admin.styles.intake.fork.needsBrandAndFields')
+        : forkMode !== 'new' && source !== 'china_import'
+          ? t('admin.styles.intake.fork.needsTargetAndFields', {
+              defaultValue:
+                'Pick the source style and complete the required fields to submit.',
+            })
+          : t('admin.styles.intake.needsName');
 
   return (
     <div className="mx-auto w-full max-w-[1280px] px-3 pb-32 sm:px-4">

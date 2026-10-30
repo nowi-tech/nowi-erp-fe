@@ -8,13 +8,25 @@ import { Button } from '@/components/ui/button';
 import { useToast } from '@/components/ui/toast';
 import LotStageStepper from '@/components/production/LotStageStepper';
 import EditLotDialog from '@/components/production/EditLotDialog';
+import { HoverThumbnail } from '@/components/dashboard/StylesInFlightTable';
+import { uploadPhoto } from '@/api/storage';
 import {
   getLot,
+  setBatchImage,
+  setProductionType,
+  type ProductionBatch,
+  type ProductionType,
   type BatchSizeLine,
   type LotDetail,
   type LotTimelineEntry,
 } from '@/api/production';
-import { hasLeftFloor, IN_PRODUCTION_STATUSES, pendingAt, statusLabel } from '@/lib/production';
+import {
+  hasLeftFloor,
+  IN_PRODUCTION_STATUSES,
+  pendingAt,
+  productionTypeLabel,
+  statusLabel,
+} from '@/lib/production';
 import { hasAnyRole, PRODUCTION_WRITE_ROLES } from '@/lib/userRoles';
 import { localISO } from '@/lib/date';
 import { useAuth } from '@/context/auth';
@@ -72,6 +84,7 @@ export default function ProductionLotDetail() {
   const [lot, setLot] = useState<LotDetail | null>(null);
   const [loading, setLoading] = useState(true);
   const [editOpen, setEditOpen] = useState(false);
+  const [saving, setSaving] = useState(false);
 
   const latestId = useRef(id);
   useEffect(() => {
@@ -119,6 +132,42 @@ export default function ProductionLotDetail() {
     const forId = id;
     const fresh = await getLot(Number(forId));
     if (forId === latestId.current) setLot(fresh);
+  };
+
+  // The save returns the whole lot; image and run type don't touch the timeline, so no refetch.
+  const applySaved = (row: ProductionBatch) => {
+    setLot((prev) => (prev && prev.id === row.id ? { ...prev, ...row } : prev));
+  };
+
+  const changeType = (next: ProductionType) => {
+    if (!lot || next === lot.productionType) return;
+    setSaving(true);
+    void setProductionType(lot.id, next)
+      .then(
+        applySaved,
+        () =>
+          toast.show(
+            t('admin.production.type.saveFailed', { defaultValue: "Couldn't change the run type." }),
+            'error',
+          ),
+      )
+      .finally(() => setSaving(false));
+  };
+
+  const replaceImage = (file: File | undefined) => {
+    if (!file || !lot) return;
+    setSaving(true);
+    void uploadPhoto('production_batch', lot.id, file)
+      .then(({ objectPath }) => setBatchImage(lot.id, objectPath))
+      .then(
+        applySaved,
+        () =>
+          toast.show(
+            t('admin.production.intake.imageFailed', { defaultValue: "Couldn't upload that image." }),
+            'error',
+          ),
+      )
+      .finally(() => setSaving(false));
   };
 
   if (loading) {
@@ -218,6 +267,26 @@ export default function ProductionLotDetail() {
         <Button variant="outline" onClick={() => navigate(backTo)}>
           {t('common.back', { defaultValue: 'Back' })}
         </Button>
+        {/* Keyed on the URL so a replaced image clears an earlier load failure. */}
+        <HoverThumbnail key={lot.imageUrl ?? ''} src={lot.imageUrl} alt={lot.styleRef ?? lot.batchNo} size={48} />
+        {/* A brand lot owns its image; a style lot shows the style's, changed there. */}
+        {canWrite && lot.origin === 'external' && lot.status !== 'cancelled' && (
+          <label className="cursor-pointer text-sm font-semibold text-[var(--color-primary)] hover:underline">
+            <input
+              type="file"
+              accept="image/*"
+              className="hidden"
+              disabled={saving}
+              onChange={(e) => {
+                replaceImage(e.target.files?.[0]);
+                e.target.value = '';
+              }}
+            />
+            {saving
+              ? t('common.uploading', { defaultValue: 'Uploading…' })
+              : t('admin.production.lot.replaceImage', { defaultValue: 'Replace image' })}
+          </label>
+        )}
         <h1 className="text-2xl font-bold tracking-tight">{lot.batchNo}</h1>
         {/* Same mono treatment the board's Style column uses. The catalogue name is
             left out: EasyEcom often holds a per-size code there, not a name. */}
@@ -230,6 +299,22 @@ export default function ProductionLotDetail() {
         {lot.tailorName && <Badge variant="secondary">{lot.tailorName}</Badge>}
         {lot.brandName && <Badge variant="outline">{lot.brandName}</Badge>}
         {lot.colourName && <Badge variant="outline">{lot.colourName}</Badge>}
+        {/* Brand lots are always bulk, so only Nowi-style lots show or change it. */}
+        {lot.origin !== 'external' &&
+          (canWrite && lot.status !== 'cancelled' ? (
+            <select
+              value={lot.productionType}
+              disabled={saving}
+              onChange={(e) => changeType(e.target.value as ProductionType)}
+              aria-label={t('admin.production.type.label', { defaultValue: 'Run type' })}
+              className="h-7 rounded-full border border-[var(--color-border)] bg-transparent px-2.5 text-xs font-semibold"
+            >
+              <option value="low_moq">{productionTypeLabel(t, 'low_moq')}</option>
+              <option value="bulk">{productionTypeLabel(t, 'bulk')}</option>
+            </select>
+          ) : (
+            <Badge variant="outline">{productionTypeLabel(t, lot.productionType)}</Badge>
+          ))}
 
         {/* Sub-lots link both ways: the rest of this lot, or where this one came from. */}
         {[

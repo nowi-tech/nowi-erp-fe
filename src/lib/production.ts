@@ -1,6 +1,6 @@
 import type { useTranslation } from 'react-i18next';
 import type { InventoryStyle } from '@/api/inventoryHealth';
-import type { BatchSizeLine, BatchStatus } from '@/api/production';
+import type { BatchSizeLine, BatchStatus, ProductionType } from '@/api/production';
 
 type T = ReturnType<typeof useTranslation>['t'];
 
@@ -84,6 +84,12 @@ const FLOOR_STAGE_LABEL: Partial<Record<BatchStatus, string>> = {
   alteration: 'In alteration',
   on_hold: 'On hold',
 };
+
+export function productionTypeLabel(t: T, type: ProductionType): string {
+  return type === 'low_moq'
+    ? t('admin.production.type.lowMoq', { defaultValue: 'Low MOQ' })
+    : t('admin.production.type.bulk', { defaultValue: 'Bulk' });
+}
 
 /** Status label, shared so the board and the lot page can't word it differently. */
 export function statusLabel(t: T, status: BatchStatus): string {

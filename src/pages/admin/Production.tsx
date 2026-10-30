@@ -45,6 +45,7 @@ import {
   FABRIC_STATUSES,
   type FabricStatus,
   type BatchOrigin,
+  type ProductionType,
   type BatchStatus,
   type CreateBatchBody,
   type ProductionBatch,
@@ -58,6 +59,7 @@ import {
   meaningfulName,
   IN_PRODUCTION_STATUSES,
   pendingAtCurrentStage,
+  productionTypeLabel,
   statusLabel,
   suggestedStage,
 } from '@/lib/production';
@@ -175,6 +177,10 @@ export default function Production() {
     const o = searchParams.get('origin');
     return o === 'forecast' || o === 'style' ? o : '';
   });
+  const [typeFilter, setTypeFilter] = useState<ProductionType | ''>(() => {
+    const v = searchParams.get('type');
+    return v === 'low_moq' || v === 'bulk' ? v : '';
+  });
   // Brand: '' = all · 'own' = Nowi's own goods (no brand) · a brand id as a string.
   const [brandFilter, setBrandFilter] = useState(() => {
     const b = searchParams.get('brand') ?? '';
@@ -190,6 +196,7 @@ export default function Production() {
       tab,
       status: statusFilter,
       origin: originFilter,
+      type: typeFilter,
       brand: brandFilter,
       q: debouncedSearch.trim(),
     };
@@ -204,6 +211,7 @@ export default function Production() {
     tab,
     statusFilter,
     originFilter,
+    typeFilter,
     brandFilter,
     debouncedSearch,
     searchParams,
@@ -259,6 +267,7 @@ export default function Production() {
     tab,
     statusFilter,
     originFilter,
+    typeFilter,
     brandFilter,
     search: debouncedSearch,
     from: dateFrom,
@@ -268,6 +277,7 @@ export default function Production() {
     tab,
     statusFilter,
     originFilter,
+    typeFilter,
     brandFilter,
     search: debouncedSearch,
     from: dateFrom,
@@ -290,6 +300,7 @@ export default function Production() {
       tab: f.tab === 'to_start' || f.tab === 'parked' ? undefined : f.tab,
       status: f.statusFilter || undefined,
       origin: f.originFilter || undefined,
+      productionType: f.typeFilter || undefined,
       brand: f.brandFilter || undefined,
       search: f.search || undefined,
       ...entryWindow(f.from, f.to),
@@ -325,6 +336,7 @@ export default function Production() {
         tab,
         status: statusFilter || undefined,
         origin: originFilter || undefined,
+        productionType: typeFilter || undefined,
         brand: brandFilter || undefined,
         search: debouncedSearch || undefined,
         ...entryWindow(dateFrom, dateTo),
@@ -339,7 +351,7 @@ export default function Production() {
         kpis: res.kpis,
       };
     },
-    [tab, debouncedSearch, statusFilter, originFilter, brandFilter, dateFrom, dateTo],
+    [tab, debouncedSearch, statusFilter, originFilter, typeFilter, brandFilter, dateFrom, dateTo],
   );
 
   const reqRef = useRef(0);
@@ -703,6 +715,18 @@ export default function Production() {
               <option value="style">
                 {t('admin.production.originStyle', { defaultValue: 'From style' })}
               </option>
+            </select>
+            <select
+              value={typeFilter}
+              onChange={(e) => setTypeFilter(e.target.value as ProductionType | '')}
+              className={RAIL_SELECT_CLASS}
+              aria-label={t('admin.production.type.label', { defaultValue: 'Run type' })}
+            >
+              <option value="">
+                {t('admin.production.type.all', { defaultValue: 'Type: All' })}
+              </option>
+              <option value="low_moq">{productionTypeLabel(t, 'low_moq')}</option>
+              <option value="bulk">{productionTypeLabel(t, 'bulk')}</option>
             </select>
             <select
               value={brandFilter}
@@ -1494,6 +1518,12 @@ function BatchTable({
                 />
                 {b.colourName}
               </span>
+            )}
+            {/* Bulk is the default, so only the exception is tagged. */}
+            {b.productionType === 'low_moq' && (
+              <Badge variant="outline" className="mt-1 text-[10px]">
+                {productionTypeLabel(t, 'low_moq')}
+              </Badge>
             )}
           </div>
         );

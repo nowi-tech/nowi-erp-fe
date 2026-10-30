@@ -75,6 +75,7 @@ import StartProductionDialog, {
 } from '@/components/production/StartProductionDialog';
 import { useDebounced } from '@/lib/useDebounced';
 import { formatStyleRef } from '@/lib/styleRef';
+import { sourceKind, sourceLabel } from '@/lib/styleSource';
 
 /**
  * Self-contained Home content surface — the per-style "Styles in flight"
@@ -1432,11 +1433,31 @@ export default function StylesInFlightTable({
       ),
   };
 
-  // Default grammar (All · Needs attention · Draft): IMG · Style/Name ·
+  // Where the style came from; anything but our own sampling is highlighted.
+  const typeColumn: QueueColumn<DashboardStyleRow> = {
+    key: 'type',
+    header: t('dashboard.table.columns.type', { defaultValue: 'Type' }),
+    width: '128px',
+    cell: (row) => {
+      const kind = sourceKind({ source: row.source, brandId: row.brand?.id });
+      return (
+        <Badge
+          variant={kind === 'sampling' ? 'secondary' : 'stitch'}
+          className="text-[10px]"
+          title={row.brand?.name}
+        >
+          {sourceLabel(t, kind)}
+        </Badge>
+      );
+    },
+  };
+
+  // Default grammar (All · Needs attention · Draft): IMG · Style/Name · Type ·
   // Collection · Colour · Status · Metrics — same shared cells as every other tab.
   const defaultColumns: QueueColumn<DashboardStyleRow>[] = [
     imgColumn,
     styleNameColumn,
+    typeColumn,
     collectionColumn,
     colourColumn,
     statusColumn,
@@ -1520,6 +1541,7 @@ export default function StylesInFlightTable({
   const samplingColumns: QueueColumn<DashboardStyleRow>[] = [
     imgColumn,
     styleNameColumn,
+    typeColumn,
     collectionColumn,
     colourColumn,
     stageColumn,
@@ -1535,6 +1557,7 @@ export default function StylesInFlightTable({
   const cataloguingColumns: QueueColumn<DashboardStyleRow>[] = [
     imgColumn,
     styleNameColumn,
+    typeColumn,
     collectionColumn,
     colourColumn,
     statusColumn,
@@ -1550,6 +1573,7 @@ export default function StylesInFlightTable({
   const liveColumns: QueueColumn<DashboardStyleRow>[] = [
     imgColumn,
     styleNameColumn,
+    typeColumn,
     collectionColumn,
     colourColumn,
     statusColumn,
@@ -1799,6 +1823,8 @@ export default function StylesInFlightTable({
         open={sampleApproveTarget !== null}
         busy={sampleApproveBusy}
         costPrice={sampleApproveTarget?.costPrice ?? null}
+        styleId={sampleApproveTarget?.id ?? null}
+        image={sampleApproveTarget?.thumbnail ?? null}
         onClose={() =>
           sampleApproveBusy ? undefined : setSampleApproveTarget(null)
         }

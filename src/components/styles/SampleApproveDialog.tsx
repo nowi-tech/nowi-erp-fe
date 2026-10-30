@@ -1,11 +1,16 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { CheckCircle2 } from 'lucide-react';
 import { Dialog } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
+import { useToast } from '@/components/ui/toast';
+import ImageUploadTile from '@/components/shared/ImageUploadTile';
+import { getReadUrls, uploadPhoto } from '@/api/storage';
 import type { SampleApprovalStatus, SampleApproveStyleBody } from '@/api/styles';
+
+const ABSOLUTE = /^(https?:|data:|blob:)/i;
 
 // The sample-verdict options (Approval #2). `approved_for_production` is the
 // only verdict that advances the lifecycle; the others record the verdict and
@@ -27,6 +32,8 @@ export default function SampleApproveDialog({
   open,
   busy,
   costPrice,
+  styleId,
+  image,
   onClose,
   onConfirm,
 }: {
@@ -34,23 +41,86 @@ export default function SampleApproveDialog({
   busy: boolean;
   /** Existing cost price (prefill for re-approval / correction). */
   costPrice?: number | null;
+  /** The style being approved — a replacement image uploads under it. */
+  styleId: number | null;
+  /** Current main image: a signed URL or a GCS object path. */
+  image: string | null;
   onClose: () => void;
   onConfirm: (body: SampleApproveStyleBody) => void;
 }) {
   const { t } = useTranslation();
+  const toast = useToast();
   const [verdict, setVerdict] = useState<SampleApprovalStatus>(
     'approved_for_production',
   );
   const [note, setNote] = useState('');
   const [cost, setCost] = useState('');
+  // null = not answered yet; false = replace it.
+  const [imageFinal, setImageFinal] = useState<boolean | null>(null);
+  const [current, setCurrent] = useState<string | null>(null);
+  const [newImagePath, setNewImagePath] = useState('');
+  const [newPreview, setNewPreview] = useState('');
+  const [uploading, setUploading] = useState(false);
+  // Bumped on every reset, so an upload that finishes after it can't land on another style.
+  const uploadSeq = useRef(0);
 
   useEffect(() => {
     if (open) {
+      uploadSeq.current += 1;
+      setUploading(false);
       setVerdict('approved_for_production');
       setNote('');
       setCost(costPrice != null ? String(costPrice) : '');
+      setImageFinal(image ? null : false);
+      setNewImagePath('');
+      setNewPreview('');
     }
-  }, [open, costPrice]);
+  }, [open, costPrice, image]);
+
+  // Show the current image whether we were handed a URL or a storage path.
+  useEffect(() => {
+    let live = true;
+    if (!open || !image) setCurrent(null);
+    else if (ABSOLUTE.test(image)) setCurrent(image);
+    else
+      void getReadUrls([image])
+        .then((m) => {
+          if (!live) return;
+          setCurrent(m[image] ?? null);
+          if (!m[image]) setImageFinal(false);
+        })
+        .catch(() => {
+          if (!live) return;
+          setCurrent(null);
+          setImageFinal(false);
+        });
+    return () => {
+      live = false;
+    };
+  }, [open, image]);
+
+  const onImageFile = (file: File | undefined) => {
+    if (!file || styleId == null) return;
+    const seq = ++uploadSeq.current;
+    setUploading(true);
+    setNewPreview(URL.createObjectURL(file));
+    void uploadPhoto('style', styleId, file)
+      .then(({ objectPath }) => {
+        if (seq === uploadSeq.current) setNewImagePath(objectPath);
+      })
+      .catch(() => {
+        if (seq !== uploadSeq.current) return;
+        setNewPreview('');
+        setNewImagePath('');
+        toast.show(
+          t('admin.production.intake.imageFailed', { defaultValue: "Couldn't upload that image." }),
+          'error',
+        );
+      })
+      .finally(() => {
+        if (seq === uploadSeq.current) setUploading(false);
+      });
+  };
 
   // Only the advancing verdict actually approves the sample — cost is required
   // then (an approved sample must carry its cost). Rework verdicts may omit it.
@@ -58,27 +128,30 @@ export default function SampleApproveDialog({
   const costNum = cost.trim() ? Number(cost) : NaN;
   const costValid = Number.isFinite(costNum) && costNum > 0;
   const costMissing = advancing && !costValid;
+  const imageMissing = advancing && !(imageFinal === true || newImagePath);
 
   return (
     <Dialog
       open={open}
-      onClose={onClose}
+      onClose={uploading ? () => undefined : onClose}
       title={t('admin.styles.approval2.dialogTitle', {
         defaultValue: 'Approve sample',
       })}
       footer={
         <>
-          <Button variant="outline" size="sm" disabled={busy} onClick={onClose}>
+          <Button variant="outline" size="sm" disabled={busy || uploading} onClick={onClose}>
             {t('admin.styles.approval2.cancel', { defaultValue: 'Cancel' })}
           </Button>
           <Button
             size="sm"
-            disabled={busy || costMissing}
+            disabled={busy || uploading || costMissing || imageMissing}
             onClick={() =>
               onConfirm({
                 sampleApproval: verdict,
                 note: note.trim() || undefined,
                 costPrice: costValid ? costNum : undefined,
+                ...(advancing && imageFinal === true ? { imageConfirmed: true } : {}),
+                ...(advancing && imageFinal === false && newImagePath ? { newImagePath } : {}),
               })
             }
           >
@@ -119,6 +192,54 @@ export default function SampleApproveDialog({
             ))}
           </select>
         </div>
+        {advancing && (
+          <div>
+            <label className="block text-xs text-[var(--color-muted-foreground)] mb-1">
+              {current
+                ? t('admin.styles.approval2.imageQuestion', { defaultValue: 'Is this the final image?' })
+                : t('admin.styles.approval2.imageUpload', { defaultValue: 'Upload the final image' })}
+              <span className="text-[var(--color-destructive)]"> *</span>
+            </label>
+            {current && (
+              <div className="flex items-center gap-3">
+                <img
+                  src={current}
+                  // An image that won't load can't be confirmed — ask for an upload instead.
+                  onError={() => {
+                    setCurrent(null);
+                    setImageFinal(false);
+                  }}
+                  alt=""
+                  className="h-20 w-20 shrink-0 rounded-[var(--radius-sm)] object-cover"
+                />
+                <Button
+                  size="sm"
+                  variant={imageFinal === true ? 'default' : 'outline'}
+                  onClick={() => setImageFinal(true)}
+                >
+                  {t('common.yes', { defaultValue: 'Yes' })}
+                </Button>
+                <Button
+                  size="sm"
+                  variant={imageFinal === false ? 'default' : 'outline'}
+                  onClick={() => setImageFinal(false)}
+                >
+                  {t('common.no', { defaultValue: 'No' })}
+                </Button>
+              </div>
+            )}
+            {imageFinal === false && (
+              <div className={current ? 'mt-3' : undefined}>
+                <ImageUploadTile
+                  preview={newPreview}
+                  uploading={uploading}
+                  onFile={onImageFile}
+                  disabled={styleId == null}
+                />
+              </div>
+            )}
+          </div>
+        )}
         {/* Cost price — required to approve (the advancing verdict). For a
             rework verdict it's optional context. */}
         <div>

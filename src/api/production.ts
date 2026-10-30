@@ -6,6 +6,7 @@ import type { StyleLifecycle } from './types';
 /** Why the batch exists. Decides whether `suggestedQty` means anything, and
  *  whether the batch reconciles against the forecast at all. */
 export type BatchOrigin = 'forecast' | 'style' | 'external';
+export type ProductionType = 'low_moq' | 'bulk';
 
 /**
  * Ordered production pipeline. A batch opens at `planning` (pre-floor staging)
@@ -78,6 +79,7 @@ export interface ProductionBatch {
   /** Is the fabric sorted? null = nobody has said yet. Editable on Pipeline
    *  only; `not_available` blocks send-to-production. */
   fabricStatus: FabricStatus | null;
+  productionType: ProductionType;
   colourName: string | null;
   colourHex: string | null;
   /** Tailor the lot went to the floor with; their code is inside `batchNo`. */
@@ -163,6 +165,7 @@ export interface ListBatchesParams {
   tab?: ProductionTab;
   status?: BatchStatus;
   origin?: BatchOrigin;
+  productionType?: ProductionType;
   /** `own` = Nowi's own batches (no brand) · a brand id as a string = that label. */
   brand?: string;
   search?: string;
@@ -178,6 +181,7 @@ export function getBatches(params: ListBatchesParams = {}): Promise<ListBatchesR
   if (params.tab) q.tab = params.tab;
   if (params.status) q.status = params.status;
   if (params.origin) q.origin = params.origin;
+  if (params.productionType) q.productionType = params.productionType;
   if (params.brand) q.brand = params.brand;
   if (params.search) q.search = params.search;
   if (params.from) q.from = params.from;
@@ -251,8 +255,10 @@ export interface CreateBatchBody {
   externalSku?: string;
   /** Colour master FK — REQUIRED on an external (brand) batch. */
   colourId?: number;
-  /** Uploaded image (GCS object path) for an external batch. */
+  /** Uploaded image (GCS object path) — required on an external batch. */
   imagePath?: string;
+  /** Asked when starting from a Nowi style; BE stores `bulk` when absent. */
+  productionType?: ProductionType;
   /** Skip Planning and open on the floor (cutting); stamps both timestamps. */
   directToProduction?: boolean;
   /** Tailor for a lot opening straight on the floor — their short code becomes
@@ -312,6 +318,20 @@ export function setFabricStatus(
 ): Promise<ProductionBatch> {
   return apiClient
     .patch<ProductionBatch>(`/api/production/batches/${id}/fabric-status`, { fabricStatus })
+    .then((r) => r.data);
+}
+
+/** Switch a Nowi-style lot between Low MOQ and Bulk. */
+export function setProductionType(id: number, productionType: ProductionType): Promise<ProductionBatch> {
+  return apiClient
+    .patch<ProductionBatch>(`/api/production/batches/${id}/production-type`, { productionType })
+    .then((r) => r.data);
+}
+
+/** Replace a brand (external) lot's own image. */
+export function setBatchImage(id: number, imagePath: string): Promise<ProductionBatch> {
+  return apiClient
+    .patch<ProductionBatch>(`/api/production/batches/${id}/image`, { imagePath })
     .then((r) => r.data);
 }
 

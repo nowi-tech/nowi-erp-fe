@@ -104,8 +104,7 @@ export type CreateStyleRequest = Partial<
   basedOnStyleId?: number;
   /** …or by entering its minted style code (BE resolves to the id). */
   basedOnStyleCode?: string;
-  /** 3rd-party fork: the partner's own style code, stored verbatim as the
-   *  Style # (sent with source='third_party'; no NOWI minting). */
+  /** Own Style # for the 3rd-party forks, kept verbatim; omit it to mint one at Approval #1. */
   thirdPartyStyleId?: string;
 };
 
@@ -290,6 +289,9 @@ export interface SampleApproveStyleBody {
   /** Per-style cost price. Required by the BE when the verdict advances the
    *  lifecycle (an approved sample must carry its cost). */
   costPrice?: number;
+  /** Approving needs one: the current main image confirmed, or a new upload. */
+  imageConfirmed?: boolean;
+  newImagePath?: string;
 }
 
 export async function approveStyle(
