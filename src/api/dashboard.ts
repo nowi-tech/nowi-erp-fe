@@ -50,6 +50,8 @@ export interface DashboardStyleRow {
   primaryColour: string | null;
   thumbnail: string | null;
   source: StyleSource;
+  /** Whose label it carries — the two 3rd-party paths. */
+  brand: { id: number; name: string } | null;
   lifecycle: StyleLifecycle;
   /** Raw enum value (coarse) — meaningful while in_sampling. */
   samplingStatus: string | null;

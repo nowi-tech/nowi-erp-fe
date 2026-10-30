@@ -69,6 +69,7 @@ import { cn } from '@/lib/utils';
 import { POST_SAMPLING, formatStyleRef } from '@/lib/styleRef';
 import GoLiveDialog from '@/components/styles/GoLiveDialog';
 import SampleApproveDialog from '@/components/styles/SampleApproveDialog';
+import { isThirdPartyKind, sourceKind, sourceLabel } from '@/lib/styleSource';
 
 // Roles allowed to add a new colour (spawn a sibling submission). Adding a
 // colour is a CREATE-flavoured action — colourways are finished-goods /
@@ -360,28 +361,16 @@ export default function StyleWorkspace() {
   // China Import is a simple single-approval flow — no sampling stage,
   // no Approval #2, no inspections. Sampling-only UI is hidden for it.
   const isChinaImport = style.source === 'china_import';
-  // 3rd-party finished goods — surface the source as a headline badge (like
-  // China Import) so it's obvious the Style # is a partner code, not minted.
-  const isThirdParty = style.source === 'third_party';
-  // Manufactured by a 3rd party — like China Import, the source IS the story
-  // (skips sampling, minted Style #), so surface it as a headline badge too.
-  const isThirdPartyMfg = style.source === 'third_party_manufactured';
-  // Imported / partner *finished goods* — a single-approval flow with no
-  // sampling phase (china = NW-minted, 3rd-party = verbatim partner code).
-  // Used only for the sampling-skip below; colour fan-out is gated separately
-  // (3rd-party CAN fan out colours — each carries the partner's own code —
-  // China Import can't).
-  const isFinishedGoodsSource = isChinaImport || isThirdParty;
+  // Bought in skips sampling, like China Import.
+  const isThirdParty = style.source === 'third_party_manufactured';
   // Whether this style passes through the sampling phase at all. Mirrors the BE
   // `skipSampling` predicate (styles-actions.service): finished-goods sources,
   // colour variants (familyCode), based-on rows, and relives (oldStyleId) all
   // require Approval #1 but then land straight at sample_approved — no
   // in_sampling stage, so no stepper band and no Approval #2.
   const skipsSampling =
-    isFinishedGoodsSource ||
-    // Manufactured by a 3rd party: minted Style # (so not a finished-goods
-    // partner code), but still skips the sampling phase like the BE does.
-    style.source === 'third_party_manufactured' ||
+    isChinaImport ||
+    isThirdParty ||
     style.familyCode != null ||
     style.basedOnStyleId != null ||
     style.oldStyleId != null;
@@ -438,7 +427,8 @@ export default function StyleWorkspace() {
     style.lifecycle !== 'archived' &&
     (isAdmin || (inSamplingPhase && isApprover));
   const canRevive = style.lifecycle === 'parked';
-  const sourceLabel = t(`admin.styles.source.${style.source}`);
+  const kind = sourceKind(style);
+  const sourceText = sourceLabel(t, kind);
 
   // "Approve sample" is the primary action while a style is in sampling.
   const canSampleApproveAction = canSampleApprove;
@@ -552,6 +542,12 @@ export default function StyleWorkspace() {
             value={style.category?.name ?? style.categoryCode ?? '—'}
           />
           <SpecRow label="Collection" value={style.collection?.name ?? '—'} />
+          {isThirdPartyKind(kind) && (
+            <SpecRow
+              label={t('admin.styles.intake.fork.brandLabel')}
+              value={style.brand?.name ?? '—'}
+            />
+          )}
           <SpecRow
             label="Fabric"
             value={
@@ -790,8 +786,8 @@ export default function StyleWorkspace() {
             {/* For China Import styles the source IS the story — surface it.
                 For sampling styles the NOWI prefix already implies source,
                 so the source chip is redundant and we omit it. */}
-            {(isChinaImport || isThirdParty || isThirdPartyMfg) && (
-              <Badge variant="stitch">{sourceLabel}</Badge>
+            {(isChinaImport || isThirdPartyKind(kind)) && (
+              <Badge variant="stitch">{sourceText}</Badge>
             )}
             <Badge variant={isProductionLayout ? 'ready' : 'secondary'}>
               {lifecycleLabel}

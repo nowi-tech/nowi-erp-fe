@@ -5,6 +5,7 @@ import { Button } from '@/components/ui/button';
 import { Dialog } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { Select } from '@/components/ui/select';
 import { useToast } from '@/components/ui/toast';
 
 import GenderSelect from '@/components/styles/intake/GenderSelect';
@@ -22,6 +23,8 @@ import {
 import { listFabrics, patchStyle } from '@/api/styles';
 import { listCategories } from '@/api/categories';
 import { listCollections } from '@/api/collections';
+import { getBrands } from '@/api/brands';
+import { isThirdPartyKind, sourceKind } from '@/lib/styleSource';
 import type {
   CategoryWithStyleCode,
   Collection,
@@ -83,6 +86,8 @@ interface CoreSpecsState {
   categoryCode: FineCategoryCode | string | null;
   collectionId: number | null;
   fabricId: number | null;
+  /** Whose label it carries — 3rd-party styles only. */
+  brandId: number | null;
   primaryColour: string;
   /** Days, kept as a string so an empty input distinguishes from `0`. */
   samplingTimeline: string;
@@ -104,6 +109,7 @@ function buildCoreSpecsState(style: Style): CoreSpecsState {
       GENDER_CATEGORIES[gender][0],
     collectionId: style.collectionId ?? null,
     fabricId: style.fabricId ?? null,
+    brandId: style.brandId ?? null,
     primaryColour: style.primaryColour ?? '',
     samplingTimeline:
       style.samplingTimeline && /^\d+$/.test(style.samplingTimeline.trim())
@@ -139,6 +145,7 @@ export function CoreSpecsEditModal({
   const [fabrics, setFabrics] = useState<Fabric[]>(fabricsProp ?? []);
   const [categories, setCategories] = useState<CategoryWithStyleCode[]>([]);
   const [collections, setCollections] = useState<Collection[]>([]);
+  const [brands, setBrands] = useState<{ id: number; name: string }[]>([]);
   const [saving, setSaving] = useState(false);
   const [err, setErr] = useState<string | null>(null);
 
@@ -169,7 +176,12 @@ export function CoreSpecsEditModal({
         .then(setCollections)
         .catch(() => setCollections([]));
     }
-  }, [open, fabrics.length, categories.length, collections.length]);
+    if (brands.length === 0) {
+      void getBrands()
+        .then((rows) => setBrands(rows.filter((b) => b.isActive || b.id === style.brandId)))
+        .catch(() => setBrands([]));
+    }
+  }, [open, fabrics.length, categories.length, collections.length, brands.length]);
 
   // Gender is a free attribute — switching it never disturbs the chosen
   // category. The same Category row maps to a gender-appropriate
@@ -203,6 +215,7 @@ export function CoreSpecsEditModal({
         // is required) rather than blocking a core-specs save.
         collectionId: form.collectionId ?? undefined,
         fabricId: form.fabricId,
+        brandId: form.brandId,
         primaryColour: form.primaryColour.trim() || null,
         samplingTimeline: form.samplingTimeline.trim() || null,
         referenceLink: form.referenceLink.trim() || null,
@@ -308,6 +321,30 @@ export function CoreSpecsEditModal({
             onCollectionCreated={(c) => setCollections([...collections, c])}
           />
         </div>
+        {isThirdPartyKind(sourceKind(style)) && (
+          <div>
+            <Label>{t('admin.styles.intake.fork.brandLabel')}</Label>
+            <Select
+              value={form.brandId == null ? '' : String(form.brandId)}
+              onChange={(e) =>
+                setForm((f) => ({
+                  ...f,
+                  brandId: e.target.value ? Number(e.target.value) : null,
+                }))
+              }
+            >
+              {/* A set brand can be changed, not cleared. */}
+              {style.brandId == null && (
+                <option value="">{t('admin.styles.intake.fork.brandNone')}</option>
+              )}
+              {brands.map((f) => (
+                <option key={f.id} value={f.id}>
+                  {f.name}
+                </option>
+              ))}
+            </Select>
+          </div>
+        )}
         <div>
           <Label>{t('admin.styles.intake.fabric')}</Label>
           <FabricPicker

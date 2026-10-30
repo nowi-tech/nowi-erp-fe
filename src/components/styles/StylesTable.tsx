@@ -22,6 +22,7 @@ import { patchStyle } from '@/api/styles';
 import type { Style } from '@/api/types';
 import { cn } from '@/lib/utils';
 import { formatStyleRef } from '@/lib/styleRef';
+import { sourceKind, sourceLabel } from '@/lib/styleSource';
 
 // Enum option labels — mirror the BE Prisma enums and the same set the
 // approval dialogs + SampleStateCard already use. Kept here so the
@@ -177,6 +178,15 @@ function StyleTypePill({ style }: { style: Style }) {
           code: ref ?? '—',
           defaultValue: `Relive of ${ref ?? '—'}`,
         })}
+      </Badge>
+    );
+  }
+  // Not our own sampling (China Import, Bought in, Made for a brand…): name the source.
+  const source = sourceKind(style);
+  if (source !== 'sampling') {
+    return (
+      <Badge variant="default" className="text-[10px]" title={style.brand?.name}>
+        {sourceLabel(t, source)}
       </Badge>
     );
   }
