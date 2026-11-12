@@ -1,12 +1,12 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Plus, Trash2, ImagePlus, X } from 'lucide-react';
+import { ChevronDown, ChevronRight, Plus, Trash2, ImagePlus, X } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Dialog } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Select } from '@/components/ui/select';
 import { useToast } from '@/components/ui/toast';
+import { apiErrorMessage } from '@/api/apiClient';
 import {
   createFabric,
   patchFabric,
@@ -18,11 +18,6 @@ import { useSignedUrls } from '@/hooks/useSignedUrls';
 import type { Colour, Fabric, FabricUnitOfMeasure } from '@/api/types';
 import { cn } from '@/lib/utils';
 
-const UOM_SHORT: Record<FabricUnitOfMeasure, string> = {
-  meter: 'm',
-  kg: 'kg',
-  oz: 'oz',
-};
 
 /** CSS colour for a swatch dot: explicit hex, else the lowercased name
  *  (CSS resolves common names like "navy" / "teal"). */
@@ -53,9 +48,7 @@ interface Props {
    *  in the intake's "+ Add fabric" picker). Ignored when `editing`
    *  is set. */
   initialName?: string;
-  /** Optional UoM prefill for create mode. Intake quick-add defaults
-   *  to 'meter' so the most common path is one fewer click; Library
-   *  leaves it blank to force an explicit choice. */
+  /** UoM prefill for create mode; metre when omitted. */
   initialUnitOfMeasure?: FabricUnitOfMeasure;
   /** Trim trailing whitespace from `notes` on submit. Intake quick-add
    *  needs this so paste-and-go doesn't store whitespace; Library
@@ -67,14 +60,16 @@ interface Props {
   onCancel: () => void;
   /** Toast on success. Defaults to localised "Updated." / "Added." */
   successMessage?: string;
+  /** Fabrics already in the library — warns when the name repeats one. */
+  existing?: Fabric[];
+  /** Shows "Create and order" on a new fabric; called instead of onSaved. */
+  onSavedAndOrder?: (fabric: Fabric) => void;
 }
 
 /**
- * Single fabric editor form — used by both the Fabric Library page and
- * the intake's FabricPicker "+ Add fabric" picker. Captures every
- * field the BE accepts (name, gsm, cuttableWidth,
- * unitOfMeasure, pricePerUnit, notes) plus a composition row editor
- * that validates against the sum-to-100 rule.
+ * Single fabric editor form — used by the Fabric Library, the fabric page and
+ * the intake's FabricPicker "+ Add fabric". Name, unit and colours up front;
+ * GSM, width, composition (sum-to-100), image and notes fold under More details.
  *
  * The form manages its own state and call the relevant API
  * (`createFabric` / `patchFabric`); the caller only provides the
@@ -88,6 +83,8 @@ export default function FabricEditorForm({
   onSaved,
   onCancel,
   successMessage,
+  existing,
+  onSavedAndOrder,
 }: Props) {
   const { t } = useTranslation();
   const toast = useToast();
@@ -100,16 +97,29 @@ export default function FabricEditorForm({
 
   const [form, setForm] = useState(() => ({
     name: editing?.name ?? initialName ?? '',
-    pricePerUnit: editing?.pricePerUnit ?? '',
     imagePath: editing?.imagePath ?? '',
     notes: editing?.notes ?? '',
     gsm: editing?.gsm != null ? String(editing.gsm) : '',
     cuttableWidth:
       editing?.cuttableWidth != null ? String(editing.cuttableWidth) : '',
-    unitOfMeasure: (editing?.unitOfMeasure ?? initialUnitOfMeasure ?? '') as
+    // Every quantity is read in this unit, so a new fabric starts on metre.
+    unitOfMeasure: (editing?.id ? editing.unitOfMeasure ?? '' : initialUnitOfMeasure ?? 'meter') as
       | ''
       | FabricUnitOfMeasure,
   }));
+  // GSM, width, composition, image and notes — folded until someone needs them.
+  const [detailsOpen, setDetailsOpen] = useState(
+    () =>
+      !!editing?.id &&
+      !!(editing.gsm != null || editing.cuttableWidth != null || editing.imagePath || editing.notes || editing.compositions?.length),
+  );
+
+  // Same name ignoring case and spacing — allowed on purpose, but usually a slip.
+  const normName = (n: string) => n.toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
+  const sameName =
+    form.name.trim() === ''
+      ? undefined
+      : existing?.find((f) => f.id !== editing?.id && normName(f.name) === normName(form.name));
 
   // ── Representative image (parent fabric) ──────────────────────────
   const [uploadingImage, setUploadingImage] = useState(false);
@@ -170,6 +180,17 @@ export default function FabricEditorForm({
       mounted = false;
     };
   }, []);
+
+  // A colour with stock, an open order or lots waiting on it can't be dropped (the server refuses too).
+  const lockedColourIds = useMemo(
+    () =>
+      new Set(
+        (editing?.colours ?? [])
+          .filter((c) => (c.availableQuantity ?? 0) > 0 || (c.onOrderQuantity ?? 0) > 0 || (c.heldQuantity ?? 0) > 0)
+          .map((c) => c.colourId),
+      ),
+    [editing],
+  );
 
   const toggleColour = (id: number) =>
     setSelectedColourIds((prev) => {
@@ -254,8 +275,8 @@ export default function FabricEditorForm({
     (r) => r.fibre.trim().toLowerCase() === 'other',
   );
 
-  const submit = async () => {
-    if (!form.name.trim()) return;
+  const submit = async (andOrder = false) => {
+    if (!form.name.trim() || !form.unitOfMeasure) return;
 
     // Composition validation — mirror the backend 400 so the user
     // gets a sensible error before the round-trip.
@@ -301,12 +322,11 @@ export default function FabricEditorForm({
     try {
       const payload = {
         name: form.name.trim(),
-        pricePerUnit: form.pricePerUnit || null,
         imagePath: form.imagePath || null,
         notes: (trimNotes ? form.notes.trim() : form.notes) || null,
         gsm: form.gsm ? Number(form.gsm) : null,
         cuttableWidth: form.cuttableWidth || null,
-        unitOfMeasure: form.unitOfMeasure || null,
+        unitOfMeasure: form.unitOfMeasure,
         compositions: comp.map((r) => ({
           fibre: r.fibre.trim(),
           percent: Number(r.percent),
@@ -324,15 +344,13 @@ export default function FabricEditorForm({
             : t('admin.fabricLibrary.addedToast', { defaultValue: 'Added.' })),
         'success',
       );
-      onSaved(saved);
+      if (andOrder && onSavedAndOrder) onSavedAndOrder(saved);
+      else onSaved(saved);
     } catch (e: unknown) {
-      const m =
-        (e as { response?: { data?: { message?: string | string[] } } })
-          ?.response?.data?.message ??
-        t('admin.fabricLibrary.addError', {
-          defaultValue: 'Could not save fabric.',
-        });
-      toast.show(Array.isArray(m) ? m.join(', ') : String(m), 'error');
+      toast.show(
+        apiErrorMessage(e) ?? t('admin.fabricLibrary.addError', { defaultValue: 'Could not save fabric.' }),
+        'error',
+      );
     } finally {
       setSaving(false);
     }
@@ -348,8 +366,136 @@ export default function FabricEditorForm({
           onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))}
           autoFocus
         />
+        {sameName && (
+          <p className="mt-1 text-xs text-[var(--status-rework-ink)]">
+            {t('admin.fabricLibrary.form.sameName', {
+              defaultValue: '“{{name}}” ({{code}}) already exists — add a colour to it instead?',
+              name: sameName.name,
+              code: sameName.code ?? '—',
+            })}
+          </p>
+        )}
       </div>
 
+      <div>
+        <Label>{t('admin.fabricLibrary.form.unitOfMeasure')} *</Label>
+        <div className="flex gap-2">
+          {(['meter', 'kg', ...(form.unitOfMeasure === 'oz' ? ['oz'] : [])] as FabricUnitOfMeasure[]).map((u) => (
+            <button
+              key={u}
+              type="button"
+              aria-pressed={form.unitOfMeasure === u}
+              onClick={() => setForm((f) => ({ ...f, unitOfMeasure: u }))}
+              className={cn(
+                'h-9 rounded-md border px-4 text-[13px] font-medium transition-colors',
+                form.unitOfMeasure === u
+                  ? 'border-[var(--color-primary)] bg-[var(--color-primary)]/10 text-[var(--color-primary)]'
+                  : 'border-[var(--color-border)] hover:bg-[var(--color-muted)]',
+              )}
+            >
+              {t(`admin.fabricLibrary.uom.${u}`)}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {/* Colours this fabric is stocked in — drives per-colour stock and
+          constrains the variant colour picker. */}
+      <div className="border border-[var(--color-border)] rounded-[var(--radius-sm)] p-2.5 space-y-2">
+        <div className="flex items-center justify-between">
+          <Label className="mb-0">
+            {t('admin.fabricLibrary.colours.title', {
+              defaultValue: 'Colours stocked',
+            })}{' '}
+            *
+          </Label>
+          <span className="text-xs tabular-nums text-[var(--color-muted-foreground)]">
+            {t('admin.fabricLibrary.colours.count', {
+              defaultValue: '{{n}} selected',
+              n: selectedColourIds.size,
+            })}
+          </span>
+        </div>
+        <Input
+          className="h-8 text-[13px]"
+          placeholder={t('admin.fabricLibrary.colours.search', {
+            defaultValue: 'Search colours…',
+          })}
+          value={colourQuery}
+          onChange={(e) => setColourQuery(e.target.value)}
+        />
+        <div className="flex flex-wrap gap-1.5 max-h-40 overflow-y-auto">
+          {filteredColours.map((c) => {
+            const on = selectedColourIds.has(c.id);
+            return (
+              <button
+                key={c.id}
+                type="button"
+                onClick={() => toggleColour(c.id)}
+                aria-pressed={on}
+                disabled={on && lockedColourIds.has(c.id)}
+                className={cn(
+                  'inline-flex items-center gap-1.5 rounded-full border px-2 py-1 text-[12px] transition-colors disabled:cursor-not-allowed',
+                  on
+                    ? 'border-[var(--color-primary)] bg-[var(--color-primary)]/10 font-medium'
+                    : 'border-[var(--color-border)] hover:bg-[var(--color-muted)]',
+                )}
+              >
+                <span
+                  className="h-3 w-3 rounded-full border border-black/10"
+                  style={{ backgroundColor: swatchColor(c.hex, c.name) }}
+                />
+                {c.name}
+              </button>
+            );
+          })}
+          {filteredColours.length === 0 && (
+            <span className="text-[12px] text-[var(--color-muted-foreground)] py-1">
+              {t('admin.fabricLibrary.colours.empty', {
+                defaultValue: 'No matching colours.',
+              })}
+            </span>
+          )}
+        </div>
+        <div>
+          <Button
+            type="button"
+            size="sm"
+            variant="outline"
+            onClick={() => {
+              // Prefill from whatever was typed in the search box.
+              setNewColourName(colourQuery.trim());
+              setAddColourOpen(true);
+            }}
+          >
+            <Plus size={13} />
+            <span className="ml-1">
+              {colourQuery.trim()
+                ? t('admin.fabricLibrary.colours.addNamed', {
+                    defaultValue: 'Add "{{name}}"',
+                    name: colourQuery.trim(),
+                  })
+                : t('admin.fabricLibrary.colours.add', {
+                    defaultValue: 'Add colour',
+                  })}
+            </span>
+          </Button>
+        </div>
+      </div>
+
+      <button
+        type="button"
+        onClick={() => setDetailsOpen((o) => !o)}
+        className="inline-flex items-center gap-1 text-[13px] font-medium text-[var(--color-primary)]"
+      >
+        {detailsOpen ? <ChevronDown size={15} /> : <ChevronRight size={15} />}
+        {t('admin.fabricLibrary.form.moreDetails', { defaultValue: 'More details' })}
+        <span className="font-normal text-[var(--color-muted-foreground)]">
+          {t('admin.fabricLibrary.form.moreDetailsWhat', { defaultValue: '(GSM, width, composition, image, notes)' })}
+        </span>
+      </button>
+      {detailsOpen && (
+        <div className="space-y-3">
       {/* ── Representative image ─────────────────────────────────── */}
       <div>
         <Label>
@@ -424,40 +570,6 @@ export default function FabricEditorForm({
             value={form.cuttableWidth}
             onChange={(e) =>
               setForm((f) => ({ ...f, cuttableWidth: e.target.value }))
-            }
-          />
-        </div>
-        <div>
-          <Label>{t('admin.fabricLibrary.form.unitOfMeasure')}</Label>
-          <Select
-            value={form.unitOfMeasure}
-            onChange={(e) =>
-              setForm((f) => ({
-                ...f,
-                unitOfMeasure: e.target.value as '' | FabricUnitOfMeasure,
-              }))
-            }
-          >
-            <option value="">—</option>
-            <option value="meter">{t('admin.fabricLibrary.uom.meter')}</option>
-            <option value="kg">{t('admin.fabricLibrary.uom.kg')}</option>
-            <option value="oz">{t('admin.fabricLibrary.uom.oz')}</option>
-          </Select>
-        </div>
-        <div>
-          <Label>
-            {t('admin.fabricLibrary.form.pricePerUnit')}
-            {form.unitOfMeasure
-              ? ` (₹ / ${UOM_SHORT[form.unitOfMeasure]})`
-              : ' (₹)'}
-          </Label>
-          <Input
-            type="number"
-            min={0}
-            step="0.01"
-            value={form.pricePerUnit}
-            onChange={(e) =>
-              setForm((f) => ({ ...f, pricePerUnit: e.target.value }))
             }
           />
         </div>
@@ -547,94 +659,16 @@ export default function FabricEditorForm({
         )}
       </div>
 
-      {/* Colours this fabric is stocked in — drives per-colour stock and
-          constrains the variant colour picker. */}
-      <div className="border border-[var(--color-border)] rounded-[var(--radius-sm)] p-2.5 space-y-2">
-        <div className="flex items-center justify-between">
-          <Label className="mb-0">
-            {t('admin.fabricLibrary.colours.title', {
-              defaultValue: 'Colours stocked',
-            })}
-          </Label>
-          <span className="text-xs tabular-nums text-[var(--color-muted-foreground)]">
-            {t('admin.fabricLibrary.colours.count', {
-              defaultValue: '{{n}} selected',
-              n: selectedColourIds.size,
-            })}
-          </span>
-        </div>
+      <div>
+        <Label>{t('admin.fabricLibrary.form.notes')}</Label>
         <Input
-          className="h-8 text-[13px]"
-          placeholder={t('admin.fabricLibrary.colours.search', {
-            defaultValue: 'Search colours…',
-          })}
-          value={colourQuery}
-          onChange={(e) => setColourQuery(e.target.value)}
+          value={form.notes}
+          onChange={(e) => setForm((f) => ({ ...f, notes: e.target.value }))}
         />
-        <div className="flex flex-wrap gap-1.5 max-h-40 overflow-y-auto">
-          {filteredColours.map((c) => {
-            const on = selectedColourIds.has(c.id);
-            return (
-              <button
-                key={c.id}
-                type="button"
-                onClick={() => toggleColour(c.id)}
-                aria-pressed={on}
-                className={cn(
-                  'inline-flex items-center gap-1.5 rounded-full border px-2 py-1 text-[12px] transition-colors',
-                  on
-                    ? 'border-[var(--color-primary)] bg-[var(--color-primary)]/10 font-medium'
-                    : 'border-[var(--color-border)] hover:bg-[var(--color-muted)]',
-                )}
-              >
-                <span
-                  className="h-3 w-3 rounded-full border border-black/10"
-                  style={{ backgroundColor: swatchColor(c.hex, c.name) }}
-                />
-                {c.name}
-              </button>
-            );
-          })}
-          {filteredColours.length === 0 && (
-            <span className="text-[12px] text-[var(--color-muted-foreground)] py-1">
-              {t('admin.fabricLibrary.colours.empty', {
-                defaultValue: 'No matching colours.',
-              })}
-            </span>
-          )}
-        </div>
-        <div>
-          <Button
-            type="button"
-            size="sm"
-            variant="outline"
-            onClick={() => {
-              // Prefill from whatever was typed in the search box.
-              setNewColourName(colourQuery.trim());
-              setAddColourOpen(true);
-            }}
-          >
-            <Plus size={13} />
-            <span className="ml-1">
-              {colourQuery.trim()
-                ? t('admin.fabricLibrary.colours.addNamed', {
-                    defaultValue: 'Add "{{name}}"',
-                    name: colourQuery.trim(),
-                  })
-                : t('admin.fabricLibrary.colours.add', {
-                    defaultValue: 'Add colour',
-                  })}
-            </span>
-          </Button>
-        </div>
-        <p className="text-[11px] text-[var(--color-muted-foreground)]">
-          {t('admin.fabricLibrary.colours.help', {
-            defaultValue:
-              'Pick every colour this fabric is procured in. Stock is tracked per colour, and Style variants pick their colour from this list.',
-          })}
-        </p>
       </div>
 
+        </div>
+      )}
       {/* New-colour popup — creates a Colour-master row, then selects it. */}
       <Dialog
         open={addColourOpen}
@@ -698,22 +732,25 @@ export default function FabricEditorForm({
         </div>
       </Dialog>
 
-      <div>
-        <Label>{t('admin.fabricLibrary.form.notes')}</Label>
-        <Input
-          value={form.notes}
-          onChange={(e) => setForm((f) => ({ ...f, notes: e.target.value }))}
-        />
-      </div>
-
       </div>
       <div className="flex justify-end gap-2 pt-3 mt-1 border-t border-[var(--color-border)] shrink-0">
         <Button variant="outline" size="sm" onClick={onCancel}>
           {t('common.cancel', { defaultValue: 'Cancel' })}
         </Button>
+        {onSavedAndOrder && !isEditing && (
+          <Button
+            size="sm"
+            variant="outline"
+            disabled={saving || !form.name.trim() || !form.unitOfMeasure || selectedColourIds.size === 0 || !compValid}
+            onClick={() => void submit(true)}
+          >
+            {t('admin.fabricLibrary.form.createAndOrder', { defaultValue: 'Create and order' })}
+          </Button>
+        )}
         <Button
           size="sm"
-          disabled={saving || !form.name.trim() || !compValid}
+          // A new fabric needs a colour: stock is kept per colour.
+          disabled={saving || !form.name.trim() || !form.unitOfMeasure || (!isEditing && selectedColourIds.size === 0) || !compValid}
           onClick={() => void submit()}
         >
           {saving
