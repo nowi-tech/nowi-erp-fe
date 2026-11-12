@@ -63,6 +63,8 @@ export interface Vendor {
   easyecomEnabled: boolean;
   consumptionApiEnabled: boolean;
   isActive: boolean;
+  /** Production factory (Kotty, Gurukul, …) — the "issued to" list. */
+  isFactory?: boolean;
 }
 
 export interface Sku {
@@ -280,6 +282,17 @@ export interface FabricColour {
   imagePath?: string | null;
   /** Per-(fabric, colour) availability: SUM of stock entries for this colour. */
   availableQuantity?: number;
+  /** The supplier's own code for this shade. */
+  /** Open orders still to arrive (ordered − received). */
+  onOrderQuantity?: number;
+  nextExpectedDate?: string | null;
+  overdueOrders?: number;
+  /** Fabric held by lots still in planning. */
+  heldQuantity?: number;
+  /** "Cut but not in stock" flags waiting for a stock check. */
+  needsReview?: number;
+  /** Used for lots, samples and wastage in the last 30 days, net of returns. */
+  used30d?: number;
 }
 
 export interface Fabric {
@@ -309,7 +322,8 @@ export interface Fabric {
   updatedAt?: string;
 }
 
-export type FabricStockEntryType = 'receipt' | 'consumption' | 'adjustment';
+export type FabricStockEntryType = 'receipt' | 'consumption' | 'adjustment' | 'return';
+export type FabricIssuePurpose = 'production' | 'sample' | 'wastage' | 'other' | 'vendor_return';
 
 export interface FabricStockEntry {
   id: number;
@@ -353,12 +367,19 @@ export interface FabricChallanLineInput {
   /** Rate per unit (₹ / UoM). IN only — refreshes the colour child's price. */
   pricePerUnit?: number | null;
   note?: string | null;
+  /** IN only — the fabric order this line fills. */
+  fabricOrderId?: number | null;
+  /** OUT only — what the issue is for, and the lot or sample it goes to. */
+  purpose?: FabricIssuePurpose | null;
+  productionBatchId?: number | null;
+  styleId?: number | null;
 }
 
 export interface CreateFabricChallanInput {
   /** Movement direction — defaults to `in` on the server when omitted. */
   direction?: FabricChallanDirection;
-  challanNo: string;
+  /** Required on IN; omit on OUT to get an `ISS-00001` slip number. */
+  challanNo?: string;
   /** ISO yyyy-mm-dd (the date printed on the paper challan). */
   challanDate: string;
   /** Vendor id — the structured source; the server names the supplier from it. */
@@ -1084,3 +1105,102 @@ export interface EditDispatchItemPayload {
   reason: string;
   note?: string;
 }
+
+// ── Fabric orders ────────────────────────────────────────────────────────
+
+export type FabricOrderStatus =
+  | 'need_to_order'
+  | 'ordered'
+  | 'dispatched'
+  | 'on_hold'
+  | 'received'
+  | 'cancelled';
+
+export interface FabricOrder {
+  id: number;
+  /** Running number, shown as "PO 12". */
+  orderNo: number;
+  fabricColourId: number | null;
+  fabric: { id: number; name: string; code: string | null; unitOfMeasure: FabricUnitOfMeasure | null } | null;
+  colour: { code: string | null; name: string; hex: string | null; pricePerUnit: number | null } | null;
+  /** What is being sourced when it isn't in the library yet. */
+  itemName: string | null;
+  vendor: { id: number; name: string } | null;
+  quantityOrdered: number;
+  receivedQuantity: number;
+  orderDate: string;
+  expectedDate: string | null;
+  status: FabricOrderStatus;
+  isOverdue: boolean;
+  note: string | null;
+  createdBy: { id: number; name: string } | null;
+  createdAt: string;
+  /** Receipts, plus fabric sent back to the vendor (negative, `sentBack`). */
+  receipts: {
+    entryId: number;
+    quantity: number;
+    sentBack: boolean;
+    note: string | null;
+    challanId: number | null;
+    challanNo: string | null;
+    challanDate: string | null;
+    receivedBy: string | null;
+    createdAt: string;
+  }[];
+}
+
+export interface FabricOrderInput {
+  fabricColourId?: number | null;
+  itemName?: string | null;
+  vendorId?: number | null;
+  quantityOrdered?: number;
+  orderDate?: string;
+  expectedDate?: string | null;
+  status?: FabricOrderStatus;
+  note?: string | null;
+}
+
+// ── Fabric activity ──────────────────────────────────────────────────────
+
+export interface FabricStockActivity {
+  kind: 'stock';
+  id: string;
+  at: string;
+  actor: string | null;
+  entryId: number;
+  entryType: FabricStockEntryType;
+  quantity: number;
+  usedQuantity: number | null;
+  returnedQuantity: number;
+  /** What can still come back on an issue line — the server's own cap. */
+  returnable?: number;
+  purpose: FabricIssuePurpose | null;
+  needsReview: boolean;
+  colour: { id: number; name: string; hex: string | null } | null;
+  challan: {
+    id: number;
+    challanNo: string;
+    direction: FabricChallanDirection;
+    vendor: { id: number; name: string } | null;
+  } | null;
+  lot: { id: number; batchNo: string } | null;
+  style: { id: number; styleId: string | null; workingName: string | null } | null;
+  fabricOrderId: number | null;
+  fabricOrderNo: number | null;
+  note: string | null;
+}
+
+export interface FabricAuditActivity {
+  kind: 'order' | 'edit';
+  id: string;
+  at: string;
+  actor: string | null;
+  action: string;
+  orderId: number | null;
+  orderNo: number | null;
+  before: Record<string, unknown> | null;
+  after: Record<string, unknown> | null;
+  reason: string | null;
+}
+
+export type FabricActivity = FabricStockActivity | FabricAuditActivity;

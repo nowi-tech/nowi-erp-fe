@@ -7,6 +7,19 @@ export async function listVendors(): Promise<Vendor[]> {
   return Array.isArray(res.data) ? res.data : res.data.data;
 }
 
+/** Active vendors, names only — what the fabric desk's pickers can read. */
+export interface VendorOption {
+  id: number;
+  name: string;
+  code: string;
+  isFactory: boolean;
+}
+
+export async function listVendorOptions(): Promise<VendorOption[]> {
+  const res = await apiClient.get<VendorOption[]>('/api/vendors/options');
+  return res.data;
+}
+
 /** Quick-add from a picker — the server mints the code from the name. */
 export async function createVendor(name: string): Promise<Vendor> {
   const res = await apiClient.post<Vendor>('/api/vendors', { name });
