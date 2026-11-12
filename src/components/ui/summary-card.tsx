@@ -28,8 +28,21 @@ export interface SummaryCardProps {
   onClick?: () => void;
   /** Hide the "View →" footer for a card that leads nowhere. */
   hideView?: boolean;
+  /** Alert colouring for a count that needs attention; omit for the plain card. */
+  tone?: 'danger' | 'warning';
   className?: string;
 }
+
+const TONE: Record<NonNullable<SummaryCardProps['tone']>, { card: string; value: string }> = {
+  danger: {
+    card: 'border-[var(--status-stuck-ink)]/30 bg-[var(--status-stuck-bg)]/40',
+    value: 'text-[var(--status-stuck-ink)]',
+  },
+  warning: {
+    card: 'border-[var(--status-rework-ink)]/30 bg-[var(--status-rework-bg)]/40',
+    value: 'text-[var(--status-rework-ink)]',
+  },
+};
 
 const CARD_CLASS =
   'group flex flex-col rounded-[var(--radius-lg)] border border-[var(--color-border)] bg-[var(--color-surface)] p-5 text-left shadow-sm transition-all duration-150 hover:-translate-y-0.5 hover:border-[var(--color-border-strong)] hover:shadow-md focus:outline-none focus-visible:border-[var(--color-primary)] focus-visible:ring-2 focus-visible:ring-[var(--color-primary)]/20';
@@ -41,6 +54,7 @@ export function SummaryCard({
   to,
   onClick,
   hideView,
+  tone,
   className,
 }: SummaryCardProps) {
   const { t } = useTranslation();
@@ -50,7 +64,12 @@ export function SummaryCard({
       <span className="text-[11px] font-bold uppercase tracking-[0.05em] text-[var(--color-muted-foreground)]">
         {label}
       </span>
-      <span className="mt-3 text-[40px] font-bold leading-none tabular-nums text-[var(--color-foreground)]">
+      <span
+        className={cn(
+          'mt-3 text-[40px] font-bold leading-none tabular-nums text-[var(--color-foreground)]',
+          tone && TONE[tone].value,
+        )}
+      >
         {value}
       </span>
       {breakdown && breakdown.length > 0 && (
@@ -84,13 +103,13 @@ export function SummaryCard({
 
   if (to) {
     return (
-      <Link to={to} className={cn(CARD_CLASS, className)}>
+      <Link to={to} className={cn(CARD_CLASS, tone && TONE[tone].card, className)}>
         {body}
       </Link>
     );
   }
   return (
-    <button type="button" onClick={onClick} className={cn(CARD_CLASS, className)}>
+    <button type="button" onClick={onClick} className={cn(CARD_CLASS, tone && TONE[tone].card, className)}>
       {body}
     </button>
   );

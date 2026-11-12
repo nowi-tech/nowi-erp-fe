@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useNavigate, useSearchParams } from 'react-router-dom';
-import { ChevronRight, Factory, Loader2, Search, X } from 'lucide-react';
+import { ChevronRight, Factory, Loader2, Pencil, Search, X } from 'lucide-react';
 import {
   QueueTabs,
   StyleQueueTable,
@@ -24,6 +24,8 @@ import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 import { Skeleton } from '@/components/ui/skeleton';
 import RecordOutputDialog from '@/components/production/RecordOutputDialog';
 import StageQtyDialog from '@/components/production/StageQtyDialog';
+import FabricPlanDialog from '@/components/production/FabricPlanDialog';
+import FabricCheckText from '@/components/production/FabricCheckText';
 import DailyEntryDialog from '@/components/production/DailyEntryDialog';
 import EditPlanDialog from '@/components/production/EditPlanDialog';
 import StartProductionIntakeDialog from '@/components/production/StartProductionIntakeDialog';
@@ -39,11 +41,10 @@ import {
   getBatches,
   parkStyle,
   sendToProduction,
-  setFabricStatus,
+  setTrimsStatus,
   unparkStyle,
   updateLot,
-  FABRIC_STATUSES,
-  type FabricStatus,
+  type TrimsStatus,
   type BatchOrigin,
   type ProductionType,
   type BatchStatus,
@@ -71,11 +72,13 @@ import { useDebounced } from '@/lib/useDebounced';
 import {
   hasAnyRole,
   FABRIC_STATUS_WRITE_ROLES,
+  FABRIC_VIEW_ROLES,
   PRODUCTION_CANCEL_ROLES,
   PRODUCTION_CANCELLED_VIEW_ROLES,
   PRODUCTION_FLOOR_CANCEL_ROLES,
   PRODUCTION_WRITE_ROLES,
 } from '@/lib/userRoles';
+import { cn } from '@/lib/utils';
 import { Select } from '@/components/ui/select';
 
 type Tab = 'to_start' | 'planning' | 'in_production' | 'completed' | 'parked';
@@ -91,14 +94,13 @@ function statusOptions(tab: Tab, canSeeCancelled: boolean): BatchStatus[] {
   ];
 }
 
-/** Fallback labels — the Production page runs on inline defaultValues, not
- *  locale files, so these are the strings unless a key is added later. */
-const FABRIC_LABEL: Record<FabricStatus, string> = {
+/** Fallback labels — the Production page runs on inline defaultValues, not locale files. */
+const TRIMS_LABEL: Record<TrimsStatus, string> = {
   available: 'Available',
   not_available: 'Not available',
   ordered: 'Ordered',
 };
-const FABRIC_TONE: Record<FabricStatus, string> = {
+const TRIMS_TONE: Record<TrimsStatus, string> = {
   available: 'text-emerald-700',
   not_available: 'text-red-700',
   ordered: 'text-amber-700',
@@ -155,6 +157,7 @@ export default function Production() {
   const canCancelOnFloor = hasAnyRole(user, PRODUCTION_FLOOR_CANCEL_ROLES);
   const canSeeCancelled = hasAnyRole(user, PRODUCTION_CANCELLED_VIEW_ROLES);
   const canSetFabric = hasAnyRole(user, FABRIC_STATUS_WRITE_ROLES);
+  const canOpenFabric = hasAnyRole(user, FABRIC_VIEW_ROLES);
 
   // Opens on the floor by default ("what's running right now?"), but honours
   // ?tab= so other pages can deep-link here — e.g. starting a batch elsewhere
@@ -248,6 +251,7 @@ export default function Production() {
   const [intakeOpen, setIntakeOpen] = useState(false);
   const [outputTarget, setOutputTarget] = useState<ProductionBatch | null>(null);
   const [sendTarget, setSendTarget] = useState<ProductionBatch | null>(null);
+  const [fabricTarget, setFabricTarget] = useState<ProductionBatch | null>(null);
   const [editTarget, setEditTarget] = useState<ProductionBatch | null>(null);
   const [updateTarget, setUpdateTarget] = useState<ProductionBatch | null>(null);
   const [holdTarget, setHoldTarget] = useState<ProductionBatch | null>(null);
@@ -572,7 +576,7 @@ export default function Production() {
 
   const onSend = (
     items: StageQtyItem[],
-    extra?: { tailorId?: number; fabricFeasible?: boolean },
+    extra?: { tailorId?: number; fabricUsed?: number },
   ) => {
     const target = sendTarget;
     if (!target) return;
@@ -861,6 +865,7 @@ export default function Production() {
           tab={tab}
           canWrite={canWrite}
           canSetFabric={canSetFabric}
+          canOpenFabric={canOpenFabric}
           canCancel={canCancel}
           canCancelOnFloor={canCancelOnFloor}
           busy={busy}
@@ -880,9 +885,10 @@ export default function Production() {
             })
           }
           onSend={(b) => setSendTarget(b)}
-          onFabricStatus={(b, next) =>
-            void runAction(() => setFabricStatus(b.id, next))
+          onTrimsStatus={(b, next) =>
+            void runAction(() => setTrimsStatus(b.id, next))
           }
+          onFabricPlan={(b) => setFabricTarget(b)}
           onCancel={(b) => setCancelTarget(b)}
         />
       )}
@@ -911,6 +917,14 @@ export default function Production() {
       />
       {/* Pipeline → floor: records what went into cutting AND names the tailor,
           which is what gives the lot number its suffix. */}
+      <FabricPlanDialog
+        lot={fabricTarget}
+        onClose={() => setFabricTarget(null)}
+        onSaved={(updated) => {
+          setFabricTarget(null);
+          applyBatch(updated);
+        }}
+      />
       <StageQtyDialog
         open={sendTarget !== null}
         busy={busy}
@@ -1368,6 +1382,7 @@ function BatchTable({
   tab,
   canWrite,
   canSetFabric,
+  canOpenFabric,
   canCancel,
   canCancelOnFloor,
   busy,
@@ -1382,7 +1397,8 @@ function BatchTable({
   onHold,
   onResume,
   onSend,
-  onFabricStatus,
+  onTrimsStatus,
+  onFabricPlan,
   onCancel,
   onComplete,
   onOpen,
@@ -1393,6 +1409,7 @@ function BatchTable({
   /** Fabric status is its own gate — the fabric desk may set it without
    *  gaining any other batch edit. */
   canSetFabric: boolean;
+  canOpenFabric: boolean;
   canCancel: boolean;
   canCancelOnFloor: boolean;
   busy: boolean;
@@ -1411,7 +1428,9 @@ function BatchTable({
   /** Returns a held lot to the stage it was held from. */
   onResume: (batch: ProductionBatch) => void;
   onSend: (batch: ProductionBatch) => void;
-  onFabricStatus: (batch: ProductionBatch, next: FabricStatus | null) => void;
+  onTrimsStatus: (batch: ProductionBatch, next: TrimsStatus | null) => void;
+  /** Opens the lot's fabric plan — fabric colour and per-size estimate. */
+  onFabricPlan: (batch: ProductionBatch) => void;
   onCancel: (batch: ProductionBatch) => void;
   /** Closes the lot: records produced-per-size and asks why if it's short. */
   onComplete?: (batch: ProductionBatch) => void;
@@ -1551,38 +1570,89 @@ function BatchTable({
     if (tab === 'planning') {
       cols.push({
         key: 'fabric',
-        width: '150px',
-        header: t('admin.production.fabric', { defaultValue: 'Fabric + trim' }),
-        cell: (b) =>
-          canSetFabric ? (
-            <span onClick={stopRowClick}>
-              <Select
-                className="h-8 rounded-md px-2 text-xs"
-                value={b.fabricStatus ?? ''}
-                disabled={busy}
-                onChange={(e) =>
-                  onFabricStatus(b, (e.target.value || null) as FabricStatus | null)
-                }
+        width: '230px',
+        header: t('admin.production.fabricOnly', { defaultValue: 'Fabric' }),
+        cell: (b) => (
+          <div className="space-y-1" onClick={stopRowClick}>
+            {b.fabric ? (
+              <>
+                {/* The name opens the fabric's page; ✎ changes the plan. */}
+                <div className="flex items-center gap-1">
+                  {canOpenFabric ? (
+                    <a
+                      href={`/fabric-library/${b.fabric.fabricId}`}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="truncate text-xs font-medium text-[var(--color-primary)] hover:underline"
+                    >
+                      {b.fabric.fabricName} · {b.fabric.colourName}
+                    </a>
+                  ) : (
+                    <span className="truncate text-xs font-medium">
+                      {b.fabric.fabricName} · {b.fabric.colourName}
+                    </span>
+                  )}
+                  {canSetFabric && (
+                    <button
+                      type="button"
+                      onClick={() => onFabricPlan(b)}
+                      aria-label={t('admin.production.fabricPlan.title', { defaultValue: 'Fabric' })}
+                      className="shrink-0 rounded p-0.5 text-[var(--color-muted-foreground)] hover:bg-[var(--color-muted)] hover:text-[var(--color-foreground)]"
+                    >
+                      <Pencil size={12} />
+                    </button>
+                  )}
+                </div>
+                {b.fabric.check ? (
+                  <FabricCheckText check={b.fabric.check} unit={b.fabric.unit} compact />
+                ) : (
+                  canSetFabric && (
+                    <button
+                      type="button"
+                      className="text-xs text-[var(--color-muted-foreground)] hover:underline"
+                      onClick={() => onFabricPlan(b)}
+                    >
+                      {t('admin.production.fabricPlan.addEstimate', { defaultValue: 'Add fabric per piece' })}
+                    </button>
+                  )
+                )}
+              </>
+            ) : canSetFabric ? (
+              <button
+                type="button"
+                className="text-xs font-medium text-[var(--color-primary)] hover:underline"
+                onClick={() => onFabricPlan(b)}
               >
-                <option value="">
-                  {t('admin.production.fabricUnset', { defaultValue: '— Not set' })}
+                {t('admin.production.fabricPlan.set', { defaultValue: 'Set fabric' })}
+              </button>
+            ) : (
+              <span className="text-[var(--color-muted-foreground)]">—</span>
+            )}
+          </div>
+        ),
+      });
+      // Set by hand — the system doesn't track trims. Shown only; never blocks sending.
+      cols.push({
+        key: 'trims',
+        width: '160px',
+        header: t('admin.production.trims', { defaultValue: 'Trims' }),
+        cell: (b) => (
+          <span onClick={stopRowClick}>
+            <Select
+              className={cn('h-8 w-36 rounded-md px-2 text-xs', b.trimsStatus && TRIMS_TONE[b.trimsStatus])}
+              value={b.trimsStatus ?? ''}
+              disabled={!canSetFabric || busy}
+              onChange={(e) => onTrimsStatus(b, (e.target.value || null) as TrimsStatus | null)}
+            >
+              <option value="">{t('admin.production.trimsUnset', { defaultValue: '— Not set' })}</option>
+              {(Object.keys(TRIMS_LABEL) as TrimsStatus[]).map((v) => (
+                <option key={v} value={v}>
+                  {t(`admin.production.trimsStatus.${v}`, { defaultValue: TRIMS_LABEL[v] })}
                 </option>
-                {FABRIC_STATUSES.map((f) => (
-                  <option key={f} value={f}>
-                    {t(`admin.production.fabricStatus.${f}`, { defaultValue: FABRIC_LABEL[f] })}
-                  </option>
-                ))}
-              </Select>
-            </span>
-          ) : (
-            <span className={b.fabricStatus ? FABRIC_TONE[b.fabricStatus] : 'text-[var(--color-muted-foreground)]'}>
-              {b.fabricStatus
-                ? t(`admin.production.fabricStatus.${b.fabricStatus}`, {
-                    defaultValue: FABRIC_LABEL[b.fabricStatus],
-                  })
-                : '—'}
-            </span>
-          ),
+              ))}
+            </Select>
+          </span>
+        ),
       });
     }
 
@@ -1663,19 +1733,9 @@ function BatchTable({
               {canWrite && tab === 'planning' && (
                 <Button
                   size="sm"
-                  // The server refuses both, so the click was only going to fail.
-                  disabled={busy || b.fabricStatus == null || b.fabricStatus === 'not_available'}
-                  title={
-                    b.fabricStatus == null
-                      ? t('admin.production.blockedFabricUnset', {
-                          defaultValue: 'Set the fabric + trim status first.',
-                        })
-                      : b.fabricStatus === 'not_available'
-                        ? t('admin.production.blockedNoFabric', {
-                            defaultValue: 'Fabric + trim is marked not available.',
-                          })
-                        : undefined
-                  }
+                  // The server refuses these, so the click was only going to fail.
+                  disabled={busy || !b.fabric}
+                  title={!b.fabric ? t('admin.production.blockedNoFabricColour', { defaultValue: 'Set fabric first.' }) : undefined}
                   onClick={() => onSend(b)}
                 >
                   {t('admin.production.sendToProduction', { defaultValue: 'Send to production' })}
@@ -1747,7 +1807,9 @@ function BatchTable({
     tab,
     canWrite,
     canSetFabric,
-    onFabricStatus,
+    canOpenFabric,
+    onTrimsStatus,
+    onFabricPlan,
     busy,
     selectable,
     selected,

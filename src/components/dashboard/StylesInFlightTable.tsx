@@ -1748,6 +1748,7 @@ export default function StylesInFlightTable({
         open={approvalTarget !== null}
         busy={approvalBusy}
         gender={null}
+        styleId={approvalTarget?.id ?? null}
         onClose={() => setApprovalTarget(null)}
         onConfirm={async (body) => {
           if (!approvalTarget) return;

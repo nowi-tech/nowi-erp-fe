@@ -143,6 +143,19 @@ export const FABRIC_WRITE_ROLES: readonly UserRole[] = [
   'fabric_manager',
 ];
 
+/** Can open the Fabric Library and Fabric orders pages — their route guard. */
+export const FABRIC_VIEW_ROLES: readonly UserRole[] = [
+  'admin',
+  'sampling_editor',
+  'sampling_lead',
+  'viewer',
+  'production_lead',
+  'fabric_manager',
+];
+
+/** Setting a colour's stock to a physical count. Mirrors the BE `FABRIC_STOCK_CHECK_ROLES`. */
+export const FABRIC_STOCK_CHECK_ROLES: readonly UserRole[] = ['admin', 'fabric_manager'];
+
 /**
  * Roles allowed to START a production batch and move it through the floor
  * stages. Mirrors the BE `PRODUCTION_WRITE_ROLES`. Gates the "Add to production

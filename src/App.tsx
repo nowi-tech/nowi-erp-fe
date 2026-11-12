@@ -20,6 +20,7 @@ import {
   ALTERATION_READ_ROLES,
   DESIGN_SUBMIT_ROLES,
   DISPATCH_VIEW_ROLES,
+  FABRIC_VIEW_ROLES,
   PRODUCTION_BOARD_READ_ROLES,
   PRODUCTION_READ_ROLES,
 } from './lib/userRoles';
@@ -70,10 +71,8 @@ const ChinaImportRegistry = lazy(
 const NewIntake = lazy(() => import('./pages/styles/NewIntake'));
 const StyleWorkspace = lazy(() => import('./pages/styles/StyleWorkspace'));
 const FabricLibrary = lazy(() => import('./pages/fabric-library/FabricLibrary'));
-const ReceiveFabricChallan = lazy(
-  () => import('./pages/fabric-library/ReceiveFabricChallan'),
-);
 const FabricDetail = lazy(() => import('./pages/fabric-library/FabricDetail'));
+const FabricOrders = lazy(() => import('./pages/fabric-library/FabricOrders'));
 
 function PageSkeleton() {
   // Inline shimmer — calm, sits inside whatever shell already rendered
@@ -667,18 +666,29 @@ function App() {
             </Route>
 
             <Route
+              path="/fabric-orders"
+              element={
+                <ProtectedRoute allowedRoles={[...FABRIC_VIEW_ROLES]}>
+                  <S>
+                    <AdminShell />
+                  </S>
+                </ProtectedRoute>
+              }
+            >
+              <Route
+                index
+                element={
+                  <S>
+                    <FabricOrders />
+                  </S>
+                }
+              />
+            </Route>
+
+            <Route
               path="/fabric-library"
               element={
-                <ProtectedRoute
-                  allowedRoles={[
-                    'admin',
-                    'sampling_editor',
-                    'sampling_lead',
-                    'viewer',
-                    'production_lead',
-                    'fabric_manager',
-                  ]}
-                >
+                <ProtectedRoute allowedRoles={[...FABRIC_VIEW_ROLES]}>
                   <S>
                     <AdminShell />
                   </S>
@@ -693,14 +703,7 @@ function App() {
                   </S>
                 }
               />
-              <Route
-                path="receive"
-                element={
-                  <S>
-                    <ReceiveFabricChallan />
-                  </S>
-                }
-              />
+
               <Route
                 path=":id"
                 element={

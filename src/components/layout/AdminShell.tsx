@@ -18,6 +18,7 @@ import {
   Shirt,
   Container,
   Layers,
+  ShoppingCart,
   PanelLeftClose,
   PanelLeft,
   Database,
@@ -150,6 +151,7 @@ const NAV_SECTIONS: NavSection[] = [
       // fabric_manager is added inline (not via PD_ROLES) so the fabric desk
       // sees the fabric library without gaining the other PD_ROLES nav links.
       { to: '/fabric-library', icon: <Layers size={18} />, labelKey: 'admin.nav.fabricLibrary', roles: [...PD_ROLES, 'fabric_manager'] },
+      { to: '/fabric-orders', icon: <ShoppingCart size={18} />, labelKey: 'admin.nav.fabricOrders', roles: [...PD_ROLES, 'fabric_manager'] },
     ],
   },
   {

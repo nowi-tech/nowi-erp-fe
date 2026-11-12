@@ -1,82 +1,154 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
-import { ArrowLeft, Truck } from 'lucide-react';
-import { useNavigate, useParams } from 'react-router-dom';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { ArrowLeft, ArrowUpRight, ClipboardCheck, Pencil, ShoppingCart } from 'lucide-react';
+import { FilterRailSegments } from '@/components/ui/filter-rail';
+import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Dialog } from '@/components/ui/dialog';
+import { Select } from '@/components/ui/select';
+import { ActivityTimeline, type TimelineItem } from '@/components/ui/activity-timeline';
 import FabricEditorForm from '@/components/fabrics/FabricEditorForm';
-import { getFabric, listFabricStock } from '@/api/styles';
+import FabricOrderDialog from '@/components/fabrics/FabricOrderDialog';
+import FabricOrdersTable from '@/components/fabrics/FabricOrdersTable';
+import IssueSlipDialog from '@/components/fabrics/IssueSlipDialog';
+import { ReturnDialog, SendBackDialog, StockCheckDialog } from '@/components/fabrics/StockActionDialogs';
+import { getColourLots, getFabric, getFabricActivity, listFabrics } from '@/api/styles';
+import { listFabricOrders } from '@/api/fabricOrders';
 import { useSignedUrls } from '@/hooks/useSignedUrls';
+import { useAuth } from '@/context/auth';
+import {
+  FABRIC_STOCK_CHECK_ROLES,
+  FABRIC_WRITE_ROLES,
+  hasAnyRole,
+  PRODUCTION_BOARD_READ_ROLES,
+  STYLE_VIEW_ROLES,
+} from '@/lib/userRoles';
 import type {
   Fabric,
+  FabricActivity,
   FabricColour,
-  FabricStockEntry,
-  FabricUnitOfMeasure,
+  FabricOrder,
+  FabricOrderStatus,
+  FabricStockActivity,
 } from '@/api/types';
+import {
+  colourState,
+  COLOUR_STATE_LABEL,
+  COLOUR_STATE_VARIANT,
+  daysOfCover,
+  fmtQty,
+  OPEN_ORDER_STATUSES,
+  ORDER_STATUS_LABEL,
+  orderQtyForLots,
+  poLabel,
+  PURPOSE_LABEL,
+} from '@/lib/fabric';
+import { cn } from '@/lib/utils';
 
-const UOM_SHORT: Record<FabricUnitOfMeasure, string> = {
-  meter: 'm',
-  kg: 'kg',
-  oz: 'oz',
+type Kind = 'all' | 'stock' | 'orders' | 'edits';
+
+const FIELD_LABEL: Record<string, string> = {
+  name: 'Name',
+  gsm: 'GSM',
+  cuttableWidth: 'Width',
+  unitOfMeasure: 'Unit',
+  construction: 'Construction',
+  count: 'Count',
+  composition: 'Composition',
+  colours: 'Colours',
+  imagePath: 'Image',
+  notes: 'Notes',
+  isActive: 'Active',
+  status: 'Status',
+  quantityOrdered: 'Quantity',
+  expectedDate: 'Due',
+  orderDate: 'Order date',
+  vendorId: 'Vendor',
+  fabricColourId: 'Fabric',
+  itemName: 'Item',
+  note: 'Remarks',
 };
 
-/** Ledger rows for one colour, oldest→newest, each carrying its balance after. */
-interface LedgerRow {
-  entry: FabricStockEntry;
-  balance: number;
-}
-
 /**
- * Walk a colour's entries oldest→newest so each row can show the balance the
- * ledger stood at *after* it, then flip to newest-first for display. The
- * balance is the running sum — never a stored number.
- */
-function withRunningBalance(entries: FabricStockEntry[]): LedgerRow[] {
-  const oldestFirst = [...entries].sort((a, b) => a.id - b.id);
-  let balance = 0;
-  const rows = oldestFirst.map((entry) => {
-    balance += Number(entry.quantity);
-    return { entry, balance };
-  });
-  return rows.reverse();
-}
-
-/**
- * Fabric detail — the per-colour view of one fabric.
- *
- * Price and stock live on the colour child, and so does history: every ledger
- * row carries its `fabricColourId`, so this page groups the fabric's entries by
- * colour rather than showing one merged list. Rows predating colours (or on
- * colourless fabrics) fall into an "unattributed" group so nothing is hidden.
+ * Fabric detail — the fabric, its colours (stock, held, on order), its orders,
+ * and at the bottom one activity log of stock moves, order changes and edits.
  */
 export default function FabricDetail() {
   const { t } = useTranslation();
   const navigate = useNavigate();
   const { id } = useParams<{ id: string }>();
   const fabricId = Number(id);
+  const { user } = useAuth();
+  const canEdit = hasAnyRole(user, FABRIC_WRITE_ROLES);
+  const canCheck = hasAnyRole(user, FABRIC_STOCK_CHECK_ROLES);
+  const links = { lot: hasAnyRole(user, PRODUCTION_BOARD_READ_ROLES), style: hasAnyRole(user, STYLE_VIEW_ROLES) };
 
   const [fabric, setFabric] = useState<Fabric | null>(null);
-  const [entries, setEntries] = useState<FabricStockEntry[]>([]);
+  const [allFabrics, setAllFabrics] = useState<Fabric[]>([]);
+  const [orders, setOrders] = useState<FabricOrder[]>([]);
+  const [showAllOrders, setShowAllOrders] = useState(false);
   const [loading, setLoading] = useState(true);
   const [editOpen, setEditOpen] = useState(false);
+  const [orderFor, setOrderFor] = useState<{ fabricColourId?: number; quantity?: number } | null>(null);
+  const [issueFor, setIssueFor] = useState<{ fabricColourId?: number } | null>(null);
+  const [checkOf, setCheckOf] = useState<FabricColour | null>(null);
+  const [returnOf, setReturnOf] = useState<FabricStockActivity | null>(null);
+  const [sendBackOf, setSendBackOf] = useState<FabricStockActivity | null>(null);
+
+  const [kind, setKind] = useState<Kind>('all');
+  // The selected colour: set by clicking a row (or arriving from the Library); filters orders and activity.
+  const [params] = useSearchParams();
+  const [colourFilter, setColourFilter] = useState<number | ''>(() => Number(params.get('colour')) || '');
+  const [lotsHolding, setLotsHolding] = useState<{ id: number; batchNo: string; style: string | null; held: number }[]>([]);
+  const [activity, setActivity] = useState<FabricActivity[]>([]);
+  const [nextBefore, setNextBefore] = useState<string | null>(null);
+  const [activityBusy, setActivityBusy] = useState(false);
+  // Only the latest request may write — a slow reply for an old filter is dropped.
+  const activitySeq = useRef(0);
+
+  const loadActivity = useCallback(
+    async (before?: string) => {
+      if (!Number.isFinite(fabricId)) return;
+      const seq = ++activitySeq.current;
+      setActivityBusy(true);
+      try {
+        const r = await getFabricActivity(fabricId, {
+          kind: kind === 'all' ? undefined : kind,
+          colourId: colourFilter === '' ? undefined : colourFilter,
+          before,
+        });
+        if (seq !== activitySeq.current) return;
+        // Pages overlap on the boundary timestamp, so drop rows already shown.
+        setActivity((a) => {
+          if (!before) return r.items;
+          const seen = new Set(a.map((x) => x.id));
+          return [...a, ...r.items.filter((x) => !seen.has(x.id))];
+        });
+        setNextBefore(r.nextBefore);
+      } finally {
+        if (seq === activitySeq.current) setActivityBusy(false);
+      }
+    },
+    [fabricId, kind, colourFilter],
+  );
 
   const load = useCallback(async () => {
     if (!Number.isFinite(fabricId)) {
-      // Resolve to "not found" — returning early would leave the initial
-      // loading:true in place and the page on its skeleton forever.
       setFabric(null);
       setLoading(false);
       return;
     }
     setLoading(true);
     try {
-      const [f, ledger] = await Promise.all([
+      const [f, os, all] = await Promise.all([
         getFabric(fabricId),
-        listFabricStock(fabricId),
+        listFabricOrders({ fabricId }),
+        listFabrics(),
       ]);
       setFabric(f);
-      setEntries(ledger);
+      setOrders(os);
+      setAllFabrics(all);
     } catch {
       setFabric(null);
     } finally {
@@ -87,78 +159,74 @@ export default function FabricDetail() {
   useEffect(() => {
     void load();
   }, [load]);
+  useEffect(() => {
+    void loadActivity().catch(() => undefined);
+  }, [loadActivity]);
 
-  // One signed-URL call for the parent image plus every colour swatch.
+  const refresh = () => {
+    void load();
+    void loadActivity().catch(() => undefined);
+  };
+
   const imagePaths = useMemo(
-    () => [
-      fabric?.imagePath ?? null,
-      ...(fabric?.colours ?? []).map((c) => c.imagePath ?? null),
-    ],
+    () => [fabric?.imagePath ?? null, ...(fabric?.colours ?? []).map((c) => c.imagePath ?? null)],
     [fabric],
   );
   const imageUrls = useSignedUrls(imagePaths);
 
-  const uom = fabric?.unitOfMeasure ? UOM_SHORT[fabric.unitOfMeasure] : '';
-  const qty = (n: number) => `${n}${uom ? ` ${uom}` : ''}`;
+  const unit = fabric?.unitOfMeasure ?? null;
+  const colours = fabric?.colours ?? [];
+  const sum = (pick: (c: FabricColour) => number | undefined) => colours.reduce((s, c) => s + (pick(c) ?? 0), 0);
+  const stockValue = colours.reduce(
+    (s, c) => (c.pricePerUnit != null && c.availableQuantity != null ? s + c.pricePerUnit * c.availableQuantity : s),
+    0,
+  );
+  /** Order prefilled with what planning lots are short of. */
+  const orderColour = (c: FabricColour) => setOrderFor({ fabricColourId: c.id, quantity: orderQtyForLots(c) });
+  const selected = colours.find((c) => c.id === colourFilter) ?? null;
+  useEffect(() => {
+    setLotsHolding([]);
+    if (colourFilter === '') return;
+    let live = true;
+    void getColourLots(colourFilter)
+      .then((r) => {
+        if (live) setLotsHolding(r);
+      })
+      .catch(() => undefined);
+    return () => {
+      live = false;
+    };
+  }, [colourFilter, selected?.availableQuantity]);
 
-  const byColour = useMemo(() => {
-    const m = new Map<number, FabricStockEntry[]>();
-    const loose: FabricStockEntry[] = [];
-    for (const e of entries) {
-      if (e.fabricColourId == null) loose.push(e);
-      else m.set(e.fabricColourId, [...(m.get(e.fabricColourId) ?? []), e]);
-    }
-    return { m, loose };
-  }, [entries]);
-
-  const totalStock = useMemo(
-    () => entries.reduce((sum, e) => sum + Number(e.quantity), 0),
-    [entries],
+  const shownOrders = orders.filter(
+    (o) =>
+      (showAllOrders || OPEN_ORDER_STATUSES.includes(o.status)) &&
+      (colourFilter === '' || o.fabricColourId === colourFilter),
   );
 
-  /** Stock value = each colour's own stock at its own price; skip unpriced. */
-  const stockValue = useMemo(() => {
-    if (!fabric) return 0;
-    return (fabric.colours ?? []).reduce((sum, c) => {
-      if (c.pricePerUnit == null || c.availableQuantity == null) return sum;
-      return sum + c.pricePerUnit * c.availableQuantity;
-    }, 0);
-  }, [fabric]);
-
-  if (loading) {
-    return (
-      <div className="p-6 text-sm text-[var(--color-muted-foreground)]">
-        {t('common.loading')}
-      </div>
-    );
+  if (loading && !fabric) {
+    return <div className="p-6 text-sm text-[var(--color-muted-foreground)]">{t('common.loading')}</div>;
   }
-
   if (!fabric) {
     return (
-      <div className="p-6 space-y-3">
+      <div className="space-y-3 p-6">
         <BackLink onClick={() => navigate('/fabric-library')} label={t('admin.fabricLibrary.detail.back')} />
-        <p className="text-sm text-[var(--color-muted-foreground)]">
-          {t('admin.fabricLibrary.detail.notFound')}
-        </p>
+        <p className="text-sm text-[var(--color-muted-foreground)]">{t('admin.fabricLibrary.detail.notFound')}</p>
       </div>
     );
   }
 
   const parentImg = fabric.imagePath ? imageUrls[fabric.imagePath] : undefined;
+  const colourName = (cid: number | null | undefined) => colours.find((c) => c.id === cid)?.name ?? '';
 
   return (
     <div className="space-y-6 pb-10">
       <BackLink onClick={() => navigate('/fabric-library')} label={t('admin.fabricLibrary.detail.back')} />
 
-      {/* Header — identity, then the two actions that change this fabric. */}
       <section className="rounded-[var(--radius-md)] border border-[var(--color-border)] bg-[var(--color-surface)] p-4">
         <div className="flex flex-wrap items-start gap-4">
           {parentImg && (
-            <img
-              src={parentImg}
-              alt={fabric.name}
-              className="h-24 w-24 shrink-0 rounded-[var(--radius-md)] border border-[var(--color-border)] object-cover"
-            />
+            <img src={parentImg} alt={fabric.name} className="h-24 w-24 shrink-0 rounded-[var(--radius-md)] border border-[var(--color-border)] object-cover" />
           )}
           <div className="min-w-0 flex-1">
             <div className="flex flex-wrap items-center gap-2">
@@ -172,99 +240,489 @@ export default function FabricDetail() {
             <div className="mt-0.5 text-xs text-[var(--color-muted-foreground)]">
               {[
                 fabric.code,
-                fabric.unitOfMeasure,
+                fabric.unitOfMeasure && t(`admin.fabricLibrary.uom.${fabric.unitOfMeasure}`, { defaultValue: fabric.unitOfMeasure }),
                 fabric.gsm != null ? `${fabric.gsm} GSM` : null,
-                fabric.cuttableWidth != null
-                  ? `${Number(fabric.cuttableWidth)}″`
-                  : null,
-                ...(fabric.compositions ?? []).map(
-                  (c) => `${Number(c.percent)}% ${c.fibre}`,
-                ),
+                fabric.cuttableWidth != null ? `${Number(fabric.cuttableWidth)}″` : null,
+                ...(fabric.compositions ?? []).map((c) => `${Number(c.percent)}% ${c.fibre}`),
               ]
                 .filter(Boolean)
                 .join(' · ')}
             </div>
           </div>
-          <div className="flex gap-2">
-            <Button size="sm" variant="outline" onClick={() => setEditOpen(true)}>
-              {t('admin.fabricLibrary.edit')}
-            </Button>
-            <Button size="sm" onClick={() => navigate('/fabric-library/receive')}>
-              <Truck size={14} className="mr-1.5" />
-              {t('admin.fabricLibrary.receiveFabric')}
-            </Button>
-          </div>
+          {canEdit && (
+            <div className="flex flex-wrap gap-2">
+              <Button size="sm" variant="outline" onClick={() => setEditOpen(true)}>
+                <Pencil size={15} />
+                {t('admin.fabricLibrary.edit')}
+              </Button>
+              <Button size="sm" onClick={() => setIssueFor({})}>
+                <ArrowUpRight size={15} />
+                {t('admin.fabricLibrary.issue')}
+              </Button>
+              <Button size="sm" variant="outline" onClick={() => setOrderFor({})}>
+                <ShoppingCart size={15} />
+                {t('admin.fabricLibrary.order', { defaultValue: 'Order' })}
+              </Button>
+            </div>
+          )}
         </div>
       </section>
 
-      <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-        <Stat label={t('admin.fabricLibrary.detail.totalStock')} value={qty(totalStock)} />
-        <Stat
-          label={t('admin.fabricLibrary.detail.colours')}
-          value={String((fabric.colours ?? []).length)}
-        />
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+        <Stat label={t('admin.fabricLibrary.detail.totalStock')} value={fmtQty(sum((c) => c.availableQuantity), unit)} />
+        <Stat label={t('admin.fabricLibrary.cols.onOrder', { defaultValue: 'On order' })} value={fmtQty(sum((c) => c.onOrderQuantity), unit)} />
+        <Stat label={t('admin.fabricLibrary.cols.held', { defaultValue: 'Held for lots' })} value={fmtQty(sum((c) => c.heldQuantity), unit)} />
         <Stat
           label={t('admin.fabricLibrary.detail.stockValue')}
           value={stockValue > 0 ? `₹${stockValue.toLocaleString('en-IN')}` : '—'}
         />
       </div>
 
-      {(fabric.colours ?? []).length === 0 && byColour.loose.length === 0 && (
-        <p className="text-sm text-[var(--color-muted-foreground)]">
-          {t('admin.fabricLibrary.detail.noColours')}
-        </p>
-      )}
-
-      {(fabric.colours ?? []).map((c) => (
-        <ColourSection
-          key={c.id}
-          colour={c}
-          uom={uom}
-          swatch={imageUrls[(c.imagePath ?? fabric.imagePath)!]}
-          rows={withRunningBalance(byColour.m.get(c.id) ?? [])}
-        />
-      ))}
-
-      {byColour.loose.length > 0 && (
-        <section className="rounded-[var(--radius-md)] border border-dashed border-[var(--color-border)] bg-[var(--color-surface)]">
-          <div className="px-4 py-2.5">
-            <div className="text-sm font-medium">
-              {t('admin.fabricLibrary.detail.unattributed')} ({byColour.loose.length})
-            </div>
-            <div className="text-[11px] text-[var(--color-muted-foreground)]">
-              {t('admin.fabricLibrary.detail.unattributedHint')}
-            </div>
+      <Card title={t('admin.fabricLibrary.detail.colours')}>
+        {colours.length === 0 ? (
+          <p className="px-4 py-3 text-sm text-[var(--color-muted-foreground)]">{t('admin.fabricLibrary.detail.noColours')}</p>
+        ) : (
+          <div className="overflow-x-auto">
+            {/* Same columns and widths as the Library. */}
+            <table className="w-full min-w-[1000px] table-fixed text-[13px]">
+              <colgroup>
+                <col className="w-[300px]" />
+                <col className="w-[240px]" />
+                <col className="w-[160px]" />
+                <col />
+              </colgroup>
+              <thead className="bg-[var(--color-surface-2)] text-[11px] font-semibold uppercase tracking-wider text-[var(--color-muted-foreground)]">
+                <tr>
+                  <th className="px-3 py-2 text-left">{t('admin.fabricLibrary.cols.colour', { defaultValue: 'Colour' })}</th>
+                  <th className="px-3 py-2 text-left">{t('admin.fabricLibrary.cols.stock', { defaultValue: 'Stock' })}</th>
+                  <th className="px-3 py-2 text-right">{t('admin.fabricLibrary.cols.onOrder', { defaultValue: 'On order' })}</th>
+                  <th className="px-3 py-2" />
+                </tr>
+              </thead>
+              <tbody>
+                {colours.map((c) => {
+                  const swatch = c.imagePath ?? fabric.imagePath;
+                  const state = colourState(c);
+                  return (
+                    <tr
+                      key={c.id}
+                      className={cn(
+                        'cursor-pointer border-t border-[var(--color-border)] hover:bg-[var(--color-surface-2)]/50',
+                        colourFilter === c.id && 'bg-[var(--color-primary-soft)]/40',
+                      )}
+                      onClick={(e) => {
+                        if (!(e.target as HTMLElement).closest('button, a, input, select')) {
+                          setColourFilter(colourFilter === c.id ? '' : c.id);
+                        }
+                      }}
+                    >
+                      <td className="px-3 py-3">
+                        <div className="flex items-center gap-2">
+                          {swatch && imageUrls[swatch] ? (
+                            <img src={imageUrls[swatch]} alt="" className="h-8 w-8 rounded border border-[var(--color-border)] object-cover" />
+                          ) : (
+                            <span className="h-4 w-4 rounded-full border border-black/10" style={{ backgroundColor: c.hex || c.name.toLowerCase() }} />
+                          )}
+                          <div>
+                            <div className="font-medium">{c.name}</div>
+                            {c.code && <div className="text-xs text-[var(--color-muted-foreground)]">{c.code}</div>}
+                          </div>
+                        </div>
+                      </td>
+                      <td className="px-3 py-3">
+                        <div className="flex items-center gap-3">
+                          <span className="w-20 shrink-0 text-right font-medium tabular-nums">
+                            {fmtQty(c.availableQuantity ?? 0, unit)}
+                          </span>
+                          <Badge variant={COLOUR_STATE_VARIANT[state]}>
+                            {t(`admin.fabricLibrary.states.${state}`, { defaultValue: COLOUR_STATE_LABEL[state] })}
+                          </Badge>
+                          {(c.needsReview ?? 0) > 0 && (
+                            <Badge variant="warning">{t('admin.fabricLibrary.checkStock', { defaultValue: 'Check stock' })}</Badge>
+                          )}
+                        </div>
+                      </td>
+                      <td className="px-3 py-3 text-right tabular-nums">
+                        {(c.onOrderQuantity ?? 0) > 0 ? (
+                          <>
+                            <div className="font-medium">{fmtQty(c.onOrderQuantity!, unit)}</div>
+                            {c.nextExpectedDate && (
+                              <div
+                                className={cn(
+                                  'text-xs',
+                                  (c.overdueOrders ?? 0) > 0
+                                    ? 'font-semibold text-[var(--color-destructive)]'
+                                    : 'text-[var(--color-muted-foreground)]',
+                                )}
+                              >
+                                {t('admin.fabricOrders.dueOn', {
+                                  defaultValue: 'due {{date}}',
+                                  date: new Date(c.nextExpectedDate).toLocaleDateString(),
+                                })}
+                              </div>
+                            )}
+                          </>
+                        ) : (
+                          <span className="text-[var(--color-muted-foreground)]">—</span>
+                        )}
+                      </td>
+                      <td className="whitespace-nowrap px-3 py-3 text-right">
+                        <div className="inline-flex items-center gap-2">
+                          {canEdit && (
+                            <>
+                              <Button
+                                size="sm"
+                                disabled={(c.availableQuantity ?? 0) <= 0}
+                                onClick={() => setIssueFor({ fabricColourId: c.id })}
+                              >
+                                <ArrowUpRight size={15} />
+                                {t('admin.fabricLibrary.issue')}
+                              </Button>
+                              <Button size="sm" variant="outline" onClick={() => orderColour(c)}>
+                                <ShoppingCart size={15} />
+                                {t('admin.fabricLibrary.order', { defaultValue: 'Order' })}
+                              </Button>
+                            </>
+                          )}
+                          {canCheck && (
+                            <Button size="sm" variant="outline" onClick={() => setCheckOf(c)}>
+                              <ClipboardCheck size={15} />
+                              {t('admin.stockCheck.short', { defaultValue: 'Update' })}
+                            </Button>
+                          )}
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
           </div>
-          <LedgerTable rows={withRunningBalance(byColour.loose)} uom={uom} />
-        </section>
-      )}
+        )}
+        {selected && (
+          <div className="flex flex-wrap items-center gap-x-6 gap-y-2 border-t border-[var(--color-border)] bg-[var(--color-primary-soft)]/20 px-5 py-3 text-[13px]">
+            <span className="font-semibold">{selected.name}</span>
+            <span>
+              {t('admin.fabricLibrary.cols.used30d', { defaultValue: 'Used (30 days)' })}:{' '}
+              <b className="tabular-nums">{(selected.used30d ?? 0) > 0 ? fmtQty(selected.used30d!, unit) : '—'}</b>
+              {daysOfCover(selected) != null &&
+                ` · ${t('admin.fabricLibrary.daysLeftShort', { defaultValue: '{{n}} days left', n: daysOfCover(selected) })}`}
+            </span>
+            <span>
+              {t('admin.fabricLibrary.cols.price', { defaultValue: 'Price' })}:{' '}
+              <b className="tabular-nums">{selected.pricePerUnit != null ? `₹${selected.pricePerUnit}` : '—'}</b>
+            </span>
+            <span>
+              {t('admin.fabricLibrary.lotsHolding', { defaultValue: 'Lots waiting on it' })}:{' '}
+              {lotsHolding.length === 0
+                ? '—'
+                : lotsHolding.map((l, i) => (
+                    <span key={l.id}>
+                      {i > 0 && ', '}
+                      {links.lot ? (
+                        <Link to={`/admin/production/lots/${l.id}`} className="font-medium text-[var(--color-primary)] hover:underline">
+                          {t('admin.fabricActivity.lot', { defaultValue: 'lot {{no}}', no: l.batchNo })}
+                        </Link>
+                      ) : (
+                        t('admin.fabricActivity.lot', { defaultValue: 'lot {{no}}', no: l.batchNo })
+                      )}{' '}
+                      · {fmtQty(l.held, unit)}
+                    </span>
+                  ))}
+            </span>
+            <Button size="sm" variant="ghost" className="ml-auto" onClick={() => setColourFilter('')}>
+              {t('admin.fabricLibrary.showAllColours', { defaultValue: 'All colours' })}
+            </Button>
+          </div>
+        )}
+      </Card>
 
-      <Dialog
-        open={editOpen}
-        onClose={() => setEditOpen(false)}
-        maxWidthClassName="max-w-3xl"
-        title={`${t('admin.fabricLibrary.editFabric')} — ${fabric.name}`}
+      <Card
+        title={t('admin.fabricOrders.title', { defaultValue: 'Orders' })}
+        right={
+          <FilterRailSegments
+            options={[
+              { value: 'open', label: t('admin.fabricOrders.open', { defaultValue: 'Open' }) },
+              { value: 'all', label: t('admin.fabricOrders.all', { defaultValue: 'All' }) },
+            ]}
+            value={showAllOrders ? 'all' : 'open'}
+            onChange={(v) => setShowAllOrders(v === 'all')}
+          />
+        }
       >
+        <FabricOrdersTable orders={shownOrders} fabrics={allFabrics} canEdit={canEdit} onChanged={refresh} />
+      </Card>
+
+      <Card
+        title={t('admin.styles.workspace.activity', { defaultValue: 'Activity log' })}
+        right={
+          <div className="flex flex-wrap items-center gap-2">
+            <FilterRailSegments
+              options={(['all', 'stock', 'orders', 'edits'] as Kind[]).map((k) => ({
+                value: k,
+                label: t(`admin.fabricActivity.kinds.${k}`, {
+                  defaultValue: { all: 'All', stock: 'Stock', orders: 'Orders', edits: 'Edits' }[k],
+                }),
+              }))}
+              value={kind}
+              onChange={setKind}
+            />
+            <Select
+              className="h-9 w-auto text-[13px]"
+              value={colourFilter === '' ? '' : String(colourFilter)}
+              onChange={(e) => setColourFilter(e.target.value ? Number(e.target.value) : '')}
+              aria-label={t('admin.fabricLibrary.cols.colour', { defaultValue: 'Colour' })}
+            >
+              <option value="">{t('admin.fabricActivity.allColours', { defaultValue: 'All colours' })}</option>
+              {colours.map((c) => (
+                <option key={c.id} value={String(c.id)}>
+                  {c.name}
+                </option>
+              ))}
+            </Select>
+          </div>
+        }
+      >
+        {activity.length === 0 ? (
+          <p className="px-5 py-4 text-sm text-[var(--color-muted-foreground)]">{t('admin.fabricLibrary.detail.noHistory')}</p>
+        ) : (
+          <ActivityTimeline items={activity.map((a) => toTimelineItem(a, unit, colourName, canEdit, links, setReturnOf, setSendBackOf, t))} />
+        )}
+        {nextBefore && (
+          <div className="border-t border-[var(--color-border)] px-5 py-2 text-center">
+            <Button
+              size="sm"
+              variant="outline"
+              disabled={activityBusy}
+              onClick={() => void loadActivity(nextBefore).catch(() => undefined)}
+            >
+              {t('admin.fabricActivity.more', { defaultValue: 'Load more' })}
+            </Button>
+          </div>
+        )}
+      </Card>
+
+      <Dialog open={editOpen} onClose={() => setEditOpen(false)} maxWidthClassName="max-w-3xl" title={`${t('admin.fabricLibrary.editFabric')} — ${fabric.name}`}>
         <FabricEditorForm
           editing={fabric}
+          existing={allFabrics}
           onCancel={() => setEditOpen(false)}
           onSaved={() => {
             setEditOpen(false);
-            void load();
+            refresh();
           }}
         />
       </Dialog>
+
+      <FabricOrderDialog
+        open={orderFor != null}
+        preset={orderFor ? { fabricId: fabric.id, ...orderFor } : undefined}
+        fabrics={allFabrics}
+        onClose={() => setOrderFor(null)}
+        onSaved={() => {
+          setOrderFor(null);
+          refresh();
+        }}
+      />
+      <IssueSlipDialog
+        open={issueFor != null}
+        preset={issueFor ? { fabricId: fabric.id, fabricColourId: issueFor.fabricColourId } : undefined}
+        fabrics={allFabrics}
+        onClose={() => setIssueFor(null)}
+        onSaved={() => {
+          setIssueFor(null);
+          refresh();
+        }}
+      />
+      <StockCheckDialog
+        target={checkOf ? { fabricColourId: checkOf.id, name: checkOf.name, stock: checkOf.availableQuantity ?? 0, unit } : null}
+        onClose={() => setCheckOf(null)}
+        onSaved={() => {
+          setCheckOf(null);
+          refresh();
+        }}
+      />
+      <ReturnDialog
+        target={
+          returnOf
+            ? {
+                entryId: returnOf.entryId,
+                label: [returnOf.colour?.name, returnOf.challan?.challanNo].filter(Boolean).join(' · '),
+                open: returnableOf(returnOf),
+                unit,
+              }
+            : null
+        }
+        onClose={() => setReturnOf(null)}
+        onSaved={() => {
+          setReturnOf(null);
+          refresh();
+        }}
+      />
+      <SendBackDialog
+        target={
+          sendBackOf
+            ? {
+                entryId: sendBackOf.entryId,
+                label: [sendBackOf.colour?.name, sendBackOf.challan?.challanNo].filter(Boolean).join(' · '),
+                open: sendBackOf.quantity - sendBackOf.returnedQuantity,
+                unit,
+              }
+            : null
+        }
+        onClose={() => setSendBackOf(null)}
+        onSaved={() => {
+          setSendBackOf(null);
+          refresh();
+        }}
+      />
     </div>
   );
 }
 
+type T = ReturnType<typeof useTranslation>['t'];
+
+function fmtValue(key: string, v: unknown, colourName: (id: number) => string, t: T): string | null {
+  if (v === null || v === undefined || v === '') return '—';
+  if (key === 'status') {
+    const s = String(v) as FabricOrderStatus;
+    return t(`admin.fabricOrders.statuses.${s}`, { defaultValue: ORDER_STATUS_LABEL[s] ?? s });
+  }
+  if (key === 'fabricColourId') return colourName(Number(v)) || String(v);
+  if (key === 'expectedDate' || key === 'orderDate') return new Date(String(v)).toLocaleDateString();
+  if (key === 'imagePath') return null;
+  return String(v);
+}
+
+/** Issued less returned, unless the server sent its tighter cap. */
+const returnableOf = (a: FabricStockActivity) => a.returnable ?? -a.quantity - a.returnedQuantity;
+
+/** One activity row in words — "Issued 300 m · Green → Gurukul · lot 1001". */
+function toTimelineItem(
+  a: FabricActivity,
+  unit: string | null,
+  colourName: (id: number) => string,
+  canEdit: boolean,
+  links: { lot: boolean; style: boolean },
+  onReturn: (a: FabricStockActivity) => void,
+  onSendBack: (a: FabricStockActivity) => void,
+  t: T,
+): TimelineItem {
+  if (a.kind !== 'stock') {
+    const after = a.after ?? {};
+    const before = a.before ?? {};
+    const chips = Object.keys(after).flatMap((k) => {
+      const label = t(`admin.fabricActivity.fields.${k}`, { defaultValue: FIELD_LABEL[k] ?? k });
+      const v = fmtValue(k, after[k], colourName, t);
+      if (v === null) return [label];
+      return a.action.endsWith('_created') ? [`${label}: ${v}`] : [`${label}: ${fmtValue(k, before[k], colourName, t) ?? '—'} → ${v}`];
+    });
+    const po = a.orderNo != null ? poLabel(a.orderNo) : t('admin.fabricActivity.order', { defaultValue: 'Order' });
+    const label = {
+      fabric_created: t('admin.fabricActivity.created', { defaultValue: 'Created fabric' }),
+      fabric_updated: t('admin.fabricActivity.edited', { defaultValue: 'Edited fabric' }),
+      fabric_order_created: t('admin.fabricActivity.orderCreatedPo', { defaultValue: 'New order {{po}}', po }),
+      fabric_order_updated: t('admin.fabricActivity.orderUpdatedPo', { defaultValue: '{{po}} updated', po }),
+    }[a.action] ?? a.action;
+    return { id: a.id, actor: a.actor ?? t('admin.fabricActivity.system', { defaultValue: 'System' }), label, chips, note: a.reason, at: a.at };
+  }
+
+  const qty = fmtQty(Math.abs(a.quantity), unit);
+  const colour = a.colour?.name ?? '';
+  const lotText = a.lot && t('admin.fabricActivity.lot', { defaultValue: 'lot {{no}}', no: a.lot.batchNo });
+  const styleText = a.style && (a.style.styleId ?? a.style.workingName);
+  const target = a.lot ? (
+    links.lot ? (
+      <Link to={`/admin/production/lots/${a.lot.id}`} className="text-[var(--color-primary)] hover:underline">
+        {lotText}
+      </Link>
+    ) : (
+      lotText
+    )
+  ) : a.style ? (
+    links.style ? (
+      <Link to={`/styles/${a.style.id}`} className="text-[var(--color-primary)] hover:underline">
+        {styleText}
+      </Link>
+    ) : (
+      styleText
+    )
+  ) : null;
+  const challan = a.challan?.challanNo;
+  const vendor = a.challan?.vendor?.name;
+  let label: string;
+  let chips: string[] = [];
+  let extra: React.ReactNode = target;
+  if (a.entryType === 'receipt') {
+    label = t('admin.fabricActivity.received', { defaultValue: 'Received {{qty}} · {{colour}}', qty, colour });
+    chips = [
+      challan && t('admin.fabricActivity.challan', { defaultValue: 'challan {{no}}', no: challan }),
+      vendor,
+      a.fabricOrderNo != null &&
+        t('admin.fabricActivity.againstPo', { defaultValue: 'against {{po}}', po: poLabel(a.fabricOrderNo) }),
+      a.returnedQuantity > 0 &&
+        t('admin.fabricActivity.sentBackSoFar', { defaultValue: '{{qty}} sent back', qty: fmtQty(a.returnedQuantity, unit) }),
+    ].filter(Boolean) as string[];
+    // Only fabric that came in against an order has a supplier to go back to.
+    if (canEdit && a.fabricOrderId != null && a.quantity - a.returnedQuantity > 0) {
+      extra = (
+        <Button size="sm" variant="outline" className="h-8 px-3" onClick={() => onSendBack(a)}>
+          {t('admin.sendBack.action', { defaultValue: 'Send back' })}
+        </Button>
+      );
+    }
+  } else if (a.purpose === 'vendor_return') {
+    label = t('admin.fabricActivity.sentBack', { defaultValue: 'Sent back {{qty}} · {{colour}}', qty, colour });
+    chips = [vendor && `→ ${vendor}`, challan].filter(Boolean) as string[];
+  } else if (a.entryType === 'return') {
+    label = t('admin.fabricActivity.returned', { defaultValue: 'Returned {{qty}} · {{colour}}', qty, colour });
+    chips = [vendor].filter(Boolean) as string[];
+  } else if (a.entryType === 'adjustment') {
+    // Cutting / sample top-ups are written under CUT-… / SAMPLE-…; counts under CHECK-….
+    label = /^(CUT|SAMPLE)-/.test(challan ?? '')
+      ? a.needsReview
+        ? t('admin.fabricActivity.gap', { defaultValue: 'Cut but not in stock: {{qty}} · {{colour}} — check stock', qty, colour })
+        : t('admin.fabricActivity.gapCleared', { defaultValue: 'Cut but not in stock: {{qty}} · {{colour}}', qty, colour })
+      : t('admin.fabricActivity.check', { defaultValue: 'Stock check · {{colour}}: {{sign}}{{qty}}', colour, qty, sign: a.quantity >= 0 ? '+' : '−' });
+  } else if (a.usedQuantity != null) {
+    label = t('admin.fabricActivity.used', {
+      defaultValue: 'Used {{used}} · {{colour}}',
+      used: fmtQty(a.usedQuantity, unit),
+      colour,
+    });
+    chips = [
+      a.quantity !== 0
+        ? t('admin.fabricActivity.deducted', { defaultValue: 'deducted {{qty}}', qty })
+        : t('admin.fabricActivity.alreadyIssued', { defaultValue: 'already issued' }),
+    ];
+  } else {
+    label = t('admin.fabricActivity.issued', { defaultValue: 'Issued {{qty}} · {{colour}}', qty, colour });
+    chips = [
+      vendor && `→ ${vendor}`,
+      challan,
+      a.purpose && a.purpose !== 'production'
+        ? t(`admin.issueSlip.purposes.${a.purpose}`, { defaultValue: PURPOSE_LABEL[a.purpose] })
+        : null,
+      a.returnedQuantity > 0 && t('admin.fabricActivity.returnedSoFar', { defaultValue: '{{qty}} returned', qty: fmtQty(a.returnedQuantity, unit) }),
+    ].filter(Boolean) as string[];
+    const open = returnableOf(a);
+    if (canEdit && open > 0) {
+      extra = (
+        <span className="inline-flex items-center gap-2">
+          {target}
+          <Button size="sm" variant="outline" className="h-8 px-3" onClick={() => onReturn(a)}>
+            {t('admin.returnFabric.action', { defaultValue: 'Return' })}
+          </Button>
+        </span>
+      );
+    }
+  }
+  return { id: a.id, actor: a.actor ?? t('admin.fabricActivity.system', { defaultValue: 'System' }), label, chips, note: a.note, extra, at: a.at };
+}
+
 function BackLink({ onClick, label }: { onClick: () => void; label: string }) {
   return (
-    <button
-      type="button"
-      onClick={onClick}
-      className="inline-flex items-center gap-1.5 text-xs text-[var(--color-muted-foreground)] hover:text-[var(--color-foreground)]"
-    >
+    <button type="button" onClick={onClick} className="inline-flex items-center gap-1.5 text-[13px] text-[var(--color-muted-foreground)] hover:text-[var(--color-foreground)]">
       <ArrowLeft size={14} />
       {label}
     </button>
@@ -274,175 +732,20 @@ function BackLink({ onClick, label }: { onClick: () => void; label: string }) {
 function Stat({ label, value }: { label: string; value: string }) {
   return (
     <div className="rounded-[var(--radius-md)] border border-[var(--color-border)] bg-[var(--color-surface)] px-4 py-3">
-      <div className="text-[11px] font-bold uppercase tracking-[0.05em] text-[var(--color-muted-foreground)]">
-        {label}
-      </div>
+      <div className="text-[11px] font-bold uppercase tracking-[0.05em] text-[var(--color-muted-foreground)]">{label}</div>
       <div className="mt-1 text-2xl font-bold tabular-nums">{value}</div>
     </div>
   );
 }
 
-/** One colour: its figures, then its own ledger. */
-function ColourSection({
-  colour,
-  uom,
-  swatch,
-  rows,
-}: {
-  colour: FabricColour;
-  uom: string;
-  swatch?: string;
-  rows: LedgerRow[];
-}) {
-  const { t } = useTranslation();
-  const value =
-    colour.pricePerUnit != null && colour.availableQuantity != null
-      ? colour.pricePerUnit * colour.availableQuantity
-      : null;
-
+function Card({ title, right, children }: { title: string; right?: React.ReactNode; children: React.ReactNode }) {
   return (
-    <section className="rounded-[var(--radius-md)] border border-[var(--color-border)] bg-[var(--color-surface)]">
-      <div className="flex flex-wrap items-center gap-3 px-4 py-3">
-        {swatch ? (
-          <img
-            src={swatch}
-            alt=""
-            className="h-10 w-10 shrink-0 rounded-[var(--radius-sm)] border border-[var(--color-border)] object-cover"
-          />
-        ) : (
-          <span
-            className="h-10 w-10 shrink-0 rounded-[var(--radius-sm)] border border-black/10"
-            style={{ backgroundColor: colour.hex || colour.name.toLowerCase() }}
-          />
-        )}
-        <div className="min-w-0">
-          <div className="text-sm font-medium">{colour.name}</div>
-          {colour.code && (
-            <div className="text-[11px] tabular-nums text-[var(--color-muted-foreground)]">
-              {colour.code}
-            </div>
-          )}
-        </div>
-        <div className="ml-auto flex items-center gap-6">
-          <Figure
-            label={t('admin.fabricLibrary.detail.price')}
-            value={
-              colour.pricePerUnit != null
-                ? `₹${colour.pricePerUnit}${uom ? ` / ${uom}` : ''}`
-                : '—'
-            }
-          />
-          <Figure
-            label={t('admin.fabricLibrary.detail.inStock')}
-            value={
-              colour.availableQuantity != null
-                ? `${colour.availableQuantity}${uom ? ` ${uom}` : ''}`
-                : '—'
-            }
-          />
-          <Figure
-            label={t('admin.fabricLibrary.detail.value')}
-            value={value != null ? `₹${value.toLocaleString('en-IN')}` : '—'}
-          />
-        </div>
+    <section className="overflow-hidden rounded-[var(--radius-md)] border border-[var(--color-border)] bg-[var(--color-surface)]">
+      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-[var(--color-border)] bg-[var(--color-surface-2)] px-5 py-3">
+        <h3 className="m-0 font-serif text-base font-semibold">{title}</h3>
+        {right}
       </div>
-      <LedgerTable rows={rows} uom={uom} />
+      {children}
     </section>
-  );
-}
-
-function Figure({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="text-right">
-      <div className="text-[11px] font-bold uppercase tracking-[0.05em] text-[var(--color-muted-foreground)]">
-        {label}
-      </div>
-      <div className="text-sm tabular-nums">{value}</div>
-    </div>
-  );
-}
-
-function LedgerTable({ rows, uom }: { rows: LedgerRow[]; uom: string }) {
-  const { t } = useTranslation();
-  const c = (k: string) => t(`admin.fabricLibrary.detail.cols.${k}`);
-
-  if (rows.length === 0) {
-    return (
-      <div className="border-t border-[var(--color-border)] px-4 py-3 text-xs text-[var(--color-muted-foreground)]">
-        {t('admin.fabricLibrary.detail.noHistory')}
-      </div>
-    );
-  }
-
-  return (
-    <div className="overflow-x-auto border-t border-[var(--color-border)]">
-      <table className="w-full text-xs">
-        <thead className="bg-[var(--color-surface-2)] text-[11px] font-semibold uppercase tracking-wide text-[var(--color-muted-foreground)]">
-          <tr>
-            <th className="px-3 py-1.5 text-left">{c('date')}</th>
-            <th className="px-3 py-1.5 text-left">{c('direction')}</th>
-            <th className="px-3 py-1.5 text-right">{c('qty')}</th>
-            <th className="px-3 py-1.5 text-right">{c('rate')}</th>
-            <th className="px-3 py-1.5 text-left">{c('challan')}</th>
-            <th className="px-3 py-1.5 text-left">{c('party')}</th>
-            <th className="px-3 py-1.5 text-left">{c('note')}</th>
-            <th className="px-3 py-1.5 text-right">{c('balance')}</th>
-          </tr>
-        </thead>
-        <tbody>
-          {rows.map(({ entry, balance }) => {
-            const q = Number(entry.quantity);
-            const isIn = q >= 0;
-            return (
-              <tr key={entry.id} className="border-t border-[var(--color-border)]">
-                <td className="px-3 py-1.5 whitespace-nowrap">
-                  {new Date(
-                    entry.challan?.challanDate ?? entry.createdAt,
-                  ).toLocaleDateString()}
-                </td>
-                <td className="px-3 py-1.5">
-                  <span
-                    className={
-                      isIn
-                        ? 'rounded-full bg-[var(--color-muted)] px-1.5 py-0.5 text-[10px] font-medium'
-                        : 'rounded-full bg-red-50 px-1.5 py-0.5 text-[10px] font-medium text-red-700'
-                    }
-                  >
-                    {isIn
-                      ? t('admin.fabricLibrary.detail.in')
-                      : t('admin.fabricLibrary.detail.out')}
-                  </span>
-                </td>
-                <td
-                  className={`px-3 py-1.5 text-right tabular-nums ${
-                    isIn ? '' : 'text-red-700'
-                  }`}
-                >
-                  {isIn ? '+' : '−'}
-                  {Math.abs(q)}
-                  {uom ? ` ${uom}` : ''}
-                </td>
-                <td className="px-3 py-1.5 text-right tabular-nums">
-                  {entry.pricePerUnit != null ? `₹${entry.pricePerUnit}` : '—'}
-                </td>
-                <td className="px-3 py-1.5 tabular-nums">
-                  {entry.challan?.challanNo ?? '—'}
-                </td>
-                <td className="px-3 py-1.5">
-                  {entry.challan?.vendor?.name || '—'}
-                </td>
-                <td className="px-3 py-1.5 text-[var(--color-muted-foreground)]">
-                  {entry.note || ''}
-                </td>
-                <td className="px-3 py-1.5 text-right tabular-nums">
-                  {balance}
-                  {uom ? ` ${uom}` : ''}
-                </td>
-              </tr>
-            );
-          })}
-        </tbody>
-      </table>
-    </div>
   );
 }

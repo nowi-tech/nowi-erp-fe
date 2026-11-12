@@ -337,7 +337,8 @@
       },
       "production": "उत्पादन",
       "styles": "सैंपलिंग",
-      "fabricLibrary": "फ़ैब्रिक लाइब्रेरी"
+      "fabricLibrary": "फ़ैब्रिक लाइब्रेरी",
+      "fabricOrders": "फ़ैब्रिक ऑर्डर"
     },
     "chinaImport": {
       "title": "China Import",
@@ -354,16 +355,9 @@
       "allFabrics": "सभी फैब्रिक",
       "blended": "मिश्रित",
       "cols": {
-        "name": "फैब्रिक नाम",
         "content": "सामग्री",
-        "gsm": "जीएसएम",
-        "width": "चौड़ाई",
         "price": "मूल्य",
-        "updated": "अंतिम अपडेट",
-        "actions": "क्रियाएँ",
-        "available": "उपलब्ध",
-        "type": "प्रकार",
-        "unit": "इकाई"
+        "actions": "क्रियाएँ"
       },
       "empty": "इन फ़िल्टर से कोई फैब्रिक मेल नहीं खाता।",
       "addedToast": "फैब्रिक जोड़ा गया।",
@@ -381,7 +375,6 @@
         "gsm": "जीएसएम",
         "cuttableWidth": "कटाई योग्य चौड़ाई (इंच)",
         "unitOfMeasure": "माप की इकाई",
-        "pricePerUnit": "प्रति इकाई मूल्य",
         "notes": "टिप्पणियाँ"
       },
       "comp": {
@@ -399,23 +392,14 @@
         "errSum": "संरचना का योग 100% होना चाहिए (वर्तमान में {{sum}}%)।"
       },
       "filters": {
-        "searchPlaceholder": "फैब्रिक नाम से खोजें…",
-        "content": "सामग्री",
-        "clear": "फ़िल्टर साफ़ करें",
-        "activeSummary_one": "{{count}} फैब्रिक मेल खाता है",
-        "activeSummary_other": "{{count}} फैब्रिक मेल खाते हैं",
-        "activeOf": "{{total}} में से {{count}}"
+        "content": "सामग्री"
       },
-      "noStock": "स्टॉक नहीं",
       "available": "उपलब्ध",
       "addStock": "स्टॉक जोड़ें",
       "edit": "संपादित करें",
-      "stockSavedToast": "स्टॉक प्रविष्टि दर्ज की गई।",
-      "stockSaveError": "स्टॉक दर्ज नहीं हो सका। पुनः प्रयास करें।",
       "stockHelp": "कपड़े की प्राप्ति या समायोजन दर्ज करें। डिज़ाइन स्वीकृत होने पर खपत स्वतः घटाई जाती है।",
       "stock": {
         "entryType": "प्रविष्टि प्रकार",
-        "quantity": "मात्रा",
         "note": "टिप्पणी",
         "receipt": "प्राप्ति (स्टॉक जोड़ें)",
         "adjustment": "समायोजन",

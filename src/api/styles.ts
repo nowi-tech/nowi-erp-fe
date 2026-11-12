@@ -19,6 +19,7 @@ import type {
   StyleGender,
   Fabric,
   FabricStockEntry,
+  FabricActivity,
   FabricStockEntryType,
   Colour,
 } from './types';
@@ -292,6 +293,9 @@ export interface SampleApproveStyleBody {
   /** Approving needs one: the current main image confirmed, or a new upload. */
   imageConfirmed?: boolean;
   newImagePath?: string;
+  /** Fabric the sample used and the colour it came from — deducted on sign-off. */
+  fabricUsed?: number;
+  fabricColourId?: number;
 }
 
 export async function approveStyle(
@@ -573,16 +577,34 @@ export async function deleteFabric(id: number): Promise<void> {
 }
 
 // ─── Fabric stock ledger ──────────────────────────────────────────────
-export async function listFabricStock(
+// Stock is written only via fabric challans (IN/OUT) — see api/fabricChallans.
+
+/** Stock moves, order changes and fabric edits for one fabric, newest first. */
+export async function getFabricActivity(
   fabricId: number,
-): Promise<FabricStockEntry[]> {
-  const res = await apiClient.get<FabricStockEntry[]>(
-    `/api/fabrics/${fabricId}/stock`,
+  params: { kind?: 'stock' | 'orders' | 'edits'; colourId?: number; before?: string; take?: number } = {},
+): Promise<{ items: FabricActivity[]; nextBefore: string | null }> {
+  const res = await apiClient.get<{ items: FabricActivity[]; nextBefore: string | null }>(
+    `/api/fabrics/${fabricId}/activity`,
+    { params },
   );
   return res.data;
 }
 
-// Stock is written only via fabric challans (IN/OUT) — see api/fabricChallans.
+/** Styles still sampling — the issue slip's "Sample" picker. */
+export interface SampleStyleOption {
+  id: number;
+  styleId: string | null;
+  workingName: string | null;
+  imagePath: string | null;
+}
+
+export async function listSampleStyles(search?: string): Promise<SampleStyleOption[]> {
+  const res = await apiClient.get<SampleStyleOption[]>('/api/fabrics/sample-styles', {
+    params: search ? { search } : {},
+  });
+  return res.data;
+}
 
 // Re-export common types so screens don't need to reach into types.ts.
 export type {
@@ -617,5 +639,13 @@ export interface CreateFromListingRequest {
 /** Bring an EasyEcom listing with no ERP style into the ERP as a 3rd-party style. */
 export async function createStyleFromListing(body: CreateFromListingRequest): Promise<Style> {
   const res = await apiClient.post<Style>('/api/styles/from-listing', body);
+  return res.data;
+}
+
+/** Planning lots holding a fabric colour, biggest hold first. */
+export async function getColourLots(
+  fabricColourId: number,
+): Promise<{ id: number; batchNo: string; style: string | null; held: number }[]> {
+  const res = await apiClient.get(`/api/fabrics/colours/${fabricColourId}/lots`);
   return res.data;
 }

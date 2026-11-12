@@ -592,6 +592,7 @@ export default function StylesRegistry() {
         open={approvalTarget !== null}
         busy={approvalBusy}
         gender={approvalTarget?.gender ?? null}
+        styleId={approvalTarget?.id ?? null}
         onClose={() => setApprovalTarget(null)}
         onConfirm={async (body) => {
           if (!approvalTarget) return;
