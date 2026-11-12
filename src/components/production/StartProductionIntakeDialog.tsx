@@ -11,6 +11,7 @@ import { useToast } from '@/components/ui/toast';
 import { useDebounced } from '@/lib/useDebounced';
 import { listColourMaster, createColourMaster } from '@/api/styles';
 import {
+  getFabricDefaults,
   searchCatalog,
   type CatalogStyle,
   type CreateBatchBody,
@@ -18,10 +19,13 @@ import {
 } from '@/api/production';
 import { getBrands, createBrand, type Brand } from '@/api/brands';
 import TailorPicker from '@/components/production/TailorPicker';
+import FabricPicker from '@/components/styles/intake/FabricPicker';
+import { listFabrics } from '@/api/styles';
+import { UOM_SHORT } from '@/lib/fabric';
 import { uploadPhoto } from '@/api/storage';
 import ImageUploadTile from '@/components/shared/ImageUploadTile';
 import ProductionTypeToggle from '@/components/production/ProductionTypeToggle';
-import type { Colour } from '@/api/types';
+import type { Colour, Fabric } from '@/api/types';
 
 type Mode = 'existing' | 'external';
 
@@ -106,6 +110,11 @@ export default function StartProductionIntakeDialog({
   // number gains its `-RAJ`. A lot going to the pipeline is named later.
   const [tailorId, setTailorId] = useState<number | ''>('');
   const [productionType, setProductionType] = useState<ProductionType | null>(null);
+  // Cutting deducts from this colour, so a lot can't open on the floor without it.
+  const [fabrics, setFabrics] = useState<Fabric[]>([]);
+  const [fabricPick, setFabricPick] = useState<{ fabricId: number; fabricColourId: number | null } | null>(null);
+  const [fabricUsed, setFabricUsed] = useState('');
+  const pickedStyleKey = useRef<string | null>(null);
 
   // Reset everything when the dialog opens; load the picker's data once.
   useEffect(() => {
@@ -121,6 +130,15 @@ export default function StartProductionIntakeDialog({
     setQuery('');
     setTailorId('');
     setProductionType(null);
+    setFabricPick(null);
+    setFabricUsed('');
+    pickedStyleKey.current = null;
+    if (!isAlt)
+      void listFabrics()
+        .then(setFabrics)
+        .catch(() =>
+          toast.show(t('admin.production.fabricPlan.loadError', { defaultValue: 'Could not load fabrics.' }), 'error'),
+        );
     void getBrands().then(setBrands).catch(() => undefined);
     void listColourMaster().then(setColours).catch(() => undefined);
   }, [open]);
@@ -180,12 +198,27 @@ export default function StartProductionIntakeDialog({
     for (const z of s.sizes) seeded[z.sku] = 0;
     setQty(seeded);
     setExtSizes({}); // fresh manual-size picker when the style has no resolved sizes
+    // Same fabric as this style's last lot, unless one is picked before the reply lands.
+    pickedStyleKey.current = s.styleKey;
+    setFabricPick(null);
+    setFabricUsed('');
+    if (!isAlt) {
+      void getFabricDefaults({ styleId: s.linkedStyleId, styleKey: s.styleKey })
+        .then((d) => {
+          if (pickedStyleKey.current !== s.styleKey) return;
+          const fcId = d.fabricColourId;
+          const f = fabrics.find((x) => x.colours?.some((c) => c.id === fcId));
+          if (fcId != null && f) setFabricPick((p) => p ?? { fabricId: f.id, fabricColourId: fcId });
+        })
+        .catch(() => undefined);
+    }
   };
 
   // "+ Add" on the combobox → switch to the new-item form, carrying the typed
   // text over as the SKU (mirrors relive's typed-code path).
   const startExternal = (typed: string) => {
     setMode('external');
+    pickedStyleKey.current = null;
     setExternalSku(typed.trim());
     setExtSizes({});
     setQty({});
@@ -300,6 +333,17 @@ export default function StartProductionIntakeDialog({
         (isAlt || imagePath !== '') &&
         extActiveSizes.length > 0);
 
+  const fabricColourId = fabricPick?.fabricColourId ?? undefined;
+  const fabricUnit = (() => {
+    const u = fabrics.find((f) => f.id === fabricPick?.fabricId)?.unitOfMeasure;
+    return u ? UOM_SHORT[u] : '';
+  })();
+  const canSendDirect = tailorId !== '' && fabricColourId != null && Number(fabricUsed) > 0;
+  const fabricFields = (direct: boolean) => ({
+    fabricColourId,
+    fabricUsed: direct ? Number(fabricUsed) : undefined,
+  });
+
   const build = (directToProduction: boolean): CreateBatchBody | null => {
     if (mode === 'existing') {
       if (!sel) return null;
@@ -322,6 +366,7 @@ export default function StartProductionIntakeDialog({
         productionType: productionType ?? undefined,
         directToProduction,
         tailorId: directToProduction && tailorId !== '' ? tailorId : undefined,
+        ...fabricFields(directToProduction),
         items,
       };
     }
@@ -334,6 +379,7 @@ export default function StartProductionIntakeDialog({
       imagePath: imagePath || undefined,
       directToProduction,
       tailorId: directToProduction && tailorId !== '' ? tailorId : undefined,
+      ...fabricFields(directToProduction),
       items: extActiveSizes
         .filter((s) => (qty[s] ?? 0) > 0)
         .map((s) => ({ sku: extSku(s), size: s, qtyPlanned: qty[s] ?? 0 })),
@@ -378,7 +424,7 @@ export default function StartProductionIntakeDialog({
                 the lot number, so it can't be filled in afterwards. */}
             <Button
               size="sm"
-              disabled={busy || !canSubmit || tailorId === ''}
+              disabled={busy || !canSubmit || !canSendDirect}
               onClick={() => submit(true)}
             >
               <Factory size={14} />
@@ -651,6 +697,32 @@ export default function StartProductionIntakeDialog({
             value={tailorId === '' ? null : tailorId}
             onChange={(id) => setTailorId(id ?? '')}
           />
+          <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-[1fr_10rem]">
+            <div className="space-y-1.5">
+              <Label>{t('admin.production.intake.fabricLabel', { defaultValue: 'Fabric' })}</Label>
+              <FabricPicker
+                fabrics={fabrics}
+                fabricId={fabricPick?.fabricId ?? null}
+                fabricColourId={fabricPick?.fabricColourId ?? null}
+                onChange={(c) => setFabricPick(c ? { fabricId: c.fabricId, fabricColourId: c.fabricColourId } : null)}
+                onFabricCreated={(f) => setFabrics((fs) => [...fs, f])}
+              />
+            </div>
+            <div className="space-y-1.5">
+              <Label>
+                {t('admin.production.intake.fabricUsed', { defaultValue: 'Fabric used' })}
+                {fabricUnit ? ` (${fabricUnit})` : ''}
+              </Label>
+              <Input
+                type="number"
+                inputMode="decimal"
+                min="0"
+                step="0.01"
+                value={fabricUsed}
+                onChange={(e) => setFabricUsed(e.target.value)}
+              />
+            </div>
+          </div>
         </div>
       )}
     </Dialog>

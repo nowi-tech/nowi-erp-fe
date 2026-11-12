@@ -5,6 +5,11 @@ import { Dialog } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import TailorPicker from '@/components/production/TailorPicker';
+import FabricUsedField, {
+  estimateFabric,
+  fabricUsedValue,
+  type FabricUsedEdit,
+} from '@/components/production/FabricUsedField';
 import { type ProductionBatch, type StageQtyItem } from '@/api/production';
 
 /** Pipeline → floor: pieces cut per size and the tailor (whose code suffixes the lot number). */
@@ -21,12 +26,13 @@ export default function StageQtyDialog({
   onClose: () => void;
   onConfirm: (
     items: StageQtyItem[],
-    extra?: { tailorId?: number; fabricFeasible?: boolean },
+    extra?: { tailorId?: number; fabricUsed?: number },
   ) => void;
 }) {
   const { t } = useTranslation();
   const [qty, setQty] = useState<Record<string, number>>({});
   const [tailorId, setTailorId] = useState<number | ''>('');
+  const [fabricUsed, setFabricUsed] = useState<FabricUsedEdit>(null);
 
   useEffect(() => {
     if (!open || !batch) return;
@@ -35,11 +41,14 @@ export default function StageQtyDialog({
       Object.fromEntries(batch.sizes.map((s) => [s.sku, Math.max(0, s.qtyPlanned - s.qtyCut)])),
     );
     setTailorId(batch.tailorId ?? '');
+    setFabricUsed(null);
   }, [open, batch]);
 
   const total = useMemo(() => Object.values(qty).reduce((a, b) => a + b, 0), [qty]);
 
   if (!batch) return null;
+  const estimate = estimateFabric(batch.sizes, qty);
+  const used = Number(fabricUsedValue(fabricUsed, estimate));
 
   const set = (sku: string, raw: string) =>
     setQty((p) => ({ ...p, [sku]: Math.max(0, Number.parseInt(raw, 10) || 0) }));
@@ -71,11 +80,14 @@ export default function StageQtyDialog({
           </Button>
           <Button
             size="sm"
-            disabled={busy || total <= 0 || tailorId === ''}
+            disabled={busy || total <= 0 || tailorId === '' || (batch.fabric != null && !(used > 0))}
             onClick={() =>
               onConfirm(
                 batch.sizes.map((s) => ({ sku: s.sku, qty: qty[s.sku] ?? 0 })),
-                { tailorId: tailorId === '' ? undefined : tailorId },
+                {
+                  tailorId: tailorId === '' ? undefined : tailorId,
+                  ...(batch.fabric && used > 0 ? { fabricUsed: used } : {}),
+                },
               )
             }
           >
@@ -141,6 +153,14 @@ export default function StageQtyDialog({
           </tbody>
         </table>
       </div>
+      {batch.fabric && total > 0 && (
+        <FabricUsedField
+          fabric={batch.fabric}
+          estimate={estimate}
+          value={fabricUsed}
+          onChange={setFabricUsed}
+        />
+      )}
     </Dialog>
   );
 }

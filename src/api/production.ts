@@ -53,15 +53,15 @@ export interface BatchSizeLine {
   /** null = no forecast existed (style-origin), NOT "forecast said zero". */
   suggestedQty: number | null;
   qtyProduced: number | null;
+  /** Estimated fabric per piece for this size; null = not given. */
+  fabricPerPiece: number | null;
   /** Units already shipped on challans; `qtyProduced - qtyDispatched` is what
    *  remains to dispatch. Always a number (0 when nothing shipped). */
   qtyDispatched: number;
 }
 
-/** Whether a batch's fabric is sorted. Mirrors the BE enum. */
-export type FabricStatus = 'available' | 'not_available' | 'ordered';
-
-export const FABRIC_STATUSES: FabricStatus[] = ['available', 'not_available', 'ordered'];
+/** Trims are set by hand on the Pipeline; null = nobody has said yet. */
+export type TrimsStatus = 'available' | 'not_available' | 'ordered';
 
 export interface ProductionBatch {
   id: number;
@@ -76,9 +76,7 @@ export interface ProductionBatch {
   externalSku: string | null;
   /** Colour master for an external batch; null on style/forecast batches. */
   colourId: number | null;
-  /** Is the fabric sorted? null = nobody has said yet. Editable on Pipeline
-   *  only; `not_available` blocks send-to-production. */
-  fabricStatus: FabricStatus | null;
+  trimsStatus: TrimsStatus | null;
   productionType: ProductionType;
   colourName: string | null;
   colourHex: string | null;
@@ -119,6 +117,35 @@ export interface ProductionBatch {
   parentBatch: { id: number; batchNo: string } | null;
   /** Sub-lots split from this one (only a root lot has them). */
   subLots: { id: number; batchNo: string; status: BatchStatus }[];
+  /** Fabric this lot is cut from; null until a fabric plan is set. */
+  fabric: BatchFabric | null;
+}
+
+/** Planning check: red (short) / yellow (low) / green (enough). */
+export interface FabricPlanCheck {
+  state: 'enough' | 'low' | 'short';
+  needed: number;
+  stock: number;
+  /** Stock less what other planning lots hold. */
+  free: number;
+  onOrder: number;
+  nextExpectedDate: string | null;
+}
+
+export interface BatchFabric {
+  fabricColourId: number;
+  fabricId: number;
+  fabricName: string;
+  fabricCode: string | null;
+  colourName: string;
+  colourHex: string | null;
+  unit: string | null;
+  needed: number;
+  /** Issued to the lot, net of returns (includes what cutting deducted). */
+  issued: number;
+  /** Confirmed as used at cutting. */
+  used: number;
+  check: FabricPlanCheck | null;
 }
 
 export interface ProductionKpis {
@@ -264,6 +291,10 @@ export interface CreateBatchBody {
   /** Tailor for a lot opening straight on the floor — their short code becomes
    *  the lot number suffix. Ignored when the lot lands in Planning. */
   tailorId?: number;
+  /** Fabric colour the lot is cut from — required to send straight to the floor. */
+  fabricColourId?: number;
+  /** Fabric used for a lot opening on the floor; comes off stock. */
+  fabricUsed?: number;
   notes?: string;
   items: CreateBatchItem[];
 }
@@ -294,31 +325,50 @@ export interface StageQtyItem {
 }
 
 /** Planning → floor. Records what went into cutting and names the tailor, whose
- *  short code turns lot `1001` into `1001-RAJ`. `fabricFeasible` is the sender's
- *  confirmation that the fabric exists; it lands on the audit entry. */
+ *  short code turns lot `1001` into `1001-RAJ`. */
 export function sendToProduction(
   id: number,
   items: StageQtyItem[],
-  extra?: { tailorId?: number; fabricFeasible?: boolean },
+  extra?: { tailorId?: number; fabricUsed?: number },
 ): Promise<ProductionBatch> {
   return apiClient
     .post<ProductionBatch>(`/api/production/batches/${id}/actions/send-to-production`, {
       items,
       ...(extra?.tailorId != null ? { tailorId: extra.tailorId } : {}),
-      ...(extra?.fabricFeasible != null ? { fabricFeasible: extra.fabricFeasible } : {}),
+      ...(extra?.fabricUsed != null ? { fabricUsed: extra.fabricUsed } : {}),
     })
     .then((r) => r.data);
 }
 
-/** Set (or clear, with null) whether the batch's fabric is sorted. Pipeline
- *  only — the BE refuses it once the lot is on the floor. */
-export function setFabricStatus(
+/** Set (or clear, with null) whether a lot's trims are in. Pipeline only. */
+export function setTrimsStatus(id: number, trimsStatus: TrimsStatus | null): Promise<ProductionBatch> {
+  return apiClient
+    .patch<ProductionBatch>(`/api/production/batches/${id}/trims-status`, { trimsStatus })
+    .then((r) => r.data);
+}
+
+/** Set a lot's fabric colour and per-size fabric estimate. */
+export function setFabricPlan(
   id: number,
-  fabricStatus: FabricStatus | null,
+  body: {
+    fabricColourId?: number | null;
+    items?: { sku: string; fabricPerPiece: number | null }[];
+  },
 ): Promise<ProductionBatch> {
   return apiClient
-    .patch<ProductionBatch>(`/api/production/batches/${id}/fabric-status`, { fabricStatus })
+    .patch<ProductionBatch>(`/api/production/batches/${id}/fabric-plan`, body)
     .then((r) => r.data);
+}
+
+/** Prefill for a lot's fabric plan — the last lot of the same style. */
+export function getFabricDefaults(params: {
+  styleId?: number | null;
+  styleKey?: string | null;
+}): Promise<{ fabricColourId: number | null; perPieceBySize: Record<string, number> }> {
+  const q: Record<string, string> = {};
+  if (params.styleId) q.styleId = String(params.styleId);
+  if (params.styleKey) q.styleKey = params.styleKey;
+  return apiClient.get('/api/production/fabric-defaults', { params: q }).then((r) => r.data);
 }
 
 /** Switch a Nowi-style lot between Low MOQ and Bulk. */
@@ -363,6 +413,8 @@ export interface UpdateLotBody {
   /** The figures and stage the dialog opened with; a mismatch is refused (409). */
   expected?: (CorrectStageQtyItem & { qtyPlanned?: number })[];
   expectedStatus?: BatchStatus;
+  /** Fabric confirmed as used for the pieces this save adds to cutting. */
+  fabricUsed?: number;
 }
 
 /** One save for the whole dialog — the server applies it all or none of it. */

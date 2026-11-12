@@ -18,6 +18,12 @@ import {
 } from '@/api/production';
 import { apiErrorMessage, apiErrorStatus } from '@/api/apiClient';
 import { FLOOR_STAGES, statusLabel, suggestedStage } from '@/lib/production';
+import { fmtQty } from '@/lib/fabric';
+import FabricUsedField, {
+  estimateFabric,
+  fabricUsedValue,
+  type FabricUsedEdit,
+} from '@/components/production/FabricUsedField';
 
 /** Every stage total the dialog sets: its API name, the size-line field, and its heading. */
 const STAGES = [
@@ -55,6 +61,7 @@ export default function EditLotDialog({
   const [busy, setBusy] = useState(false);
   // The lot as the server last read it — replaces `lot` after a 409 so typed figures survive.
   const [fresh, setFresh] = useState<ProductionBatch | null>(null);
+  const [fabricUsed, setFabricUsed] = useState<FabricUsedEdit>(null);
 
   useEffect(() => {
     if (!open || !lot) return;
@@ -68,6 +75,7 @@ export default function EditLotDialog({
     setNotes(lot.notes ?? '');
     setReviewing(false);
     setFresh(null);
+    setFabricUsed(null);
   }, [open, lot]);
 
   if (!lot) return null;
@@ -107,6 +115,16 @@ export default function EditLotDialog({
   const statusChanged = status !== base.status;
   const notesChanged = nextNotes !== (base.notes ?? '');
 
+  // Only a raised cut total uses fabric; a lowered one is a correction.
+  const cutAdded: Record<string, number> = Object.fromEntries(
+    base.sizes.map((s) => [s.sku, Math.max(0, (stages[s.sku]?.cutting ?? s.qtyCut) - s.qtyCut)]),
+  );
+  const fabricEstimate = estimateFabric(base.sizes, cutAdded);
+  const askFabric = base.fabric != null && Object.values(cutAdded).some((n) => n > 0);
+  const fabricUsedNum = Number(fabricUsedValue(fabricUsed, fabricEstimate));
+  // Cut pieces always used some cloth — a blank or 0 would silently skip the deduction.
+  const fabricOk = !askFabric || fabricUsedNum > 0;
+
   const changes: string[] = [];
   if (statusChanged) {
     changes.push(
@@ -127,6 +145,14 @@ export default function EditLotDialog({
       `${d.s.size} · ${t(`admin.production.lot.${d.m.key}`, { defaultValue: d.m.text })} ${d.s[d.m.field]} → ${d.to}`,
     );
   }
+  if (askFabric && fabricUsedNum > 0) {
+    changes.push(
+      t('admin.production.fabricUsed.line', {
+        defaultValue: 'Fabric used: {{qty}}',
+        qty: fmtQty(fabricUsedNum, base.fabric!.unit),
+      }),
+    );
+  }
   if (notesChanged) {
     changes.push(
       nextNotes
@@ -135,7 +161,7 @@ export default function EditLotDialog({
     );
   }
 
-  const canSave = changes.length > 0 && total > 0 && !busy;
+  const canSave = changes.length > 0 && total > 0 && fabricOk && !busy;
 
   const save = async () => {
     const body: UpdateLotBody = {
@@ -151,6 +177,7 @@ export default function EditLotDialog({
       ...(corrections.length > 0 ? { stages: corrections } : {}),
       ...(statusChanged ? { status } : {}),
       ...(notesChanged ? { notes: nextNotes } : {}),
+      ...(askFabric && fabricUsedNum > 0 ? { fabricUsed: fabricUsedNum } : {}),
       // What the dialog is working from — the server refuses the save if the lot has moved on.
       expectedStatus: base.status,
       expected: base.sizes.map((s) => ({
@@ -342,6 +369,15 @@ export default function EditLotDialog({
             </tbody>
           </table>
         </div>
+
+        {askFabric && (
+          <FabricUsedField
+            fabric={base.fabric!}
+            estimate={fabricEstimate}
+            value={fabricUsed}
+            onChange={setFabricUsed}
+          />
+        )}
 
         <div className="mt-4">
           <label className="mb-1 block text-xs font-medium">
