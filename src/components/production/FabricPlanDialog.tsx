@@ -79,7 +79,7 @@ export default function FabricPlanDialog({
   const fabric = fabrics.find((f) => f.id === fabricId);
   const colour = fabric?.colours?.find((c) => c.id === fabricColourId);
   const uom = fabric?.unitOfMeasure ? UOM_SHORT[fabric.unitOfMeasure] : '';
-  const needed = Number(estimate) || 0;
+  const needed = Math.round((Number(estimate) || 0) * 100) / 100;
 
   // Same rule as the server: free = stock less what OTHER planning lots hold.
   const preview: FabricPlanCheck | null = useMemo(() => {
