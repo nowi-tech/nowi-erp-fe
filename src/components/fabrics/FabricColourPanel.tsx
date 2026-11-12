@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
-import { ArrowUpRight, ClipboardCheck, ShoppingCart } from 'lucide-react';
+import { ArrowUpRight, ClipboardCheck, Loader2, ShoppingCart } from 'lucide-react';
 import { Drawer } from '@/components/ui/drawer';
 import { Button } from '@/components/ui/button';
 import { FilterRailSegments } from '@/components/ui/filter-rail';
@@ -54,11 +54,14 @@ export function useFabricActivity(
   const [busy, setBusy] = useState(false);
   // Only the latest request may write — a slow reply for an old filter is dropped.
   const seqRef = useRef(0);
+  // A next-page request while a fresh load runs would append the old filter's page to the new list.
+  const loading = useRef(false);
 
   const load = useCallback(
     async (before?: string) => {
-      if (!Number.isFinite(fabricId)) return;
+      if (!Number.isFinite(fabricId) || (before && loading.current)) return;
       const seq = ++seqRef.current;
+      loading.current = true;
       setBusy(true);
       try {
         const r = await getFabricActivity(fabricId, { kind, colourId, before });
@@ -69,9 +72,13 @@ export function useFabricActivity(
           const seen = new Set(a.map((x) => x.id));
           return [...a, ...r.items.filter((x) => !seen.has(x.id))];
         });
-        setNextBefore(r.nextBefore);
+        // A cursor that doesn't move would refetch the same page forever.
+        setNextBefore(r.nextBefore === before ? null : r.nextBefore);
       } finally {
-        if (seq === seqRef.current) setBusy(false);
+        if (seq === seqRef.current) {
+          loading.current = false;
+          setBusy(false);
+        }
       }
     },
     [fabricId, kind, colourId],
@@ -81,10 +88,11 @@ export function useFabricActivity(
     void load().catch(() => undefined);
   }, [load, version]);
 
-  return { activity, nextBefore, busy, loadMore: () => void load(nextBefore ?? undefined).catch(() => undefined) };
+  const loadMore = useCallback(() => void load(nextBefore ?? undefined).catch(() => undefined), [load, nextBefore]);
+  return { activity, nextBefore, busy, loadMore };
 }
 
-/** The activity list with its "Load more" footer. */
+/** The activity list; the next page loads when its bottom scrolls into view. */
 export function ActivityList({
   feed,
   fabric,
@@ -103,6 +111,20 @@ export function ActivityList({
   const { t } = useTranslation();
   const unit = fabric.unitOfMeasure ?? null;
   const colourName = (cid: number | null | undefined) => fabric.colours?.find((c) => c.id === cid)?.name ?? '';
+  const sentinelRef = useRef<HTMLDivElement>(null);
+  const { nextBefore, busy, loadMore } = feed;
+  // Re-armed after every load, so a sentinel still in view fetches the next page too.
+  useEffect(() => {
+    const el = sentinelRef.current;
+    if (!el || !nextBefore || busy) return;
+    const io = new IntersectionObserver((entries) => {
+      if (!entries[0].isIntersecting) return;
+      io.disconnect();
+      loadMore();
+    });
+    io.observe(el);
+    return () => io.disconnect();
+  }, [nextBefore, busy, loadMore]);
   return (
     <>
       {feed.activity.length === 0 ? (
@@ -113,10 +135,8 @@ export function ActivityList({
         />
       )}
       {feed.nextBefore && (
-        <div className="border-t border-[var(--color-border)] px-5 py-2 text-center">
-          <Button size="sm" variant="outline" disabled={feed.busy} onClick={feed.loadMore}>
-            {t('admin.fabricActivity.more', { defaultValue: 'Load more' })}
-          </Button>
+        <div ref={sentinelRef} className="flex justify-center py-3 text-[var(--color-muted-foreground)]">
+          {feed.busy && <Loader2 className="animate-spin" size={16} />}
         </div>
       )}
     </>
@@ -144,11 +164,11 @@ export function ColourActions({
     <div className="inline-flex items-center gap-2">
       {canEdit && (
         <>
-          <Button size="sm" disabled={(colour.availableQuantity ?? 0) <= 0} onClick={() => onIssue(colour)}>
+          <Button size="sm" variant="outline" disabled={(colour.availableQuantity ?? 0) <= 0} onClick={() => onIssue(colour)}>
             <ArrowUpRight size={15} />
             {t('admin.fabricLibrary.issue')}
           </Button>
-          <Button size="sm" variant="outline" onClick={() => onOrder(colour)}>
+          <Button size="sm" onClick={() => onOrder(colour)}>
             <ShoppingCart size={15} />
             {t('admin.fabricLibrary.order', { defaultValue: 'Order' })}
           </Button>
