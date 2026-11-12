@@ -503,6 +503,7 @@ export default function FabricLibrary() {
           setCountOpen(false);
           void load();
         }}
+        onRefresh={() => void load()}
       />
 
       <StockCheckDialog

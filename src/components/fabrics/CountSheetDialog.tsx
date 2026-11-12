@@ -23,11 +23,14 @@ export default function CountSheetDialog({
   fabrics,
   onClose,
   onSaved,
+  onRefresh,
 }: {
   open: boolean;
   fabrics: Fabric[];
   onClose: () => void;
   onSaved: () => void;
+  /** Reload the figures without closing — after a save that stopped partway. */
+  onRefresh: () => void;
 }) {
   const { t } = useTranslation();
   const toast = useToast();
@@ -83,7 +86,12 @@ export default function CountSheetDialog({
         })}`,
         'error',
       );
-      if (done > 0) onSaved();
+      // Keep what didn't save (and the reason) so Update can be pressed again.
+      if (done > 0) {
+        const saved = new Set(changed.slice(0, done).map(({ colour: c }) => c.id));
+        setCounts((m) => Object.fromEntries(Object.entries(m).filter(([id]) => !saved.has(Number(id)))));
+        onRefresh();
+      }
     } finally {
       setSaving(false);
     }
@@ -111,7 +119,7 @@ export default function CountSheetDialog({
       <div className="space-y-4">
         <div className="space-y-1.5">
           <Label>{t('admin.countSheet.what', { defaultValue: 'Count' })}</Label>
-          <Select value={scope} onChange={(e) => setScope(e.target.value)}>
+          <Select value={scope} disabled={saving} onChange={(e) => setScope(e.target.value)}>
             <option value="" disabled>
               {t('admin.countSheet.pick', { defaultValue: 'Choose a fabric…' })}
             </option>
@@ -160,6 +168,7 @@ export default function CountSheetDialog({
                           min="0"
                           step="0.01"
                           value={counts[c.id] ?? ''}
+                          disabled={saving}
                           onChange={(e) => setCounts((m) => ({ ...m, [c.id]: e.target.value }))}
                         />
                         <span className="w-6 text-left text-xs text-[var(--color-muted-foreground)]">
@@ -178,6 +187,7 @@ export default function CountSheetDialog({
           <Label>{t('admin.stockCheck.reason', { defaultValue: 'Reason' })} *</Label>
           <Input
             value={reason}
+            disabled={saving}
             placeholder={t('admin.countSheet.reasonPh', { defaultValue: 'Monthly stock-take' })}
             onChange={(e) => setReason(e.target.value)}
           />
