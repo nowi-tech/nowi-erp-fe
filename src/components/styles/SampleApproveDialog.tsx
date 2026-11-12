@@ -74,6 +74,9 @@ export default function SampleApproveDialog({
   const [fabricUsed, setFabricUsed] = useState('');
   // The fabric question loads after the dialog opens; signing off before it arrives would skip it.
   const [fabricLoading, setFabricLoading] = useState(false);
+  // A failed lookup is not "no fabric": sign-off waits until it loads. Bump `fabricTry` to retry.
+  const [fabricError, setFabricError] = useState(false);
+  const [fabricTry, setFabricTry] = useState(0);
 
   useEffect(() => {
     let live = true;
@@ -82,6 +85,7 @@ export default function SampleApproveDialog({
     setColourKnown(false);
     setFabricUsed('');
     setFabricLoading(false);
+    setFabricError(false);
     if (!open || styleId == null) return;
     setFabricLoading(true);
     void getStyle(styleId)
@@ -96,14 +100,7 @@ export default function SampleApproveDialog({
         setFabricUsed(st.sampleFabricRequired != null ? String(Number(st.sampleFabricRequired)) : '');
       })
       .catch(() => {
-        if (live) {
-          toast.show(
-            t('admin.styles.approval2.fabricLoadError', {
-              defaultValue: "Couldn't load the sample's fabric — its usage won't be recorded.",
-            }),
-            'error',
-          );
-        }
+        if (live) setFabricError(true);
       })
       .finally(() => {
         if (live) setFabricLoading(false);
@@ -112,7 +109,7 @@ export default function SampleApproveDialog({
       live = false;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [open, styleId]);
+  }, [open, styleId, fabricTry]);
 
   useEffect(() => {
     if (open) {
@@ -198,7 +195,7 @@ export default function SampleApproveDialog({
           </Button>
           <Button
             size="sm"
-            disabled={busy || uploading || costMissing || imageMissing || fabricMissing || fabricLoading}
+            disabled={busy || uploading || costMissing || imageMissing || fabricMissing || fabricLoading || fabricError}
             onClick={() =>
               onConfirm({
                 sampleApproval: verdict,
@@ -295,6 +292,14 @@ export default function SampleApproveDialog({
                 />
               </div>
             )}
+          </div>
+        )}
+        {fabricError && (
+          <div className="flex items-center gap-2 text-sm text-[var(--color-destructive)]">
+            {t('admin.styles.approval2.fabricLoadError', { defaultValue: "Couldn't load the sample's fabric." })}
+            <Button size="sm" variant="outline" onClick={() => setFabricTry((n) => n + 1)}>
+              {t('common.retry', { defaultValue: 'Retry' })}
+            </Button>
           </div>
         )}
         {fabric && (

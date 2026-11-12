@@ -51,7 +51,9 @@ export default function Approval1Dialog({
   const [confirmed, setConfirmed] = useState(false);
   const [note, setNote] = useState('');
 
-  const [stock, setStock] = useState<{ fabric: Fabric; colour?: FabricColour } | null | 'none'>(null);
+  const [stock, setStock] = useState<
+    { fabric: Fabric; colour?: FabricColour; styleColour: string | null } | null | 'none' | 'error'
+  >(null);
 
   // Reset the checklist each time the dialog opens.
   useEffect(() => {
@@ -73,9 +75,11 @@ export default function Approval1Dialog({
           return;
         }
         const f = await getFabric(st.fabricId);
-        if (live) setStock({ fabric: f, colour: styleFabricColour(f, st.primaryColour) });
+        if (live) setStock({ fabric: f, colour: styleFabricColour(f, st.primaryColour), styleColour: st.primaryColour });
       })
-      .catch(() => undefined);
+      .catch(() => {
+        if (live) setStock('error');
+      });
     return () => {
       live = false;
     };
@@ -85,9 +89,28 @@ export default function Approval1Dialog({
     if (stock === 'none') {
       return { text: t('admin.styles.approval1.noFabric', { defaultValue: 'Fabric: not picked yet' }), tone: 'muted' as const };
     }
+    if (stock === 'error') {
+      return { text: t('admin.styles.approval1.stockError', { defaultValue: "Couldn't load fabric stock." }), tone: 'muted' as const };
+    }
     if (!stock) return null;
-    const { fabric, colour } = stock;
+    const { fabric, colour, styleColour } = stock;
     const unit = fabric.unitOfMeasure;
+    // Another colour's stock is not this style's stock.
+    if (!colour && (fabric.colours?.length ?? 0) > 0) {
+      return {
+        text: styleColour
+          ? t('admin.styles.approval1.colourMissing', {
+              defaultValue: '{{fabric}} · {{colour}} not in the library',
+              fabric: fabric.name,
+              colour: styleColour,
+            })
+          : t('admin.styles.approval1.colourUnset', {
+              defaultValue: '{{fabric}} · style colour not set',
+              fabric: fabric.name,
+            }),
+        tone: 'bad' as const,
+      };
+    }
     const have = colour
       ? colour.availableQuantity ?? 0
       : (fabric.colours ?? []).reduce((s, c) => s + (c.availableQuantity ?? 0), 0);
