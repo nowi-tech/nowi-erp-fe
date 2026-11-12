@@ -132,7 +132,8 @@ export function Drawer({
           'bg-[var(--color-surface)] border-l border-[var(--color-border)]',
           'shadow-[var(--shadow-pop)]',
           'transition-transform duration-200 ease-out',
-          open ? 'translate-x-0' : 'translate-x-full',
+          // translate-none when open: any transform would trap nested fixed overlays inside the panel.
+          open ? 'translate-none' : 'translate-x-full',
         )}
       >
         {/* Top accent line */}
