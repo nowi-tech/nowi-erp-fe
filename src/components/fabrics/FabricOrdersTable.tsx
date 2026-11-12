@@ -21,6 +21,16 @@ import {
 } from '@/lib/fabric';
 import FabricOrderDialog from './FabricOrderDialog';
 import FabricOrderDrawer from './FabricOrderDrawer';
+import { compareNullsLast, LastUpdated, SortHeader, useSortCycle } from '@/components/ui/sort-header';
+
+type SortKey = 'orderNo' | 'ordered' | 'due' | 'updated';
+
+const SORT_VALUE: Record<SortKey, (o: FabricOrder) => number | null> = {
+  orderNo: (o) => o.orderNo,
+  ordered: (o) => Date.parse(o.orderDate),
+  due: (o) => (o.expectedDate ? Date.parse(o.expectedDate) : null),
+  updated: (o) => Date.parse(o.updatedAt),
+};
 
 interface Props {
   orders: FabricOrder[];
@@ -42,6 +52,8 @@ export default function FabricOrdersTable({ orders, fabrics, showFabric, canEdit
   const [editing, setEditing] = useState<FabricOrder | null>(null);
   const [receiving, setReceiving] = useState<FabricOrder | null>(null);
   const [confirm, setConfirm] = useState<{ order: FabricOrder; kind: 'close' | 'cancel' } | null>(null);
+  const { sortKey, sortDir, onSort } = useSortCycle<SortKey>();
+  const sortProps = { sortKey, sortDir, onSort };
 
   const run = async (p: Promise<unknown>) => {
     try {
@@ -64,6 +76,12 @@ export default function FabricOrdersTable({ orders, fabrics, showFabric, canEdit
     );
   }
 
+  // No header clicked → the order the caller passed in.
+  const sorted =
+    sortKey == null
+      ? orders
+      : [...orders].sort((a, b) => compareNullsLast(SORT_VALUE[sortKey](a), SORT_VALUE[sortKey](b), sortDir));
+
   const statusLabel = (s: FabricOrderStatus) =>
     t(`admin.fabricOrders.statuses.${s}`, { defaultValue: ORDER_STATUS_LABEL[s] });
 
@@ -72,7 +90,12 @@ export default function FabricOrdersTable({ orders, fabrics, showFabric, canEdit
       <table className="w-full text-[13px]">
         <thead className="bg-[var(--color-surface-2)] text-[11px] font-semibold uppercase tracking-wider text-[var(--color-muted-foreground)]">
           <tr>
-            <th className="px-3 py-2 text-left">{t('admin.fabricOrders.orderNo', { defaultValue: 'Order' })}</th>
+            <th className="px-3 py-2 text-left">
+              <div className="flex items-center gap-3 whitespace-nowrap">
+                <SortHeader label={t('admin.fabricOrders.orderNo', { defaultValue: 'Order no.' })} col="orderNo" {...sortProps} />
+                <SortHeader label={t('admin.fabricOrders.orderedOn', { defaultValue: 'Ordered' })} col="ordered" {...sortProps} />
+              </div>
+            </th>
             <th className="px-3 py-2 text-left">
               {showFabric
                 ? t('admin.fabricOrders.fabricColour', { defaultValue: 'Fabric · colour' })
@@ -80,14 +103,19 @@ export default function FabricOrdersTable({ orders, fabrics, showFabric, canEdit
             </th>
             <th className="px-3 py-2 text-left">{t('admin.fabricOrders.vendor', { defaultValue: 'Vendor' })}</th>
             <th className="px-3 py-2 text-right">{t('admin.fabricOrders.received', { defaultValue: 'Received / ordered' })}</th>
-            <th className="px-3 py-2 text-left">{t('admin.fabricOrders.due', { defaultValue: 'Due' })}</th>
+            <th className="px-3 py-2 text-left">
+              <SortHeader label={t('admin.fabricOrders.due', { defaultValue: 'Due' })} col="due" {...sortProps} />
+            </th>
             <th className="px-3 py-2 text-left">{t('admin.fabricOrders.status', { defaultValue: 'Status' })}</th>
+            <th className="whitespace-nowrap px-3 py-2 text-left">
+              <SortHeader label={t('admin.fabricOrders.lastUpdated', { defaultValue: 'Last updated' })} col="updated" {...sortProps} />
+            </th>
             <th className="px-3 py-2 text-left">{t('admin.fabricOrders.note', { defaultValue: 'Remarks' })}</th>
             {canEdit && <th className="px-3 py-2" />}
           </tr>
         </thead>
         <tbody>
-          {orders.map((o) => {
+          {sorted.map((o) => {
             const isOpen = OPEN_ORDER_STATUSES.includes(o.status);
             const unit = o.fabric?.unitOfMeasure ?? null;
             return (
@@ -151,6 +179,9 @@ export default function FabricOrdersTable({ orders, fabrics, showFabric, canEdit
                     ) : (
                       <Badge variant={ORDER_STATUS_VARIANT[o.status]}>{statusLabel(o.status)}</Badge>
                     )}
+                  </td>
+                  <td className="px-3 py-2.5 whitespace-nowrap">
+                    <LastUpdated at={o.updatedAt} />
                   </td>
                   <td className="px-3 py-2.5 text-[var(--color-muted-foreground)]">{o.note ?? ''}</td>
                   {canEdit && (

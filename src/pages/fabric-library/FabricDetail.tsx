@@ -196,11 +196,11 @@ export default function FabricDetail() {
                     <Pencil size={15} />
                     {t('admin.fabricLibrary.edit')}
                   </Button>
-                  <Button size="sm" onClick={() => setIssueFor({})}>
+                  <Button size="sm" variant="outline" onClick={() => setIssueFor({})}>
                     <ArrowUpRight size={15} />
                     {t('admin.fabricLibrary.issue')}
                   </Button>
-                  <Button size="sm" variant="outline" onClick={() => setOrderFor({})}>
+                  <Button size="sm" onClick={() => setOrderFor({})}>
                     <ShoppingCart size={15} />
                     {t('admin.fabricLibrary.order', { defaultValue: 'Order' })}
                   </Button>

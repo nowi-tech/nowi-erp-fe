@@ -293,6 +293,8 @@ export interface FabricColour {
   needsReview?: number;
   /** Used for lots, samples and wastage in the last 30 days, net of returns. */
   used30d?: number;
+  /** Newest stock move or order change on this colour (list only). */
+  lastUpdatedAt?: string | null;
 }
 
 export interface Fabric {
@@ -320,6 +322,8 @@ export interface Fabric {
   /** Computed: SUM of all stock-ledger entries (signed). */
   availableQuantity?: number;
   updatedAt?: string;
+  /** Newest of the fabric edit, its stock moves and its order changes (list only). */
+  lastUpdatedAt?: string | null;
 }
 
 export type FabricStockEntryType = 'receipt' | 'consumption' | 'adjustment' | 'return';
@@ -1135,6 +1139,7 @@ export interface FabricOrder {
   note: string | null;
   createdBy: { id: number; name: string } | null;
   createdAt: string;
+  updatedAt: string;
   /** Receipts, plus fabric sent back to the vendor (negative, `sentBack`). */
   receipts: {
     entryId: number;

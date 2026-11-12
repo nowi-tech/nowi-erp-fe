@@ -20,6 +20,7 @@ import { useToast } from '@/components/ui/toast';
 import FabricEditorForm from '@/components/fabrics/FabricEditorForm';
 import FabricOrderDialog from '@/components/fabrics/FabricOrderDialog';
 import FabricOrdersTable from '@/components/fabrics/FabricOrdersTable';
+import { compareNullsLast, LastUpdated, SortHeader, useSortCycle } from '@/components/ui/sort-header';
 import IssueSlipDialog from '@/components/fabrics/IssueSlipDialog';
 import { StockCheckDialog } from '@/components/fabrics/StockActionDialogs';
 import CountSheetDialog from '@/components/fabrics/CountSheetDialog';
@@ -79,6 +80,7 @@ export default function FabricLibrary() {
   const [search, setSearch] = useState('');
   const [chip, setChip] = useState<Chip | null>(null);
   const [collapsed, setCollapsed] = useState<Set<number>>(new Set());
+  const { sortKey, sortDir, onSort } = useSortCycle<'stock' | 'updated'>();
 
   const [newFabricOpen, setNewFabricOpen] = useState(false);
   const [orderFor, setOrderFor] = useState<{ fabricId?: number; fabricColourId?: number; quantity?: number } | null>(null);
@@ -118,7 +120,7 @@ export default function FabricLibrary() {
     return m;
   }, [orders]);
 
-  const groups = useMemo(() => {
+  const filteredGroups = useMemo(() => {
     const q = search.trim().toLowerCase();
     const matches = (f: Fabric, c: FabricColour): boolean => {
       const text = `${f.name} ${f.code ?? ''} ${c.name} ${c.code ?? ''}`;
@@ -136,6 +138,24 @@ export default function FabricLibrary() {
             g.fabric.name.toLowerCase().includes(q)),
       );
   }, [fabrics, search, chip]);
+
+  // Colours sort by their own value; fabrics by the total stock of the colours shown, or their own last update.
+  const groups = useMemo(() => {
+    if (sortKey == null) return filteredGroups;
+    const time = (d?: string | null) => (d ? Date.parse(d) : null);
+    const colourVal = (c: FabricColour) =>
+      sortKey === 'stock' ? (c.availableQuantity ?? 0) : time(c.lastUpdatedAt);
+    const fabricVal = (g: (typeof filteredGroups)[number]) =>
+      sortKey === 'stock'
+        ? g.colours.reduce((n, c) => n + (c.availableQuantity ?? 0), 0)
+        : time(g.fabric.lastUpdatedAt);
+    return filteredGroups
+      .map((g) => ({
+        ...g,
+        colours: [...g.colours].sort((a, b) => compareNullsLast(colourVal(a), colourVal(b), sortDir)),
+      }))
+      .sort((a, b) => compareNullsLast(fabricVal(a), fabricVal(b), sortDir));
+  }, [filteredGroups, sortKey, sortDir]);
 
   const allColours = useMemo(() => fabrics.flatMap((f) => f.colours ?? []), [fabrics]);
   const kpi = (k: Chip) => allColours.filter(CHIP_MATCH[k]).length;
@@ -235,32 +255,50 @@ export default function FabricLibrary() {
       <section className="rounded-[var(--radius-md)] border border-[var(--color-border)] bg-[var(--color-surface)]">
         <div className="overflow-x-auto">
           {/* Fixed widths so every row lines up; spare width goes to Actions, whose buttons sit right. */}
-          <table className="w-full min-w-[1000px] table-fixed text-sm">
+          <table className="w-full min-w-[1140px] table-fixed text-sm">
             <colgroup>
               <col className="w-[300px]" />
               <col className="w-[240px]" />
               <col className="w-[160px]" />
+              <col className="w-[140px]" />
               <col />
             </colgroup>
             <thead className="bg-[var(--color-surface-2)] text-[11px] font-semibold uppercase tracking-wider text-[var(--color-muted-foreground)]">
               <tr>
                 <th className="px-3 py-2 text-left">{t('admin.fabricLibrary.cols.colour', { defaultValue: 'Colour' })}</th>
-                <th className="px-3 py-2 text-left">{t('admin.fabricLibrary.cols.stock', { defaultValue: 'Stock' })}</th>
+                <th className="px-3 py-2 text-left">
+                  <SortHeader
+                    label={t('admin.fabricLibrary.cols.stock', { defaultValue: 'Stock' })}
+                    col="stock"
+                    sortKey={sortKey}
+                    sortDir={sortDir}
+                    onSort={onSort}
+                  />
+                </th>
                 <th className="px-3 py-2 text-right">{t('admin.fabricLibrary.cols.onOrder', { defaultValue: 'On order' })}</th>
+                <th className="px-3 py-2 text-left">
+                  <SortHeader
+                    label={t('admin.fabricLibrary.cols.lastUpdated', { defaultValue: 'Last updated' })}
+                    col="updated"
+                    sortKey={sortKey}
+                    sortDir={sortDir}
+                    onSort={onSort}
+                  />
+                </th>
                 <th className="px-3 py-2 text-right">{t('admin.fabricLibrary.cols.actions')}</th>
               </tr>
             </thead>
             <tbody>
               {loading && (
                 <tr>
-                  <td colSpan={4} className="px-3 py-8 text-center text-[var(--color-muted-foreground)]">
+                  <td colSpan={5} className="px-3 py-8 text-center text-[var(--color-muted-foreground)]">
                     {t('common.loading', 'Loading…')}
                   </td>
                 </tr>
               )}
               {!loading && groups.length === 0 && (
                 <tr>
-                  <td colSpan={4} className="px-3 py-8 text-center text-[var(--color-muted-foreground)]">
+                  <td colSpan={5} className="px-3 py-8 text-center text-[var(--color-muted-foreground)]">
                     {t('admin.fabricLibrary.empty')}
                   </td>
                 </tr>
@@ -278,7 +316,7 @@ export default function FabricLibrary() {
                           if (!(e.target as HTMLElement).closest('button, a')) toggle(f.id);
                         }}
                       >
-                        <td colSpan={4} className="px-3 py-2.5">
+                        <td colSpan={3} className="px-3 py-2.5">
                           <div className="flex items-center gap-2">
                             <button
                               type="button"
@@ -315,6 +353,10 @@ export default function FabricLibrary() {
                             )}
                           </div>
                         </td>
+                        <td className="whitespace-nowrap px-3 py-2.5">
+                          <LastUpdated at={f.lastUpdatedAt} />
+                        </td>
+                        <td />
                       </tr>
                       {!isCollapsed &&
                         colours.map((c) => {
@@ -396,19 +438,23 @@ export default function FabricLibrary() {
                                   <span className="text-[var(--color-muted-foreground)]">—</span>
                                 )}
                               </td>
+                              <td className="whitespace-nowrap px-3 py-3">
+                                <LastUpdated at={c.lastUpdatedAt} />
+                              </td>
                               <td className="whitespace-nowrap px-3 py-3 text-right">
                                 <div className="inline-flex items-center gap-2">
                                   {canEdit && (
                                     <>
                                       <Button
                                         size="sm"
+                                        variant="outline"
                                         disabled={(c.availableQuantity ?? 0) <= 0}
                                         onClick={() => setIssueFor({ fabricId: f.id, fabricColourId: c.id })}
                                       >
                                         <ArrowUpRight size={15} />
                                         {t('admin.fabricLibrary.issue')}
                                       </Button>
-                                      <Button size="sm" variant="outline" onClick={() => orderColour(f, c)}>
+                                      <Button size="sm" onClick={() => orderColour(f, c)}>
                                         <ShoppingCart size={15} />
                                         {t('admin.fabricLibrary.order', { defaultValue: 'Order' })}
                                       </Button>
