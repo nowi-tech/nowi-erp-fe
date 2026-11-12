@@ -339,6 +339,7 @@
       "styles": "Sampling Old",
       "chinaImport": "China Import",
       "fabricLibrary": "Fabric library",
+      "fabricOrders": "Fabric orders",
       "sections": {
         "overview": "Overview",
         "analytics": "Analytics",
@@ -818,7 +819,6 @@
       "approval1": {
         "dialogTitle": "Approve intake",
         "dialogIntro": "Confirm the intake checks before approving this style.",
-        "fabricFeasible": "Fabric feasible",
         "priceOk": "Price OK",
         "collectionFit": "Fits the collection (design fit)",
         "note": "Note (optional)",
@@ -997,49 +997,31 @@
     },
     "fabricChallan": {
       "title": "Receive fabric",
-      "subtitle": "Record a supplier challan. Each line adds stock to that fabric.",
-      "back": "Back to Fabric Library",
       "challanNo": "Challan no.",
       "challanDate": "Challan date",
       "vendor": "Supplier",
       "vendorNone": "Choose a supplier…",
-      "lines": "Fabrics on this challan",
       "addLine": "Add line",
       "fabric": "Fabric",
       "quantity": "Quantity",
       "price": "Price",
-      "pricePh": "optional",
-      "colourRequired": "This fabric stocks colours — pick one.",
       "removeLine": "Remove line",
-      "note": "Note (optional)",
-      "notePh": "Transport mode, vehicle no., anything off the slip…",
-      "record": "Record challan",
       "saving": "Recording…",
       "savedToast": "Challan recorded — stock updated.",
-      "saveError": "Could not record the challan.",
-      "addVendor": "Add supplier",
-      "addVendorError": "Could not add that supplier."
+      "saveError": "Could not record the challan."
     },
     "fabricLibrary": {
       "title": "Fabric Library",
       "subtitle": "Master list of fabrics and types used across all styles.",
       "newFabric": "New fabric",
-      "receiveFabric": "Receive fabric",
       "editFabric": "Edit fabric",
       "types": "Fabric types",
       "allFabrics": "All fabrics",
       "blended": "Blended",
       "cols": {
-        "name": "Fabric name",
         "content": "Content",
-        "gsm": "GSM",
-        "width": "Width",
         "price": "Price",
-        "updated": "Last updated",
-        "actions": "Actions",
-        "available": "Available",
-        "type": "Type",
-        "unit": "Unit"
+        "actions": "Actions"
       },
       "empty": "No fabrics match these filters.",
       "addedToast": "Fabric added.",
@@ -1057,7 +1039,6 @@
         "gsm": "GSM",
         "cuttableWidth": "Cuttable width (in)",
         "unitOfMeasure": "Unit of measure",
-        "pricePerUnit": "Price per unit",
         "notes": "Notes"
       },
       "comp": {
@@ -1075,20 +1056,11 @@
         "errSum": "Composition must sum to 100% (currently {{sum}}%)."
       },
       "filters": {
-        "searchPlaceholder": "Search by fabric name…",
-        "content": "Content",
-        "clear": "Clear filters",
-        "activeSummary_one": "{{count}} fabric matches",
-        "activeSummary_other": "{{count}} fabrics match",
-        "activeOf": "{{count}} of {{total}}"
+        "content": "Content"
       },
-      "noStock": "no stock",
       "available": "available",
       "edit": "Edit",
-      "stockSavedToast": "Stock entry recorded.",
-      "stockSaveError": "Could not record stock. Try again.",
       "stock": {
-        "quantity": "Quantity",
         "note": "Note"
       },
       "issue": "Issue",
@@ -1100,25 +1072,8 @@
         "stockValue": "Stock value",
         "history": "History",
         "noHistory": "No movements yet.",
-        "unattributed": "Unattributed entries",
-        "unattributedHint": "Recorded before colours were tracked.",
-        "price": "Price",
-        "inStock": "In stock",
-        "value": "Value",
         "noColours": "No colours on this fabric yet.",
-        "notFound": "Fabric not found.",
-        "cols": {
-          "date": "Date",
-          "direction": "Direction",
-          "qty": "Qty",
-          "rate": "Rate",
-          "challan": "Challan",
-          "party": "Party",
-          "note": "Note",
-          "balance": "Balance"
-        },
-        "in": "IN",
-        "out": "OUT"
+        "notFound": "Fabric not found."
       }
     },
     "editRequests": {
