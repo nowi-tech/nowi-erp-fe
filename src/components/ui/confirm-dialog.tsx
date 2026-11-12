@@ -1,5 +1,6 @@
 import type { ReactNode } from 'react';
 import { cn } from '@/lib/utils';
+import { useEscapeWhenTop } from './overlay-stack';
 
 interface ConfirmDialogProps {
   open: boolean;
@@ -38,6 +39,7 @@ export function ConfirmDialog({
   onConfirm,
   onCancel,
 }: ConfirmDialogProps) {
+  useEscapeWhenTop(open, onCancel);
   if (!open) return null;
   return (
     <div

@@ -2,6 +2,7 @@ import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { X } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { ConfirmDialog } from './confirm-dialog';
+import { useEscapeWhenTop } from './overlay-stack';
 
 interface DrawerProps {
   open: boolean;
@@ -97,21 +98,16 @@ export function Drawer({
     onCloseRef.current();
   };
 
-  // Esc to close + body scroll lock
+  useEscapeWhenTop(open, requestClose);
+
+  // Body scroll lock
   useEffect(() => {
     if (!open) return;
     const prev = document.body.style.overflow;
     document.body.style.overflow = 'hidden';
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') requestClose();
-    };
-    window.addEventListener('keydown', onKey);
     return () => {
       document.body.style.overflow = prev;
-      window.removeEventListener('keydown', onKey);
     };
-    // requestClose reads everything via refs; stable to omit.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open]);
 
   return (

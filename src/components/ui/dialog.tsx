@@ -1,15 +1,7 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { cn } from '@/lib/utils';
 import { ConfirmDialog } from './confirm-dialog';
-
-/**
- * Module-level Dialog stack. Each open Dialog pushes its id on mount
- * and pops on unmount. Only the top entry handles Escape so a nested
- * popover (e.g. the colour-picker "Add new" dialog opened inside the
- * edit modal) dismisses by itself before its host.
- */
-const dialogStack: number[] = [];
-let nextDialogId = 1;
+import { useEscapeWhenTop } from './overlay-stack';
 
 interface DialogProps {
   open: boolean;
@@ -84,33 +76,17 @@ export function Dialog({
     onCloseRef.current();
   };
 
-  // Each open Dialog instance gets a stable id. Keep it across renders.
-  const dialogIdRef = useRef<number | null>(null);
+  // Only the topmost overlay handles Escape, so a nested one dismisses before its host.
+  useEscapeWhenTop(open, requestClose);
 
   useEffect(() => {
     if (!open) return;
-    // Claim a slot on the stack — the topmost id is the active one
-    // for Escape handling. Pop on close so siblings underneath don't
-    // think they're still topmost.
-    const id = nextDialogId++;
-    dialogIdRef.current = id;
-    dialogStack.push(id);
-
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key !== 'Escape') return;
-      if (dialogStack[dialogStack.length - 1] !== id) return;
-      requestClose();
-    };
-    window.addEventListener('keydown', onKey);
     // Defer focus until next paint so the element exists.
     const t = window.setTimeout(() => {
       initialFocusRef?.current?.focus();
     }, 0);
     return () => {
-      window.removeEventListener('keydown', onKey);
       window.clearTimeout(t);
-      const idx = dialogStack.lastIndexOf(id);
-      if (idx >= 0) dialogStack.splice(idx, 1);
     };
     // Only re-run when the dialog actually opens/closes. initialFocusRef
     // is a stable ref; onClose is read via onCloseRef.
