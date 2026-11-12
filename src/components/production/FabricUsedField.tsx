@@ -1,6 +1,6 @@
 import { useTranslation } from 'react-i18next';
 import { Input } from '@/components/ui/input';
-import type { BatchFabric, BatchSizeLine } from '@/api/production';
+import type { BatchFabric, ProductionBatch } from '@/api/production';
 import { fmtQty, UOM_SHORT } from '@/lib/fabric';
 import type { FabricUnitOfMeasure } from '@/api/types';
 
@@ -13,10 +13,15 @@ export function fabricUsedValue(edit: FabricUsedEdit, estimate: number): string 
   return estimate > 0 ? String(estimate) : '';
 }
 
-/** Pieces cut in this save × each size's per-piece estimate. */
-export function estimateFabric(sizes: BatchSizeLine[], cutBySku: Record<string, number>): number {
-  const n = sizes.reduce((s, l) => s + (cutBySku[l.sku] ?? 0) * (l.fabricPerPiece ?? 0), 0);
-  return Math.round(n * 100) / 100;
+/** The lot's estimate × the share of its planned pieces cut in this save. */
+export function estimateFabric(
+  lot: Pick<ProductionBatch, 'fabric' | 'sizes'>,
+  cutBySku: Record<string, number>,
+): number {
+  const planned = lot.sizes.reduce((s, l) => s + l.qtyPlanned, 0);
+  const cut = lot.sizes.reduce((s, l) => s + (cutBySku[l.sku] ?? 0), 0);
+  const est = lot.fabric?.fabricEstimate ?? 0;
+  return planned > 0 ? Math.round(((est * cut) / planned) * 100) / 100 : 0;
 }
 
 /**
