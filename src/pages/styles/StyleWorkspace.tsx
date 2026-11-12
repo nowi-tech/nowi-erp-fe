@@ -66,6 +66,7 @@ import {
   userAllRoles,
 } from '@/lib/userRoles';
 import { cn } from '@/lib/utils';
+import { ActivityTimeline } from '@/components/ui/activity-timeline';
 import { POST_SAMPLING, formatStyleRef } from '@/lib/styleRef';
 import GoLiveDialog from '@/components/styles/GoLiveDialog';
 import SampleApproveDialog from '@/components/styles/SampleApproveDialog';
@@ -1136,6 +1137,7 @@ export default function StyleWorkspace() {
         open={approveOpen}
         busy={busy !== null}
         gender={style.gender}
+        styleId={style.id}
         onClose={() => setApproveOpen(false)}
         onConfirm={(body) => {
           setApproveOpen(false);
@@ -2084,71 +2086,20 @@ function ActivityTimelineCard({
           defaultValue: 'Activity log',
         })}
       />
-      {/* The log sits at the bottom of the right-hand stack (Core specs →
-          BoM → Pattern/CAD → Activity log) and scrolls inside a capped
-          height so a long history never pushes the page. A thin,
-          always-visible scrollbar signals there's more to scroll (vs.
-          macOS overlay bars that hide). */}
-      <div className="relative">
-        <div className="overflow-y-auto p-5 max-h-[480px] [scrollbar-width:thin] [scrollbar-color:var(--color-muted-foreground-2)_transparent] [&::-webkit-scrollbar]:w-2 [&::-webkit-scrollbar-track]:bg-transparent [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-[var(--color-muted-foreground-2)]">
-          <ol className="relative ml-1.5 border-l border-[var(--color-border)] space-y-5">
-            {logs.slice(0, 20).map((log, i) => {
-              const { chips, note } = summarize(log);
-              return (
-                <li key={log.id} className="relative pl-5">
-                  <span
-                    aria-hidden
-                    className={cn(
-                      'absolute -left-[5px] top-1.5 h-2.5 w-2.5 rounded-full ring-2 ring-[var(--color-surface)]',
-                      i === 0
-                        ? 'bg-[var(--color-primary)]'
-                        : 'bg-[var(--color-muted-foreground-2)]',
-                    )}
-                  />
-                  <div className="text-sm text-[var(--color-foreground)]">
-                    <span className="font-medium">
-                      {log.actor?.name ?? '—'}
-                    </span>
-                    {' — '}
-                    <span className="text-[var(--color-muted-foreground)]">
-                      {t(`admin.styles.audit.${log.action}` as const, {
-                        defaultValue: log.action,
-                      })}
-                    </span>
-                  </div>
-                  {/* What actually changed — chips of field → new value, so
-                      the entry reads "Stage: QC" instead of a bare "Updated". */}
-                  {chips.length > 0 && (
-                    <div className="mt-1.5 flex flex-wrap gap-1">
-                      {chips.map((c) => (
-                        <span
-                          key={c}
-                          className="rounded-[6px] bg-[var(--color-muted)] px-1.5 py-0.5 text-[11px] text-[var(--color-foreground)]"
-                        >
-                          {c}
-                        </span>
-                      ))}
-                    </div>
-                  )}
-                  {note && (
-                    <div className="mt-1.5 text-[12px] italic text-[var(--color-muted-foreground)]">
-                      “{note}”
-                    </div>
-                  )}
-                  <div className="mt-1 text-[11px] text-[var(--color-muted-foreground)] tabular-nums">
-                    {new Date(log.createdAt).toLocaleString(undefined, {
-                      month: 'short',
-                      day: 'numeric',
-                      hour: '2-digit',
-                      minute: '2-digit',
-                    })}
-                  </div>
-                </li>
-              );
-            })}
-          </ol>
-        </div>
-      </div>
+      {/* Bottom of the right-hand stack (Core specs → BoM → Pattern/CAD → Activity log). */}
+      <ActivityTimeline
+        items={logs.slice(0, 20).map((log) => {
+          const { chips, note } = summarize(log);
+          return {
+            id: log.id,
+            actor: log.actor?.name ?? null,
+            label: t(`admin.styles.audit.${log.action}` as const, { defaultValue: log.action }),
+            chips,
+            note,
+            at: log.createdAt,
+          };
+        })}
+      />
     </section>
   );
 }

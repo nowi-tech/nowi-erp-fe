@@ -4,12 +4,14 @@ import { CheckCircle2, Loader2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Dialog } from '@/components/ui/dialog';
 import { Textarea } from '@/components/ui/textarea';
-import type { ApproveStyleBody } from '@/api/styles';
-import type { Style } from '@/api/types';
+import { getFabric, getStyle, type ApproveStyleBody } from '@/api/styles';
+import type { Fabric, FabricColour, Style } from '@/api/types';
+import { fmtQty, styleFabricColour } from '@/lib/fabric';
+import { cn } from '@/lib/utils';
 
 /**
- * Approval #1 confirmation dialog — the approver ticks the three
- * intake checks (fabric feasible / price OK / collection fit) and
+ * Approval #1 confirmation dialog — shows the fabric's stock (a fact,
+ * not a tick), the approver confirms price OK / collection fit, and
  * optionally records a note.
  *
  * The BE now auto-sets `samplingStatus = Pattern dev` on approval, so
@@ -26,6 +28,8 @@ interface Props {
   open: boolean;
   busy: boolean;
   gender: Style['gender'];
+  /** The style being approved — its fabric's stock is shown instead of a hand-ticked "fabric feasible". */
+  styleId: number | null;
   onClose: () => void;
   onConfirm: (body: ApproveStyleBody) => void;
 }
@@ -34,6 +38,7 @@ export default function Approval1Dialog({
   open,
   busy,
   gender,
+  styleId,
   onClose,
   onConfirm,
 }: Props) {
@@ -41,12 +46,12 @@ export default function Approval1Dialog({
   // Approver context is conveyed by the style's gender; retained as a
   // prop so callers stay in sync with the BE's gender-routed approver.
   void gender;
-  // Single "I confirm" checkbox covers all three intake checks — the
-  // user reads the list, then ticks once. All three booleans are still
-  // recorded on the BE so the audit trail and historical data shape
-  // stay the same.
+  // One "I confirm" tick covers price and collection; all three booleans are
+  // still sent so the BE's record keeps its shape.
   const [confirmed, setConfirmed] = useState(false);
   const [note, setNote] = useState('');
+
+  const [stock, setStock] = useState<{ fabric: Fabric; colour?: FabricColour } | null | 'none'>(null);
 
   // Reset the checklist each time the dialog opens.
   useEffect(() => {
@@ -55,6 +60,58 @@ export default function Approval1Dialog({
       setNote('');
     }
   }, [open]);
+
+  // Fabric is a fact from stock, not something the approver vouches for.
+  useEffect(() => {
+    setStock(null);
+    if (!open || styleId == null) return;
+    let live = true;
+    void getStyle(styleId)
+      .then(async (st) => {
+        if (!st.fabricId) {
+          if (live) setStock('none');
+          return;
+        }
+        const f = await getFabric(st.fabricId);
+        if (live) setStock({ fabric: f, colour: styleFabricColour(f, st.primaryColour) });
+      })
+      .catch(() => undefined);
+    return () => {
+      live = false;
+    };
+  }, [open, styleId]);
+
+  const stockLine = (() => {
+    if (stock === 'none') {
+      return { text: t('admin.styles.approval1.noFabric', { defaultValue: 'Fabric: not picked yet' }), tone: 'muted' as const };
+    }
+    if (!stock) return null;
+    const { fabric, colour } = stock;
+    const unit = fabric.unitOfMeasure;
+    const have = colour
+      ? colour.availableQuantity ?? 0
+      : (fabric.colours ?? []).reduce((s, c) => s + (c.availableQuantity ?? 0), 0);
+    const name = colour ? `${fabric.name} · ${colour.name}` : fabric.name;
+    const onOrder = colour?.onOrderQuantity ?? 0;
+    const coming =
+      onOrder > 0
+        ? ` · ${
+            colour?.nextExpectedDate
+              ? t('admin.styles.approval1.onOrderDue', {
+                  defaultValue: '{{qty}} on order, due {{date}}',
+                  qty: fmtQty(onOrder, unit),
+                  date: new Date(colour.nextExpectedDate).toLocaleDateString(),
+                })
+              : t('admin.styles.approval1.onOrder', { defaultValue: '{{qty}} on order', qty: fmtQty(onOrder, unit) })
+          }`
+        : '';
+    return have > 0
+      ? {
+          text: `${name}: ${t('admin.fabric.inStock', { defaultValue: '{{qty}} in stock', qty: fmtQty(have, unit) })}${coming}`,
+          tone: 'ok' as const,
+        }
+      : { text: `${name}: ${t('admin.styles.approval1.outOfStock', { defaultValue: 'out of stock' })}${coming}`, tone: 'bad' as const };
+  })();
 
   // The single confirmation must be ticked before Confirm enables —
   // policy reason for extracting the dialog: inline Approve used to
@@ -76,7 +133,7 @@ export default function Approval1Dialog({
             disabled={!canConfirm}
             onClick={() =>
               onConfirm({
-                // Single "I confirm" — record all three booleans true.
+                // Fabric was shown from stock above; the BE field keeps its shape.
                 approval1FabricFeasible: true,
                 approval1PriceOk: true,
                 approval1CollectionFit: true,
@@ -106,15 +163,27 @@ export default function Approval1Dialog({
         {t('admin.styles.approval1.dialogIntro')}
       </p>
 
+      {stockLine && (
+        <p
+          className={cn(
+            'mb-3 rounded-[var(--radius-sm)] px-3 py-2 text-sm font-medium',
+            stockLine.tone === 'ok' && 'bg-[var(--status-ready-bg)] text-[var(--status-ready-ink)]',
+            stockLine.tone === 'bad' && 'bg-[var(--status-stuck-bg)] text-[var(--status-stuck-ink)]',
+            stockLine.tone === 'muted' && 'bg-[var(--color-surface-2)] text-[var(--color-muted-foreground)]',
+          )}
+        >
+          {stockLine.text}
+        </p>
+      )}
+
       <ul className="mb-3 space-y-1.5 text-sm text-[var(--color-foreground-2)] list-disc pl-5">
-        <li>{t('admin.styles.approval1.fabricFeasible')}</li>
         <li>{t('admin.styles.approval1.priceOk')}</li>
         <li>{t('admin.styles.approval1.collectionFit')}</li>
       </ul>
 
       <CheckboxRow
-        label={t('admin.styles.approval1.confirmAll', {
-          defaultValue: 'I have verified all three checks pass.',
+        label={t('admin.styles.approval1.confirmBoth', {
+          defaultValue: 'I have verified both checks pass.',
         })}
         checked={confirmed}
         onChange={setConfirmed}

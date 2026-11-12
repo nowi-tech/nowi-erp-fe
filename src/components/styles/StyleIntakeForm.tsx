@@ -819,8 +819,17 @@ const StyleIntakeForm = forwardRef<StyleIntakeFormHandle, StyleIntakeFormProps>(
     const collectionOk = !collectionRequired || form.collectionId != null;
     const nameOk = inheritsIdentity || form.workingName.trim().length > 0;
     const brandOk = !asksBrand || form.brandId != null;
+    // A new design that will be sampled names its fabric and the estimate per sample.
+    const sampleFabricRequired = !isEdit && !isChinaImport && !skipsSampling;
+    const sampleFabricOk =
+      !sampleFabricRequired ||
+      (form.fabricId != null && Number(form.sampleFabricRequired) > 0);
     const isValid =
-      nameOk && collectionOk && brandOk && (!needsForkTarget || forkTargetOk);
+      nameOk &&
+      collectionOk &&
+      brandOk &&
+      sampleFabricOk &&
+      (!needsForkTarget || forkTargetOk);
 
     // Notify the parent on every validity flip so it can enable / disable
     // its submit button without subscribing to form state changes.
@@ -1338,7 +1347,10 @@ const StyleIntakeForm = forwardRef<StyleIntakeFormHandle, StyleIntakeFormProps>(
             >
               <div className="space-y-4">
                 <div>
-                  <Label>{t('admin.styles.intake.fabric')}</Label>
+                  <Label>
+                    {t('admin.styles.intake.fabric')}
+                    {sampleFabricRequired ? ' *' : ''}
+                  </Label>
                   <FabricPicker
                     fabrics={fabrics}
                     fabricId={form.fabricId}
@@ -1355,7 +1367,10 @@ const StyleIntakeForm = forwardRef<StyleIntakeFormHandle, StyleIntakeFormProps>(
                   />
                 </div>
                 <div>
-                  <Label>{t('admin.styles.intake.sampleFabricRequired')}</Label>
+                  <Label>
+                    {t('admin.styles.intake.sampleFabricRequired')}
+                    {sampleFabricRequired ? ' *' : ''}
+                  </Label>
                   <div className="relative">
                     <Input
                       type="number"

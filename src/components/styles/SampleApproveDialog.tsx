@@ -8,7 +8,10 @@ import { Textarea } from '@/components/ui/textarea';
 import { useToast } from '@/components/ui/toast';
 import ImageUploadTile from '@/components/shared/ImageUploadTile';
 import { getReadUrls, uploadPhoto } from '@/api/storage';
-import type { SampleApprovalStatus, SampleApproveStyleBody } from '@/api/styles';
+import { getFabric, getStyle, type SampleApprovalStatus, type SampleApproveStyleBody } from '@/api/styles';
+import { Select } from '@/components/ui/select';
+import type { Fabric } from '@/api/types';
+import { styleFabricColour, UOM_SHORT } from '@/lib/fabric';
 
 const ABSOLUTE = /^(https?:|data:|blob:)/i;
 
@@ -63,6 +66,53 @@ export default function SampleApproveDialog({
   const [uploading, setUploading] = useState(false);
   // Bumped on every reset, so an upload that finishes after it can't land on another style.
   const uploadSeq = useRef(0);
+  // The sample's fabric: what it used, confirmed here and deducted on sign-off.
+  const [fabric, setFabric] = useState<Fabric | null>(null);
+  const [fabricColourId, setFabricColourId] = useState<number | null>(null);
+  // Worked out from the style's colour; only asked when it can't be.
+  const [colourKnown, setColourKnown] = useState(false);
+  const [fabricUsed, setFabricUsed] = useState('');
+  // The fabric question loads after the dialog opens; signing off before it arrives would skip it.
+  const [fabricLoading, setFabricLoading] = useState(false);
+
+  useEffect(() => {
+    let live = true;
+    setFabric(null);
+    setFabricColourId(null);
+    setColourKnown(false);
+    setFabricUsed('');
+    setFabricLoading(false);
+    if (!open || styleId == null) return;
+    setFabricLoading(true);
+    void getStyle(styleId)
+      .then(async (st) => {
+        if (!st.fabricId) return;
+        const f = await getFabric(st.fabricId);
+        if (!live) return;
+        setFabric(f);
+        const match = styleFabricColour(f, st.primaryColour);
+        setFabricColourId(match?.id ?? null);
+        setColourKnown(match != null);
+        setFabricUsed(st.sampleFabricRequired != null ? String(Number(st.sampleFabricRequired)) : '');
+      })
+      .catch(() => {
+        if (live) {
+          toast.show(
+            t('admin.styles.approval2.fabricLoadError', {
+              defaultValue: "Couldn't load the sample's fabric — its usage won't be recorded.",
+            }),
+            'error',
+          );
+        }
+      })
+      .finally(() => {
+        if (live) setFabricLoading(false);
+      });
+    return () => {
+      live = false;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, styleId]);
 
   useEffect(() => {
     if (open) {
@@ -129,6 +179,10 @@ export default function SampleApproveDialog({
   const costValid = Number.isFinite(costNum) && costNum > 0;
   const costMissing = advancing && !costValid;
   const imageMissing = advancing && !(imageFinal === true || newImagePath);
+  const usedNum = Number(fabricUsed);
+  // A sample with a fabric must say what it used (0 is a valid answer).
+  const fabricMissing =
+    fabric != null && (fabricUsed.trim() === '' || !(usedNum >= 0) || (usedNum > 0 && fabricColourId == null));
 
   return (
     <Dialog
@@ -144,7 +198,7 @@ export default function SampleApproveDialog({
           </Button>
           <Button
             size="sm"
-            disabled={busy || uploading || costMissing || imageMissing}
+            disabled={busy || uploading || costMissing || imageMissing || fabricMissing || fabricLoading}
             onClick={() =>
               onConfirm({
                 sampleApproval: verdict,
@@ -152,6 +206,9 @@ export default function SampleApproveDialog({
                 costPrice: costValid ? costNum : undefined,
                 ...(advancing && imageFinal === true ? { imageConfirmed: true } : {}),
                 ...(advancing && imageFinal === false && newImagePath ? { newImagePath } : {}),
+                ...(fabric && usedNum > 0 && fabricColourId != null
+                  ? { fabricUsed: usedNum, fabricColourId }
+                  : {}),
               })
             }
           >
@@ -238,6 +295,52 @@ export default function SampleApproveDialog({
                 />
               </div>
             )}
+          </div>
+        )}
+        {fabric && (
+          <div>
+            <label className="block text-xs text-[var(--color-muted-foreground)] mb-1">
+              {t('admin.styles.approval2.fabricUsedShort', { defaultValue: 'Fabric this sample used' })}
+              <span className="text-[var(--color-destructive)]"> *</span>
+            </label>
+            <div className="flex gap-2">
+              {colourKnown ? (
+                <div className="flex h-10 flex-1 items-center text-sm font-medium">
+                  {fabric.name} · {fabric.colours?.find((c) => c.id === fabricColourId)?.name}
+                </div>
+              ) : (
+                <Select
+                  className="h-10 flex-1 text-sm"
+                  value={fabricColourId == null ? '' : String(fabricColourId)}
+                  onChange={(e) => setFabricColourId(e.target.value ? Number(e.target.value) : null)}
+                  aria-label={t('admin.fabricOrders.colour', { defaultValue: 'Colour' })}
+                >
+                  <option value="">
+                    {t('admin.styles.approval2.pickColour', { defaultValue: '{{fabric}} — choose a colour…', fabric: fabric.name })}
+                  </option>
+                  {(fabric.colours ?? []).map((c) => (
+                    <option key={c.id} value={String(c.id)}>
+                      {c.name}
+                    </option>
+                  ))}
+                </Select>
+              )}
+              <div className="relative w-32">
+                <Input
+                  type="number"
+                  min={0}
+                  step="0.01"
+                  inputMode="decimal"
+                  className="h-10 pr-9 text-sm"
+                  value={fabricUsed}
+                  onChange={(e) => setFabricUsed(e.target.value)}
+                  aria-invalid={fabricMissing}
+                />
+                <span className="pointer-events-none absolute right-2.5 top-1/2 -translate-y-1/2 text-xs text-[var(--color-muted-foreground)]">
+                  {fabric.unitOfMeasure ? UOM_SHORT[fabric.unitOfMeasure] : ''}
+                </span>
+              </div>
+            </div>
           </div>
         )}
         {/* Cost price — required to approve (the advancing verdict). For a

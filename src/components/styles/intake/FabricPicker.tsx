@@ -184,6 +184,7 @@ export default function FabricPicker({
         <FabricEditorForm
           key={`new-${seedName}`}
           editing={null}
+          existing={fabrics}
           initialName={seedName}
           initialUnitOfMeasure="meter"
           trimNotes
