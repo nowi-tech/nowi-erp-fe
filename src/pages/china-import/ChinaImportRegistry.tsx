@@ -1,9 +1,9 @@
 import { useCallback, useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Plus, Search } from 'lucide-react';
+import { Plus } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
+import { SearchInput } from '@/components/ui/search-input';
 import StylesTable from '@/components/styles/StylesTable';
 import StyleEditModal from '@/components/styles/StyleEditModal';
 import { listStyles } from '@/api/styles';
@@ -80,18 +80,12 @@ export default function ChinaImportRegistry() {
       {/* Search + table card */}
       <div className="bg-[var(--color-surface)] rounded-[var(--radius-md)] border border-[var(--color-border)] shadow-sm">
         <div className="p-3 border-b border-[var(--color-border)]">
-          <div className="relative flex-1 min-w-[200px]">
-            <Search
-              size={15}
-              className="absolute left-3 top-1/2 -translate-y-1/2 text-[var(--color-muted-foreground)]"
-            />
-            <Input
-              className="h-9 text-[13px] pl-9"
-              placeholder={t('admin.chinaImport.search')}
-              value={searchText}
-              onChange={(e) => setSearchText(e.target.value)}
-            />
-          </div>
+          <SearchInput
+            className="flex-1 min-w-[200px]"
+            value={searchText}
+            onChange={setSearchText}
+            placeholder={t('admin.chinaImport.search')}
+          />
         </div>
 
         <div className="p-3">

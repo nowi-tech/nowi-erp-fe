@@ -1,9 +1,9 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
-import { PackageCheck, Plus, Search } from 'lucide-react';
+import { PackageCheck, Plus } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
+import { SearchInput } from '@/components/ui/search-input';
 import { Select } from '@/components/ui/select';
 import { FilterChips } from '@/components/ui/filter-rail';
 import { SummaryCard } from '@/components/ui/summary-card';
@@ -194,15 +194,12 @@ export default function FabricOrders() {
       </div>
 
       <div className="flex flex-wrap items-center gap-2">
-        <div className="relative w-full max-w-sm">
-          <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-[var(--color-primary)]" />
-          <Input
-            className="h-9 pl-9 text-[13px] border-[var(--color-primary)]/40 bg-[var(--color-primary-soft)]/30 focus-visible:border-[var(--color-primary)] focus-visible:ring-2 focus-visible:ring-[var(--color-primary)]/25"
-            placeholder={t('admin.fabricOrders.searchPh', { defaultValue: 'Search PO, fabric, colour or supplier…' })}
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-          />
-        </div>
+        <SearchInput
+          className="w-full max-w-sm"
+          value={search}
+          onChange={setSearch}
+          placeholder={t('admin.fabricOrders.searchPh', { defaultValue: 'Search PO, fabric, colour or supplier…' })}
+        />
         <FilterChips
           options={(Object.keys(CHIP_LABEL) as Chip[]).map((k) => ({
             value: k,

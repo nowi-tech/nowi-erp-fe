@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useNavigate, useSearchParams } from 'react-router-dom';
-import { ChevronRight, Factory, Loader2, Pencil, Search, X } from 'lucide-react';
+import { ChevronRight, Factory, Loader2, Pencil } from 'lucide-react';
 import {
   QueueTabs,
   StyleQueueTable,
@@ -19,7 +19,7 @@ import {
 } from '@/components/ui/filter-rail';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
+import { SearchInput } from '@/components/ui/search-input';
 import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 import { Skeleton } from '@/components/ui/skeleton';
 import RecordOutputDialog from '@/components/production/RecordOutputDialog';
@@ -190,18 +190,17 @@ export default function Production() {
     return b === 'own' || /^\d+$/.test(b) ? b : '';
   });
 
-  // Mirror the tab, filters and (debounced) search into the URL so
-  // back-navigation restores them — the same system the dashboard Sampling tab
-  // and Inventory Health use.
+  // Mirror the tab and filters into the URL so back-navigation restores them.
+  // ?q= only seeds the search on arrival, so drop it.
   useEffect(() => {
     const params = new URLSearchParams(searchParams);
+    params.delete('q');
     const mirrored = {
       tab,
       status: statusFilter,
       origin: originFilter,
       type: typeFilter,
       brand: brandFilter,
-      q: debouncedSearch.trim(),
     };
     for (const [key, value] of Object.entries(mirrored)) {
       if (value) params.set(key, value);
@@ -216,7 +215,6 @@ export default function Production() {
     originFilter,
     typeFilter,
     brandFilter,
-    debouncedSearch,
     searchParams,
     setSearchParams,
   ]);
@@ -781,30 +779,14 @@ export default function Production() {
       <QueueTabs tabs={tabs} active={tab} onSelect={selectTab} />
 
       <div className="flex flex-wrap items-center gap-2">
-        <div className="relative w-full max-w-sm">
-          <Search
-            size={16}
-            className="absolute left-3 top-1/2 -translate-y-1/2 text-[var(--color-primary)]"
-          />
-          <Input
-            className="h-9 text-[13px] pl-9 pr-9 border-[var(--color-primary)]/40 bg-[var(--color-primary-soft)]/30 focus-visible:border-[var(--color-primary)] focus-visible:ring-2 focus-visible:ring-[var(--color-primary)]/25"
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            placeholder={t('admin.production.searchPlaceholder', {
-              defaultValue: 'Search styles, batches, or SKUs…',
-            })}
-          />
-          {search && (
-            <button
-              type="button"
-              onClick={() => setSearch('')}
-              aria-label={t('common.clear', { defaultValue: 'Clear' })}
-              className="absolute right-2.5 top-1/2 -translate-y-1/2 text-[var(--color-muted-foreground)] hover:text-[var(--color-foreground)]"
-            >
-              <X size={15} />
-            </button>
-          )}
-        </div>
+        <SearchInput
+          className="w-full max-w-sm"
+          value={search}
+          onChange={setSearch}
+          placeholder={t('admin.production.searchPlaceholder', {
+            defaultValue: 'Search styles, batches, or SKUs…',
+          })}
+        />
         {/* Not on Planning: every batch there is `planning`, and the BE gives an
             explicit status precedence over the tab — so a chip would replace the
             list with floor batches while the Planning tab stayed lit. */}

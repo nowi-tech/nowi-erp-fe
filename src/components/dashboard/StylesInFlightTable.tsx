@@ -16,12 +16,10 @@ import {
   ImageOff,
   Link2,
   Pencil,
-  Search,
-  X,
 } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { cn } from '@/lib/utils';
-import { Input } from '@/components/ui/input';
+import { SearchInput } from '@/components/ui/search-input';
 import { FloatingPill, TruncText } from '@/components/ui/trunc-text';
 import { FilterChips } from '@/components/ui/filter-rail';
 import { useToast } from '@/components/ui/toast';
@@ -505,22 +503,18 @@ export default function StylesInFlightTable({
   const [searchParams, setSearchParams] = useSearchParams();
 
   const [tab, setTab] = useState<DashboardStyleTab>(initialTab);
-  // Seed from ?q= so a search survives navigating into a style and back.
   const [searchText, setSearchText] = useState(
     () => searchParams.get('q') ?? '',
   );
   const debouncedSearch = useDebounced(searchText, 300);
 
-  // Mirror the (debounced) search into ?q= so back-navigation restores it.
+  // ?q= seeds the search once on arrival; drop it so Back doesn't restore it.
   useEffect(() => {
+    if (!searchParams.has('q')) return;
     const params = new URLSearchParams(searchParams);
-    const q = debouncedSearch.trim();
-    if (q) params.set('q', q);
-    else params.delete('q');
-    if (params.toString() !== searchParams.toString()) {
-      setSearchParams(params, { replace: true });
-    }
-  }, [debouncedSearch, searchParams, setSearchParams]);
+    params.delete('q');
+    setSearchParams(params, { replace: true });
+  }, [searchParams, setSearchParams]);
   // Multi-select status filter, scoped to the active tab. Cleared on any tab
   // switch (a previous tab's statuses wouldn't apply to the new bucket).
   const [statuses, setStatuses] = useState<DashboardStatusFilter[]>([]);
@@ -639,7 +633,6 @@ export default function StylesInFlightTable({
     setStatuses([]);
     const params = new URLSearchParams(searchParams);
     params.set('tab', next);
-    params.delete('q');
     setSearchParams(params, { replace: true });
   };
 
@@ -1657,28 +1650,12 @@ export default function StylesInFlightTable({
         {/* Search · date filter · pagination row. */}
         <div className="flex flex-wrap items-center justify-between gap-3 border-b border-[var(--color-border)] px-4 py-3">
           <div className="flex flex-1 flex-wrap items-center gap-2">
-            <div className="relative w-full max-w-sm">
-              <Search
-                size={16}
-                className="absolute left-3 top-1/2 -translate-y-1/2 text-[var(--color-primary)]"
-              />
-              <Input
-                className="h-9 text-[13px] pl-9 pr-9 border-[var(--color-primary)]/40 bg-[var(--color-primary-soft)]/30 focus-visible:border-[var(--color-primary)] focus-visible:ring-2 focus-visible:ring-[var(--color-primary)]/25"
-                placeholder={t('dashboard.table.searchPlaceholder')}
-                value={searchText}
-                onChange={(e) => setSearchText(e.target.value)}
-              />
-              {searchText && (
-                <button
-                  type="button"
-                  onClick={() => setSearchText('')}
-                  aria-label={t('common.clear', { defaultValue: 'Clear' })}
-                  className="absolute right-2.5 top-1/2 -translate-y-1/2 text-[var(--color-muted-foreground)] hover:text-[var(--color-foreground)]"
-                >
-                  <X size={15} />
-                </button>
-              )}
-            </div>
+            <SearchInput
+              className="w-full max-w-sm"
+              value={searchText}
+              onChange={setSearchText}
+              placeholder={t('dashboard.table.searchPlaceholder')}
+            />
 
             {/* Status chips sit beside the search box. Their options depend on
                 the active tab, which is why the filter lives here and not in

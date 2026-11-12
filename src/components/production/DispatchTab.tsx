@@ -2,9 +2,9 @@ import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Link } from 'react-router-dom';
 import { Capacitor } from '@capacitor/core';
-import { AlertTriangle, ChevronRight, Printer, Search } from 'lucide-react';
+import { AlertTriangle, ChevronRight, Printer } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
+import { SearchInput } from '@/components/ui/search-input';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useToast } from '@/components/ui/toast';
 import { HoverThumbnail } from '@/components/dashboard/StylesInFlightTable';
@@ -193,20 +193,14 @@ export default function DispatchTab({
           </>
         )}
         <div className="ml-auto flex flex-wrap items-center gap-2">
-          <div className="relative">
-            <Search
-              size={14}
-              className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-[var(--color-muted-foreground)]"
-            />
-            <Input
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              placeholder={t('admin.production.dispatch.searchPlaceholder', {
-                defaultValue: 'Challan, style or SKU',
-              })}
-              className="h-9 w-60 pl-8"
-            />
-          </div>
+          <SearchInput
+            className="w-60"
+            value={search}
+            onChange={setSearch}
+            placeholder={t('admin.production.dispatch.searchPlaceholder', {
+              defaultValue: 'Challan, style or SKU',
+            })}
+          />
           <select
             value={statusFilter}
             onChange={(e) => setStatusFilter(e.target.value as DispatchStatus | '')}

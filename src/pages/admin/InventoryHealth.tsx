@@ -2,7 +2,8 @@ import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } fro
 import { SortHeader } from '@/components/ui/sort-header';
 import { useTranslation } from 'react-i18next';
 import { useLocation, useNavigate, useSearchParams } from 'react-router-dom';
-import { RefreshCw, Search, ArrowUp, ArrowDown, ArrowUpRight, Minus, Ban, RotateCcw, X, Sparkles, Copy, Check, Factory, Clock, CheckCircle2, Plus, Pause, Play } from 'lucide-react';
+import { RefreshCw, ArrowUp, ArrowDown, ArrowUpRight, Minus, Ban, RotateCcw, X, Sparkles, Copy, Check, Factory, Clock, CheckCircle2, Plus, Pause, Play } from 'lucide-react';
+import { SearchInput } from '@/components/ui/search-input';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useToast } from '@/components/ui/toast';
 import { ConfirmDialog } from '@/components/ui/confirm-dialog';
@@ -219,7 +220,6 @@ export default function InventoryHealth(): ReactNode {
   const [dateFrom, setDateFrom] = useState('');
   const [dateTo, setDateTo] = useState('');
   const windowActive = !!(dateFrom && dateTo);
-  // Seed search from ?q= so it survives navigating into a style and back.
   const [searchText, setSearchText] = useState(() => searchParams.get('q') ?? '');
   const typedSearch = useDebounced(searchText, 300);
   // An emptied box applies at once; only typing waits for the debounce.
@@ -288,22 +288,13 @@ export default function InventoryHealth(): ReactNode {
     observerRef.current = io;
   }, []);
 
-  // Mirror the (debounced) search into ?q= so back-navigation restores it.
+  // ?q= seeds the search once on arrival; drop it so Back doesn't restore it.
   useEffect(() => {
-    const q = debouncedSearch.trim();
-    // Functional update reads the LATEST params (not a stale closure); return the
-    // previous instance unchanged so an identical q doesn't cause a redundant nav.
-    setSearchParams(
-      (prev) => {
-        const params = new URLSearchParams(prev);
-        if (q) params.set('q', q);
-        else params.delete('q');
-        return params.toString() === prev.toString() ? prev : params;
-      },
-      { replace: true },
-    );
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [debouncedSearch]);
+    if (!searchParams.has('q')) return;
+    const params = new URLSearchParams(searchParams);
+    params.delete('q');
+    setSearchParams(params, { replace: true });
+  }, [searchParams, setSearchParams]);
 
   // Replace-load page 0 whenever the query (via `load`) or a manual reload changes.
   useEffect(() => {
@@ -509,9 +500,7 @@ export default function InventoryHealth(): ReactNode {
   const syncedAbs = absTime(syncedAt);
   const syncedAgo = relativeTime(syncedAt);
   const synced = syncedAbs ? (syncedAgo ? `${syncedAbs} · ${syncedAgo}` : syncedAbs) : null;
-  // Back-target for the style workspace, restoring this page + search. Held in a
-  // ref so openStyle stays referentially stable — otherwise each search keystroke
-  // (which mutates ?q=) changes `from`, rebuilding the whole columns memo.
+  // Back-target for the style workspace; held in a ref so openStyle stays stable.
   const from = `${location.pathname}${location.search}`;
   const fromRef = useRef(from);
   fromRef.current = from;
@@ -842,25 +831,12 @@ export default function InventoryHealth(): ReactNode {
 
               {/* Search · count. Category + sort live in the top-right controls row. */}
               <div className="flex flex-wrap items-center gap-2.5 border-b border-[var(--color-border)] px-4 py-3">
-                <div className="relative w-full sm:w-72">
-                  <Search size={16} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-[var(--color-primary)]" />
-                  <input
-                    value={searchText}
-                    onChange={(e) => setSearchText(e.target.value)}
-                    placeholder={t('admin.inventoryHealth.search', { defaultValue: 'Search style, size or name…' })}
-                    className="h-9 w-full rounded-md border border-[var(--color-primary)]/40 bg-[var(--color-primary-soft)]/30 pl-9 pr-9 text-[13px] text-[var(--color-foreground)] outline-none focus-visible:border-[var(--color-primary)] focus-visible:ring-2 focus-visible:ring-[var(--color-primary)]/25"
-                  />
-                  {searchText && (
-                    <button
-                      type="button"
-                      onClick={() => setSearchText('')}
-                      aria-label={t('common.clear', { defaultValue: 'Clear' })}
-                      className="absolute right-2.5 top-1/2 -translate-y-1/2 text-[var(--color-muted-foreground)] hover:text-[var(--color-foreground)]"
-                    >
-                      <X size={15} />
-                    </button>
-                  )}
-                </div>
+                <SearchInput
+                  className="w-full sm:w-72"
+                  value={searchText}
+                  onChange={setSearchText}
+                  placeholder={t('admin.inventoryHealth.search', { defaultValue: 'Search style, size or name…' })}
+                />
                 <span className="ml-auto shrink-0 text-[12px] tabular-nums text-[var(--color-muted-foreground)]">
                   {loading ? (
                     <Skeleton className="inline-block h-3.5 w-16 rounded align-middle" />

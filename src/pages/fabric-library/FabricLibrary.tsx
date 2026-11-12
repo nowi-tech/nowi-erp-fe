@@ -5,13 +5,12 @@ import {
   ChevronRight,
   ClipboardCheck,
   Plus,
-  Search,
   ShoppingCart,
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
+import { SearchInput } from '@/components/ui/search-input';
 import { Badge } from '@/components/ui/badge';
 import { SummaryCard } from '@/components/ui/summary-card';
 import { FilterChips } from '@/components/ui/filter-rail';
@@ -229,15 +228,12 @@ export default function FabricLibrary() {
       </div>
 
       <div className="flex flex-wrap items-center gap-2">
-        <div className="relative w-full max-w-sm">
-          <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-[var(--color-primary)]" />
-          <Input
-            className="h-9 pl-9 text-[13px] border-[var(--color-primary)]/40 bg-[var(--color-primary-soft)]/30 focus-visible:border-[var(--color-primary)] focus-visible:ring-2 focus-visible:ring-[var(--color-primary)]/25"
-            placeholder={t('admin.fabricLibrary.searchPh', { defaultValue: 'Search fabric, colour or code…' })}
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-          />
-        </div>
+        <SearchInput
+          className="w-full max-w-sm"
+          value={search}
+          onChange={setSearch}
+          placeholder={t('admin.fabricLibrary.searchPh', { defaultValue: 'Search fabric, colour or code…' })}
+        />
         {/* Same filter the tiles set — one active at a time. */}
         <FilterChips
           ariaLabel={t('admin.fabricLibrary.cols.stock', { defaultValue: 'Stock' })}

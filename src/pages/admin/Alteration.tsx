@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useNavigate, useSearchParams } from 'react-router-dom';
-import { Scissors, Search, X } from 'lucide-react';
+import { Scissors } from 'lucide-react';
 import {
   QueueTabs,
   StyleQueueTable,
@@ -13,6 +13,7 @@ import { FilterRail, RAIL_SELECT_CLASS } from '@/components/ui/filter-rail';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { SearchInput } from '@/components/ui/search-input';
 import { Select } from '@/components/ui/select';
 import { Label } from '@/components/ui/label';
 import { ConfirmDialog } from '@/components/ui/confirm-dialog';
@@ -59,7 +60,7 @@ export default function Alteration() {
 
   const { statusLabel, sourceLabel, channelLabel } = useAlterationLabels();
 
-  // ── tab, search and filters, mirrored into the URL ───────────────
+  // ── tab and filters, mirrored into the URL ───────────────────────
   const [searchParams, setSearchParams] = useSearchParams();
   const [tab, setTab] = useState<Tab>(() => {
     const t0 = searchParams.get('tab') as Tab | null;
@@ -76,11 +77,12 @@ export default function Alteration() {
     return c && ALTERATION_CHANNELS.includes(c) ? c : '';
   });
 
+  // ?q= only seeds the search on arrival, so drop it.
   useEffect(() => {
     const params = new URLSearchParams(searchParams);
+    params.delete('q');
     const mirrored = {
       tab,
-      q: debouncedSearch.trim(),
       source: sourceFilter,
       channel: channelFilter,
     };
@@ -91,7 +93,7 @@ export default function Alteration() {
     if (params.toString() !== searchParams.toString()) {
       setSearchParams(params, { replace: true });
     }
-  }, [tab, debouncedSearch, sourceFilter, channelFilter, searchParams, setSearchParams]);
+  }, [tab, sourceFilter, channelFilter, searchParams, setSearchParams]);
 
   // ── list ─────────────────────────────────────────────────────────
   const [rows, setRows] = useState<AlterationEntry[]>([]);
@@ -412,30 +414,14 @@ export default function Alteration() {
         onSelect={setTab}
       />
 
-      <div className="relative w-full max-w-sm">
-        <Search
-          size={16}
-          className="absolute left-3 top-1/2 -translate-y-1/2 text-[var(--color-primary)]"
-        />
-        <Input
-          className="h-9 text-[13px] pl-9 pr-9 border-[var(--color-primary)]/40 bg-[var(--color-primary-soft)]/30 focus-visible:border-[var(--color-primary)] focus-visible:ring-2 focus-visible:ring-[var(--color-primary)]/25"
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-          placeholder={t('admin.alteration.searchPlaceholder', {
-            defaultValue: 'Search entry, style, SKU, reference or tailor…',
-          })}
-        />
-        {search && (
-          <button
-            type="button"
-            onClick={() => setSearch('')}
-            aria-label={t('common.clear', { defaultValue: 'Clear' })}
-            className="absolute right-2.5 top-1/2 -translate-y-1/2 text-[var(--color-muted-foreground)] hover:text-[var(--color-foreground)]"
-          >
-            <X size={15} />
-          </button>
-        )}
-      </div>
+      <SearchInput
+        className="w-full max-w-sm"
+        value={search}
+        onChange={setSearch}
+        placeholder={t('admin.alteration.searchPlaceholder', {
+          defaultValue: 'Search entry, style, SKU, reference or tailor…',
+        })}
+      />
 
       <StyleQueueTable<AlterationEntry>
         columns={columns}

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { Card, CardContent } from '@/components/ui/card';
@@ -8,6 +8,7 @@ import StageChips, { type StageChipKey } from '@/components/StageChips';
 import KpiTile from '@/components/KpiTile';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { SearchInput } from '@/components/ui/search-input';
 import { Label } from '@/components/ui/label';
 import { Select } from '@/components/ui/select';
 import { Badge } from '@/components/ui/badge';
@@ -136,9 +137,12 @@ function ProductionWip() {
   const [warehouses, setWarehouses] = useState<FilterOption[]>([]);
   const [statuses, setStatuses] = useState<FilterStatus[]>([]);
 
-  const current = useMemo(() => paramsFromUrl(searchParams), [searchParams]);
-  const [skuInput, setSkuInput] = useState(current.sku ?? '');
+  const [skuInput, setSkuInput] = useState(() => searchParams.get('sku') ?? '');
   const debouncedSku = useDebounced(skuInput, 250);
+  const current = useMemo(
+    () => ({ ...paramsFromUrl(searchParams), sku: debouncedSku || undefined }),
+    [searchParams, debouncedSku],
+  );
 
   const [data, setData] = useState<LocatorResponse | null>(null);
   const [loading, setLoading] = useState(false);
@@ -187,15 +191,23 @@ function ProductionWip() {
     };
   }, []);
 
-  // Sync debounced SKU input back to URL.
+  // ?sku= seeds the box once on arrival; drop it so Back doesn't restore it.
   useEffect(() => {
+    if (!searchParams.has('sku')) return;
     const next = new URLSearchParams(searchParams);
-    if (debouncedSku) next.set('sku', debouncedSku);
-    else next.delete('sku');
-    if ((next.get('sku') ?? '') !== (searchParams.get('sku') ?? '')) {
-      next.delete('skip');
-      setSearchParams(next, { replace: true });
-    }
+    next.delete('sku');
+    setSearchParams(next, { replace: true });
+  }, [searchParams, setSearchParams]);
+
+  // A new SKU search starts from the first page.
+  const lastSku = useRef(debouncedSku);
+  useEffect(() => {
+    if (lastSku.current === debouncedSku) return;
+    lastSku.current = debouncedSku;
+    if (!searchParams.has('skip')) return;
+    const next = new URLSearchParams(searchParams);
+    next.delete('skip');
+    setSearchParams(next, { replace: true });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [debouncedSku]);
 
@@ -229,7 +241,7 @@ function ProductionWip() {
       cancelled = true;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [searchParams, vendors]);
+  }, [current, vendors]);
 
   const updateParam = useCallback(
     (key: string, value: string | undefined) => {
@@ -391,7 +403,10 @@ function ProductionWip() {
           (current.from ? 1 : 0) +
           (current.to ? 1 : 0)
         }
-        onClear={() => setSearchParams(new URLSearchParams())}
+        onClear={() => {
+          setSkuInput('');
+          setSearchParams(new URLSearchParams());
+        }}
       >
           <div>
             <Label>{t('admin.locator.filters.vendor')}</Label>
@@ -465,9 +480,11 @@ function ProductionWip() {
           </div>
           <div className="md:col-span-1">
             <Label>{t('admin.locator.filters.sku')}</Label>
-            <Input
+            {/* h-12 matches the other fields in this filter row. */}
+            <SearchInput
+              inputClassName="h-12 text-[15px]"
               value={skuInput}
-              onChange={(e) => setSkuInput(e.target.value)}
+              onChange={setSkuInput}
               placeholder={t('admin.locator.filters.search')}
             />
           </div>

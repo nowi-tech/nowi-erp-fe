@@ -1,8 +1,8 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
-import { Plus, Search } from 'lucide-react';
+import { Plus } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
-import { Input } from '@/components/ui/input';
+import { SearchInput } from '@/components/ui/search-input';
 import { Select } from '@/components/ui/select';
 import { useToast } from '@/components/ui/toast';
 import {
@@ -488,18 +488,12 @@ export default function StylesRegistry() {
         <QueueTabs tabs={tabDefs} active={tab} onSelect={selectTab} />
 
         <div className="flex flex-wrap items-center gap-2">
-          <div className="relative flex-1 min-w-[200px]">
-            <Search
-              size={15}
-              className="absolute left-3 top-1/2 -translate-y-1/2 text-[var(--color-muted-foreground)]"
-            />
-            <Input
-              className="h-9 text-[13px] pl-9"
-              placeholder={t('admin.styles.filters.search')}
-              value={searchText}
-              onChange={(e) => setSearchText(e.target.value)}
-            />
-          </div>
+          <SearchInput
+            className="flex-1 min-w-[200px]"
+            value={searchText}
+            onChange={setSearchText}
+            placeholder={t('admin.styles.filters.search')}
+          />
           <Select
             className="h-9 text-[13px] w-auto"
             value={samplingStatus}
