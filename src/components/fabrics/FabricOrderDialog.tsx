@@ -15,6 +15,13 @@ import type { Fabric, FabricOrder, FabricOrderStatus } from '@/api/types';
 import { ORDER_STATUS_LABEL, SETTABLE_ORDER_STATUSES, UOM_SHORT } from '@/lib/fabric';
 import { localISO, todayISO } from '@/lib/date';
 
+/** Order date + lead days, as a date string. */
+function dueFrom(orderDate: string, leadDays: number): string {
+  const due = new Date(`${orderDate}T00:00:00`);
+  due.setDate(due.getDate() + leadDays);
+  return localISO(due);
+}
+
 interface Props {
   open: boolean;
   onClose: () => void;
@@ -45,11 +52,15 @@ export default function FabricOrderDialog({ open, onClose, onSaved, fabrics, edi
     note: '',
   });
   // What the defaults filled in, so a colour change replaces those but never a typed value.
-  const autoFilled = useRef<{ vendorId: number | null; expectedDate: string }>({ vendorId: null, expectedDate: '' });
+  const autoFilled = useRef<{ vendorId: number | null; expectedDate: string; leadDays: number | null }>({
+    vendorId: null,
+    expectedDate: '',
+    leadDays: null,
+  });
 
   useEffect(() => {
     if (!open) return;
-    autoFilled.current = { vendorId: null, expectedDate: '' };
+    autoFilled.current = { vendorId: null, expectedDate: '', leadDays: null };
     void listVendorOptions()
       .then(setVendors)
       .catch(() =>
@@ -83,13 +94,15 @@ export default function FabricOrderDialog({ open, onClose, onSaved, fabrics, edi
         if (!alive) return;
         const prev = autoFilled.current;
         setForm((f) => {
-          const due = new Date(`${f.orderDate}T00:00:00`);
-          if (d.leadDays != null) due.setDate(due.getDate() + d.leadDays);
           const takeVendor = f.vendorId == null || f.vendorId === prev.vendorId;
           const takeDate = f.expectedDate === '' || f.expectedDate === prev.expectedDate;
           const vendorId = takeVendor ? d.vendorId : f.vendorId;
-          const expectedDate = takeDate ? (d.leadDays != null ? localISO(due) : '') : f.expectedDate;
-          autoFilled.current = { vendorId: takeVendor ? vendorId : null, expectedDate: takeDate ? expectedDate : '' };
+          const expectedDate = takeDate ? (d.leadDays != null ? dueFrom(f.orderDate, d.leadDays) : '') : f.expectedDate;
+          autoFilled.current = {
+            vendorId: takeVendor ? vendorId : null,
+            expectedDate: takeDate ? expectedDate : '',
+            leadDays: d.leadDays,
+          };
           return { ...f, vendorId, expectedDate };
         });
       })
@@ -103,6 +116,17 @@ export default function FabricOrderDialog({ open, onClose, onSaved, fabrics, edi
   const uom = fabric?.unitOfMeasure ? UOM_SHORT[fabric.unitOfMeasure] : '';
   const set = <K extends keyof typeof form>(k: K, v: (typeof form)[K]) =>
     setForm((f) => ({ ...f, [k]: v }));
+
+  // An auto-filled due date follows the order date; a typed one stays put.
+  const changeOrderDate = (orderDate: string) => {
+    const a = autoFilled.current;
+    if (!orderDate || a.leadDays == null || a.expectedDate === '' || form.expectedDate !== a.expectedDate) {
+      return set('orderDate', orderDate);
+    }
+    const expectedDate = dueFrom(orderDate, a.leadDays);
+    autoFilled.current = { ...a, expectedDate };
+    setForm((f) => ({ ...f, orderDate, expectedDate }));
+  };
 
   const fabricOptions = useMemo(
     () =>
@@ -256,7 +280,7 @@ export default function FabricOrderDialog({ open, onClose, onSaved, fabrics, edi
           </div>
           <div className="space-y-1.5">
             <Label>{t('admin.fabricOrders.orderDate', { defaultValue: 'Order date' })}</Label>
-            <Input type="date" value={form.orderDate} onChange={(e) => set('orderDate', e.target.value)} />
+            <Input type="date" value={form.orderDate} onChange={(e) => changeOrderDate(e.target.value)} />
           </div>
           <div className="space-y-1.5">
             <Label>
