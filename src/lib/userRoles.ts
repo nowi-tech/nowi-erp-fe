@@ -143,6 +143,9 @@ export const FABRIC_WRITE_ROLES: readonly UserRole[] = [
   'fabric_manager',
 ];
 
+/** Deleting a fabric. Mirrors the BE fabrics controller `DELETE_GATED`. */
+export const FABRIC_DELETE_ROLES: readonly UserRole[] = ['admin', 'production_lead', 'fabric_manager'];
+
 /** Can open the Fabric Library and Fabric orders pages — their route guard. */
 export const FABRIC_VIEW_ROLES: readonly UserRole[] = [
   'admin',

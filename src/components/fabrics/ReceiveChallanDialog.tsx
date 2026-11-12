@@ -10,6 +10,7 @@ import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 import { dueOn, overReceiptMessage } from './ReceiveOrderDialog';
 import { apiErrorMessage } from '@/api/apiClient';
 import { createFabricChallan } from '@/api/fabricChallans';
+import { useQuickAddVendor } from './useQuickAddVendor';
 import type { FabricOrder } from '@/api/types';
 import { fmtQty, poLabel, UOM_SHORT } from '@/lib/fabric';
 import { todayISO } from '@/lib/date';
@@ -53,10 +54,12 @@ export default function ReceiveChallanDialog({
   const [challanDate, setChallanDate] = useState(todayISO());
   const [saving, setSaving] = useState(false);
   const [overMsg, setOverMsg] = useState<string | null>(null);
+  const [added, setAdded] = useState<[number, string][]>([]);
 
   useEffect(() => {
     if (!open) return;
     setVendorId(null);
+    setAdded([]);
     setPicked(new Map());
     setChallanNo('');
     setChallanDate(todayISO());
@@ -65,10 +68,13 @@ export default function ReceiveChallanDialog({
   const receivable = useMemo(() => orders.filter((o) => o.fabricColourId != null), [orders]);
   const suppliers = useMemo(
     () =>
-      [...new Map(receivable.filter((o) => o.vendor).map((o) => [o.vendor!.id, o.vendor!.name])).entries()].sort(
-        (a, b) => a[1].localeCompare(b[1]),
-      ),
-    [receivable],
+      [
+        ...new Map([
+          ...receivable.filter((o) => o.vendor).map((o): [number, string] => [o.vendor!.id, o.vendor!.name]),
+          ...added,
+        ]).entries(),
+      ].sort((a, b) => a[1].localeCompare(b[1])),
+    [receivable, added],
   );
   const hasUnassigned = receivable.some((o) => !o.vendor);
   // That supplier's orders, plus any order placed without a supplier yet.
@@ -90,6 +96,10 @@ export default function ReceiveChallanDialog({
     setPicked(new Map());
     if (theirs.length === 1) pick(theirs[0]);
   };
+  const addVendor = useQuickAddVendor((v) => {
+    setAdded((a) => [...a, [v.id, v.name]]);
+    chooseSupplier(v.id);
+  });
   const toggle = (o: FabricOrder) => {
     if (!picked.has(o.id)) return pick(o);
     setPicked((m) => {
@@ -180,6 +190,8 @@ export default function ReceiveChallanDialog({
                   : []),
               ]}
               onChange={(id) => chooseSupplier((id as number) ?? null)}
+              onAddNew={(typed) => void addVendor(typed)}
+              addNewLabel={t('admin.fabricChallan.addVendor', { defaultValue: 'Add supplier' })}
               placeholder={t('admin.fabricChallan.vendorNone', { defaultValue: 'Choose a supplier…' })}
               ariaLabel={t('admin.fabricChallan.vendor', { defaultValue: 'Supplier' })}
             />

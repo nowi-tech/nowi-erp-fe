@@ -10,6 +10,7 @@ import { Combobox } from '@/components/ui/combobox';
 import { useToast } from '@/components/ui/toast';
 import { apiErrorMessage } from '@/api/apiClient';
 import { listVendorOptions, type VendorOption } from '@/api/vendors';
+import { useQuickAddVendor } from './useQuickAddVendor';
 import { createFabricOrder, getFabricOrderDefaults, updateFabricOrder } from '@/api/fabricOrders';
 import type { Fabric, FabricOrder, FabricOrderStatus } from '@/api/types';
 import { ORDER_STATUS_LABEL, SETTABLE_ORDER_STATUSES, UOM_SHORT } from '@/lib/fabric';
@@ -136,6 +137,10 @@ export default function FabricOrderDialog({ open, onClose, onSaved, fabrics, edi
     [fabrics],
   );
   const vendorOptions = vendors.map((v) => ({ value: v.id, label: v.name }));
+  const addVendor = useQuickAddVendor((v) => {
+    setVendors((vs) => (vs.some((x) => x.id === v.id) ? vs : [...vs, v]));
+    set('vendorId', v.id);
+  });
 
   // Once placed, an order needs someone to chase and a date to be late against.
   const placed = !form.unlisted && form.status !== 'need_to_order';
@@ -260,6 +265,8 @@ export default function FabricOrderDialog({ open, onClose, onSaved, fabrics, edi
               value={form.vendorId}
               options={vendorOptions}
               onChange={(id) => set('vendorId', (id as number) ?? null)}
+              onAddNew={(typed) => void addVendor(typed)}
+              addNewLabel={t('admin.fabricChallan.addVendor', { defaultValue: 'Add supplier' })}
               placeholder={t('admin.fabricChallan.vendorNone', { defaultValue: 'Choose a supplier…' })}
               ariaLabel={t('admin.fabricOrders.vendor', { defaultValue: 'Vendor' })}
             />
