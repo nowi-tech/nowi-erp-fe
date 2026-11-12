@@ -1065,6 +1065,14 @@
       },
       "issue": "Issue",
       "issueFabric": "Issue fabric",
+      "delete": "Delete",
+      "deleteTitle": "Delete fabric",
+      "deleteMsg": "Delete {{name}}? Its colours are removed too. This can't be undone.",
+      "deletedToast": "{{name}} deleted.",
+      "deleteError": "Could not delete the fabric.",
+      "colourPanel": {
+        "daysLeft": "Days left"
+      },
       "detail": {
         "back": "Back to library",
         "totalStock": "Total stock",

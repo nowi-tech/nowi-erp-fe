@@ -1,74 +1,45 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { ArrowLeft, ArrowUpRight, ClipboardCheck, Pencil, ShoppingCart } from 'lucide-react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import { ArrowLeft, ArrowUpRight, Pencil, ShoppingCart, Trash2 } from 'lucide-react';
 import { FilterRailSegments } from '@/components/ui/filter-rail';
-import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom';
+import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Dialog } from '@/components/ui/dialog';
+import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 import { Select } from '@/components/ui/select';
-import { ActivityTimeline, type TimelineItem } from '@/components/ui/activity-timeline';
+import { useToast } from '@/components/ui/toast';
+import FabricColourPanel, { ActivityList, ColourActions, returnableOf, useFabricActivity } from '@/components/fabrics/FabricColourPanel';
 import FabricEditorForm from '@/components/fabrics/FabricEditorForm';
 import FabricOrderDialog from '@/components/fabrics/FabricOrderDialog';
 import FabricOrdersTable from '@/components/fabrics/FabricOrdersTable';
 import IssueSlipDialog from '@/components/fabrics/IssueSlipDialog';
 import { ReturnDialog, SendBackDialog, StockCheckDialog } from '@/components/fabrics/StockActionDialogs';
-import { getColourLots, getFabric, getFabricActivity, listFabrics } from '@/api/styles';
+import { apiErrorMessage } from '@/api/apiClient';
+import { deleteFabric, getFabric, listFabrics } from '@/api/styles';
 import { listFabricOrders } from '@/api/fabricOrders';
 import { useSignedUrls } from '@/hooks/useSignedUrls';
 import { useAuth } from '@/context/auth';
 import {
+  FABRIC_DELETE_ROLES,
   FABRIC_STOCK_CHECK_ROLES,
   FABRIC_WRITE_ROLES,
   hasAnyRole,
   PRODUCTION_BOARD_READ_ROLES,
   STYLE_VIEW_ROLES,
 } from '@/lib/userRoles';
-import type {
-  Fabric,
-  FabricActivity,
-  FabricColour,
-  FabricOrder,
-  FabricOrderStatus,
-  FabricStockActivity,
-} from '@/api/types';
+import type { Fabric, FabricColour, FabricOrder, FabricStockActivity } from '@/api/types';
 import {
   colourState,
   COLOUR_STATE_LABEL,
   COLOUR_STATE_VARIANT,
-  daysOfCover,
   fmtQty,
   OPEN_ORDER_STATUSES,
-  ORDER_STATUS_LABEL,
   orderQtyForLots,
-  poLabel,
-  PURPOSE_LABEL,
 } from '@/lib/fabric';
 import { cn } from '@/lib/utils';
 
 type Kind = 'all' | 'stock' | 'orders' | 'edits';
-
-const FIELD_LABEL: Record<string, string> = {
-  name: 'Name',
-  gsm: 'GSM',
-  cuttableWidth: 'Width',
-  unitOfMeasure: 'Unit',
-  construction: 'Construction',
-  count: 'Count',
-  composition: 'Composition',
-  colours: 'Colours',
-  imagePath: 'Image',
-  notes: 'Notes',
-  isActive: 'Active',
-  status: 'Status',
-  quantityOrdered: 'Quantity',
-  expectedDate: 'Due',
-  orderDate: 'Order date',
-  vendorId: 'Vendor',
-  fabricColourId: 'Fabric',
-  itemName: 'Item',
-  note: 'Remarks',
-};
 
 /**
  * Fabric detail — the fabric, its colours (stock, held, on order), its orders,
@@ -97,41 +68,16 @@ export default function FabricDetail() {
   const [sendBackOf, setSendBackOf] = useState<FabricStockActivity | null>(null);
 
   const [kind, setKind] = useState<Kind>('all');
-  // The selected colour: set by clicking a row (or arriving from the Library); filters orders and activity.
-  const [params] = useSearchParams();
-  const [colourFilter, setColourFilter] = useState<number | ''>(() => Number(params.get('colour')) || '');
-  const [lotsHolding, setLotsHolding] = useState<{ id: number; batchNo: string; style: string | null; held: number }[]>([]);
-  const [activity, setActivity] = useState<FabricActivity[]>([]);
-  const [nextBefore, setNextBefore] = useState<string | null>(null);
-  const [activityBusy, setActivityBusy] = useState(false);
-  // Only the latest request may write — a slow reply for an old filter is dropped.
-  const activitySeq = useRef(0);
-
-  const loadActivity = useCallback(
-    async (before?: string) => {
-      if (!Number.isFinite(fabricId)) return;
-      const seq = ++activitySeq.current;
-      setActivityBusy(true);
-      try {
-        const r = await getFabricActivity(fabricId, {
-          kind: kind === 'all' ? undefined : kind,
-          colourId: colourFilter === '' ? undefined : colourFilter,
-          before,
-        });
-        if (seq !== activitySeq.current) return;
-        // Pages overlap on the boundary timestamp, so drop rows already shown.
-        setActivity((a) => {
-          if (!before) return r.items;
-          const seen = new Set(a.map((x) => x.id));
-          return [...a, ...r.items.filter((x) => !seen.has(x.id))];
-        });
-        setNextBefore(r.nextBefore);
-      } finally {
-        if (seq === activitySeq.current) setActivityBusy(false);
-      }
-    },
-    [fabricId, kind, colourFilter],
-  );
+  const [colourFilter, setColourFilter] = useState<number | ''>('');
+  // Bumped after any change so the activity feeds (page and panel) refetch.
+  const [version, setVersion] = useState(0);
+  const feed = useFabricActivity(fabricId, kind === 'all' ? undefined : kind, colourFilter === '' ? undefined : colourFilter, version);
+  // The colour whose side panel is open; the Library links here with ?colour=<id>.
+  const [params, setParams] = useSearchParams();
+  const [panelId, setPanelId] = useState<number | null>(() => Number(params.get('colour')) || null);
+  const [deleteOpen, setDeleteOpen] = useState(false);
+  const toast = useToast();
+  const canDelete = hasAnyRole(user, FABRIC_DELETE_ROLES);
 
   const load = useCallback(async () => {
     if (!Number.isFinite(fabricId)) {
@@ -159,13 +105,22 @@ export default function FabricDetail() {
   useEffect(() => {
     void load();
   }, [load]);
-  useEffect(() => {
-    void loadActivity().catch(() => undefined);
-  }, [loadActivity]);
 
   const refresh = () => {
     void load();
-    void loadActivity().catch(() => undefined);
+    setVersion((v) => v + 1);
+  };
+
+  const onDelete = async () => {
+    if (!fabric) return;
+    setDeleteOpen(false);
+    try {
+      await deleteFabric(fabric.id);
+      toast.show(t('admin.fabricLibrary.deletedToast', { defaultValue: '{{name}} deleted.', name: fabric.name }));
+      navigate('/fabric-library');
+    } catch (e) {
+      toast.show(apiErrorMessage(e) ?? t('admin.fabricLibrary.deleteError', { defaultValue: 'Could not delete the fabric.' }), 'error');
+    }
   };
 
   const imagePaths = useMemo(
@@ -183,26 +138,11 @@ export default function FabricDetail() {
   );
   /** Order prefilled with what planning lots are short of. */
   const orderColour = (c: FabricColour) => setOrderFor({ fabricColourId: c.id, quantity: orderQtyForLots(c) });
-  const selected = colours.find((c) => c.id === colourFilter) ?? null;
-  useEffect(() => {
-    setLotsHolding([]);
-    if (colourFilter === '') return;
-    let live = true;
-    void getColourLots(colourFilter)
-      .then((r) => {
-        if (live) setLotsHolding(r);
-      })
-      .catch(() => undefined);
-    return () => {
-      live = false;
-    };
-  }, [colourFilter, selected?.availableQuantity]);
+  const panelColour = colours.find((c) => c.id === panelId) ?? null;
+  // Dialogs sit under the drawer, so the panel steps aside while one is open and returns after.
+  const dialogOpen = editOpen || orderFor != null || issueFor != null || checkOf != null || returnOf != null || sendBackOf != null;
 
-  const shownOrders = orders.filter(
-    (o) =>
-      (showAllOrders || OPEN_ORDER_STATUSES.includes(o.status)) &&
-      (colourFilter === '' || o.fabricColourId === colourFilter),
-  );
+  const shownOrders = orders.filter((o) => showAllOrders || OPEN_ORDER_STATUSES.includes(o.status));
 
   if (loading && !fabric) {
     return <div className="p-6 text-sm text-[var(--color-muted-foreground)]">{t('common.loading')}</div>;
@@ -217,7 +157,6 @@ export default function FabricDetail() {
   }
 
   const parentImg = fabric.imagePath ? imageUrls[fabric.imagePath] : undefined;
-  const colourName = (cid: number | null | undefined) => colours.find((c) => c.id === cid)?.name ?? '';
 
   return (
     <div className="space-y-6 pb-10">
@@ -249,20 +188,30 @@ export default function FabricDetail() {
                 .join(' · ')}
             </div>
           </div>
-          {canEdit && (
+          {(canEdit || canDelete) && (
             <div className="flex flex-wrap gap-2">
-              <Button size="sm" variant="outline" onClick={() => setEditOpen(true)}>
-                <Pencil size={15} />
-                {t('admin.fabricLibrary.edit')}
-              </Button>
-              <Button size="sm" onClick={() => setIssueFor({})}>
-                <ArrowUpRight size={15} />
-                {t('admin.fabricLibrary.issue')}
-              </Button>
-              <Button size="sm" variant="outline" onClick={() => setOrderFor({})}>
-                <ShoppingCart size={15} />
-                {t('admin.fabricLibrary.order', { defaultValue: 'Order' })}
-              </Button>
+              {canEdit && (
+                <>
+                  <Button size="sm" variant="outline" onClick={() => setEditOpen(true)}>
+                    <Pencil size={15} />
+                    {t('admin.fabricLibrary.edit')}
+                  </Button>
+                  <Button size="sm" onClick={() => setIssueFor({})}>
+                    <ArrowUpRight size={15} />
+                    {t('admin.fabricLibrary.issue')}
+                  </Button>
+                  <Button size="sm" variant="outline" onClick={() => setOrderFor({})}>
+                    <ShoppingCart size={15} />
+                    {t('admin.fabricLibrary.order', { defaultValue: 'Order' })}
+                  </Button>
+                </>
+              )}
+              {canDelete && (
+                <Button size="sm" variant="outline" onClick={() => setDeleteOpen(true)}>
+                  <Trash2 size={15} />
+                  {t('admin.fabricLibrary.delete', { defaultValue: 'Delete' })}
+                </Button>
+              )}
             </div>
           )}
         </div>
@@ -306,14 +255,9 @@ export default function FabricDetail() {
                   return (
                     <tr
                       key={c.id}
-                      className={cn(
-                        'cursor-pointer border-t border-[var(--color-border)] hover:bg-[var(--color-surface-2)]/50',
-                        colourFilter === c.id && 'bg-[var(--color-primary-soft)]/40',
-                      )}
+                      className="cursor-pointer border-t border-[var(--color-border)] hover:bg-[var(--color-surface-2)]/50"
                       onClick={(e) => {
-                        if (!(e.target as HTMLElement).closest('button, a, input, select')) {
-                          setColourFilter(colourFilter === c.id ? '' : c.id);
-                        }
+                        if (!(e.target as HTMLElement).closest('button, a, input, select')) setPanelId(c.id);
                       }}
                     >
                       <td className="px-3 py-3">
@@ -324,7 +268,13 @@ export default function FabricDetail() {
                             <span className="h-4 w-4 rounded-full border border-black/10" style={{ backgroundColor: c.hex || c.name.toLowerCase() }} />
                           )}
                           <div>
-                            <div className="font-medium">{c.name}</div>
+                            <button
+                              type="button"
+                              className="font-medium text-[var(--color-primary)] underline underline-offset-2 hover:opacity-80"
+                              onClick={() => setPanelId(c.id)}
+                            >
+                              {c.name}
+                            </button>
                             {c.code && <div className="text-xs text-[var(--color-muted-foreground)]">{c.code}</div>}
                           </div>
                         </div>
@@ -367,72 +317,20 @@ export default function FabricDetail() {
                         )}
                       </td>
                       <td className="whitespace-nowrap px-3 py-3 text-right">
-                        <div className="inline-flex items-center gap-2">
-                          {canEdit && (
-                            <>
-                              <Button
-                                size="sm"
-                                disabled={(c.availableQuantity ?? 0) <= 0}
-                                onClick={() => setIssueFor({ fabricColourId: c.id })}
-                              >
-                                <ArrowUpRight size={15} />
-                                {t('admin.fabricLibrary.issue')}
-                              </Button>
-                              <Button size="sm" variant="outline" onClick={() => orderColour(c)}>
-                                <ShoppingCart size={15} />
-                                {t('admin.fabricLibrary.order', { defaultValue: 'Order' })}
-                              </Button>
-                            </>
-                          )}
-                          {canCheck && (
-                            <Button size="sm" variant="outline" onClick={() => setCheckOf(c)}>
-                              <ClipboardCheck size={15} />
-                              {t('admin.stockCheck.short', { defaultValue: 'Update' })}
-                            </Button>
-                          )}
-                        </div>
+                        <ColourActions
+                          colour={c}
+                          canEdit={canEdit}
+                          canCheck={canCheck}
+                          onIssue={(x) => setIssueFor({ fabricColourId: x.id })}
+                          onOrder={orderColour}
+                          onCheck={setCheckOf}
+                        />
                       </td>
                     </tr>
                   );
                 })}
               </tbody>
             </table>
-          </div>
-        )}
-        {selected && (
-          <div className="flex flex-wrap items-center gap-x-6 gap-y-2 border-t border-[var(--color-border)] bg-[var(--color-primary-soft)]/20 px-5 py-3 text-[13px]">
-            <span className="font-semibold">{selected.name}</span>
-            <span>
-              {t('admin.fabricLibrary.cols.used30d', { defaultValue: 'Used (30 days)' })}:{' '}
-              <b className="tabular-nums">{(selected.used30d ?? 0) > 0 ? fmtQty(selected.used30d!, unit) : '—'}</b>
-              {daysOfCover(selected) != null &&
-                ` · ${t('admin.fabricLibrary.daysLeftShort', { defaultValue: '{{n}} days left', n: daysOfCover(selected) })}`}
-            </span>
-            <span>
-              {t('admin.fabricLibrary.cols.price', { defaultValue: 'Price' })}:{' '}
-              <b className="tabular-nums">{selected.pricePerUnit != null ? `₹${selected.pricePerUnit}` : '—'}</b>
-            </span>
-            <span>
-              {t('admin.fabricLibrary.lotsHolding', { defaultValue: 'Lots waiting on it' })}:{' '}
-              {lotsHolding.length === 0
-                ? '—'
-                : lotsHolding.map((l, i) => (
-                    <span key={l.id}>
-                      {i > 0 && ', '}
-                      {links.lot ? (
-                        <Link to={`/admin/production/lots/${l.id}`} className="font-medium text-[var(--color-primary)] hover:underline">
-                          {t('admin.fabricActivity.lot', { defaultValue: 'lot {{no}}', no: l.batchNo })}
-                        </Link>
-                      ) : (
-                        t('admin.fabricActivity.lot', { defaultValue: 'lot {{no}}', no: l.batchNo })
-                      )}{' '}
-                      · {fmtQty(l.held, unit)}
-                    </span>
-                  ))}
-            </span>
-            <Button size="sm" variant="ghost" className="ml-auto" onClick={() => setColourFilter('')}>
-              {t('admin.fabricLibrary.showAllColours', { defaultValue: 'All colours' })}
-            </Button>
           </div>
         )}
       </Card>
@@ -483,24 +381,46 @@ export default function FabricDetail() {
           </div>
         }
       >
-        {activity.length === 0 ? (
-          <p className="px-5 py-4 text-sm text-[var(--color-muted-foreground)]">{t('admin.fabricLibrary.detail.noHistory')}</p>
-        ) : (
-          <ActivityTimeline items={activity.map((a) => toTimelineItem(a, unit, colourName, canEdit, links, setReturnOf, setSendBackOf, t))} />
-        )}
-        {nextBefore && (
-          <div className="border-t border-[var(--color-border)] px-5 py-2 text-center">
-            <Button
-              size="sm"
-              variant="outline"
-              disabled={activityBusy}
-              onClick={() => void loadActivity(nextBefore).catch(() => undefined)}
-            >
-              {t('admin.fabricActivity.more', { defaultValue: 'Load more' })}
-            </Button>
-          </div>
-        )}
+        <ActivityList feed={feed} fabric={fabric} canEdit={canEdit} links={links} onReturn={setReturnOf} onSendBack={setSendBackOf} />
       </Card>
+
+      {panelColour && (
+        <FabricColourPanel
+          fabric={fabric}
+          colour={panelColour}
+          open={!dialogOpen}
+          version={version}
+          orders={orders}
+          allFabrics={allFabrics}
+          canEdit={canEdit}
+          canCheck={canCheck}
+          links={links}
+          onClose={() => {
+            setPanelId(null);
+            setParams((p) => { p.delete('colour'); return p; }, { replace: true });
+          }}
+          onIssue={(x) => setIssueFor({ fabricColourId: x.id })}
+          onOrder={orderColour}
+          onCheck={setCheckOf}
+          onReturn={setReturnOf}
+          onSendBack={setSendBackOf}
+          onChanged={refresh}
+        />
+      )}
+
+      <ConfirmDialog
+        open={deleteOpen}
+        title={t('admin.fabricLibrary.deleteTitle', { defaultValue: 'Delete fabric' })}
+        message={t('admin.fabricLibrary.deleteMsg', {
+          defaultValue: "Delete {{name}}? Its colours are removed too. This can't be undone.",
+          name: fabric.name,
+        })}
+        confirmLabel={t('admin.fabricLibrary.delete', { defaultValue: 'Delete' })}
+        cancelLabel={t('common.cancel', { defaultValue: 'Cancel' })}
+        destructive
+        onCancel={() => setDeleteOpen(false)}
+        onConfirm={() => void onDelete()}
+      />
 
       <Dialog open={editOpen} onClose={() => setEditOpen(false)} maxWidthClassName="max-w-3xl" title={`${t('admin.fabricLibrary.editFabric')} — ${fabric.name}`}>
         <FabricEditorForm
@@ -578,146 +498,6 @@ export default function FabricDetail() {
       />
     </div>
   );
-}
-
-type T = ReturnType<typeof useTranslation>['t'];
-
-function fmtValue(key: string, v: unknown, colourName: (id: number) => string, t: T): string | null {
-  if (v === null || v === undefined || v === '') return '—';
-  if (key === 'status') {
-    const s = String(v) as FabricOrderStatus;
-    return t(`admin.fabricOrders.statuses.${s}`, { defaultValue: ORDER_STATUS_LABEL[s] ?? s });
-  }
-  if (key === 'fabricColourId') return colourName(Number(v)) || String(v);
-  if (key === 'expectedDate' || key === 'orderDate') return new Date(String(v)).toLocaleDateString();
-  if (key === 'imagePath') return null;
-  return String(v);
-}
-
-/** Issued less returned, unless the server sent its tighter cap. */
-const returnableOf = (a: FabricStockActivity) => a.returnable ?? -a.quantity - a.returnedQuantity;
-
-/** One activity row in words — "Issued 300 m · Green → Gurukul · lot 1001". */
-function toTimelineItem(
-  a: FabricActivity,
-  unit: string | null,
-  colourName: (id: number) => string,
-  canEdit: boolean,
-  links: { lot: boolean; style: boolean },
-  onReturn: (a: FabricStockActivity) => void,
-  onSendBack: (a: FabricStockActivity) => void,
-  t: T,
-): TimelineItem {
-  if (a.kind !== 'stock') {
-    const after = a.after ?? {};
-    const before = a.before ?? {};
-    const chips = Object.keys(after).flatMap((k) => {
-      const label = t(`admin.fabricActivity.fields.${k}`, { defaultValue: FIELD_LABEL[k] ?? k });
-      const v = fmtValue(k, after[k], colourName, t);
-      if (v === null) return [label];
-      return a.action.endsWith('_created') ? [`${label}: ${v}`] : [`${label}: ${fmtValue(k, before[k], colourName, t) ?? '—'} → ${v}`];
-    });
-    const po = a.orderNo != null ? poLabel(a.orderNo) : t('admin.fabricActivity.order', { defaultValue: 'Order' });
-    const label = {
-      fabric_created: t('admin.fabricActivity.created', { defaultValue: 'Created fabric' }),
-      fabric_updated: t('admin.fabricActivity.edited', { defaultValue: 'Edited fabric' }),
-      fabric_order_created: t('admin.fabricActivity.orderCreatedPo', { defaultValue: 'New order {{po}}', po }),
-      fabric_order_updated: t('admin.fabricActivity.orderUpdatedPo', { defaultValue: '{{po}} updated', po }),
-    }[a.action] ?? a.action;
-    return { id: a.id, actor: a.actor ?? t('admin.fabricActivity.system', { defaultValue: 'System' }), label, chips, note: a.reason, at: a.at };
-  }
-
-  const qty = fmtQty(Math.abs(a.quantity), unit);
-  const colour = a.colour?.name ?? '';
-  const lotText = a.lot && t('admin.fabricActivity.lot', { defaultValue: 'lot {{no}}', no: a.lot.batchNo });
-  const styleText = a.style && (a.style.styleId ?? a.style.workingName);
-  const target = a.lot ? (
-    links.lot ? (
-      <Link to={`/admin/production/lots/${a.lot.id}`} className="text-[var(--color-primary)] hover:underline">
-        {lotText}
-      </Link>
-    ) : (
-      lotText
-    )
-  ) : a.style ? (
-    links.style ? (
-      <Link to={`/styles/${a.style.id}`} className="text-[var(--color-primary)] hover:underline">
-        {styleText}
-      </Link>
-    ) : (
-      styleText
-    )
-  ) : null;
-  const challan = a.challan?.challanNo;
-  const vendor = a.challan?.vendor?.name;
-  let label: string;
-  let chips: string[] = [];
-  let extra: React.ReactNode = target;
-  if (a.entryType === 'receipt') {
-    label = t('admin.fabricActivity.received', { defaultValue: 'Received {{qty}} · {{colour}}', qty, colour });
-    chips = [
-      challan && t('admin.fabricActivity.challan', { defaultValue: 'challan {{no}}', no: challan }),
-      vendor,
-      a.fabricOrderNo != null &&
-        t('admin.fabricActivity.againstPo', { defaultValue: 'against {{po}}', po: poLabel(a.fabricOrderNo) }),
-      a.returnedQuantity > 0 &&
-        t('admin.fabricActivity.sentBackSoFar', { defaultValue: '{{qty}} sent back', qty: fmtQty(a.returnedQuantity, unit) }),
-    ].filter(Boolean) as string[];
-    // Only fabric that came in against an order has a supplier to go back to.
-    if (canEdit && a.fabricOrderId != null && a.quantity - a.returnedQuantity > 0) {
-      extra = (
-        <Button size="sm" variant="outline" className="h-8 px-3" onClick={() => onSendBack(a)}>
-          {t('admin.sendBack.action', { defaultValue: 'Send back' })}
-        </Button>
-      );
-    }
-  } else if (a.purpose === 'vendor_return') {
-    label = t('admin.fabricActivity.sentBack', { defaultValue: 'Sent back {{qty}} · {{colour}}', qty, colour });
-    chips = [vendor && `→ ${vendor}`, challan].filter(Boolean) as string[];
-  } else if (a.entryType === 'return') {
-    label = t('admin.fabricActivity.returned', { defaultValue: 'Returned {{qty}} · {{colour}}', qty, colour });
-    chips = [vendor].filter(Boolean) as string[];
-  } else if (a.entryType === 'adjustment') {
-    // Cutting / sample top-ups are written under CUT-… / SAMPLE-…; counts under CHECK-….
-    label = /^(CUT|SAMPLE)-/.test(challan ?? '')
-      ? a.needsReview
-        ? t('admin.fabricActivity.gap', { defaultValue: 'Cut but not in stock: {{qty}} · {{colour}} — check stock', qty, colour })
-        : t('admin.fabricActivity.gapCleared', { defaultValue: 'Cut but not in stock: {{qty}} · {{colour}}', qty, colour })
-      : t('admin.fabricActivity.check', { defaultValue: 'Stock check · {{colour}}: {{sign}}{{qty}}', colour, qty, sign: a.quantity >= 0 ? '+' : '−' });
-  } else if (a.usedQuantity != null) {
-    label = t('admin.fabricActivity.used', {
-      defaultValue: 'Used {{used}} · {{colour}}',
-      used: fmtQty(a.usedQuantity, unit),
-      colour,
-    });
-    chips = [
-      a.quantity !== 0
-        ? t('admin.fabricActivity.deducted', { defaultValue: 'deducted {{qty}}', qty })
-        : t('admin.fabricActivity.alreadyIssued', { defaultValue: 'already issued' }),
-    ];
-  } else {
-    label = t('admin.fabricActivity.issued', { defaultValue: 'Issued {{qty}} · {{colour}}', qty, colour });
-    chips = [
-      vendor && `→ ${vendor}`,
-      challan,
-      a.purpose && a.purpose !== 'production'
-        ? t(`admin.issueSlip.purposes.${a.purpose}`, { defaultValue: PURPOSE_LABEL[a.purpose] })
-        : null,
-      a.returnedQuantity > 0 && t('admin.fabricActivity.returnedSoFar', { defaultValue: '{{qty}} returned', qty: fmtQty(a.returnedQuantity, unit) }),
-    ].filter(Boolean) as string[];
-    const open = returnableOf(a);
-    if (canEdit && open > 0) {
-      extra = (
-        <span className="inline-flex items-center gap-2">
-          {target}
-          <Button size="sm" variant="outline" className="h-8 px-3" onClick={() => onReturn(a)}>
-            {t('admin.returnFabric.action', { defaultValue: 'Return' })}
-          </Button>
-        </span>
-      );
-    }
-  }
-  return { id: a.id, actor: a.actor ?? t('admin.fabricActivity.system', { defaultValue: 'System' }), label, chips, note: a.note, extra, at: a.at };
 }
 
 function BackLink({ onClick, label }: { onClick: () => void; label: string }) {
