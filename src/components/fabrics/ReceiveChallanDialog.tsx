@@ -99,7 +99,7 @@ export default function ReceiveChallanDialog({
   const addVendor = useQuickAddVendor((v) => {
     setAdded((a) => [...a, [v.id, v.name]]);
     chooseSupplier(v.id);
-  });
+  }, `${open}:${vendorId}`);
   const toggle = (o: FabricOrder) => {
     if (!picked.has(o.id)) return pick(o);
     setPicked((m) => {

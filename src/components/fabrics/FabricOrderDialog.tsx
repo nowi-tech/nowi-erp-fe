@@ -140,7 +140,7 @@ export default function FabricOrderDialog({ open, onClose, onSaved, fabrics, edi
   const addVendor = useQuickAddVendor((v) => {
     setVendors((vs) => (vs.some((x) => x.id === v.id) ? vs : [...vs, v]));
     set('vendorId', v.id);
-  });
+  }, `${open}:${form.vendorId}`);
 
   // Once placed, an order needs someone to chase and a date to be late against.
   const placed = !form.unlisted && form.status !== 'need_to_order';
