@@ -22,7 +22,7 @@ const PREVIEW_LOW_PERCENT = 20;
 
 /**
  * A lot's fabric: which fabric colour it's cut from and the estimated fabric
- * per piece for each size. Shows the red / yellow / green check as you type.
+ * for the whole lot. Shows the red / yellow / green check as you type.
  */
 export default function FabricPlanDialog({
   lot,
@@ -38,7 +38,7 @@ export default function FabricPlanDialog({
   const [fabrics, setFabrics] = useState<Fabric[]>([]);
   const [fabricId, setFabricId] = useState<number | null>(null);
   const [fabricColourId, setFabricColourId] = useState<number | null>(null);
-  const [perPiece, setPerPiece] = useState<Record<string, string>>({});
+  const [estimate, setEstimate] = useState('');
   const [saving, setSaving] = useState(false);
   const [loaded, setLoaded] = useState(false);
 
@@ -48,9 +48,7 @@ export default function FabricPlanDialog({
     setLoaded(false);
     setFabricId(null);
     setFabricColourId(null);
-    setPerPiece(
-      Object.fromEntries(lot.sizes.map((s) => [s.sku, s.fabricPerPiece != null ? String(s.fabricPerPiece) : ''])),
-    );
+    setEstimate(lot.fabric?.fabricEstimate != null ? String(lot.fabric.fabricEstimate) : '');
     void Promise.all([
       listFabrics(),
       // A lot with no plan yet starts from the last lot of the same style.
@@ -62,12 +60,10 @@ export default function FabricPlanDialog({
       const fcId = lot.fabric?.fabricColourId ?? defaults?.fabricColourId ?? null;
       setFabricColourId(fcId);
       setFabricId(fs.find((f) => f.colours?.some((c) => c.id === fcId))?.id ?? null);
-      if (defaults) {
-        setPerPiece((p) =>
-          Object.fromEntries(
-            lot.sizes.map((s) => [s.sku, p[s.sku] || (defaults.perPieceBySize[s.size] != null ? String(defaults.perPieceBySize[s.size]) : '')]),
-          ),
-        );
+      const perPiece = defaults?.fabricPerPiece;
+      if (perPiece != null) {
+        const planned = lot.sizes.reduce((s, l) => s + l.qtyPlanned, 0);
+        setEstimate((e) => e || String(Math.round(perPiece * planned * 100) / 100));
       }
       setLoaded(true);
       })
@@ -83,13 +79,7 @@ export default function FabricPlanDialog({
   const fabric = fabrics.find((f) => f.id === fabricId);
   const colour = fabric?.colours?.find((c) => c.id === fabricColourId);
   const uom = fabric?.unitOfMeasure ? UOM_SHORT[fabric.unitOfMeasure] : '';
-  const needed = useMemo(
-    () =>
-      Math.round(
-        (lot?.sizes ?? []).reduce((s, l) => s + l.qtyPlanned * (Number(perPiece[l.sku]) || 0), 0) * 100,
-      ) / 100,
-    [lot, perPiece],
-  );
+  const needed = Number(estimate) || 0;
 
   // Same rule as the server: free = stock less what OTHER planning lots hold.
   const preview: FabricPlanCheck | null = useMemo(() => {
@@ -114,10 +104,7 @@ export default function FabricPlanDialog({
     try {
       const updated = await setFabricPlan(lot.id, {
         fabricColourId,
-        items: lot.sizes.map((s) => ({
-          sku: s.sku,
-          fabricPerPiece: perPiece[s.sku] === '' || perPiece[s.sku] == null ? null : Number(perPiece[s.sku]),
-        })),
+        fabricEstimate: estimate === '' ? null : Math.round(Number(estimate) * 100) / 100,
       });
       onSaved(updated);
     } catch (e) {
@@ -190,51 +177,24 @@ export default function FabricPlanDialog({
           </div>
         </div>
 
-        <table className="w-full text-sm">
-          <thead>
-            <tr className="border-b border-[var(--color-border)] text-[10.5px] uppercase tracking-wider text-[var(--color-muted-foreground)]">
-              <th className="py-2 pr-3 text-left font-semibold">{t('admin.production.size', { defaultValue: 'Size' })}</th>
-              <th className="py-2 pr-3 text-right font-semibold">{t('admin.production.planned', { defaultValue: 'Planned' })}</th>
-              <th className="py-2 pr-3 text-left font-semibold">
-                {t('admin.production.fabricPlan.perPiece', { defaultValue: 'Fabric / piece' })}
-                {uom ? ` (${uom})` : ''}
-              </th>
-              <th className="py-2 pr-3 text-right font-semibold">{t('admin.production.fabricPlan.fabric', { defaultValue: 'Fabric' })}</th>
-            </tr>
-          </thead>
-          <tbody>
-            {lot.sizes.map((s) => (
-              <tr key={s.sku} className="border-b border-[var(--color-border)]/60">
-                <td className="py-2 pr-3 font-semibold">{s.size}</td>
-                <td className="py-2 pr-3 text-right tabular-nums">{s.qtyPlanned}</td>
-                <td className="py-2 pr-3">
-                  <Input
-                    type="number"
-                    min={0}
-                    step="0.01"
-                    inputMode="decimal"
-                    className="h-9 w-24 text-center text-sm font-semibold"
-                    value={perPiece[s.sku] ?? ''}
-                    onChange={(e) => setPerPiece((p) => ({ ...p, [s.sku]: e.target.value }))}
-                    aria-label={t('admin.production.fabricPlan.perPieceFor', {
-                      defaultValue: 'Fabric per piece for size {{size}}',
-                      size: s.size,
-                    })}
-                  />
-                </td>
-                <td className="py-2 pr-3 text-right tabular-nums">
-                  {fmtQty(s.qtyPlanned * (Number(perPiece[s.sku]) || 0), fabric?.unitOfMeasure)}
-                </td>
-              </tr>
-            ))}
-            <tr>
-              <td colSpan={3} className="py-2 pr-3 text-right text-xs font-semibold uppercase text-[var(--color-muted-foreground)]">
-                {t('admin.production.fabricPlan.total', { defaultValue: 'Total' })}
-              </td>
-              <td className="py-2 pr-3 text-right font-semibold tabular-nums">{fmtQty(needed, fabric?.unitOfMeasure)}</td>
-            </tr>
-          </tbody>
-        </table>
+        <div>
+          <label htmlFor="fabric-estimate" className="mb-1 block text-xs font-medium">
+            {t('admin.production.fabricPlan.estimate', { defaultValue: 'Estimated fabric' })}
+          </label>
+          <div className="flex items-center gap-2">
+            <Input
+              id="fabric-estimate"
+              type="number"
+              min={0}
+              step="0.01"
+              inputMode="decimal"
+              className="h-9 w-32 text-sm font-semibold"
+              value={estimate}
+              onChange={(e) => setEstimate(e.target.value)}
+            />
+            <span className="text-sm">{uom}</span>
+          </div>
+        </div>
 
         {preview && <FabricCheckText check={preview} unit={fabric?.unitOfMeasure ?? null} />}
       </div>

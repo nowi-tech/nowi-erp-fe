@@ -119,7 +119,7 @@ export default function EditLotDialog({
   const cutAdded: Record<string, number> = Object.fromEntries(
     base.sizes.map((s) => [s.sku, Math.max(0, (stages[s.sku]?.cutting ?? s.qtyCut) - s.qtyCut)]),
   );
-  const fabricEstimate = estimateFabric(base.sizes, cutAdded);
+  const fabricEstimate = estimateFabric(base, cutAdded);
   const askFabric = base.fabric != null && Object.values(cutAdded).some((n) => n > 0);
   const fabricUsedNum = Number(fabricUsedValue(fabricUsed, fabricEstimate));
   // Cut pieces always used some cloth — a blank or 0 would silently skip the deduction.

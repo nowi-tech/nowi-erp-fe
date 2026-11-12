@@ -47,7 +47,7 @@ export default function StageQtyDialog({
   const total = useMemo(() => Object.values(qty).reduce((a, b) => a + b, 0), [qty]);
 
   if (!batch) return null;
-  const estimate = estimateFabric(batch.sizes, qty);
+  const estimate = estimateFabric(batch, qty);
   const used = Number(fabricUsedValue(fabricUsed, estimate));
 
   const set = (sku: string, raw: string) =>

@@ -53,8 +53,6 @@ export interface BatchSizeLine {
   /** null = no forecast existed (style-origin), NOT "forecast said zero". */
   suggestedQty: number | null;
   qtyProduced: number | null;
-  /** Estimated fabric per piece for this size; null = not given. */
-  fabricPerPiece: number | null;
   /** Units already shipped on challans; `qtyProduced - qtyDispatched` is what
    *  remains to dispatch. Always a number (0 when nothing shipped). */
   qtyDispatched: number;
@@ -141,6 +139,8 @@ export interface BatchFabric {
   colourHex: string | null;
   unit: string | null;
   needed: number;
+  /** Estimated fabric for the whole lot, in the fabric's unit; null = not given. */
+  fabricEstimate: number | null;
   /** Issued to the lot, net of returns (includes what cutting deducted). */
   issued: number;
   /** Confirmed as used at cutting. */
@@ -347,12 +347,12 @@ export function setTrimsStatus(id: number, trimsStatus: TrimsStatus | null): Pro
     .then((r) => r.data);
 }
 
-/** Set a lot's fabric colour and per-size fabric estimate. */
+/** Set a lot's fabric colour and whole-lot fabric estimate. */
 export function setFabricPlan(
   id: number,
   body: {
     fabricColourId?: number | null;
-    items?: { sku: string; fabricPerPiece: number | null }[];
+    fabricEstimate?: number | null;
   },
 ): Promise<ProductionBatch> {
   return apiClient
@@ -364,7 +364,7 @@ export function setFabricPlan(
 export function getFabricDefaults(params: {
   styleId?: number | null;
   styleKey?: string | null;
-}): Promise<{ fabricColourId: number | null; perPieceBySize: Record<string, number> }> {
+}): Promise<{ fabricColourId: number | null; fabricPerPiece: number | null }> {
   const q: Record<string, string> = {};
   if (params.styleId) q.styleId = String(params.styleId);
   if (params.styleKey) q.styleKey = params.styleKey;
