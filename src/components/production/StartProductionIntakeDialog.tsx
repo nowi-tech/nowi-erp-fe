@@ -115,6 +115,12 @@ export default function StartProductionIntakeDialog({
   const [fabricPick, setFabricPick] = useState<{ fabricId: number; fabricColourId: number | null } | null>(null);
   const [fabricUsed, setFabricUsed] = useState('');
   const pickedStyleKey = useRef<string | null>(null);
+  // Leaving the current selection drops its fabric and any reply still on the way for it.
+  const resetFabric = (styleKey: string | null = null) => {
+    pickedStyleKey.current = styleKey;
+    setFabricPick(null);
+    setFabricUsed('');
+  };
 
   // Reset everything when the dialog opens; load the picker's data once.
   useEffect(() => {
@@ -130,9 +136,7 @@ export default function StartProductionIntakeDialog({
     setQuery('');
     setTailorId('');
     setProductionType(null);
-    setFabricPick(null);
-    setFabricUsed('');
-    pickedStyleKey.current = null;
+    resetFabric();
     if (!isAlt)
       void listFabrics()
         .then(setFabrics)
@@ -199,9 +203,7 @@ export default function StartProductionIntakeDialog({
     setQty(seeded);
     setExtSizes({}); // fresh manual-size picker when the style has no resolved sizes
     // Same fabric as this style's last lot, unless one is picked before the reply lands.
-    pickedStyleKey.current = s.styleKey;
-    setFabricPick(null);
-    setFabricUsed('');
+    resetFabric(s.styleKey);
     if (!isAlt) {
       void getFabricDefaults({ styleId: s.linkedStyleId, styleKey: s.styleKey })
         .then((d) => {
@@ -218,13 +220,14 @@ export default function StartProductionIntakeDialog({
   // text over as the SKU (mirrors relive's typed-code path).
   const startExternal = (typed: string) => {
     setMode('external');
-    pickedStyleKey.current = null;
+    resetFabric();
     setExternalSku(typed.trim());
     setExtSizes({});
     setQty({});
   };
 
   const backToPicker = () => {
+    resetFabric();
     setMode('existing');
     setExternalSku('');
     setExtSizes({});
@@ -496,7 +499,10 @@ export default function StartProductionIntakeDialog({
                 </div>
                 <button
                   type="button"
-                  onClick={() => setSel(null)}
+                  onClick={() => {
+                    setSel(null);
+                    resetFabric();
+                  }}
                   className="text-[var(--color-muted-foreground)] hover:text-[var(--color-foreground)]"
                   aria-label={t('admin.production.intake.change', { defaultValue: 'Change style' })}
                 >
