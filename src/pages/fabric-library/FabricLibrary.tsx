@@ -138,23 +138,30 @@ export default function FabricLibrary() {
       );
   }, [fabrics, search, chip]);
 
-  // Colours sort by their own value; fabrics by the total stock of the colours shown, or their own last update.
+  // Last updated keeps the grouping: fabrics by their own date, colours by theirs.
   const groups = useMemo(() => {
-    if (sortKey == null) return filteredGroups;
+    if (sortKey !== 'updated') return filteredGroups;
     const time = (d?: string | null) => (d ? Date.parse(d) : null);
-    const colourVal = (c: FabricColour) =>
-      sortKey === 'stock' ? (c.availableQuantity ?? 0) : time(c.lastUpdatedAt);
-    const fabricVal = (g: (typeof filteredGroups)[number]) =>
-      sortKey === 'stock'
-        ? g.colours.reduce((n, c) => n + (c.availableQuantity ?? 0), 0)
-        : time(g.fabric.lastUpdatedAt);
     return filteredGroups
       .map((g) => ({
         ...g,
-        colours: [...g.colours].sort((a, b) => compareNullsLast(colourVal(a), colourVal(b), sortDir)),
+        colours: [...g.colours].sort((a, b) => compareNullsLast(time(a.lastUpdatedAt), time(b.lastUpdatedAt), sortDir)),
       }))
-      .sort((a, b) => compareNullsLast(fabricVal(a), fabricVal(b), sortDir));
+      .sort((a, b) => compareNullsLast(time(a.fabric.lastUpdatedAt), time(b.fabric.lastUpdatedAt), sortDir));
   }, [filteredGroups, sortKey, sortDir]);
+
+  // Stock sort drops the grouping: every visible colour in one list, ranked by its own stock.
+  const stockRanked = useMemo(
+    () =>
+      sortKey !== 'stock'
+        ? null
+        : filteredGroups
+            .flatMap((g) => g.colours.map((c) => ({ fabric: g.fabric, colour: c })))
+            .sort((a, b) =>
+              compareNullsLast(a.colour.availableQuantity ?? 0, b.colour.availableQuantity ?? 0, sortDir),
+            ),
+    [filteredGroups, sortKey, sortDir],
+  );
 
   const allColours = useMemo(() => fabrics.flatMap((f) => f.colours ?? []), [fabrics]);
   const kpi = (k: Chip) => allColours.filter(CHIP_MATCH[k]).length;
@@ -186,6 +193,129 @@ export default function FabricLibrary() {
       else n.add(id);
       return n;
     });
+
+  /** One colour's row; `flat` (stock-sorted list) labels it with its fabric too. */
+  const colourRow = (f: Fabric, c: FabricColour, flat: boolean) => {
+    const state = colourState(c);
+    const swatch = c.imagePath ?? f.imagePath;
+    const unit = f.unitOfMeasure;
+    return (
+      <tr
+        key={c.id}
+        className="cursor-pointer border-t border-[var(--color-border)] hover:bg-[var(--color-surface-2)]/50"
+        // The colour opens its fabric's page with that colour selected.
+        onClick={(e) => {
+          if (!(e.target as HTMLElement).closest('button, a, input, select')) {
+            navigate(`/fabric-library/${f.id}?colour=${c.id}`);
+          }
+        }}
+      >
+        <td className={cn('py-3 pr-3', flat ? 'pl-3' : 'pl-10')}>
+          <div className="flex items-center gap-2">
+            {swatch && imageUrls[swatch] ? (
+              <img src={imageUrls[swatch]} alt="" className="h-5 w-5 rounded-[3px] border border-black/10 object-cover" />
+            ) : (
+              <span
+                className="h-4 w-4 rounded-full border border-black/10"
+                style={{ backgroundColor: c.hex || c.name.toLowerCase() }}
+              />
+            )}
+            {flat ? (
+              <span className="truncate">
+                <span className="font-medium">
+                  {f.name} · {c.name}
+                </span>
+                {f.code && <span className="ml-1.5 text-xs text-[var(--color-muted-foreground)]">{f.code}</span>}
+              </span>
+            ) : (
+              <span className="font-medium">{c.name}</span>
+            )}
+          </div>
+        </td>
+        <td className="px-3 py-3">
+          <div className="flex items-center gap-3">
+            <span className="w-20 shrink-0 text-right font-medium tabular-nums">
+              {fmtQty(c.availableQuantity ?? 0, unit)}
+            </span>
+            <Badge variant={COLOUR_STATE_VARIANT[state]}>
+              {t(`admin.fabricLibrary.states.${state}`, { defaultValue: COLOUR_STATE_LABEL[state] })}
+            </Badge>
+            {(c.needsReview ?? 0) > 0 && (
+              <Badge variant="warning">
+                {t('admin.fabricLibrary.checkStock', { defaultValue: 'Check stock' })}
+              </Badge>
+            )}
+          </div>
+        </td>
+        <td className="px-3 py-3 text-right tabular-nums">
+          {(c.onOrderQuantity ?? 0) > 0 ? (
+            <button
+              type="button"
+              onClick={() => setOrdersOf({ fabric: f, colour: c })}
+              className="text-right underline-offset-2 hover:underline"
+            >
+              <div className="font-medium">{fmtQty(c.onOrderQuantity!, unit)}</div>
+              {c.nextExpectedDate && (
+                <div
+                  className={cn(
+                    'text-xs',
+                    (c.overdueOrders ?? 0) > 0
+                      ? 'font-semibold text-[var(--color-destructive)]'
+                      : 'text-[var(--color-muted-foreground)]',
+                  )}
+                >
+                  {t('admin.fabricOrders.dueOn', {
+                    defaultValue: 'due {{date}}',
+                    date: new Date(c.nextExpectedDate).toLocaleDateString(),
+                  })}
+                </div>
+              )}
+            </button>
+          ) : (ordersByColour.get(c.id) ?? []).length > 0 ? (
+            <button
+              type="button"
+              onClick={() => setOrdersOf({ fabric: f, colour: c })}
+              className="text-xs text-[var(--color-muted-foreground)] hover:underline"
+            >
+              {t('admin.fabricLibrary.needToOrder', { defaultValue: 'Need to order' })}
+            </button>
+          ) : (
+            <span className="text-[var(--color-muted-foreground)]">—</span>
+          )}
+        </td>
+        <td className="whitespace-nowrap px-3 py-3">
+          <LastUpdated at={c.lastUpdatedAt} />
+        </td>
+        <td className="whitespace-nowrap px-3 py-3 text-right">
+          <div className="inline-flex items-center gap-2">
+            {canEdit && (
+              <>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  disabled={(c.availableQuantity ?? 0) <= 0}
+                  onClick={() => setIssueFor({ fabricId: f.id, fabricColourId: c.id })}
+                >
+                  <ArrowUpRight size={15} />
+                  {t('admin.fabricLibrary.issue')}
+                </Button>
+                <Button size="sm" onClick={() => orderColour(f, c)}>
+                  <ShoppingCart size={15} />
+                  {t('admin.fabricLibrary.order', { defaultValue: 'Order' })}
+                </Button>
+              </>
+            )}
+            {canCheck && (
+              <Button size="sm" variant="outline" onClick={() => setCheckOf({ fabric: f, colour: c })}>
+                <ClipboardCheck size={15} />
+                {t('admin.stockCheck.short', { defaultValue: 'Update' })}
+              </Button>
+            )}
+          </div>
+        </td>
+      </tr>
+    );
+  };
 
   return (
     <div className="space-y-5 pb-10">
@@ -292,14 +422,16 @@ export default function FabricLibrary() {
                   </td>
                 </tr>
               )}
-              {!loading && groups.length === 0 && (
+              {!loading && (stockRanked ? stockRanked.length === 0 : groups.length === 0) && (
                 <tr>
                   <td colSpan={5} className="px-3 py-8 text-center text-[var(--color-muted-foreground)]">
                     {t('admin.fabricLibrary.empty')}
                   </td>
                 </tr>
               )}
+              {!loading && stockRanked?.map(({ fabric: f, colour: c }) => colourRow(f, c, true))}
               {!loading &&
+                !stockRanked &&
                 groups.map(({ fabric: f, colours }) => {
                   const isCollapsed = collapsed.has(f.id);
                   const img = f.imagePath ? imageUrls[f.imagePath] : undefined;
@@ -354,119 +486,7 @@ export default function FabricLibrary() {
                         </td>
                         <td />
                       </tr>
-                      {!isCollapsed &&
-                        colours.map((c) => {
-                          const state = colourState(c);
-                          const swatch = c.imagePath ?? f.imagePath;
-                          const unit = f.unitOfMeasure;
-                          return (
-                            <tr
-                              key={c.id}
-                              className="cursor-pointer border-t border-[var(--color-border)] hover:bg-[var(--color-surface-2)]/50"
-                              // The colour opens its fabric's page with that colour selected.
-                              onClick={(e) => {
-                                if (!(e.target as HTMLElement).closest('button, a, input, select')) {
-                                  navigate(`/fabric-library/${f.id}?colour=${c.id}`);
-                                }
-                              }}
-                            >
-                              <td className="py-3 pl-10 pr-3">
-                                <div className="flex items-center gap-2">
-                                  {swatch && imageUrls[swatch] ? (
-                                    <img src={imageUrls[swatch]} alt="" className="h-5 w-5 rounded-[3px] border border-black/10 object-cover" />
-                                  ) : (
-                                    <span
-                                      className="h-4 w-4 rounded-full border border-black/10"
-                                      style={{ backgroundColor: c.hex || c.name.toLowerCase() }}
-                                    />
-                                  )}
-                                  <span className="font-medium">{c.name}</span>
-                                </div>
-                              </td>
-                              <td className="px-3 py-3">
-                                <div className="flex items-center gap-3">
-                                  <span className="w-20 shrink-0 text-right font-medium tabular-nums">
-                                    {fmtQty(c.availableQuantity ?? 0, unit)}
-                                  </span>
-                                  <Badge variant={COLOUR_STATE_VARIANT[state]}>
-                                    {t(`admin.fabricLibrary.states.${state}`, { defaultValue: COLOUR_STATE_LABEL[state] })}
-                                  </Badge>
-                                  {(c.needsReview ?? 0) > 0 && (
-                                    <Badge variant="warning">
-                                      {t('admin.fabricLibrary.checkStock', { defaultValue: 'Check stock' })}
-                                    </Badge>
-                                  )}
-                                </div>
-                              </td>
-                              <td className="px-3 py-3 text-right tabular-nums">
-                                {(c.onOrderQuantity ?? 0) > 0 ? (
-                                  <button
-                                    type="button"
-                                    onClick={() => setOrdersOf({ fabric: f, colour: c })}
-                                    className="text-right underline-offset-2 hover:underline"
-                                  >
-                                    <div className="font-medium">{fmtQty(c.onOrderQuantity!, unit)}</div>
-                                    {c.nextExpectedDate && (
-                                      <div
-                                        className={cn(
-                                          'text-xs',
-                                          (c.overdueOrders ?? 0) > 0
-                                            ? 'font-semibold text-[var(--color-destructive)]'
-                                            : 'text-[var(--color-muted-foreground)]',
-                                        )}
-                                      >
-                                        {t('admin.fabricOrders.dueOn', {
-                                          defaultValue: 'due {{date}}',
-                                          date: new Date(c.nextExpectedDate).toLocaleDateString(),
-                                        })}
-                                      </div>
-                                    )}
-                                  </button>
-                                ) : (ordersByColour.get(c.id) ?? []).length > 0 ? (
-                                  <button
-                                    type="button"
-                                    onClick={() => setOrdersOf({ fabric: f, colour: c })}
-                                    className="text-xs text-[var(--color-muted-foreground)] hover:underline"
-                                  >
-                                    {t('admin.fabricLibrary.needToOrder', { defaultValue: 'Need to order' })}
-                                  </button>
-                                ) : (
-                                  <span className="text-[var(--color-muted-foreground)]">—</span>
-                                )}
-                              </td>
-                              <td className="whitespace-nowrap px-3 py-3">
-                                <LastUpdated at={c.lastUpdatedAt} />
-                              </td>
-                              <td className="whitespace-nowrap px-3 py-3 text-right">
-                                <div className="inline-flex items-center gap-2">
-                                  {canEdit && (
-                                    <>
-                                      <Button
-                                        size="sm"
-                                        variant="outline"
-                                        disabled={(c.availableQuantity ?? 0) <= 0}
-                                        onClick={() => setIssueFor({ fabricId: f.id, fabricColourId: c.id })}
-                                      >
-                                        <ArrowUpRight size={15} />
-                                        {t('admin.fabricLibrary.issue')}
-                                      </Button>
-                                      <Button size="sm" onClick={() => orderColour(f, c)}>
-                                        <ShoppingCart size={15} />
-                                        {t('admin.fabricLibrary.order', { defaultValue: 'Order' })}
-                                      </Button>
-                                    </>
-                                  )}
-                                  {canCheck && (
-                                    <Button size="sm" variant="outline" onClick={() => setCheckOf({ fabric: f, colour: c })}>
-                                      <ClipboardCheck size={15} />
-                                      {t('admin.stockCheck.short', { defaultValue: 'Update' })}
-                                    </Button>
-                                  )}
-                                </div>
-                              </td>
-                            </tr>
-                          );
-                        })}
+                      {!isCollapsed && colours.map((c) => colourRow(f, c, false))}
                     </Fragment>
                   );
                 })}
