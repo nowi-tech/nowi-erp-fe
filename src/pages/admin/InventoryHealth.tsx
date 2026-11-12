@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { SortHeader } from '@/components/ui/sort-header';
 import { useTranslation } from 'react-i18next';
 import { useLocation, useNavigate, useSearchParams } from 'react-router-dom';
-import { RefreshCw, Search, ArrowUp, ArrowDown, ArrowUpDown, ArrowUpRight, Minus, Ban, RotateCcw, X, Sparkles, Copy, Check, Factory, Clock, CheckCircle2, Plus, Pause, Play } from 'lucide-react';
+import { RefreshCw, Search, ArrowUp, ArrowDown, ArrowUpRight, Minus, Ban, RotateCcw, X, Sparkles, Copy, Check, Factory, Clock, CheckCircle2, Plus, Pause, Play } from 'lucide-react';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useToast } from '@/components/ui/toast';
 import { ConfirmDialog } from '@/components/ui/confirm-dialog';
@@ -1549,43 +1550,6 @@ function StatCard({
         </span>
       )}
     </div>
-  );
-}
-
-/** Clickable column header. A faint ArrowUpDown means "sortable"; the active
- *  column shows a solid ArrowUp/ArrowDown. Sorts the STYLES (server-side). */
-function SortHeader({
-  label,
-  col,
-  sortKey,
-  sortDir,
-  onSort,
-  align = 'left',
-}: {
-  label: string;
-  col: SortKey;
-  sortKey: SortKey | null;
-  sortDir: 'asc' | 'desc';
-  onSort: (k: SortKey) => void;
-  align?: 'left' | 'right';
-}): ReactNode {
-  const activeSort = sortKey === col;
-  const Icon = activeSort ? (sortDir === 'asc' ? ArrowUp : ArrowDown) : ArrowUpDown;
-  return (
-    <button
-      type="button"
-      onClick={(e) => {
-        e.stopPropagation();
-        onSort(col);
-      }}
-      className={`flex items-center gap-1 uppercase tracking-[inherit] transition hover:text-[var(--color-foreground)] ${
-        align === 'right' ? 'ml-auto justify-end' : 'justify-start'
-      }`}
-      style={{ color: activeSort ? PRIMARY : 'inherit', letterSpacing: 'inherit' }}
-    >
-      {label}
-      <Icon size={12} style={{ color: activeSort ? PRIMARY : MUTED }} />
-    </button>
   );
 }
 
