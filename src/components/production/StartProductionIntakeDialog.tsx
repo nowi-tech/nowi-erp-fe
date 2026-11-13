@@ -18,6 +18,7 @@ import {
   type ProductionType,
 } from '@/api/production';
 import { getBrands, createBrand, type Brand } from '@/api/brands';
+import { apiErrorMessage } from '@/api/apiClient';
 import TailorPicker from '@/components/production/TailorPicker';
 import FabricPicker from '@/components/styles/intake/FabricPicker';
 import { listFabrics } from '@/api/styles';
@@ -291,9 +292,10 @@ export default function StartProductionIntakeDialog({
         );
         setBrandId(b.id);
       })
-      .catch(() =>
+      .catch((e) =>
         toast.show(
-          t('admin.production.intake.brandFailed', { defaultValue: "Couldn't add that brand." }),
+          apiErrorMessage(e) ??
+            t('admin.production.intake.brandFailed', { defaultValue: "Couldn't add that brand." }),
           'error',
         ),
       );
@@ -602,6 +604,7 @@ export default function StartProductionIntakeDialog({
               options={brands.map((b) => ({ value: b.id, label: b.name }))}
               onChange={(id) => setBrandId(id ?? '')}
               onAddNew={addBrand}
+              addOnEnter={false}
               addNewLabel={t('admin.production.intake.addBrand', { defaultValue: 'Add a new brand' })}
               placeholder={t('admin.production.intake.pickBrand', { defaultValue: 'Choose a brand…' })}
               ariaLabel={t('admin.production.intake.brand', { defaultValue: 'Brand' })}

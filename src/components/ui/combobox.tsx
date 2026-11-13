@@ -36,6 +36,8 @@ interface Props<V extends string | number = string | number> {
    * When the typed value is empty, this is the generic "+ Add new" path.
    */
   onAddNew?: (typed: string) => void;
+  /** Enter with no match calls `onAddNew`; false makes the "+ Add" row click the only way to add. */
+  addOnEnter?: boolean;
   /**
    * Label shown for the generic "+ Add new" row (empty query).
    * When the user has typed something with no match, the label
@@ -89,6 +91,7 @@ export function Combobox<V extends string | number = string | number>({
   options,
   onChange,
   onAddNew,
+  addOnEnter = true,
   addNewLabel,
   onQueryChange,
   serverFiltered = false,
@@ -241,6 +244,7 @@ export function Combobox<V extends string | number = string | number>({
       // one keystroke from a duplicate record.
       const q = query.trim();
       if (q && filtered.length === 0 && onAddNew) {
+        if (!addOnEnter) return;
         close();
         onAddNew(q);
         return;
