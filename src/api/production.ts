@@ -196,6 +196,8 @@ export interface ListBatchesParams {
   /** `own` = Nowi's own batches (no brand) · a brand id as a string = that label. */
   brand?: string;
   search?: string;
+  /** With `search` on the in_production tab, also match completed lots. */
+  includeCompleted?: boolean;
   /** Inclusive `startedAt` window, local `YYYY-MM-DD` (interpreted IST server-side). */
   from?: string;
   to?: string;
@@ -211,6 +213,7 @@ export function getBatches(params: ListBatchesParams = {}): Promise<ListBatchesR
   if (params.productionType) q.productionType = params.productionType;
   if (params.brand) q.brand = params.brand;
   if (params.search) q.search = params.search;
+  if (params.includeCompleted) q.includeCompleted = '1';
   if (params.from) q.from = params.from;
   if (params.to) q.to = params.to;
   if (params.skip != null) q.skip = String(params.skip);

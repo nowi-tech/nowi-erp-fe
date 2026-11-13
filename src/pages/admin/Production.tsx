@@ -305,6 +305,7 @@ export default function Production() {
       productionType: f.typeFilter || undefined,
       brand: f.brandFilter || undefined,
       search: f.search || undefined,
+      includeCompleted: true,
       ...entryWindow(f.from, f.to),
     });
     setKpis(res.kpis);
@@ -341,6 +342,7 @@ export default function Production() {
         productionType: typeFilter || undefined,
         brand: brandFilter || undefined,
         search: debouncedSearch || undefined,
+        includeCompleted: true,
         ...entryWindow(dateFrom, dateTo),
         skip,
         take: PAGE_SIZE,
@@ -451,7 +453,8 @@ export default function Production() {
           ? updated.status === 'planning'
           : tab === 'completed'
             ? updated.status === 'completed'
-            : IN_PRODUCTION_STATUSES.includes(updated.status);
+            : IN_PRODUCTION_STATUSES.includes(updated.status) ||
+              (!!debouncedSearch && updated.status === 'completed'); // a search lists completed lots here too
       let removed = false;
       setBatches((prev) => {
         if (!inTab) {
@@ -471,7 +474,7 @@ export default function Production() {
       }
       void loadKpis(); // KPI cards are separate state — updating them can't blink the list
     },
-    [tab, loadKpis],
+    [tab, debouncedSearch, loadKpis],
   );
 
   // A batch mutation that returns the updated batch; patch it in place.
