@@ -11,6 +11,7 @@ import { HoverThumbnail } from '@/components/dashboard/StylesInFlightTable';
 import AcceptChallanDialog from '@/components/production/AcceptChallanDialog';
 import { apiErrorMessage } from '@/api/apiClient';
 import ReasonDialog from '@/components/production/ReasonDialog';
+import EasyecomReduceDialog, { type EasyecomRemoval } from '@/components/production/EasyecomReduceDialog';
 import { printChallan } from '@/components/production/printChallan';
 import { useAuth } from '@/context/auth';
 import { useDebounced } from '@/lib/useDebounced';
@@ -18,10 +19,12 @@ import { hasAnyRole, PRODUCTION_READ_ROLES, STYLE_VIEW_ROLES } from '@/lib/userR
 import {
   acceptDispatch,
   correctDispatchReceipt,
+  resolveEasyecomGrn,
   cancelDispatch,
   getDispatches,
   type DispatchItemRow,
   type DispatchStatus,
+  type EasyecomGrnStatus,
   type ProductionDispatch,
 } from '@/api/productionDispatch';
 
@@ -36,6 +39,24 @@ const statusLabel: Record<DispatchStatus, string> = {
   sent: 'Awaiting',
   received: 'Received',
   cancelled: 'Cancelled',
+};
+
+const grnLabel: Record<EasyecomGrnStatus, string> = {
+  pending: 'EasyEcom…',
+  sending: 'EasyEcom…',
+  queued: 'EasyEcom…',
+  synced: 'EasyEcom ✓',
+  failed: 'EasyEcom failed',
+  needs_check: 'Check EasyEcom',
+};
+
+const grnTone: Record<EasyecomGrnStatus, string> = {
+  pending: 'bg-[var(--color-surface-2)] text-[var(--color-muted-foreground)]',
+  sending: 'bg-[var(--color-surface-2)] text-[var(--color-muted-foreground)]',
+  queued: 'bg-[var(--color-surface-2)] text-[var(--color-muted-foreground)]',
+  synced: 'bg-emerald-50 text-emerald-700',
+  failed: 'bg-red-50 text-[var(--color-destructive)]',
+  needs_check: 'bg-amber-50 text-amber-700',
 };
 
 const statusTone: Record<DispatchStatus, string> = {
@@ -91,6 +112,7 @@ export default function DispatchTab({
   const [expanded, setExpanded] = useState<Record<number, boolean>>({});
   const [acceptTarget, setAcceptTarget] = useState<ProductionDispatch | null>(null);
   const [correctTarget, setCorrectTarget] = useState<ProductionDispatch | null>(null);
+  const [removal, setRemoval] = useState<EasyecomRemoval | null>(null);
   const [cancelTarget, setCancelTarget] = useState<ProductionDispatch | null>(null);
   const [busy, setBusy] = useState(false);
 
@@ -149,9 +171,10 @@ export default function DispatchTab({
     if (!target) return;
     setBusy(true);
     correctDispatchReceipt(target.id, items, reason)
-      .then((updated) => {
+      .then(({ easyecomRemovals, ...updated }) => {
         setRows((prev) => prev.map((r) => (r.id === updated.id ? updated : r)));
         setCorrectTarget(null);
+        if (easyecomRemovals.length > 0) setRemoval({ warehouse: target.destWarehouseName, lines: easyecomRemovals });
       })
       .catch((e) =>
         toast.show(
@@ -160,6 +183,14 @@ export default function DispatchTab({
           'error',
         ),
       )
+      .finally(() => setBusy(false));
+  };
+
+  const onResolveGrn = (d: ProductionDispatch, action: 'resend' | 'confirm') => {
+    setBusy(true);
+    resolveEasyecomGrn(d.id, action)
+      .then((updated) => setRows((prev) => prev.map((r) => (r.id === updated.id ? updated : r))))
+      .catch((e) => toast.show(apiErrorMessage(e) ?? t('common.saveError', { defaultValue: 'Could not save.' }), 'error'))
       .finally(() => setBusy(false));
   };
 
@@ -316,12 +347,24 @@ export default function DispatchTab({
                       {t('admin.production.dispatch.pcs', { defaultValue: 'pcs' })}
                     </span>
                   </div>
-                  <div className="flex shrink-0 items-center gap-1.5 @3xl:w-28">
+                  <div className="flex shrink-0 items-center gap-1.5 @3xl:w-56">
                     <span className={`rounded-full px-2 py-0.5 text-[11px] font-semibold ${statusTone[d.status]}`}>
                       {t(`admin.production.dispatch.status.${d.status}`, { defaultValue: statusLabel[d.status] })}
                     </span>
                     {d.hasMismatch && (
                       <AlertTriangle size={14} className="text-amber-600" aria-label="mismatch" />
+                    )}
+                    {d.easyecomGrn && (
+                      <span
+                        title={d.easyecomGrn.message ?? undefined}
+                        className={`whitespace-nowrap rounded px-1.5 py-0.5 text-[10.5px] font-semibold ${grnTone[d.easyecomGrn.status]}`}
+                      >
+                        {d.easyecomGrn.status === 'pending' && d.easyecomGrn.message
+                          ? t('admin.production.dispatch.grn.scheduled', { defaultValue: 'EasyEcom scheduled' })
+                          : t(`admin.production.dispatch.grn.${d.easyecomGrn.status}`, {
+                              defaultValue: grnLabel[d.easyecomGrn.status],
+                            })}
+                      </span>
                     )}
                   </div>
                   <div
@@ -346,8 +389,8 @@ export default function DispatchTab({
                         {t('admin.production.dispatch.accept.cta', { defaultValue: 'Receive' })}
                       </Button>
                     )}
-                    {canAccept && d.status === 'received' && (
-                      <Button variant="outline" size="sm" onClick={() => setCorrectTarget(d)}>
+                    {canAccept && d.status === 'received' && d.hasMismatch && (
+                      <Button variant="destructive" size="sm" onClick={() => setCorrectTarget(d)}>
                         {t('admin.production.dispatch.correct.cta', { defaultValue: 'Correct' })}
                       </Button>
                     )}
@@ -414,6 +457,25 @@ export default function DispatchTab({
                     {d.notes && (
                       <div className="py-2 text-xs text-[var(--color-muted-foreground)]">{d.notes}</div>
                     )}
+                    {canAccept && (d.easyecomGrn?.status === 'failed' || d.easyecomGrn?.status === 'needs_check') && (
+                      <div className="flex flex-wrap items-center gap-2 py-2 text-xs">
+                        <span className="min-w-0 flex-1 text-[var(--color-destructive)]">{d.easyecomGrn.message}</span>
+                        {d.easyecomGrn.status === 'failed' ? (
+                          <Button variant="outline" size="sm" disabled={busy} onClick={() => onResolveGrn(d, 'resend')}>
+                            {t('admin.production.dispatch.grn.retry', { defaultValue: 'Retry' })}
+                          </Button>
+                        ) : (
+                          <>
+                            <Button variant="outline" size="sm" disabled={busy} onClick={() => onResolveGrn(d, 'confirm')}>
+                              {t('admin.production.dispatch.grn.confirm', { defaultValue: 'Already in EasyEcom' })}
+                            </Button>
+                            <Button variant="outline" size="sm" disabled={busy} onClick={() => onResolveGrn(d, 'resend')}>
+                              {t('admin.production.dispatch.grn.resend', { defaultValue: 'Not in EasyEcom — send again' })}
+                            </Button>
+                          </>
+                        )}
+                      </div>
+                    )}
                   </div>
                 )}
               </div>
@@ -429,6 +491,8 @@ export default function DispatchTab({
         onClose={() => setAcceptTarget(null)}
         onConfirm={onAccept}
       />
+
+      <EasyecomReduceDialog removal={removal} onClose={() => setRemoval(null)} />
 
       <AcceptChallanDialog
         open={correctTarget !== null}

@@ -21,7 +21,11 @@ export interface DispatchItemRow {
   qtySent: number;
   qtyReceived: number | null;
   mismatchFlagged: boolean;
+  /** Units already GRN'd into EasyEcom; null = line not synced. */
+  qtyPushed: number | null;
 }
+
+export type EasyecomGrnStatus = 'pending' | 'sending' | 'queued' | 'synced' | 'failed' | 'needs_check';
 
 export interface ProductionDispatch {
   id: number;
@@ -40,6 +44,8 @@ export interface ProductionDispatch {
   qtySent: number;
   qtyReceived: number | null;
   hasMismatch: boolean;
+  /** EasyEcom auto-GRN; null = this challan doesn't sync. */
+  easyecomGrn: { status: EasyecomGrnStatus; message: string | null } | null;
   items: DispatchItemRow[];
 }
 
@@ -111,13 +117,23 @@ export function acceptDispatch(
     .then((r) => r.data);
 }
 
+/** `easyecomRemovals`: stock EasyEcom now holds above the corrected count — removed there by hand. */
+export type CorrectReceiptResult = ProductionDispatch & { easyecomRemovals: { sku: string; qty: number }[] };
+
 /** Fix received qty on an accepted challan (e.g. a piece found later); reason is audited. */
 export function correctDispatchReceipt(
   id: number,
   items: { itemId: number; qtyReceived: number }[],
   reason: string,
-): Promise<ProductionDispatch> {
+): Promise<CorrectReceiptResult> {
   return apiClient
-    .post<ProductionDispatch>(`/api/production/dispatches/${id}/actions/correct-receipt`, { items, reason })
+    .post<CorrectReceiptResult>(`/api/production/dispatches/${id}/actions/correct-receipt`, { items, reason })
+    .then((r) => r.data);
+}
+
+/** `resend`: stock is not in EasyEcom — send again. `confirm`: it's already there. */
+export function resolveEasyecomGrn(id: number, action: 'resend' | 'confirm'): Promise<ProductionDispatch> {
+  return apiClient
+    .post<ProductionDispatch>(`/api/production/dispatches/${id}/actions/easyecom-grn/${action}`)
     .then((r) => r.data);
 }
