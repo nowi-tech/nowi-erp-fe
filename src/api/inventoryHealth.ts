@@ -31,8 +31,10 @@ export interface InventorySize {
   currentStock: number;
   /** Units already committed to open production batches (planning + on the floor)
    *  for this size. Folded into `available` server-side, so cover/make already
-   *  account for it — this is the display figure for the Pipeline column. */
+   *  account for it. */
   pipelineQty: number;
+  /** Units in lots on the floor (cutting → alteration) — the Pipeline column, same count as the "in production" chip. */
+  floorQty: number;
   /** Suggested units to make to restore healthy cover. */
   makeQty: number;
   /** Unmet demand per day once below target cover (units/day) — "stock at risk

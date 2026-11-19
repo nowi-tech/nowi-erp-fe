@@ -1397,11 +1397,10 @@ function SizeRow({
         <span className="tabular-nums text-neutral-700">{fmtN(size.currentStock)}</span>
       </Cell>
 
-      {/* Units already in open production batches (planning + on the floor). Folded
-          into cover/make server-side; shown so a size mid-make reads as covered. */}
+      {/* Units on the floor — same count as the "in production" chip. */}
       <Cell label={t('admin.inventoryHealth.col.pipeline', { defaultValue: 'Pipeline' })} align="right">
-        <span className="tabular-nums" style={{ color: size.pipelineQty > 0 ? INK : MUTED }}>
-          {size.pipelineQty > 0 ? fmtN(size.pipelineQty) : '—'}
+        <span className="tabular-nums" style={{ color: size.floorQty > 0 ? INK : MUTED }}>
+          {size.floorQty > 0 ? fmtN(size.floorQty) : '—'}
         </span>
       </Cell>
 
