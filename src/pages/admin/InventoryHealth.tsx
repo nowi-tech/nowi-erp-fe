@@ -65,8 +65,8 @@ const HEADER_INK = '#334155';
 const PRIMARY = 'var(--color-primary)';
 
 // Child (size) grid — the sub-header + every size row align to it.
-// SIZE (thumb + size) · COVER · DRR · TREND · STOCK · PIPELINE · MAKE
-const GRID = 'minmax(0,1.5fr) 0.8fr 0.6fr 1.05fr 0.6fr 0.6fr 0.6fr';
+// SIZE (thumb + size) · COVER · DRR · TREND · STOCK · MAKE
+const GRID = 'minmax(0,1.5fr) 0.8fr 0.6fr 1.05fr 0.6fr 0.6fr';
 
 /** Per-urgency: label + the meaning-colour (red/amber/neutral) for text + dot. */
 const URG: Record<Urgency, { label: string; color: string; dot: string }> = {
@@ -607,7 +607,7 @@ export default function InventoryHealth(): ReactNode {
       await createBatch(body);
       setProduceTarget(null);
       toast.show(t('admin.inventoryHealth.pipelineDone', { defaultValue: 'Added to pipeline.' }), 'success');
-      // Reload so the style's Pipeline column + "in production" pill catch up.
+      // Reload so the style's "Added to pipeline" chip shows.
       setReloadTick((n) => n + 1);
     } catch {
       toast.show(
@@ -884,7 +884,6 @@ export default function InventoryHealth(): ReactNode {
                     <SortHeader label={t('admin.inventoryHealth.col.drr', { defaultValue: 'DRR · /d' })} col="drr" sortKey={sortKey} sortDir={sortDir} onSort={onSort} />
                     <span className="flex justify-end">{t('admin.inventoryHealth.col.trend', { defaultValue: 'Trend · /d' })}</span>
                     <SortHeader label={t('admin.inventoryHealth.col.stock', { defaultValue: 'Stock' })} col="stock" sortKey={sortKey} sortDir={sortDir} onSort={onSort} align="right" />
-                    <span className="flex justify-end">{t('admin.inventoryHealth.col.pipeline', { defaultValue: 'Pipeline' })}</span>
                     <SortHeader label={t('admin.inventoryHealth.col.make', { defaultValue: 'Make' })} col="make" sortKey={sortKey} sortDir={sortDir} onSort={onSort} align="right" />
                   </div>
                   {styles.map((style) => {
@@ -1202,10 +1201,12 @@ function StyleGroup({
                 {t('admin.inventoryHealth.pendingBadge', { defaultValue: 'pending approval' })}
               </span>
             )}
-            {pipelineTotal > 0 && (
-              <span className="inline-flex items-center gap-1 rounded-full border border-[var(--color-primary)]/30 bg-[var(--color-primary)]/[0.08] px-1.5 py-0.5 text-[10px] font-semibold text-[var(--color-primary)]">
+            {(pipelineTotal > 0 || style.inPlanning) && (
+              <span className="inline-flex items-center gap-1 rounded-full border border-violet-200 bg-violet-50 px-1.5 py-0.5 text-[10px] font-semibold text-violet-700">
                 <Factory size={10} />
-                {t('admin.inventoryHealth.inProduction', { defaultValue: '{{n}} in production', n: fmtN(pipelineTotal) })}
+                {pipelineTotal > 0
+                  ? t('admin.inventoryHealth.inProduction', { defaultValue: '{{n}} in production', n: fmtN(pipelineTotal) })
+                  : t('admin.inventoryHealth.inPlanning', { defaultValue: 'Added to pipeline' })}
               </span>
             )}
           </div>
@@ -1395,13 +1396,6 @@ function SizeRow({
 
       <Cell label={t('admin.inventoryHealth.col.stock', { defaultValue: 'Stock' })} align="right">
         <span className="tabular-nums text-neutral-700">{fmtN(size.currentStock)}</span>
-      </Cell>
-
-      {/* Units on the floor — same count as the "in production" chip. */}
-      <Cell label={t('admin.inventoryHealth.col.pipeline', { defaultValue: 'Pipeline' })} align="right">
-        <span className="tabular-nums" style={{ color: size.floorQty > 0 ? INK : MUTED }}>
-          {size.floorQty > 0 ? fmtN(size.floorQty) : '—'}
-        </span>
       </Cell>
 
       <Cell label={t('admin.inventoryHealth.col.make', { defaultValue: 'Make' })} align="right">

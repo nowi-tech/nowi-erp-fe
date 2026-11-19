@@ -33,8 +33,6 @@ export interface InventorySize {
    *  for this size. Folded into `available` server-side, so cover/make already
    *  account for it. */
   pipelineQty: number;
-  /** Units in lots on the floor (cutting → alteration) — the Pipeline column, same count as the "in production" chip. */
-  floorQty: number;
   /** Suggested units to make to restore healthy cover. */
   makeQty: number;
   /** Unmet demand per day once below target cover (units/day) — "stock at risk
@@ -71,6 +69,8 @@ export interface InventoryStyle {
   /** Units in open production across the style's sizes — a fact about the STYLE,
    *  so it does not move when a lens trims which size rows are listed. */
   pipelineTotal: number;
+  /** A lot for this style is in Planning — the "Added to pipeline" chip. */
+  inPlanning: boolean;
   /** Suggested units to make across its sizes. */
   makeTotal: number;
   /** Ordered money over the active window (the date picker's range, else the

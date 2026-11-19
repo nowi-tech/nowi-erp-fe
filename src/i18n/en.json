@@ -418,7 +418,6 @@
         "stock": "Stock",
         "atRisk": "At risk · /d",
         "sizesAtRisk": "Sizes at risk",
-        "pipeline": "Pipeline",
         "make": "Make"
       },
       "inProduction": "{{n}} in production",
