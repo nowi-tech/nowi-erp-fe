@@ -417,8 +417,7 @@
         "trend": "Trend · /d",
         "stock": "Stock",
         "atRisk": "At risk · /d",
-        "sizesAtRisk": "Sizes at risk",
-        "make": "Make"
+        "sizesAtRisk": "Sizes at risk"
       },
       "inProduction": "{{n}} in production",
       "filterCategory": "Category",

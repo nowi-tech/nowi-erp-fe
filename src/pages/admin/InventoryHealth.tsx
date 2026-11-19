@@ -65,8 +65,8 @@ const HEADER_INK = '#334155';
 const PRIMARY = 'var(--color-primary)';
 
 // Child (size) grid — the sub-header + every size row align to it.
-// SIZE (thumb + size) · COVER · DRR · TREND · STOCK · MAKE
-const GRID = 'minmax(0,1.5fr) 0.8fr 0.6fr 1.05fr 0.6fr 0.6fr';
+// SIZE (thumb + size) · COVER · DRR · TREND · STOCK
+const GRID = 'minmax(0,1.5fr) 0.8fr 0.6fr 1.05fr 0.6fr';
 
 /** Per-urgency: label + the meaning-colour (red/amber/neutral) for text + dot. */
 const URG: Record<Urgency, { label: string; color: string; dot: string }> = {
@@ -86,7 +86,7 @@ const AGE: Record<Exclude<Aging, 'active'>, { label: string; dot: string }> = {
  *  column sorts the STYLES by that metric aggregated over their sizes. `newest`,
  *  `revenue` and `cancelrate` are dropdown-only — they map to no column header. */
 type SortKey =
-  | 'style' | 'cover' | 'drr' | 'stock' | 'atrisk' | 'make' | 'newest' | 'revenue' | 'cancelrate';
+  | 'style' | 'cover' | 'drr' | 'stock' | 'atrisk' | 'newest' | 'revenue' | 'cancelrate';
 
 /** Sort presets the dropdown offers, over the same (sortKey, sortDir) the column
  *  headers write. Each is a "most first" ranking. */
@@ -884,7 +884,6 @@ export default function InventoryHealth(): ReactNode {
                     <SortHeader label={t('admin.inventoryHealth.col.drr', { defaultValue: 'DRR · /d' })} col="drr" sortKey={sortKey} sortDir={sortDir} onSort={onSort} />
                     <span className="flex justify-end">{t('admin.inventoryHealth.col.trend', { defaultValue: 'Trend · /d' })}</span>
                     <SortHeader label={t('admin.inventoryHealth.col.stock', { defaultValue: 'Stock' })} col="stock" sortKey={sortKey} sortDir={sortDir} onSort={onSort} align="right" />
-                    <SortHeader label={t('admin.inventoryHealth.col.make', { defaultValue: 'Make' })} col="make" sortKey={sortKey} sortDir={sortDir} onSort={onSort} align="right" />
                   </div>
                   {styles.map((style) => {
                     const img = (style.imageUrl && signed[style.imageUrl]) || null;
@@ -1396,12 +1395,6 @@ function SizeRow({
 
       <Cell label={t('admin.inventoryHealth.col.stock', { defaultValue: 'Stock' })} align="right">
         <span className="tabular-nums text-neutral-700">{fmtN(size.currentStock)}</span>
-      </Cell>
-
-      <Cell label={t('admin.inventoryHealth.col.make', { defaultValue: 'Make' })} align="right">
-        <span className="font-bold tabular-nums" style={{ color: size.makeQty > 0 ? INK : MUTED }}>
-          {fmtN(size.makeQty)}
-        </span>
       </Cell>
     </div>
   );
