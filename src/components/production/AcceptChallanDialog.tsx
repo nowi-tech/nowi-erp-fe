@@ -9,30 +9,36 @@ import type { ProductionDispatch } from '@/api/productionDispatch';
 /**
  * Warehouse acceptance: the receiver confirms received-per-line. Each line
  * pre-fills with what was sent (the common case is "it all arrived"); a value
- * that differs is flagged as a mismatch server-side.
+ * that differs is flagged as a mismatch server-side. `correct` mode reopens an
+ * accepted challan from its recorded counts and requires a reason.
  */
 export default function AcceptChallanDialog({
   open,
   busy,
   dispatch,
+  mode = 'accept',
   onClose,
   onConfirm,
 }: {
   open: boolean;
   busy: boolean;
   dispatch: ProductionDispatch | null;
+  mode?: 'accept' | 'correct';
   onClose: () => void;
-  onConfirm: (items: { itemId: number; qtyReceived: number }[]) => void;
+  onConfirm: (items: { itemId: number; qtyReceived: number }[], reason: string) => void;
 }) {
   const { t } = useTranslation();
   const [received, setReceived] = useState<Record<number, number>>({});
+  const [reason, setReason] = useState('');
+  const correcting = mode === 'correct';
 
   useEffect(() => {
     if (!open || !dispatch) return;
     const seeded: Record<number, number> = {};
-    for (const it of dispatch.items) seeded[it.id] = it.qtySent;
+    for (const it of dispatch.items) seeded[it.id] = correcting ? (it.qtyReceived ?? it.qtySent) : it.qtySent;
     setReceived(seeded);
-  }, [open, dispatch]);
+    setReason('');
+  }, [open, dispatch, correcting]);
 
   const total = useMemo(
     () => Object.values(received).reduce((a, b) => a + b, 0),
@@ -40,6 +46,9 @@ export default function AcceptChallanDialog({
   );
 
   if (!dispatch) return null;
+
+  const changed = dispatch.items.filter((it) => received[it.id] !== (it.qtyReceived ?? it.qtySent));
+  const canSave = !correcting || (changed.length > 0 && reason.trim().length >= 3);
 
   const set = (id: number, raw: string) => {
     const n = Math.max(0, Number.parseInt(raw, 10) || 0);
@@ -54,7 +63,9 @@ export default function AcceptChallanDialog({
       title={
         <div className="min-w-0">
           <div className="text-[11px] font-semibold uppercase tracking-wider text-[var(--color-primary)]">
-            {t('admin.production.dispatch.accept.eyebrow', { defaultValue: 'Receive challan' })}
+            {correcting
+              ? t('admin.production.dispatch.correct.eyebrow', { defaultValue: 'Correct received qty' })
+              : t('admin.production.dispatch.accept.eyebrow', { defaultValue: 'Receive challan' })}
           </div>
           <div className="truncate text-base font-semibold">{dispatch.challanNo}</div>
           <div className="truncate text-[11px] font-normal text-[var(--color-muted-foreground)]">
@@ -69,17 +80,28 @@ export default function AcceptChallanDialog({
           </Button>
           <Button
             size="sm"
-            disabled={busy}
+            disabled={busy || !canSave}
             onClick={() =>
-              onConfirm(dispatch.items.map((it) => ({ itemId: it.id, qtyReceived: received[it.id] ?? 0 })))
+              onConfirm(
+                (correcting ? changed : dispatch.items).map((it) => ({
+                  itemId: it.id,
+                  qtyReceived: received[it.id] ?? 0,
+                })),
+                reason.trim(),
+              )
             }
           >
             <CheckCircle2 size={14} />
             <span className="ml-1">
-              {t('admin.production.dispatch.accept.confirm', {
-                defaultValue: 'Confirm received · {{n}}',
-                n: total,
-              })}
+              {correcting
+                ? t('admin.production.dispatch.correct.confirm', {
+                    defaultValue: 'Save correction · {{n}}',
+                    n: total,
+                  })
+                : t('admin.production.dispatch.accept.confirm', {
+                    defaultValue: 'Confirm received · {{n}}',
+                    n: total,
+                  })}
             </span>
           </Button>
         </>
@@ -152,6 +174,21 @@ export default function AcceptChallanDialog({
           </tbody>
         </table>
       </div>
+      {correcting && (
+        <div className="mt-3">
+          <label className="mb-1 block text-xs font-semibold text-[var(--color-muted-foreground)]">
+            {t('admin.production.cancel.reasonLabel', { defaultValue: 'Reason' })}
+          </label>
+          <Input
+            value={reason}
+            maxLength={1000}
+            onChange={(e) => setReason(e.target.value)}
+            placeholder={t('admin.production.dispatch.correct.reasonPlaceholder', {
+              defaultValue: 'e.g. 1 XL found in another carton',
+            })}
+          />
+        </div>
+      )}
     </Dialog>
   );
 }

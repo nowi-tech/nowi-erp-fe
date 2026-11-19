@@ -110,3 +110,14 @@ export function acceptDispatch(
     .post<ProductionDispatch>(`/api/production/dispatches/${id}/actions/accept`, { items, notes })
     .then((r) => r.data);
 }
+
+/** Fix received qty on an accepted challan (e.g. a piece found later); reason is audited. */
+export function correctDispatchReceipt(
+  id: number,
+  items: { itemId: number; qtyReceived: number }[],
+  reason: string,
+): Promise<ProductionDispatch> {
+  return apiClient
+    .post<ProductionDispatch>(`/api/production/dispatches/${id}/actions/correct-receipt`, { items, reason })
+    .then((r) => r.data);
+}

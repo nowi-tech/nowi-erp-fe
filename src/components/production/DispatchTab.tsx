@@ -9,6 +9,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { useToast } from '@/components/ui/toast';
 import { HoverThumbnail } from '@/components/dashboard/StylesInFlightTable';
 import AcceptChallanDialog from '@/components/production/AcceptChallanDialog';
+import { apiErrorMessage } from '@/api/apiClient';
 import ReasonDialog from '@/components/production/ReasonDialog';
 import { printChallan } from '@/components/production/printChallan';
 import { useAuth } from '@/context/auth';
@@ -16,6 +17,7 @@ import { useDebounced } from '@/lib/useDebounced';
 import { hasAnyRole, PRODUCTION_READ_ROLES, STYLE_VIEW_ROLES } from '@/lib/userRoles';
 import {
   acceptDispatch,
+  correctDispatchReceipt,
   cancelDispatch,
   getDispatches,
   type DispatchItemRow,
@@ -88,6 +90,7 @@ export default function DispatchTab({
   const debouncedSearch = useDebounced(search.trim(), 300);
   const [expanded, setExpanded] = useState<Record<number, boolean>>({});
   const [acceptTarget, setAcceptTarget] = useState<ProductionDispatch | null>(null);
+  const [correctTarget, setCorrectTarget] = useState<ProductionDispatch | null>(null);
   const [cancelTarget, setCancelTarget] = useState<ProductionDispatch | null>(null);
   const [busy, setBusy] = useState(false);
 
@@ -135,6 +138,25 @@ export default function DispatchTab({
       .catch(() =>
         toast.show(
           t('admin.production.dispatch.acceptFailed', { defaultValue: "Couldn't record the receipt." }),
+          'error',
+        ),
+      )
+      .finally(() => setBusy(false));
+  };
+
+  const onCorrect = (items: { itemId: number; qtyReceived: number }[], reason: string) => {
+    const target = correctTarget;
+    if (!target) return;
+    setBusy(true);
+    correctDispatchReceipt(target.id, items, reason)
+      .then((updated) => {
+        setRows((prev) => prev.map((r) => (r.id === updated.id ? updated : r)));
+        setCorrectTarget(null);
+      })
+      .catch((e) =>
+        toast.show(
+          apiErrorMessage(e) ??
+            t('admin.production.dispatch.correctFailed', { defaultValue: "Couldn't save the correction." }),
           'error',
         ),
       )
@@ -324,6 +346,11 @@ export default function DispatchTab({
                         {t('admin.production.dispatch.accept.cta', { defaultValue: 'Receive' })}
                       </Button>
                     )}
+                    {canAccept && d.status === 'received' && (
+                      <Button variant="outline" size="sm" onClick={() => setCorrectTarget(d)}>
+                        {t('admin.production.dispatch.correct.cta', { defaultValue: 'Correct' })}
+                      </Button>
+                    )}
                   </div>
                 </div>
 
@@ -401,6 +428,15 @@ export default function DispatchTab({
         dispatch={acceptTarget}
         onClose={() => setAcceptTarget(null)}
         onConfirm={onAccept}
+      />
+
+      <AcceptChallanDialog
+        open={correctTarget !== null}
+        busy={busy}
+        dispatch={correctTarget}
+        mode="correct"
+        onClose={() => setCorrectTarget(null)}
+        onConfirm={onCorrect}
       />
 
       <ReasonDialog
