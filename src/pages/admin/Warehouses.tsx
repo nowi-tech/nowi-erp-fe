@@ -25,6 +25,7 @@ interface DraftState {
   spocPhone: string;
   easyecomWarehouseId: string;
   easyecomEnabled: boolean;
+  easyecomAutoGrn: boolean;
 }
 
 const EMPTY_DRAFT: DraftState = {
@@ -35,6 +36,7 @@ const EMPTY_DRAFT: DraftState = {
   spocPhone: '',
   easyecomWarehouseId: '',
   easyecomEnabled: false,
+  easyecomAutoGrn: false,
 };
 
 interface ApiErrorShape {
@@ -87,6 +89,7 @@ export default function Warehouses() {
       spocPhone: row.spocPhone ?? '',
       easyecomWarehouseId: row.easyecomWarehouseId ?? '',
       easyecomEnabled: row.easyecomEnabled,
+      easyecomAutoGrn: row.easyecomAutoGrn,
     });
     setAddOpen(true);
   }
@@ -116,6 +119,7 @@ export default function Warehouses() {
       spocPhone: optional(draft.spocPhone),
       easyecomWarehouseId: optional(draft.easyecomWarehouseId),
       easyecomEnabled: draft.easyecomEnabled,
+      easyecomAutoGrn: draft.easyecomAutoGrn,
     };
     try {
       if (editId != null) {
@@ -232,9 +236,16 @@ export default function Warehouses() {
                                 })}
                           </Badge>
                         ) : (
-                          <span className="text-[var(--color-muted-foreground)]">
-                            —
-                          </span>
+                          !r.easyecomAutoGrn && (
+                            <span className="text-[var(--color-muted-foreground)]">
+                              —
+                            </span>
+                          )
+                        )}
+                        {r.easyecomAutoGrn && (
+                          <Badge variant="success" dot>
+                            {t('admin.warehouses.autoGrn', { defaultValue: 'Auto GRN' })}
+                          </Badge>
                         )}
                       </td>
                       <td className="px-3 py-2">
@@ -389,6 +400,18 @@ export default function Warehouses() {
             />
             {t('admin.warehouses.easyecomEnabled', {
               defaultValue: 'Sync dispatches to EasyEcom for this warehouse',
+            })}
+          </label>
+          <label className="flex items-center gap-2 text-sm">
+            <input
+              type="checkbox"
+              checked={draft.easyecomAutoGrn}
+              onChange={(e) =>
+                setDraft((s) => ({ ...s, easyecomAutoGrn: e.target.checked }))
+              }
+            />
+            {t('admin.warehouses.easyecomAutoGrn', {
+              defaultValue: 'Auto GRN received challans into EasyEcom (India)',
             })}
           </label>
         </form>

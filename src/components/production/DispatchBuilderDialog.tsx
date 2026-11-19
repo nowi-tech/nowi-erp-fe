@@ -49,9 +49,8 @@ export default function DispatchBuilderDialog({
     void listDestinationWarehouses().then((w) => {
       const active = w.filter((x) => x.isActive);
       setWarehouses(active);
-      // Default to the Pul Prahladpur warehouse (the production destination),
-      // else the first active one — so the common case needs no picking.
-      const preferred = active.find((x) => /pul[\s-]?prahladpur/i.test(x.name)) ?? active[0];
+      // Default to the auto-GRN warehouse (the production destination), else the first active one.
+      const preferred = active.find((x) => x.easyecomAutoGrn) ?? active[0];
       if (preferred) setWarehouseId(preferred.id);
     });
   }, [open]);

@@ -815,6 +815,8 @@ export interface DestinationWarehouse {
   spocPhone?: string | null;
   easyecomWarehouseId?: string | null;
   easyecomEnabled: boolean;
+  /** GRN received production challans into EasyEcom; also the default destination. */
+  easyecomAutoGrn: boolean;
   isActive: boolean;
   createdAt?: string;
 }
@@ -827,6 +829,7 @@ export interface CreateDestinationWarehousePayload {
   spocPhone?: string;
   easyecomWarehouseId?: string;
   easyecomEnabled?: boolean;
+  easyecomAutoGrn?: boolean;
   isActive?: boolean;
 }
 
