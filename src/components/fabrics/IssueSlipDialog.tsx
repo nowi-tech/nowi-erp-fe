@@ -10,7 +10,7 @@ import { Combobox } from '@/components/ui/combobox';
 import { useToast } from '@/components/ui/toast';
 import { apiErrorMessage } from '@/api/apiClient';
 import { listVendorOptions, type VendorOption } from '@/api/vendors';
-import { useQuickAddParty } from '@/components/shared/useQuickAddParty';
+import { keepAdded, useQuickAddParty } from '@/components/shared/useQuickAddParty';
 import { createFabricChallan, getLastIssueVendor } from '@/api/fabricChallans';
 import { getBatches, type ProductionBatch } from '@/api/production';
 import { listSampleStyles, type SampleStyleOption } from '@/api/styles';
@@ -72,7 +72,9 @@ export default function IssueSlipDialog({ open, onClose, onSaved, fabrics, prese
     if (!open) return;
     const loadError = () =>
       toast.show(t('admin.issueSlip.loadError', { defaultValue: 'Could not load the lists. Reload to try again.' }), 'error');
-    void listVendorOptions().then(setVendors).catch(loadError);
+    void listVendorOptions()
+      .then((rows) => setVendors(keepAdded(rows)))
+      .catch(loadError);
     const f = fabrics.find((x) => x.id === preset?.fabricId);
     setLines([
       {
