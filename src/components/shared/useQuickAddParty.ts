@@ -19,6 +19,11 @@ const FAILED: Record<PartyRole, string> = {
   brand: "Couldn't add that brand.",
 };
 
+/** State updater for a freshly loaded list that keeps any party quick-added before it arrived. */
+export function keepAdded<T extends { id: number }>(rows: T[]) {
+  return (prev: T[]) => [...rows, ...prev.filter((p) => !rows.some((r) => r.id === p.id))];
+}
+
 /** Combobox `onAddNew` for any party picker: the server reuses a party of that name, giving it this role. */
 export function useQuickAddParty(
   role: PartyRole,

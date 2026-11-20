@@ -10,7 +10,7 @@ import { useToast } from '@/components/ui/toast';
 import { apiErrorMessage } from '@/api/apiClient';
 import { createFabricChallan } from '@/api/fabricChallans';
 import { listVendorOptions } from '@/api/vendors';
-import { useQuickAddParty } from '@/components/shared/useQuickAddParty';
+import { keepAdded, useQuickAddParty } from '@/components/shared/useQuickAddParty';
 import type { FabricOrder } from '@/api/types';
 import { fmtQty, poLabel, UOM_SHORT } from '@/lib/fabric';
 import { todayISO } from '@/lib/date';
@@ -56,19 +56,22 @@ export default function ReceiveOrderDialog({
   const [date, setDate] = useState(todayISO());
   const [vendorId, setVendorId] = useState<number | null>(null);
   const [vendors, setVendors] = useState<{ id: number; name: string }[]>([]);
+  // Bumped on every open, so a "+ Add" reply from an earlier open is dropped.
+  const [openSeq, setOpenSeq] = useState(0);
   const addVendor = useQuickAddParty(
     'supplier',
     (v) => {
       setVendors((vs) => (vs.some((x) => x.id === v.id) ? vs : [...vs, v]));
       setVendorId(v.id);
     },
-    vendorId,
+    `${order?.id}:${openSeq}:${vendorId}`,
   );
   const [saving, setSaving] = useState(false);
   const [overMsg, setOverMsg] = useState<string | null>(null);
 
   useEffect(() => {
     if (!order) return;
+    setOpenSeq((n) => n + 1);
     setChallanNo('');
     setQty(String(dueOn(order)));
     setPrice(order.colour?.pricePerUnit != null ? String(order.colour.pricePerUnit) : '');
@@ -77,7 +80,7 @@ export default function ReceiveOrderDialog({
     // Only an order placed without a vendor needs the supplier asked.
     if (!order.vendor)
       void listVendorOptions()
-        .then((rows) => setVendors(rows.filter((v) => v.isSupplier)))
+        .then((all) => setVendors(keepAdded<{ id: number; name: string }>(all.filter((v) => v.isSupplier))))
         .catch(() => undefined);
   }, [order]);
 

@@ -10,7 +10,7 @@ import { Combobox } from '@/components/ui/combobox';
 import { useToast } from '@/components/ui/toast';
 import { apiErrorMessage } from '@/api/apiClient';
 import { listVendorOptions, type VendorOption } from '@/api/vendors';
-import { useQuickAddParty } from '@/components/shared/useQuickAddParty';
+import { keepAdded, useQuickAddParty } from '@/components/shared/useQuickAddParty';
 import { createFabricOrder, getFabricOrderDefaults, updateFabricOrder } from '@/api/fabricOrders';
 import type { Fabric, FabricOrder, FabricOrderStatus } from '@/api/types';
 import { ORDER_STATUS_LABEL, SETTABLE_ORDER_STATUSES, UOM_SHORT } from '@/lib/fabric';
@@ -63,7 +63,7 @@ export default function FabricOrderDialog({ open, onClose, onSaved, fabrics, edi
     if (!open) return;
     autoFilled.current = { vendorId: null, expectedDate: '', leadDays: null };
     void listVendorOptions()
-      .then(setVendors)
+      .then((rows) => setVendors(keepAdded(rows)))
       .catch(() =>
         toast.show(
           t('admin.fabricChallan.vendorLoadError', { defaultValue: 'Could not load suppliers. Reload to try again.' }),
@@ -140,6 +140,11 @@ export default function FabricOrderDialog({ open, onClose, onSaved, fabrics, edi
   const vendorOptions = vendors
     .filter((v) => v.isSupplier || v.id === form.vendorId)
     .map((v) => ({ value: v.id, label: v.name }));
+  // The edited order's vendor may be deactivated (not in the active list) — keep its name showing.
+  const savedVendor = editing?.vendor;
+  if (savedVendor && !vendorOptions.some((o) => o.value === savedVendor.id)) {
+    vendorOptions.unshift({ value: savedVendor.id, label: savedVendor.name });
+  }
   const addVendor = useQuickAddParty('supplier', (v) => {
     setVendors((vs) =>
       vs.some((x) => x.id === v.id)
