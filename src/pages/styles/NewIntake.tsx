@@ -117,8 +117,12 @@ export default function NewIntake() {
     : // A relive asks for nothing else — the old style # IS the submission.
       forkMode === 'relive'
       ? t('admin.styles.intake.fork.needsRelive')
-      : forkMode === 'third_party_manufactured' || forkMode === 'for_brand'
-        ? t('admin.styles.intake.fork.needsBrandAndFields')
+      : forkMode === 'third_party_manufactured'
+        ? t('admin.styles.intake.fork.needsFactoryAndFields', {
+            defaultValue: 'Choose who made it and complete the required fields to submit.',
+          })
+        : forkMode === 'for_brand'
+          ? t('admin.styles.intake.fork.needsBrandAndFields')
         : forkMode !== 'new' && source !== 'china_import'
           ? t('admin.styles.intake.fork.needsTargetAndFields', {
               defaultValue:
