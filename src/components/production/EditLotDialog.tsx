@@ -9,15 +9,17 @@ import { Textarea } from '@/components/ui/textarea';
 import { useToast } from '@/components/ui/toast';
 import {
   getLot,
+  setProductionType,
   updateLot,
   type BatchSizeLine,
   type BatchStatus,
   type CorrectStageQtyItem,
   type ProductionBatch,
+  type ProductionType,
   type UpdateLotBody,
 } from '@/api/production';
 import { apiErrorMessage, apiErrorStatus } from '@/api/apiClient';
-import { FLOOR_STAGES, statusLabel, suggestedStage } from '@/lib/production';
+import { FLOOR_STAGES, productionTypeLabel, statusLabel, suggestedStage } from '@/lib/production';
 import { fmtQty } from '@/lib/fabric';
 import FabricUsedField, {
   estimateFabric,
@@ -35,7 +37,7 @@ const STAGES = [
 ] as const;
 type STAGE = (typeof STAGES)[number]['stage'];
 
-/** Plan, stage totals, stage and remark for one lot — reviewed, then saved in one request. */
+/** Plan, stage totals, stage, run type and remark for one lot — reviewed, then saved (run type first). */
 export default function EditLotDialog({
   open,
   lot,
@@ -57,6 +59,7 @@ export default function EditLotDialog({
   // null = follow the quantities; set once the stage is picked by hand.
   const [picked, setPicked] = useState<BatchStatus | null>(null);
   const [notes, setNotes] = useState('');
+  const [runType, setRunType] = useState<ProductionType>('bulk');
   const [reviewing, setReviewing] = useState(false);
   const [busy, setBusy] = useState(false);
   // The lot as the server last read it — replaces `lot` after a 409 so typed figures survive.
@@ -73,6 +76,7 @@ export default function EditLotDialog({
     );
     setPicked(null);
     setNotes(lot.notes ?? '');
+    setRunType(lot.productionType);
     setReviewing(false);
     setFresh(null);
     setFabricUsed(null);
@@ -114,6 +118,9 @@ export default function EditLotDialog({
       : base.status);
   const statusChanged = status !== base.status;
   const notesChanged = nextNotes !== (base.notes ?? '');
+  // Brand lots are always bulk, so only Nowi-style lots offer it.
+  const showRunType = base.origin !== 'external';
+  const runTypeChanged = showRunType && runType !== base.productionType;
 
   // Only a raised cut total uses fabric; a lowered one is a correction.
   const cutAdded: Record<string, number> = Object.fromEntries(
@@ -132,6 +139,15 @@ export default function EditLotDialog({
         defaultValue: 'Stage: {{from}} → {{to}}',
         from: label(base.status),
         to: label(status),
+      }),
+    );
+  }
+  if (runTypeChanged) {
+    changes.push(
+      t('admin.production.update.runTypeLine', {
+        defaultValue: 'Run type: {{from}} → {{to}}',
+        from: productionTypeLabel(t, base.productionType),
+        to: productionTypeLabel(t, runType),
       }),
     );
   }
@@ -186,9 +202,17 @@ export default function EditLotDialog({
         ...Object.fromEntries(STAGES.map((m) => [m.stage, s[m.field]])),
       })),
     };
+    const lotChanged = changes.length > (runTypeChanged ? 1 : 0);
+    let typeSaved = false;
     setBusy(true);
     try {
-      const updated = await updateLot(base.id, body);
+      // Run type first: if the lot save then conflicts, the refreshed lot already carries it.
+      let updated = base;
+      if (runTypeChanged) {
+        updated = await setProductionType(base.id, runType);
+        typeSaved = true;
+      }
+      if (lotChanged) updated = await updateLot(base.id, body);
       toast.show(t('common.saved', { defaultValue: 'Saved.' }));
       setReviewing(false);
       onSaved(updated);
@@ -222,6 +246,7 @@ export default function EditLotDialog({
             ),
           );
           setNotes((n) => (n.trim() === (base.notes ?? '') ? latest.notes ?? '' : n));
+          setRunType((r) => (r === base.productionType ? latest.productionType : r));
           setFresh(latest);
         }
         onStale?.();
@@ -232,6 +257,8 @@ export default function EditLotDialog({
           'error',
         );
       } else {
+        // The run type landed before the lot save failed; stop listing it as pending.
+        if (typeSaved) setFresh({ ...base, productionType: runType });
         toast.show(
           apiErrorMessage(e) ?? t('common.error', { defaultValue: 'Something went wrong.' }),
           'error',
@@ -287,24 +314,41 @@ export default function EditLotDialog({
           </>
         }
       >
-        <div className="mb-4 max-w-xs">
-          <label className="mb-1 block text-xs font-medium">
-            {t('admin.production.stage', { defaultValue: 'Stage' })}
-          </label>
-          {/* A held lot keeps its status here — Resume owns that move. */}
-          <select
-            value={status}
-            disabled={held}
-            onChange={(e) => setPicked(e.target.value as BatchStatus)}
-            className={selectClass}
-          >
-            {held && <option value={base.status}>{label(base.status)}</option>}
-            {FLOOR_STAGES.map((st) => (
-              <option key={st} value={st}>
-                {label(st)}
-              </option>
-            ))}
-          </select>
+        <div className="mb-4 flex flex-wrap gap-4">
+          <div className="w-full max-w-xs">
+            <label className="mb-1 block text-xs font-medium">
+              {t('admin.production.stage', { defaultValue: 'Stage' })}
+            </label>
+            {/* A held lot keeps its status here — Resume owns that move. */}
+            <select
+              value={status}
+              disabled={held}
+              onChange={(e) => setPicked(e.target.value as BatchStatus)}
+              className={selectClass}
+            >
+              {held && <option value={base.status}>{label(base.status)}</option>}
+              {FLOOR_STAGES.map((st) => (
+                <option key={st} value={st}>
+                  {label(st)}
+                </option>
+              ))}
+            </select>
+          </div>
+          {showRunType && (
+            <div className="w-full max-w-[12rem]">
+              <label className="mb-1 block text-xs font-medium">
+                {t('admin.production.type.label', { defaultValue: 'Run type' })}
+              </label>
+              <select
+                value={runType}
+                onChange={(e) => setRunType(e.target.value as ProductionType)}
+                className={selectClass}
+              >
+                <option value="low_moq">{productionTypeLabel(t, 'low_moq')}</option>
+                <option value="bulk">{productionTypeLabel(t, 'bulk')}</option>
+              </select>
+            </div>
+          )}
         </div>
 
         <div className="overflow-x-auto">

@@ -13,9 +13,7 @@ import { uploadPhoto } from '@/api/storage';
 import {
   getLot,
   setBatchImage,
-  setProductionType,
   type ProductionBatch,
-  type ProductionType,
   type BatchSizeLine,
   type LotDetail,
   type LotTimelineEntry,
@@ -134,24 +132,9 @@ export default function ProductionLotDetail() {
     if (forId === latestId.current) setLot(fresh);
   };
 
-  // The save returns the whole lot; image and run type don't touch the timeline, so no refetch.
+  // The save returns the whole lot; the image doesn't touch the timeline, so no refetch.
   const applySaved = (row: ProductionBatch) => {
     setLot((prev) => (prev && prev.id === row.id ? { ...prev, ...row } : prev));
-  };
-
-  const changeType = (next: ProductionType) => {
-    if (!lot || next === lot.productionType) return;
-    setSaving(true);
-    void setProductionType(lot.id, next)
-      .then(
-        applySaved,
-        () =>
-          toast.show(
-            t('admin.production.type.saveFailed', { defaultValue: "Couldn't change the run type." }),
-            'error',
-          ),
-      )
-      .finally(() => setSaving(false));
   };
 
   const replaceImage = (file: File | undefined) => {
@@ -299,23 +282,6 @@ export default function ProductionLotDetail() {
         {lot.tailorName && <Badge variant="secondary">{lot.tailorName}</Badge>}
         {lot.brandName && <Badge variant="outline">{lot.brandName}</Badge>}
         {lot.colourName && <Badge variant="outline">{lot.colourName}</Badge>}
-        {/* Brand lots are always bulk, so only Nowi-style lots show or change it. */}
-        {lot.origin !== 'external' &&
-          (canWrite && lot.status !== 'cancelled' ? (
-            <select
-              value={lot.productionType}
-              disabled={saving}
-              onChange={(e) => changeType(e.target.value as ProductionType)}
-              aria-label={t('admin.production.type.label', { defaultValue: 'Run type' })}
-              className="h-7 rounded-full border border-[var(--color-border)] bg-transparent px-2.5 text-xs font-semibold"
-            >
-              <option value="low_moq">{productionTypeLabel(t, 'low_moq')}</option>
-              <option value="bulk">{productionTypeLabel(t, 'bulk')}</option>
-            </select>
-          ) : (
-            <Badge variant="outline">{productionTypeLabel(t, lot.productionType)}</Badge>
-          ))}
-
         {/* Sub-lots link both ways: the rest of this lot, or where this one came from. */}
         {[
           ...(lot.parentBatch
@@ -540,6 +506,13 @@ export default function ProductionLotDetail() {
               label={t('admin.production.lot.tailor', { defaultValue: 'Tailor' })}
               value={lot.tailorName ?? '—'}
             />
+            {/* Brand lots are always bulk, so only Nowi-style lots show it. */}
+            {lot.origin !== 'external' && (
+              <Field
+                label={t('admin.production.type.label', { defaultValue: 'Run type' })}
+                value={productionTypeLabel(t, lot.productionType)}
+              />
+            )}
             <Field
               label={t('admin.production.lot.createdBy', { defaultValue: 'Added by' })}
               value={lot.createdBy?.name ?? '—'}
@@ -604,7 +577,11 @@ export default function ProductionLotDetail() {
       <EditLotDialog
         open={editOpen}
         lot={lot}
-        onClose={() => setEditOpen(false)}
+        onClose={() => {
+          setEditOpen(false);
+          // A save can land partly (run type, then the lot), so re-read on close.
+          void reload().catch(() => undefined);
+        }}
         onSaved={() => {
           setEditOpen(false);
           // The row has no timeline, so re-read the lot rather than merging it in.
