@@ -31,7 +31,7 @@ import type { Colour, Fabric } from '@/api/types';
 type Mode = 'existing' | 'external';
 
 /** Common apparel size presets for external entries — one alpha row, one numeric. */
-const SIZE_PRESETS = ['XS', 'S', 'M', 'L', 'XL', 'XXL', '26', '28', '30', '32', '34', '36', '38', '40'];
+const SIZE_PRESETS = ['XS', 'S', 'M', 'L', 'XL', 'XXL', '3XL', '4XL', '26', '28', '30', '32', '34', '36', '38', '40'];
 
 interface ExistingSel {
   /** EasyEcom style key — the batch's real identity. Always present. */
