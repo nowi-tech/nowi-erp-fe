@@ -17,8 +17,8 @@ import {
   type CreateBatchBody,
   type ProductionType,
 } from '@/api/production';
-import { getBrands, createBrand, type Brand } from '@/api/brands';
-import { apiErrorMessage } from '@/api/apiClient';
+import { getBrands, type Brand } from '@/api/brands';
+import { useQuickAddParty } from '@/components/shared/useQuickAddParty';
 import TailorPicker from '@/components/production/TailorPicker';
 import FabricPicker from '@/components/styles/intake/FabricPicker';
 import { listFabrics } from '@/api/styles';
@@ -281,25 +281,19 @@ export default function StartProductionIntakeDialog({
       });
   };
 
-  // "+ Add" inside the brand dropdown creates the typed brand and selects it.
-  const addBrand = (typed: string) => {
-    const name = typed.trim();
-    if (!name) return;
-    void createBrand(name)
-      .then((b) => {
-        setBrands((prev) =>
-          [...prev.filter((x) => x.id !== b.id), b].sort((a, z) => a.name.localeCompare(z.name)),
-        );
-        setBrandId(b.id);
-      })
-      .catch((e) =>
-        toast.show(
-          apiErrorMessage(e) ??
-            t('admin.production.intake.brandFailed', { defaultValue: "Couldn't add that brand." }),
-          'error',
+  // "+ Add" inside the brand dropdown creates the typed brand (or reuses that party) and selects it.
+  const addBrand = useQuickAddParty(
+    'brand',
+    (b) => {
+      setBrands((prev) =>
+        [...prev.filter((x) => x.id !== b.id), { ...b, code: null, isActive: true }].sort((a, z) =>
+          a.name.localeCompare(z.name),
         ),
       );
-  };
+      setBrandId(b.id);
+    },
+    brandId,
+  );
 
   const qtyLabel = isAlt ? t('admin.alteration.qtyIn', { defaultValue: 'Pieces' }) : undefined;
 
@@ -603,7 +597,7 @@ export default function StartProductionIntakeDialog({
               value={brandId === '' ? null : brandId}
               options={brands.map((b) => ({ value: b.id, label: b.name }))}
               onChange={(id) => setBrandId(id ?? '')}
-              onAddNew={addBrand}
+              onAddNew={(typed) => void addBrand(typed)}
               addOnEnter={false}
               addNewLabel={t('admin.production.intake.addBrand', { defaultValue: 'Add a new brand' })}
               placeholder={t('admin.production.intake.pickBrand', { defaultValue: 'Choose a brand…' })}

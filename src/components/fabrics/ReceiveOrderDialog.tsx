@@ -9,7 +9,8 @@ import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 import { useToast } from '@/components/ui/toast';
 import { apiErrorMessage } from '@/api/apiClient';
 import { createFabricChallan } from '@/api/fabricChallans';
-import { listVendorOptions, type VendorOption } from '@/api/vendors';
+import { listVendorOptions } from '@/api/vendors';
+import { useQuickAddParty } from '@/components/shared/useQuickAddParty';
 import type { FabricOrder } from '@/api/types';
 import { fmtQty, poLabel, UOM_SHORT } from '@/lib/fabric';
 import { todayISO } from '@/lib/date';
@@ -54,7 +55,15 @@ export default function ReceiveOrderDialog({
   const [price, setPrice] = useState('');
   const [date, setDate] = useState(todayISO());
   const [vendorId, setVendorId] = useState<number | null>(null);
-  const [vendors, setVendors] = useState<VendorOption[]>([]);
+  const [vendors, setVendors] = useState<{ id: number; name: string }[]>([]);
+  const addVendor = useQuickAddParty(
+    'supplier',
+    (v) => {
+      setVendors((vs) => (vs.some((x) => x.id === v.id) ? vs : [...vs, v]));
+      setVendorId(v.id);
+    },
+    vendorId,
+  );
   const [saving, setSaving] = useState(false);
   const [overMsg, setOverMsg] = useState<string | null>(null);
 
@@ -66,7 +75,10 @@ export default function ReceiveOrderDialog({
     setDate(todayISO());
     setVendorId(order.vendor?.id ?? null);
     // Only an order placed without a vendor needs the supplier asked.
-    if (!order.vendor) void listVendorOptions().then(setVendors).catch(() => undefined);
+    if (!order.vendor)
+      void listVendorOptions()
+        .then((rows) => setVendors(rows.filter((v) => v.isSupplier)))
+        .catch(() => undefined);
   }, [order]);
 
   if (!order) return null;
@@ -158,6 +170,8 @@ export default function ReceiveOrderDialog({
               value={vendorId}
               options={vendors.map((v) => ({ value: v.id, label: v.name }))}
               onChange={(id) => setVendorId((id as number) ?? null)}
+              onAddNew={(typed) => void addVendor(typed)}
+              addNewLabel={t('admin.fabricChallan.addVendor', { defaultValue: 'Add supplier' })}
               placeholder={t('admin.fabricChallan.vendorNone', { defaultValue: 'Choose a supplier…' })}
               ariaLabel={t('admin.fabricChallan.vendor', { defaultValue: 'Supplier' })}
             />

@@ -10,7 +10,7 @@ import { Combobox } from '@/components/ui/combobox';
 import { useToast } from '@/components/ui/toast';
 import { apiErrorMessage } from '@/api/apiClient';
 import { listVendorOptions, type VendorOption } from '@/api/vendors';
-import { useQuickAddVendor } from './useQuickAddVendor';
+import { useQuickAddParty } from '@/components/shared/useQuickAddParty';
 import { createFabricOrder, getFabricOrderDefaults, updateFabricOrder } from '@/api/fabricOrders';
 import type { Fabric, FabricOrder, FabricOrderStatus } from '@/api/types';
 import { ORDER_STATUS_LABEL, SETTABLE_ORDER_STATUSES, UOM_SHORT } from '@/lib/fabric';
@@ -136,9 +136,16 @@ export default function FabricOrderDialog({ open, onClose, onSaved, fabrics, edi
         .map((f) => ({ value: f.id, label: f.name, sublabel: f.code ?? undefined })),
     [fabrics],
   );
-  const vendorOptions = vendors.map((v) => ({ value: v.id, label: v.name }));
-  const addVendor = useQuickAddVendor((v) => {
-    setVendors((vs) => (vs.some((x) => x.id === v.id) ? vs : [...vs, v]));
+  // Suppliers, plus the order's current vendor whatever its role.
+  const vendorOptions = vendors
+    .filter((v) => v.isSupplier || v.id === form.vendorId)
+    .map((v) => ({ value: v.id, label: v.name }));
+  const addVendor = useQuickAddParty('supplier', (v) => {
+    setVendors((vs) =>
+      vs.some((x) => x.id === v.id)
+        ? vs.map((x) => (x.id === v.id ? { ...x, isSupplier: true } : x))
+        : [...vs, { ...v, code: '', isSupplier: true, isFactory: false, isBrand: false, isRecipient: false }],
+    );
     set('vendorId', v.id);
   }, `${open}:${form.vendorId}`);
 
