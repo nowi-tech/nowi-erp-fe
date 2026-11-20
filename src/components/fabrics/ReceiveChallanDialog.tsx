@@ -10,7 +10,7 @@ import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 import { dueOn, overReceiptMessage } from './ReceiveOrderDialog';
 import { apiErrorMessage } from '@/api/apiClient';
 import { createFabricChallan } from '@/api/fabricChallans';
-import { useQuickAddVendor } from './useQuickAddVendor';
+import { useQuickAddParty } from '@/components/shared/useQuickAddParty';
 import type { FabricOrder } from '@/api/types';
 import { fmtQty, poLabel, UOM_SHORT } from '@/lib/fabric';
 import { todayISO } from '@/lib/date';
@@ -96,7 +96,7 @@ export default function ReceiveChallanDialog({
     setPicked(new Map());
     if (theirs.length === 1) pick(theirs[0]);
   };
-  const addVendor = useQuickAddVendor((v) => {
+  const addVendor = useQuickAddParty('supplier', (v) => {
     setAdded((a) => [...a, [v.id, v.name]]);
     chooseSupplier(v.id);
   }, `${open}:${vendorId}`);

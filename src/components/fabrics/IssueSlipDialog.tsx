@@ -10,6 +10,7 @@ import { Combobox } from '@/components/ui/combobox';
 import { useToast } from '@/components/ui/toast';
 import { apiErrorMessage } from '@/api/apiClient';
 import { listVendorOptions, type VendorOption } from '@/api/vendors';
+import { useQuickAddParty } from '@/components/shared/useQuickAddParty';
 import { createFabricChallan, getLastIssueVendor } from '@/api/fabricChallans';
 import { getBatches, type ProductionBatch } from '@/api/production';
 import { listSampleStyles, type SampleStyleOption } from '@/api/styles';
@@ -206,9 +207,24 @@ export default function IssueSlipDialog({ open, onClose, onSaved, fabrics, prese
     };
   });
 
-  // Factories first — they're who fabric is usually issued to.
-  const vendorOptions = [...vendors]
-    .sort((a, b) => Number(!!b.isFactory) - Number(!!a.isFactory) || a.name.localeCompare(b.name))
+  // A name typed here is someone we issue fabric to — saved as a factory.
+  const addFactory = useQuickAddParty(
+    'factory',
+    (p) => {
+      setVendors((vs) =>
+        vs.some((x) => x.id === p.id)
+          ? vs.map((x) => (x.id === p.id ? { ...x, isFactory: true } : x))
+          : [...vs, { ...p, code: '', isSupplier: false, isFactory: true, isBrand: false, isRecipient: false }],
+      );
+      setVendorId(p.id);
+    },
+    vendorId,
+  );
+
+  // Fabric is issued to whoever makes the goods: factories (plus whoever is already picked, e.g. last issued to).
+  const vendorOptions = vendors
+    .filter((v) => v.isFactory || v.id === vendorId)
+    .sort((a, b) => a.name.localeCompare(b.name))
     .map((v) => ({ value: v.id, label: v.name }));
 
   const lineReady = (l: Line) => l.fabricColourId != null && Number(l.quantity) > 0;
@@ -273,6 +289,9 @@ export default function IssueSlipDialog({ open, onClose, onSaved, fabrics, prese
               value={vendorId}
               options={vendorOptions}
               onChange={(id) => setVendorId((id as number) ?? null)}
+              onAddNew={(typed) => void addFactory(typed)}
+              addOnEnter={false}
+              addNewLabel={t('admin.party.addFactory', { defaultValue: 'Add a new factory' })}
               placeholder={t('admin.issueSlip.issuedToPh', { defaultValue: 'Choose a factory…' })}
               ariaLabel={t('admin.issueSlip.issuedTo', { defaultValue: 'Issued to' })}
             />

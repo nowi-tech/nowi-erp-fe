@@ -317,6 +317,19 @@
     }
   },
   "admin": {
+    "party": {
+      "addBrand": "Add a new brand",
+      "addFactory": "Add a new factory",
+      "addFailed": {
+        "supplier": "Could not add that supplier.",
+        "factory": "Could not add that factory.",
+        "brand": "Couldn't add that brand."
+      },
+      "loadFailed": {
+        "brand": "Couldn't load brands.",
+        "factory": "Couldn't load factories."
+      }
+    },
     "today": "Today",
     "openLocator": "Open locator",
     "lotsByStatus": "Lots by status",
@@ -724,10 +737,12 @@
           "forBrandTitle": "Made for a brand",
           "forBrandDesc": "We design and make it for another brand. Runs the full sampling workflow.",
           "brandLabel": "Brand",
-          "brandNone": "No brand",
+          "brandNone": "NOWI (own label)",
+          "madeByLabel": "Made by",
+          "madeByPick": "Choose a factory…",
           "brandPick": "Choose a brand…",
-          "brandsFailed": "Couldn't load brands. Reload the page to try again.",
           "needsBrandAndFields": "Choose a brand and complete the required fields to submit.",
+          "needsFactoryAndFields": "Choose who made it and complete the required fields to submit.",
           "colourPickLabel": "Parent style",
           "basedOnPickLabel": "Source style",
           "relivePickLabel": "Old style #",
@@ -1000,7 +1015,6 @@
       "vendor": "Supplier",
       "vendorNone": "Choose a supplier…",
       "addVendor": "Add supplier",
-      "vendorCreateError": "Could not add that supplier.",
       "addLine": "Add line",
       "fabric": "Fabric",
       "quantity": "Quantity",

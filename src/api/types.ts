@@ -64,7 +64,10 @@ export interface Vendor {
   consumptionApiEnabled: boolean;
   isActive: boolean;
   /** Production factory (Kotty, Gurukul, …) — the "issued to" list. */
+  isSupplier?: boolean;
   isFactory?: boolean;
+  isBrand?: boolean;
+  isRecipient?: boolean;
 }
 
 export interface Sku {
@@ -633,7 +636,9 @@ export interface Style {
   // Production (v2)
   productionStatus: string | null;
   productionTimeline: string | null;
+  /** "Made by" — the factory that manufactures it (Bought in). */
   factoryId: number | null;
+  factory?: { id: number; name: string } | null;
   /** Whose label it carries — the two 3rd-party paths. */
   brandId: number | null;
   brand?: { id: number; name: string } | null;
