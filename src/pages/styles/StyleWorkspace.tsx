@@ -546,7 +546,13 @@ export default function StyleWorkspace() {
           {isThirdPartyKind(kind) && (
             <SpecRow
               label={t('admin.styles.intake.fork.brandLabel')}
-              value={style.brand?.name ?? '—'}
+              value={style.brand?.name ?? t('admin.styles.intake.fork.brandNone')}
+            />
+          )}
+          {style.source === 'third_party_manufactured' && (
+            <SpecRow
+              label={t('admin.styles.intake.fork.madeByLabel', { defaultValue: 'Made by' })}
+              value={style.factory?.name ?? '—'}
             />
           )}
           <SpecRow

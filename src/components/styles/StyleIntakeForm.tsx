@@ -15,7 +15,6 @@ import { Label } from '@/components/ui/label';
 import { Select } from '@/components/ui/select';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Combobox, type ComboboxOption } from '@/components/ui/combobox';
-import { useToast } from '@/components/ui/toast';
 
 import PatternCadInput from '@/components/shared/PatternCadInput';
 import IntakeCard from '@/components/styles/intake/IntakeCard';
@@ -28,7 +27,7 @@ import ReferenceImageGrid from '@/components/styles/intake/ReferenceImageGrid';
 import { Thumbnail } from '@/components/styles/StyleQueueTable';
 import { useSignedUrls } from '@/hooks/useSignedUrls';
 import { useDebounced } from '@/lib/useDebounced';
-import { getBrands } from '@/api/brands';
+import { PartyPicker } from '@/components/shared/PartyPicker';
 import {
   GENDER_CATEGORIES,
   deriveArticleCategory,
@@ -158,6 +157,8 @@ type FormState = {
   fabricId: number | null;
   /** Whose label it carries — the two 3rd-party forks. */
   brandId: number | null;
+  /** "Made by" factory — Bought in only. */
+  factoryId: number | null;
   sampleFabricRequired: string;
   gender: Gender;
   categoryId: number | null;
@@ -253,6 +254,7 @@ function buildInitialForm(style: Style | null | undefined): FormState {
       developmentReason: '',
       fabricId: null,
       brandId: null,
+      factoryId: null,
       sampleFabricRequired: '',
       gender: 'women',
       categoryId: null,
@@ -277,6 +279,7 @@ function buildInitialForm(style: Style | null | undefined): FormState {
     developmentReason: reason,
     fabricId: style.fabricId ?? null,
     brandId: style.brandId ?? null,
+    factoryId: style.factoryId ?? null,
     sampleFabricRequired:
       style.sampleFabricRequired == null
         ? ''
@@ -540,7 +543,6 @@ const StyleIntakeForm = forwardRef<StyleIntakeFormHandle, StyleIntakeFormProps>(
     handleRef,
   ) {
     const { t } = useTranslation();
-    const toast = useToast();
     const isChinaImport = source === 'china_import';
     const isEdit = !!style;
     // The A/B/C submission fork only applies to a NEW sampling intake.
@@ -554,9 +556,6 @@ const StyleIntakeForm = forwardRef<StyleIntakeFormHandle, StyleIntakeFormProps>(
     // Own Style # for the 3rd-party forks — a new code, so a plain input, not the ref picker.
     const [thirdPartyCode, setThirdPartyCode] = useState('');
 
-    // Brands for the 3rd-party picker; fetched here as nothing upstream adds to them.
-    const [brands, setBrands] = useState<{ id: number; name: string }[]>([]);
-
     // Re-seed when the parent swaps the style under us (e.g. modal
     // reopened for a different row). We deliberately don't re-seed on
     // every render — only when the underlying style identity changes.
@@ -564,28 +563,6 @@ const StyleIntakeForm = forwardRef<StyleIntakeFormHandle, StyleIntakeFormProps>(
       setForm(buildInitialForm(style));
       // Style.id is the stable identity; falsy when create mode.
     }, [style?.id]);
-
-    // One fetch per mount; a failure says so, since a required brand would otherwise block silently.
-    useEffect(() => {
-      let live = true;
-      void getBrands()
-        .then((rows) => {
-          // Keep the saved brand listed even if it was deactivated since.
-          if (live) setBrands(rows.filter((b) => b.isActive || b.id === style?.brandId));
-        })
-        .catch(() => {
-          if (live)
-            toast.show(
-              t('admin.styles.intake.fork.brandsFailed', {
-                defaultValue: "Couldn't load brands. Reload the page to try again.",
-              }),
-              'error',
-            );
-        });
-      return () => {
-        live = false;
-      };
-    }, []);
 
     const set = <K extends keyof FormState>(k: K, v: FormState[K]) =>
       setForm((f) => ({ ...f, [k]: v }));
@@ -784,12 +761,14 @@ const StyleIntakeForm = forwardRef<StyleIntakeFormHandle, StyleIntakeFormProps>(
           : forkTarget != null;
     const isThirdParty = showFork && forkMode === 'third_party_manufactured';
     const isForBrand = showFork && forkMode === 'for_brand';
-    // Both 3rd-party forks take a brand (required) and an optional own code.
+    // Both 3rd-party forks take a brand and an optional own code; Bought in may carry Nowi's own label.
     const asksBrand = isThirdParty || isForBrand;
     // Edit keeps the brand editable on any style that has one (or is Bought in).
     const editsBrand =
       !showFork &&
       (style?.source === 'third_party_manufactured' || style?.brandId != null);
+    // Bought in records which factory made it.
+    const editsFactory = !showFork && style?.source === 'third_party_manufactured';
 
     // ── What this fork actually needs to be asked ───────────────────
     // A colour variant (spawnColourVariant) and a relive of an IN-SYSTEM
@@ -818,7 +797,8 @@ const StyleIntakeForm = forwardRef<StyleIntakeFormHandle, StyleIntakeFormProps>(
     const collectionRequired = !inheritsIdentity;
     const collectionOk = !collectionRequired || form.collectionId != null;
     const nameOk = inheritsIdentity || form.workingName.trim().length > 0;
-    const brandOk = !asksBrand || form.brandId != null;
+    const brandOk = !isForBrand || form.brandId != null;
+    const factoryOk = !isThirdParty || form.factoryId != null;
     // A new design that will be sampled names its fabric and the estimate per sample.
     const sampleFabricRequired = !isEdit && !isChinaImport && !skipsSampling;
     const sampleFabricOk =
@@ -828,6 +808,7 @@ const StyleIntakeForm = forwardRef<StyleIntakeFormHandle, StyleIntakeFormProps>(
       nameOk &&
       collectionOk &&
       brandOk &&
+      factoryOk &&
       sampleFabricOk &&
       (!needsForkTarget || forkTargetOk);
 
@@ -864,6 +845,7 @@ const StyleIntakeForm = forwardRef<StyleIntakeFormHandle, StyleIntakeFormProps>(
         referenceImageUrl: form.referenceImageUrl,
         // Only where the form shows it, so a brand left on another fork never travels.
         brandId: asksBrand || editsBrand ? form.brandId : undefined,
+        factoryId: isThirdParty || editsFactory ? form.factoryId : undefined,
       };
       // Source only travels on create. PATCH already knows it.
       if (!isEdit) base.source = source;
@@ -974,23 +956,29 @@ const StyleIntakeForm = forwardRef<StyleIntakeFormHandle, StyleIntakeFormProps>(
           {t('admin.styles.intake.fork.brandLabel')}
           {required ? ' *' : ''}
         </Label>
-        <Select
-          value={form.brandId == null ? '' : String(form.brandId)}
-          onChange={(e) => set('brandId', e.target.value ? Number(e.target.value) : null)}
-        >
-          {style?.brandId == null && (
-            <option value="">
-              {required
-                ? t('admin.styles.intake.fork.brandPick')
-                : t('admin.styles.intake.fork.brandNone')}
-            </option>
-          )}
-          {brands.map((b) => (
-            <option key={b.id} value={b.id}>
-              {b.name}
-            </option>
-          ))}
-        </Select>
+        <PartyPicker
+          role="brand"
+          value={form.brandId}
+          onChange={(id) => set('brandId', id)}
+          current={style?.brand}
+          // No brand = Nowi's own label: always valid on Bought in; elsewhere a set brand can't be cleared.
+          nowiOption={!required && (style?.brandId == null || style.source === 'third_party_manufactured')}
+        />
+      </div>
+    );
+
+    const factoryField = (required: boolean) => (
+      <div>
+        <Label>
+          {t('admin.styles.intake.fork.madeByLabel', { defaultValue: 'Made by' })}
+          {required ? ' *' : ''}
+        </Label>
+        <PartyPicker
+          role="factory"
+          value={form.factoryId}
+          onChange={(id) => set('factoryId', id)}
+          current={style?.factory}
+        />
       </div>
     );
 
@@ -1091,7 +1079,8 @@ const StyleIntakeForm = forwardRef<StyleIntakeFormHandle, StyleIntakeFormProps>(
               {/* Typed code becomes the Style # verbatim; blank mints one at Approval #1. */}
               {asksBrand && (
                 <div className="mt-4 max-w-md space-y-4">
-                  {brandField(true)}
+                  {brandField(isForBrand)}
+                  {isThirdParty && factoryField(true)}
                   <div>
                     <Label>{t('admin.styles.intake.fork.thirdPartyPickLabel')}</Label>
                     <Input
@@ -1295,6 +1284,7 @@ const StyleIntakeForm = forwardRef<StyleIntakeFormHandle, StyleIntakeFormProps>(
                 </div>
               )}
               {editsBrand && brandField(false)}
+              {editsFactory && factoryField(false)}
               <div>
                 <Label>
                   {t('admin.styles.intake.primaryColour')}
