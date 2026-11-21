@@ -18,7 +18,7 @@ import { todayISO } from '@/lib/date';
 import { meaningfulName } from '@/lib/production';
 import { useDebounced } from '@/lib/useDebounced';
 import { useAuth } from '@/context/auth';
-import { ADMIN_ROLES, APPROVER_ROLES, hasAnyRole, PRODUCTION_WRITE_ROLES, STYLE_DISABLE_ROLES } from '@/lib/userRoles';
+import { ADMIN_ROLES, APPROVER_ROLES, hasAnyRole, PRODUCTION_BOARD_READ_ROLES, PRODUCTION_WRITE_ROLES, STYLE_DISABLE_ROLES } from '@/lib/userRoles';
 import CreateFromListingDialog from '@/components/admin/CreateFromListingDialog';
 import { createBatch, type CreateBatchBody } from '@/api/production';
 import StartProductionDialog, {
@@ -83,40 +83,46 @@ const AGE: Record<Exclude<Aging, 'active'>, { label: string; dot: string }> = {
 };
 
 /** Sortable columns. `null` = the priority (urgency-first) default order. A
- *  column sorts the STYLES by that metric aggregated over their sizes. `newest`,
- *  `revenue` and `cancelrate` are dropdown-only — they map to no column header. */
+ *  column sorts the STYLES by that metric aggregated over their sizes. `newest`
+ *  and `revenue` are dropdown-only — they map to no column header. */
 type SortKey =
-  | 'style' | 'cover' | 'drr' | 'stock' | 'atrisk' | 'newest' | 'revenue' | 'cancelrate';
+  | 'style' | 'cover' | 'drr' | 'stock' | 'atrisk' | 'newest' | 'revenue';
 
 /** Sort presets the dropdown offers, over the same (sortKey, sortDir) the column
  *  headers write. Each is a "most first" ranking. */
-type SortPreset = 'default' | 'best' | 'newest' | 'revenue' | 'cancels';
+type SortPreset = 'default' | 'best' | 'newest' | 'revenue';
 const PRESET_SORT: Record<Exclude<SortPreset, 'default'>, SortKey> = {
   best: 'drr',
   newest: 'newest',
   revenue: 'revenue',
-  cancels: 'cancelrate',
 };
 
 const PAGE_SIZE = 50;
+
+type StyleFlag = 'discontinued' | 'paused' | 'pendingApproval';
+const FLAG_TAB: Record<StyleFlag, FilterKey> = { discontinued: 'disabled', paused: 'paused', pendingApproval: 'pending' };
+
+/** Whether flipping a flag takes the style off the current tab — mirrors the BE `shapePage` filters. */
+function leavesTab(flag: StyleFlag, next: boolean, filter: FilterKey, searching: boolean): boolean {
+  if (filter === FLAG_TAB[flag]) return !next;
+  // A search reaches hidden styles on every tab but the three exact lists.
+  if (!next || (searching && !Object.values(FLAG_TAB).includes(filter))) return false;
+  if (flag === 'discontinued') return filter !== 'pending' && filter !== 'paused';
+  if (flag === 'pendingApproval') return filter !== 'paused';
+  return true;
+}
 
 function fmtN(n: number): string {
   return n.toLocaleString('en-IN', { maximumFractionDigits: 0 });
 }
 
-/** A fact chip on the style header — same shape as a channel chip, no link.
- *  `tail` is the secondary half (window / rate), lightened so the pair reads as
- *  one fact rather than two. Green = money earned, red = money lost. */
-function StatChip({ tone, label, tail }: { tone: 'earned' | 'lost'; label: string; tail: string }): ReactNode {
-  const earned = tone === 'earned';
+/** A money fact chip on the style header — same shape as a channel chip, no link.
+ *  `tail` (the window) is lightened so the pair reads as one fact. */
+function StatChip({ label, tail }: { label: string; tail: string }): ReactNode {
   return (
-    <span
-      className={`inline-flex shrink-0 items-center rounded border px-1.5 py-0.5 text-[10px] font-semibold tabular-nums ${
-        earned ? 'border-emerald-200 bg-emerald-50 text-emerald-700' : 'border-red-200 bg-red-50 text-red-600'
-      }`}
-    >
+    <span className="inline-flex shrink-0 items-center rounded border border-emerald-200 bg-emerald-50 px-1.5 py-0.5 text-[10px] font-semibold tabular-nums text-emerald-700">
       {label}
-      <span className={`ml-1 font-normal ${earned ? 'text-emerald-500' : 'text-red-400'}`}>· {tail}</span>
+      <span className="ml-1 font-normal text-emerald-500">· {tail}</span>
     </span>
   );
 }
@@ -235,6 +241,7 @@ export default function InventoryHealth(): ReactNode {
   const canDisable = hasAnyRole(user, STYLE_DISABLE_ROLES);
   const canCreateErp = hasAnyRole(user, APPROVER_ROLES);
   const canPause = hasAnyRole(user, ADMIN_ROLES);
+  const canSeePipeline = hasAnyRole(user, PRODUCTION_BOARD_READ_ROLES);
   const [createFor, setCreateFor] = useState<InventoryStyle | null>(null);
   // Sending a style to the pipeline is a production action — a different set
   // (the page itself is open to every production reader).
@@ -266,6 +273,10 @@ export default function InventoryHealth(): ReactNode {
       }),
     [windowActive, dateFrom, dateTo, filter, inventory, debouncedSearch, category, sortKey, sortDir],
   );
+
+  // The counts depend only on the stock view and window; a tab, search or sort change keeps them.
+  const kpiScope = `${inventory}|${windowActive ? `${dateFrom}|${dateTo}` : ''}`;
+  const [kpiScopeLoaded, setKpiScopeLoaded] = useState('');
 
   // Discard out-of-order responses when the query changes mid-flight.
   const reqRef = useRef(0);
@@ -309,6 +320,7 @@ export default function InventoryHealth(): ReactNode {
         setStyles(d.styles);
         setTotal(d.total);
         setKpis(d.kpis);
+        setKpiScopeLoaded(kpiScope);
         setCategories(d.categories);
         setTrendDates(d.trendDates);
         setSyncedAt(d.syncedAt);
@@ -321,7 +333,28 @@ export default function InventoryHealth(): ReactNode {
       .finally(() => {
         if (reqRef.current === my) setLoading(false);
       });
-  }, [load, reloadTick]);
+  }, [load, reloadTick, kpiScope]);
+
+  // A button changed one style: update its card in place, then refresh only the counts.
+  const patchStyle = (styleKey: string, patch: Partial<InventoryStyle>, leaves: boolean): void => {
+    if (leaves) {
+      setStyles((prev) => prev.filter((s) => s.styleKey !== styleKey));
+      setTotal((n) => Math.max(0, n - 1));
+    } else {
+      setStyles((prev) => prev.map((s) => (s.styleKey === styleKey ? { ...s, ...patch } : s)));
+    }
+    const my = reqRef.current;
+    load(0)
+      .then((d) => {
+        if (reqRef.current !== my) return;
+        setKpis(d.kpis);
+        setTotal(d.total);
+      })
+      .catch(() => {});
+  };
+  const searching = debouncedSearch.trim() !== '';
+  const flipFlag = (styleKey: string, flag: StyleFlag, next: boolean): void =>
+    patchStyle(styleKey, { [flag]: next }, leavesTab(flag, next, filter, searching));
 
   // Append the next page when the sentinel scrolls into view.
   const loadMore = useCallback(() => {
@@ -513,7 +546,7 @@ export default function InventoryHealth(): ReactNode {
     [navigate],
   );
 
-  // Confirm → mark/unmark the product discontinued, then race-safely reload page 0.
+  // Confirm → mark/unmark the product discontinued, then update its card.
   const onConfirmDiscontinue = async (): Promise<void> => {
     if (!confirmDisc) return;
     const { styleKey, next } = confirmDisc;
@@ -526,7 +559,7 @@ export default function InventoryHealth(): ReactNode {
           : t('admin.inventoryHealth.restoredDone', { defaultValue: 'Product enabled.' }),
         'success',
       );
-      setReloadTick((n) => n + 1);
+      flipFlag(styleKey, 'discontinued', next);
     } catch {
       toast.show(
         t('admin.inventoryHealth.discontinueFailed', { defaultValue: 'Couldn’t update. Please try again.' }),
@@ -535,7 +568,7 @@ export default function InventoryHealth(): ReactNode {
     }
   };
 
-  // Confirm → pause tracking the style (or resume it), then reload.
+  // Confirm → pause tracking the style (or resume it), then update its card.
   const onConfirmPause = async (): Promise<void> => {
     if (!confirmPause) return;
     const { styleKey, next } = confirmPause;
@@ -548,13 +581,13 @@ export default function InventoryHealth(): ReactNode {
           : t('admin.inventoryHealth.resumeDone', { defaultValue: 'Back on the list.' }),
         'success',
       );
-      setReloadTick((n) => n + 1);
+      flipFlag(styleKey, 'paused', next);
     } catch {
       toast.show(t('admin.inventoryHealth.holdFailed', { defaultValue: 'Couldn’t update. Please try again.' }), 'error');
     }
   };
 
-  // Confirm → hold the style for seller approval (or release it), then reload.
+  // Confirm → hold the style for seller approval (or release it), then update its card.
   const onConfirmHold = async (): Promise<void> => {
     if (!confirmHold) return;
     const { styleKey, next } = confirmHold;
@@ -567,7 +600,7 @@ export default function InventoryHealth(): ReactNode {
           : t('admin.inventoryHealth.releaseDone', { defaultValue: 'Back on the list.' }),
         'success',
       );
-      setReloadTick((n) => n + 1);
+      flipFlag(styleKey, 'pendingApproval', next);
     } catch {
       toast.show(
         t('admin.inventoryHealth.holdFailed', { defaultValue: 'Couldn’t update. Please try again.' }),
@@ -602,13 +635,13 @@ export default function InventoryHealth(): ReactNode {
   };
 
   const onProduceConfirm = async (body: CreateBatchBody): Promise<void> => {
+    const styleKey = produceTarget?.styleKey;
     setProduceBusy(true);
     try {
       await createBatch(body);
       setProduceTarget(null);
       toast.show(t('admin.inventoryHealth.pipelineDone', { defaultValue: 'Added to pipeline.' }), 'success');
-      // Reload so the style's "Added to pipeline" chip shows.
-      setReloadTick((n) => n + 1);
+      if (styleKey) patchStyle(styleKey, { inPlanning: true }, false);
     } catch {
       toast.show(
         t('admin.inventoryHealth.pipelineFailed', { defaultValue: 'Couldn’t add to pipeline. Please try again.' }),
@@ -619,9 +652,9 @@ export default function InventoryHealth(): ReactNode {
     }
   };
 
-  // A count belongs to the query that produced it: while the next one is in
-  // flight, show none rather than the last view's number.
-  const shown = (n: number): number | undefined => (loading ? undefined : n);
+  // A count belongs to the stock view + window that produced it; blank only while those change.
+  const countsFresh = !loading || kpiScopeLoaded === kpiScope;
+  const shown = (n: number): number | undefined => (countsFresh ? n : undefined);
   // The lens tabs (Sampling-style) — urgency tiers, then the aging + new lenses.
   const lensTabs: QueueTab<FilterKey>[] = kpis
     ? [
@@ -757,7 +790,6 @@ export default function InventoryHealth(): ReactNode {
               <option value="best">{t('admin.inventoryHealth.sort.best', { defaultValue: 'Best seller' })}</option>
               <option value="newest">{t('admin.inventoryHealth.sort.newest', { defaultValue: 'What’s new' })}</option>
               <option value="revenue">{t('admin.inventoryHealth.sort.revenue', { defaultValue: 'Top revenue' })}</option>
-              <option value="cancels">{t('admin.inventoryHealth.sort.cancels', { defaultValue: 'Most cancelled' })}</option>
             </select>
             <FilterRailDivider />
             {/* DRR/cover window — same control the sampling dashboard uses. */}
@@ -799,7 +831,7 @@ export default function InventoryHealth(): ReactNode {
             <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
               <StatCard
                 label={t('admin.inventoryHealth.chip.cut', { defaultValue: 'Cut size' })}
-                value={loading ? null : kpis.cutSize}
+                value={countsFresh ? kpis.cutSize : null}
                 dot={AMBER}
                 active={filter === 'cut'}
                 onClick={() => selectFilter(filter === 'cut' ? 'all' : 'cut')}
@@ -807,7 +839,7 @@ export default function InventoryHealth(): ReactNode {
               />
               <StatCard
                 label={t('admin.inventoryHealth.chip.out', { defaultValue: 'Out of stock' })}
-                value={loading ? null : kpis.outOfStock}
+                value={countsFresh ? kpis.outOfStock : null}
                 dot={RED}
                 active={filter === 'out'}
                 onClick={() => selectFilter(filter === 'out' ? 'all' : 'out')}
@@ -815,7 +847,7 @@ export default function InventoryHealth(): ReactNode {
               />
               <StatCard
                 label={t('admin.inventoryHealth.toMake', { defaultValue: 'To make' })}
-                value={loading ? null : kpis.unitsToMake}
+                value={countsFresh ? kpis.unitsToMake : null}
                 unit={t('admin.inventoryHealth.headlineUnits', { defaultValue: 'units' })}
               />
             </div>
@@ -846,10 +878,8 @@ export default function InventoryHealth(): ReactNode {
                 </span>
               </div>
 
-              {/* A fresh query (tab switch / filter / search / sort) shows the loader
-                  in place of the now-stale rows, then the new data — instead of
-                  silently swapping one dataset for another. */}
-              {loading ? (
+              {/* The first load shows a skeleton; later queries keep the old rows, dimmed, until the new ones land. */}
+              {loading && !styles.length ? (
                 <div aria-busy aria-label={t('admin.inventoryHealth.loading', { defaultValue: 'Loading…' })}>
                   {Array.from({ length: 6 }).map((_, i) => (
                     <div
@@ -867,14 +897,17 @@ export default function InventoryHealth(): ReactNode {
                     </div>
                   ))}
                 </div>
-              ) : total === 0 ? (
+              ) : !styles.length ? (
                 <div className="px-4 py-12 text-center text-sm text-[var(--color-muted-foreground)]">
                   {t('admin.inventoryHealth.empty', { defaultValue: 'Nothing matches this filter.' })}
                 </div>
               ) : (
                 // Grey list — column labels + floating white style cards (gap on
                 // every side); the header sits inside the grey area to stay aligned.
-                <div className="space-y-2.5 bg-neutral-100 p-2.5">
+                <div
+                  aria-busy={loading}
+                  className={`space-y-2.5 bg-neutral-100 p-2.5 transition-opacity ${loading ? 'pointer-events-none opacity-50' : ''}`}
+                >
                   <div
                     className="hidden gap-3 px-4 pb-0.5 text-[11px] font-semibold uppercase tracking-wide lg:grid"
                     style={{ gridTemplateColumns: GRID, color: HEADER_INK }}
@@ -906,6 +939,14 @@ export default function InventoryHealth(): ReactNode {
                         onRequestDiscontinue={(styleKey, next) => setConfirmDisc({ styleKey, next })}
                         onRequestHold={(styleKey, next) => setConfirmHold({ styleKey, next })}
                         onProduce={() => openProduce(style, img)}
+                        onOpenPipeline={
+                          canSeePipeline
+                            ? (tab) =>
+                                navigate(
+                                  `/admin/production?${new URLSearchParams({ tab, q: style.erpStyleId ?? style.styleKey })}`,
+                                )
+                            : undefined
+                        }
                         t={t}
                       />
                     );
@@ -1106,6 +1147,7 @@ function StyleGroup({
   onRequestDiscontinue,
   onRequestHold,
   onProduce,
+  onOpenPipeline,
   t,
 }: {
   style: InventoryStyle;
@@ -1126,6 +1168,8 @@ function StyleGroup({
   onRequestDiscontinue: (styleKey: string, next: boolean) => void;
   onRequestHold: (styleKey: string, next: boolean) => void;
   onProduce: () => void;
+  /** Opens the Production page on that tab for this style; absent without pipeline access. */
+  onOpenPipeline?: (tab: 'planning' | 'in_production') => void;
   t: ReturnType<typeof useTranslation>['t'];
 }): ReactNode {
   const linked = style.linkedStyleId != null;
@@ -1200,40 +1244,47 @@ function StyleGroup({
                 {t('admin.inventoryHealth.pendingBadge', { defaultValue: 'pending approval' })}
               </span>
             )}
-            {(pipelineTotal > 0 || style.inPlanning) && (
-              <span className="inline-flex items-center gap-1 rounded-full border border-violet-200 bg-violet-50 px-1.5 py-0.5 text-[10px] font-semibold text-violet-700">
-                <Factory size={10} />
-                {pipelineTotal > 0
+            {(pipelineTotal > 0 || style.inPlanning) && (() => {
+              const label =
+                pipelineTotal > 0
                   ? t('admin.inventoryHealth.inProduction', { defaultValue: '{{n}} in production', n: fmtN(pipelineTotal) })
-                  : t('admin.inventoryHealth.inPlanning', { defaultValue: 'Added to pipeline' })}
-              </span>
-            )}
+                  : t('admin.inventoryHealth.inPlanning', { defaultValue: 'Added to pipeline' });
+              const cls =
+                'inline-flex items-center gap-1 rounded-full border border-violet-200 bg-violet-50 px-1.5 py-0.5 text-[10px] font-semibold text-violet-700';
+              if (!onOpenPipeline) {
+                return (
+                  <span className={cls}>
+                    <Factory size={10} />
+                    {label}
+                  </span>
+                );
+              }
+              return (
+                <button
+                  type="button"
+                  onClick={() => onOpenPipeline(pipelineTotal > 0 ? 'in_production' : 'planning')}
+                  title={t('admin.inventoryHealth.openPipeline', { defaultValue: 'Open in production pipeline' })}
+                  className={`${cls} hover:bg-violet-100`}
+                >
+                  <Factory size={10} />
+                  {label}
+                  <ArrowUpRight size={10} />
+                </button>
+              );
+            })()}
           </div>
           {(style.marketplaceLinks.length > 0 || style.cancelRate != null) && (
             <div className="mt-0.5 flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1">
               <ChannelChips links={style.marketplaceLinks} />
-              {/* Ordered money over the active window; hidden when nothing was
-                  ordered, where "₹0 · 0 of 0" would be noise, not a finding. */}
+              {/* Hidden when nothing was ordered in the window (cancelRate is null then). */}
               {style.cancelRate != null && (
-                <>
-                  <StatChip
-                    tone="earned"
-                    label={t('admin.inventoryHealth.revenueStat', {
-                      defaultValue: 'Revenue {{v}}',
-                      v: fmtMoney(style.revenue),
-                    })}
-                    tail={t('admin.inventoryHealth.windowDays', { defaultValue: '{{n}}d', n: dates.length })}
-                  />
-                  <StatChip
-                    tone="lost"
-                    label={t('admin.inventoryHealth.cancelledStat', {
-                      defaultValue: 'Cancelled {{n}} of {{total}}',
-                      n: fmtN(style.cancelledItems),
-                      total: fmtN(style.soldItems + style.cancelledItems),
-                    })}
-                    tail={`${style.cancelRate.toLocaleString('en-IN', { maximumFractionDigits: 1 })}%`}
-                  />
-                </>
+                <StatChip
+                  label={t('admin.inventoryHealth.revenueStat', {
+                    defaultValue: 'Revenue {{v}}',
+                    v: fmtMoney(style.revenue),
+                  })}
+                  tail={t('admin.inventoryHealth.windowDays', { defaultValue: '{{n}}d', n: dates.length })}
+                />
               )}
             </div>
           )}

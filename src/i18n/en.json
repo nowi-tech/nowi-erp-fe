@@ -391,7 +391,6 @@
       "windowClear": "Reset to default window",
       "openStyle": "Open style workspace",
       "revenueStat": "Revenue {{v}}",
-      "cancelledStat": "Cancelled {{n}} of {{total}}",
       "windowDays": "{{n}}d",
       "headlineUnits": "units",
       "filtering": "filtering · click to clear",
@@ -433,6 +432,7 @@
         "sizesAtRisk": "Sizes at risk"
       },
       "inProduction": "{{n}} in production",
+      "openPipeline": "Open in production pipeline",
       "filterCategory": "Category",
       "categoryAll": "All categories",
       "sortBy": "Sort by",
@@ -440,8 +440,7 @@
         "default": "Sort: Default",
         "best": "Best seller",
         "newest": "What’s new",
-        "revenue": "Top revenue",
-        "cancels": "Most cancelled"
+        "revenue": "Top revenue"
       },
       "discontinuedBadge": "disabled",
       "notLinkedBadge": "not linked in ERP",
