@@ -11,7 +11,7 @@ import { getReadUrls, uploadPhoto } from '@/api/storage';
 import { getFabric, getStyle, type SampleApprovalStatus, type SampleApproveStyleBody } from '@/api/styles';
 import { Select } from '@/components/ui/select';
 import type { Fabric } from '@/api/types';
-import { styleFabricColour, UOM_SHORT } from '@/lib/fabric';
+import { styleFabricColour } from '@/lib/fabric';
 
 const ABSOLUTE = /^(https?:|data:|blob:)/i;
 
@@ -342,7 +342,7 @@ export default function SampleApproveDialog({
                   aria-invalid={fabricMissing}
                 />
                 <span className="pointer-events-none absolute right-2.5 top-1/2 -translate-y-1/2 text-xs text-[var(--color-muted-foreground)]">
-                  {fabric.unitOfMeasure ? UOM_SHORT[fabric.unitOfMeasure] : ''}
+                  m
                 </span>
               </div>
             </div>

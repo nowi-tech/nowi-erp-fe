@@ -1,8 +1,7 @@
 import { useTranslation } from 'react-i18next';
 import { Input } from '@/components/ui/input';
 import type { BatchFabric, ProductionBatch } from '@/api/production';
-import { fmtQty, UOM_SHORT } from '@/lib/fabric';
-import type { FabricUnitOfMeasure } from '@/api/types';
+import { fmtQty, fmtStockAndMetres } from '@/lib/fabric';
 
 /** A typed fabric-used value, remembered with the estimate it replaced. */
 export type FabricUsedEdit = { value: string; forEstimate: number } | null;
@@ -42,7 +41,6 @@ export default function FabricUsedField({
   onChange: (v: FabricUsedEdit) => void;
 }) {
   const { t } = useTranslation();
-  const u = fabric.unit ? UOM_SHORT[fabric.unit as FabricUnitOfMeasure] ?? fabric.unit : '';
   return (
     <div className="mt-4 rounded-[var(--radius-md)] border border-[var(--color-border)] bg-[var(--color-surface-2)] p-3">
       <label className="mb-1 block text-xs font-medium">
@@ -63,13 +61,13 @@ export default function FabricUsedField({
           value={fabricUsedValue(value, estimate)}
           onChange={(e) => onChange({ value: e.target.value, forEstimate: estimate })}
         />
-        <span className="text-sm">{u}</span>
+        <span className="text-sm">m</span>
       </div>
       <p className="mt-1 text-[11px] text-[var(--color-muted-foreground)]">
         {t('admin.production.fabricUsed.hint', {
           defaultValue: 'Estimate {{estimate}} · issued to lot {{issued}}',
-          estimate: fmtQty(estimate, fabric.unit),
-          issued: fmtQty(fabric.issued, fabric.unit),
+          estimate: fmtQty(estimate, 'meter'),
+          issued: fmtStockAndMetres(fabric.issued, fabric.unit),
         })}
       </p>
     </div>

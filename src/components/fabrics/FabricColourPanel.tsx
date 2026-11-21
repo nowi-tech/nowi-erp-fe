@@ -16,7 +16,7 @@ import type {
   FabricOrderStatus,
   FabricStockActivity,
 } from '@/api/types';
-import { daysOfCover, fmtQty, OPEN_ORDER_STATUSES, ORDER_STATUS_LABEL, poLabel, PURPOSE_LABEL } from '@/lib/fabric';
+import { daysOfCover, fmtQty, fmtStockAndMetres, OPEN_ORDER_STATUSES, ORDER_STATUS_LABEL, poLabel, PURPOSE_LABEL } from '@/lib/fabric';
 
 export type ActivityLinks = { lot: boolean; style: boolean };
 
@@ -439,7 +439,7 @@ function toTimelineItem(
   } else if (a.usedQuantity != null) {
     label = t('admin.fabricActivity.used', {
       defaultValue: 'Used {{used}} · {{colour}}',
-      used: fmtQty(a.usedQuantity, unit),
+      used: fmtStockAndMetres(a.usedQuantity, unit),
       colour,
     });
     chips = [

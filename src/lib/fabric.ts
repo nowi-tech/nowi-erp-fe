@@ -13,6 +13,14 @@ export function fmtQty(n: number, unit?: string | null): string {
   return `${v.toLocaleString('en-IN')}${u ? ` ${u}` : ''}`;
 }
 
+/** Fabric usage is always entered in metres; kg-stocked fabric converts at this rate (BE `METRES_PER_KG`). */
+export const METRES_PER_KG = 5;
+
+/** Stock quantity, with its metre equivalent for kg fabric: "4 kg (20 m)". */
+export function fmtStockAndMetres(n: number, unit?: string | null): string {
+  return unit === 'kg' ? `${fmtQty(n, unit)} (${fmtQty(n * METRES_PER_KG, 'meter')})` : fmtQty(n, unit);
+}
+
 /** What planning lots are short of after stock and open orders; undefined when nothing is. */
 export function orderQtyForLots(c: FabricColour): number | undefined {
   const short = Math.round(((c.heldQuantity ?? 0) - (c.availableQuantity ?? 0) - (c.onOrderQuantity ?? 0)) * 100) / 100;

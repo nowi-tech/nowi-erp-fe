@@ -148,7 +148,7 @@ export default function DailyEntryDialog({
     changes.push(
       t('admin.production.fabricUsed.line', {
         defaultValue: 'Fabric used: {{qty}}',
-        qty: fmtQty(fabricUsedNum, base.fabric!.unit),
+        qty: fmtQty(fabricUsedNum, 'meter'),
       }),
     );
   }
