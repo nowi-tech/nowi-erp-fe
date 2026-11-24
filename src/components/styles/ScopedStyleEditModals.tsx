@@ -59,13 +59,6 @@ function readCategoryId(style: Style): number | null {
   return (style as unknown as { categoryId?: number }).categoryId ?? null;
 }
 
-/** Human suffix for the sample-fabric quantity input. */
-function uomLabel(u: Fabric['unitOfMeasure']): string {
-  if (u === 'kg') return 'kg';
-  if (u === 'oz') return 'oz';
-  return 'm';
-}
-
 /** Extract an API error message into a string. */
 function errMessage(e: unknown, fallback: string): string {
   const m =
@@ -606,7 +599,7 @@ export function BomEditModal({
               className="pointer-events-none absolute inset-y-0 right-3 flex items-center text-[12px] font-medium text-[var(--color-muted-foreground)]"
               aria-hidden
             >
-              {uomLabel(selectedFabric?.unitOfMeasure ?? null)}
+              m
             </span>
           </div>
         </div>

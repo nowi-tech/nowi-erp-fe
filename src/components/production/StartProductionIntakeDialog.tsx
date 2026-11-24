@@ -22,7 +22,6 @@ import { useQuickAddParty } from '@/components/shared/useQuickAddParty';
 import TailorPicker from '@/components/production/TailorPicker';
 import FabricPicker from '@/components/styles/intake/FabricPicker';
 import { listFabrics } from '@/api/styles';
-import { UOM_SHORT } from '@/lib/fabric';
 import { uploadPhoto } from '@/api/storage';
 import ImageUploadTile from '@/components/shared/ImageUploadTile';
 import ProductionTypeToggle from '@/components/production/ProductionTypeToggle';
@@ -333,10 +332,6 @@ export default function StartProductionIntakeDialog({
         extActiveSizes.length > 0);
 
   const fabricColourId = fabricPick?.fabricColourId ?? undefined;
-  const fabricUnit = (() => {
-    const u = fabrics.find((f) => f.id === fabricPick?.fabricId)?.unitOfMeasure;
-    return u ? UOM_SHORT[u] : '';
-  })();
   const canSendDirect = tailorId !== '' && fabricColourId != null && Number(fabricUsed) > 0;
   const fabricFields = (direct: boolean) => ({
     fabricColourId,
@@ -714,7 +709,7 @@ export default function StartProductionIntakeDialog({
             <div className="space-y-1.5">
               <Label>
                 {t('admin.production.intake.fabricUsed', { defaultValue: 'Fabric used' })}
-                {fabricUnit ? ` (${fabricUnit})` : ''}
+                {' (m)'}
               </Label>
               <Input
                 type="number"

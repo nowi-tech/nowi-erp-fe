@@ -16,6 +16,11 @@ export function fmtQty(n: number, unit?: string | null): string {
 /** Fabric usage is always entered in metres; kg-stocked fabric converts at this rate (BE `METRES_PER_KG`). */
 export const METRES_PER_KG = 5;
 
+/** Metres → the fabric's stock unit (mirrors BE `metresToStock`). */
+export function metresToStock(metres: number, unit?: string | null): number {
+  return unit === 'kg' ? Math.round((metres / METRES_PER_KG) * 100) / 100 : metres;
+}
+
 /** Stock quantity, with its metre equivalent for kg fabric: "4 kg (20 m)". */
 export function fmtStockAndMetres(n: number, unit?: string | null): string {
   return unit === 'kg' ? `${fmtQty(n, unit)} (${fmtQty(n * METRES_PER_KG, 'meter')})` : fmtQty(n, unit);

@@ -982,13 +982,6 @@ const StyleIntakeForm = forwardRef<StyleIntakeFormHandle, StyleIntakeFormProps>(
       </div>
     );
 
-    const uomLabel = (u: Fabric['unitOfMeasure']) => {
-      if (u === 'meter') return 'm';
-      if (u === 'kg') return 'kg';
-      if (u === 'oz') return 'oz';
-      return 'm';
-    };
-
     return (
       <>
         {/* Submission fork — create + sampling only (A/B/C). */}
@@ -1379,7 +1372,7 @@ const StyleIntakeForm = forwardRef<StyleIntakeFormHandle, StyleIntakeFormProps>(
                       className="pointer-events-none absolute inset-y-0 right-3 flex items-center text-[12px] font-medium text-[var(--color-muted-foreground)]"
                       aria-hidden
                     >
-                      {uomLabel(selectedFabric?.unitOfMeasure ?? null)}
+                      m
                     </span>
                   </div>
                 </div>

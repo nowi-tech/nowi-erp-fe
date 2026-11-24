@@ -612,11 +612,7 @@ export default function StyleWorkspace() {
             style.sampleFabricRequired != null && (
               <SpecRow
                 label="Sample fabric required"
-                value={`${style.sampleFabricRequired} ${
-                  style.fabric?.unitOfMeasure === 'meter'
-                    ? 'm'
-                    : (style.fabric?.unitOfMeasure ?? 'm')
-                }`}
+                value={`${style.sampleFabricRequired} m`}
               />
             )}
           {/* The source product URL captured at intake (drives reference-image
@@ -1734,11 +1730,7 @@ function BillOfMaterialsCard({
   const fabricName = style.fabric?.name ?? '—';
   const qty =
     style.sampleFabricRequired != null
-      ? `${style.sampleFabricRequired} ${
-          style.fabric?.unitOfMeasure === 'meter'
-            ? 'm'
-            : (style.fabric?.unitOfMeasure ?? 'm')
-        }`
+      ? `${style.sampleFabricRequired} m`
       : '—';
   return (
     <section className={cardClasses}>

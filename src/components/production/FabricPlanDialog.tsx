@@ -14,7 +14,7 @@ import {
   type ProductionBatch,
 } from '@/api/production';
 import type { Fabric } from '@/api/types';
-import { fmtQty, UOM_SHORT } from '@/lib/fabric';
+import { fmtQty, metresToStock } from '@/lib/fabric';
 import FabricCheckText from './FabricCheckText';
 
 // ponytail: preview uses the default; the saved lot shows the server check, which reads the setting.
@@ -78,8 +78,8 @@ export default function FabricPlanDialog({
 
   const fabric = fabrics.find((f) => f.id === fabricId);
   const colour = fabric?.colours?.find((c) => c.id === fabricColourId);
-  const uom = fabric?.unitOfMeasure ? UOM_SHORT[fabric.unitOfMeasure] : '';
-  const needed = Math.round((Number(estimate) || 0) * 100) / 100;
+  // The estimate is typed in metres; the check runs in stock units.
+  const needed = metresToStock(Math.round((Number(estimate) || 0) * 100) / 100, fabric?.unitOfMeasure);
 
   // Same rule as the server: free = stock less what OTHER planning lots hold.
   const preview: FabricPlanCheck | null = useMemo(() => {
@@ -192,7 +192,7 @@ export default function FabricPlanDialog({
               value={estimate}
               onChange={(e) => setEstimate(e.target.value)}
             />
-            <span className="text-sm">{uom}</span>
+            <span className="text-sm">m</span>
           </div>
         </div>
 
