@@ -18,6 +18,8 @@ export function printChallan(d: ProductionDispatch): void {
       <tr>
         <td class="c">${i + 1}</td>
         <td>${esc(it.name)}${it.batchNo ? ` <span class="dim">${esc(it.batchNo)}</span>` : ''}${
+          it.returnEntryNo ? ` <span class="dim">Return · ${esc(it.returnEntryNo)}</span>` : ''
+        }${
           it.brandName ? `<br/><span class="dim">${esc(it.brandName)}</span>` : ''
         }</td>
         <td class="mono">${esc(it.sku)}</td>

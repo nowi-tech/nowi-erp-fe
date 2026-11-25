@@ -138,6 +138,11 @@ export default function AcceptChallanDialog({
                         {it.batchNo}
                       </div>
                     )}
+                    {it.returnEntryNo && (
+                      <div className="font-mono text-[11px] font-semibold text-amber-700">
+                        {t('admin.production.dispatch.returnOf', { defaultValue: 'Return · {{no}}', no: it.returnEntryNo })}
+                      </div>
+                    )}
                   </td>
                   <td className="py-2 pr-3 font-mono text-xs text-[var(--color-muted-foreground)]">
                     {it.sku}
