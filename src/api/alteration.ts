@@ -1,5 +1,6 @@
 import { apiClient } from './apiClient';
 import type { CreateBatchBody } from './production';
+import type { DispatchStatus, ProductionDispatch } from './productionDispatch';
 
 export type AlterationStatus = 'received' | 'in_alteration' | 'on_hold' | 'completed' | 'cancelled';
 export type AlterationSource = 'customer_return' | 'rto' | 'warehouse' | 'production' | 'other';
@@ -32,10 +33,25 @@ export interface AlterationEntry {
   styleRef: string | null;
   name: string | null;
   imageUrl: string | null;
-  sizes: { sku: string; size: string; qtyIn: number; qtyOut: number | null; qtyScrapped: number | null }[];
+  sizes: {
+    sku: string;
+    size: string;
+    qtyIn: number;
+    /** null until QC. */
+    qtyGood: number | null;
+    /** With the tailor; null before QC and once completed. */
+    qtyToTailor: number | null;
+    qtyOut: number | null;
+    qtyScrapped: number | null;
+    qtyDispatched: number;
+    qtyToDispatch: number;
+  }[];
   qtyIn: number;
+  qtyGood: number | null;
   qtyOut: number | null;
   qtyScrapped: number | null;
+  qtyToDispatch: number;
+  challans: { id: number; challanNo: string; status: DispatchStatus; qty: number }[];
   /** Why pieces were scrapped or missing at completion. */
   closeReason: string | null;
   receivedAt: string;
@@ -92,10 +108,25 @@ export function createAlteration(
     .then((r) => r.data);
 }
 
-export function sendToAlteration(id: number, tailorId: number): Promise<AlterationEntry> {
-  return apiClient
-    .post<AlterationEntry>(`/api/alteration/${id}/send`, { tailorId })
-    .then((r) => r.data);
+export interface QcLine {
+  sku: string;
+  qtyGood: number;
+  qtyAlteration: number;
+  qtyScrapped: number;
+}
+
+export function qcAlteration(
+  id: number,
+  body: { items: QcLine[]; tailorId?: number; reason?: string },
+): Promise<AlterationEntry> {
+  return apiClient.post<AlterationEntry>(`/api/alteration/${id}/qc`, body).then((r) => r.data);
+}
+
+export function dispatchReturn(
+  id: number,
+  body: { destWarehouseId: number; items: { sku: string; qty: number }[]; notes?: string },
+): Promise<ProductionDispatch> {
+  return apiClient.post<ProductionDispatch>(`/api/alteration/${id}/dispatch`, body).then((r) => r.data);
 }
 
 export function holdAlteration(id: number, holdReason: string): Promise<AlterationEntry> {
@@ -130,6 +161,8 @@ export interface AlterationTimelineEntry {
   from: AlterationStatus | null;
   to: AlterationStatus;
   holdReason: string | null;
+  qtyGood: number | null;
+  qtyAlteration: number | null;
   qtyOut: number | null;
   qtyScrapped: number | null;
   reason: string | null;

@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useNavigate, useSearchParams } from 'react-router-dom';
-import { Scissors } from 'lucide-react';
+import { Plus } from 'lucide-react';
 import {
   QueueTabs,
   StyleQueueTable,
@@ -22,7 +22,8 @@ import { useDebounced } from '@/lib/useDebounced';
 import StartProductionIntakeDialog from '@/components/production/StartProductionIntakeDialog';
 import ReasonDialog from '@/components/production/ReasonDialog';
 import CompleteAlterationDialog from '@/components/alteration/CompleteAlterationDialog';
-import SendAlterationDialog from '@/components/alteration/SendAlterationDialog';
+import QcAlterationDialog from '@/components/alteration/QcAlterationDialog';
+import DispatchReturnDialog from '@/components/alteration/DispatchReturnDialog';
 import { useAuth } from '@/context/auth';
 import { useAlterationLabels } from '@/lib/alteration';
 import { hasAnyRole, ALTERATION_WRITE_ROLES } from '@/lib/userRoles';
@@ -35,10 +36,12 @@ import {
   cancelAlteration,
   completeAlteration,
   createAlteration,
+  dispatchReturn,
+  getAlteration,
   holdAlteration,
   listAlteration,
+  qcAlteration,
   resumeAlteration,
-  sendToAlteration,
   type AlterationChannel,
   type AlterationEntry,
   type AlterationSource,
@@ -128,7 +131,7 @@ export default function Alteration() {
       })
       .catch(() => {
         if (reqRef.current === my) {
-          toast.show(t('admin.alteration.loadFailed', { defaultValue: "Couldn't load alterations." }), 'error');
+          toast.show(t('admin.alteration.loadFailed', { defaultValue: "Couldn't load returns." }), 'error');
         }
       })
       .finally(() => {
@@ -193,7 +196,10 @@ export default function Alteration() {
   };
 
   // ── row actions ──────────────────────────────────────────────────
-  type Pending = { kind: 'send' | 'complete' | 'scrap' | 'hold' | 'resume' | 'cancel'; entry: AlterationEntry };
+  type Pending = {
+    kind: 'qc' | 'dispatch' | 'complete' | 'scrap' | 'hold' | 'resume' | 'cancel';
+    entry: AlterationEntry;
+  };
   const [pending, setPending] = useState<Pending | null>(null);
   const open = (kind: Pending['kind'], entry: AlterationEntry) => setPending({ kind, entry });
   const target = (kind: Pending['kind']) => (pending?.kind === kind ? pending.entry : null);
@@ -219,9 +225,23 @@ export default function Alteration() {
       .finally(() => setBusy(false));
   };
 
+  const onDispatch = (e: AlterationEntry, body: Parameters<typeof dispatchReturn>[1]) => {
+    setBusy(true);
+    dispatchReturn(e.id, body)
+      .then(async (c) => {
+        setPending(null);
+        toast.show(t('admin.alteration.dispatched', { defaultValue: '{{no}} sent to the warehouse.', no: c.challanNo }));
+        // Patch the one row so a long scrolled list keeps its place.
+        const { entry } = await getAlteration(e.id);
+        setRows((prev) => prev.map((r) => (r.id === entry.id ? entry : r)));
+      })
+      .catch((err) => fail(err, t('admin.alteration.actionFailed', { defaultValue: "Couldn't update it." })))
+      .finally(() => setBusy(false));
+  };
+
   const openEntry = (e: AlterationEntry) =>
-    navigate(`/admin/returns/alteration/${e.id}`, {
-      state: { from: `/admin/returns/alteration?${searchParams}` },
+    navigate(`/admin/returns/${e.id}`, {
+      state: { from: `/admin/returns?${searchParams}` },
     });
 
   const columns: QueueColumn<AlterationEntry>[] = [
@@ -290,18 +310,32 @@ export default function Alteration() {
     },
     {
       key: 'sizes',
-      width: '150px',
+      width: '180px',
       header: t('admin.alteration.sizes', { defaultValue: 'Sizes' }),
       cell: (e) => (
-        <span className="text-xs">
-          {e.sizes
-            .map((s) =>
-              s.qtyOut != null
-                ? `${s.size} ${s.qtyOut}/${s.qtyIn}${s.qtyScrapped ? ` (${t('admin.alteration.scrShort', { defaultValue: '{{n}} scr', n: s.qtyScrapped })})` : ''}`
-                : `${s.size} ${s.qtyIn}`,
-            )
-            .join(' · ')}
-        </span>
+        <div className="space-y-1">
+          {e.sizes.map((s) => {
+            const parts = [
+              s.qtyGood != null && t('admin.alteration.goodShort', { defaultValue: '{{n}} good', n: s.qtyGood }),
+              s.qtyToTailor && t('admin.alteration.atTailorShort', { defaultValue: '{{n}} at tailor', n: s.qtyToTailor }),
+              s.qtyOut && t('admin.alteration.backShort', { defaultValue: '{{n}} back', n: s.qtyOut }),
+              s.qtyScrapped && t('admin.alteration.scrShort', { defaultValue: '{{n}} scr', n: s.qtyScrapped }),
+            ].filter(Boolean);
+            return (
+              <div key={s.sku} className="text-xs">
+                <span className="font-semibold">
+                  {s.size} {s.qtyIn}
+                </span>
+                {parts.length > 0 && <span className="text-[var(--color-muted-foreground)]">: {parts.join(', ')}</span>}
+              </div>
+            );
+          })}
+          {e.qtyToDispatch > 0 && (
+            <div className="text-[11px] font-semibold text-[var(--color-primary)]">
+              {t('admin.alteration.toDispatch', { defaultValue: '{{n}} to dispatch', n: e.qtyToDispatch })}
+            </div>
+          )}
+        </div>
       ),
     },
     // The hold reason while held (amber); why pieces were scrapped or missing once completed.
@@ -344,8 +378,8 @@ export default function Alteration() {
           <Button variant="destructive" size="sm" disabled={busy} onClick={() => open('cancel', e)}>
             {t('common.cancel', { defaultValue: 'Cancel' })}
           </Button>
-          <Button size="sm" disabled={busy} onClick={() => open('send', e)}>
-            {t('admin.alteration.send', { defaultValue: 'Send' })}
+          <Button size="sm" disabled={busy} onClick={() => open('qc', e)}>
+            {t('admin.alteration.qc', { defaultValue: 'QC' })}
           </Button>
         </>
       )}
@@ -359,6 +393,11 @@ export default function Alteration() {
           </Button>
         </>
       )}
+      {e.qtyToDispatch > 0 && (
+        <Button size="sm" disabled={busy} onClick={() => open('dispatch', e)}>
+          {t('admin.production.dispatch.build.confirm', { defaultValue: 'Dispatch' })}
+        </Button>
+      )}
     </div>
   );
 
@@ -368,7 +407,7 @@ export default function Alteration() {
     <div className="space-y-6">
       <header className="flex flex-wrap items-center justify-between gap-3">
         <h1 className="text-2xl font-bold tracking-tight">
-          {t('admin.alteration.title', { defaultValue: 'Alteration' })}
+          {t('admin.alteration.title', { defaultValue: 'Returns' })}
         </h1>
         <div className="flex flex-wrap items-center gap-2">
           <FilterRail>
@@ -401,8 +440,8 @@ export default function Alteration() {
           </FilterRail>
           {canWrite && (
             <Button size="sm" onClick={openIntake}>
-              <Scissors size={14} />
-              <span className="ml-1">{t('admin.alteration.startCta', { defaultValue: 'Start alteration' })}</span>
+              <Plus size={14} />
+              <span className="ml-1">{t('admin.alteration.addReturn', { defaultValue: 'Add return' })}</span>
             </Button>
           )}
         </div>
@@ -432,7 +471,7 @@ export default function Alteration() {
         loadingLabel={t('common.loading', { defaultValue: 'Loading…' })}
         emptyLabel={t('admin.alteration.empty', { defaultValue: 'Nothing here.' })}
         actionsWidth="260px"
-        renderActions={canWrite && (tab === 'received' || tab === 'in_alteration') ? actions : undefined}
+        renderActions={canWrite && tab !== 'cancelled' ? actions : undefined}
       />
 
       {/* Hidden mid-reload: the old row count would be the wrong offset for the new query. */}
@@ -446,7 +485,7 @@ export default function Alteration() {
 
       <StartProductionIntakeDialog
         purpose="alteration"
-        title={t('admin.alteration.startCta', { defaultValue: 'Start alteration' })}
+        title={t('admin.alteration.addReturn', { defaultValue: 'Add return' })}
         renderFooter={({ canSubmit, confirm }) => (
           <>
             <Button variant="outline" size="sm" disabled={busy} onClick={() => setIntakeOpen(false)}>
@@ -501,19 +540,25 @@ export default function Alteration() {
         </div>
       </StartProductionIntakeDialog>
 
-      <SendAlterationDialog
-        entry={target('send')}
+      <QcAlterationDialog
+        entry={target('qc')}
         busy={busy}
         onClose={close}
-        onConfirm={(tailorId) => {
-          const e = target('send');
+        onConfirm={(body) => {
+          const e = target('qc');
           if (e) {
-            runAction(
-              e,
-              sendToAlteration(e.id, tailorId),
-              t('admin.alteration.sent', { defaultValue: '{{no}} sent to alteration.', no: e.entryNo }),
-            );
+            runAction(e, qcAlteration(e.id, body), t('admin.alteration.qcDone', { defaultValue: '{{no}} QC saved.', no: e.entryNo }));
           }
+        }}
+      />
+
+      <DispatchReturnDialog
+        entry={target('dispatch')}
+        busy={busy}
+        onClose={close}
+        onConfirm={(body) => {
+          const e = target('dispatch');
+          if (e) onDispatch(e, body);
         }}
       />
 

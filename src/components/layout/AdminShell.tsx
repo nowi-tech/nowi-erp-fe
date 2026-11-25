@@ -133,7 +133,7 @@ const NAV_SECTIONS: NavSection[] = [
     id: 'returns',
     titleKey: 'admin.nav.sections.returns',
     items: [
-      { to: '/admin/returns/alteration', icon: <Undo2 size={18} />, labelKey: 'admin.nav.alteration', roles: [...ALTERATION_READ_ROLES] },
+      { to: '/admin/returns', icon: <Undo2 size={18} />, labelKey: 'admin.nav.alteration', roles: [...ALTERATION_READ_ROLES] },
     ],
   },
   {

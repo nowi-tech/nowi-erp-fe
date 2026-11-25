@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { useLocation, useNavigate, useParams } from 'react-router-dom';
+import { Link, useLocation, useNavigate, useParams } from 'react-router-dom';
 import { ArrowLeft } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -31,7 +31,7 @@ export default function AlterationDetail() {
   const navigate = useNavigate();
   const location = useLocation();
   // The list as the user left it; a deep link has no state.
-  const backTo = (location.state as { from?: string } | null)?.from ?? '/admin/returns/alteration';
+  const backTo = (location.state as { from?: string } | null)?.from ?? '/admin/returns';
   const { statusLabel, sourceLabel, channelLabel } = useAlterationLabels();
   const [data, setData] = useState<{ entry: AlterationEntry; timeline: AlterationTimelineEntry[] } | null>(
     null,
@@ -99,6 +99,21 @@ export default function AlterationDetail() {
 
   const stepLabel = (s: AlterationTimelineEntry) => {
     if (s.from == null) return t('admin.alteration.step.received', { defaultValue: 'Received' });
+    if (s.from === 'received' && s.qtyGood != null) {
+      return s.qtyAlteration
+        ? t('admin.alteration.step.qcAltered', {
+            defaultValue: 'QC · {{good}} good, {{alt}} to {{tailor}}, {{scr}} scrapped',
+            good: s.qtyGood,
+            alt: s.qtyAlteration,
+            scr: s.qtyScrapped ?? 0,
+            tailor: e.tailorName ?? t('admin.alteration.tailor', { defaultValue: 'Tailor' }),
+          })
+        : t('admin.alteration.step.qc', {
+            defaultValue: 'QC · {{good}} good, {{scr}} scrapped',
+            good: s.qtyGood,
+            scr: s.qtyScrapped ?? 0,
+          });
+    }
     if (s.to === 'in_alteration' && s.from === 'received') {
       return t('admin.alteration.step.sent', {
         defaultValue: 'Sent to {{tailor}}',
@@ -113,12 +128,11 @@ export default function AlterationDetail() {
             defaultValue: 'Completed · {{n}} altered, {{scr}} scrapped of {{of}}',
             n: s.qtyOut ?? 0,
             scr: s.qtyScrapped,
-            of: e.qtyIn,
+            of: (s.qtyOut ?? 0) + s.qtyScrapped,
           })
         : t('admin.alteration.step.completed', {
-            defaultValue: 'Completed · {{n}} of {{of}} altered',
+            defaultValue: 'Completed · {{n}} altered',
             n: s.qtyOut ?? 0,
-            of: e.qtyIn,
           });
     }
     return statusLabel(s.to);
@@ -191,10 +205,16 @@ export default function AlterationDetail() {
                     {t('admin.alteration.in', { defaultValue: 'In' })}
                   </th>
                   <th className="py-2 pr-3 text-right font-semibold">
+                    {t('admin.alteration.good', { defaultValue: 'Good' })}
+                  </th>
+                  <th className="py-2 pr-3 text-right font-semibold">
                     {t('admin.alteration.altered', { defaultValue: 'Altered' })}
                   </th>
-                  <th className="py-2 text-right font-semibold">
+                  <th className="py-2 pr-3 text-right font-semibold">
                     {t('admin.alteration.scrapped', { defaultValue: 'Scrapped' })}
+                  </th>
+                  <th className="py-2 text-right font-semibold">
+                    {t('admin.alteration.dispatchedCol', { defaultValue: 'Dispatched' })}
                   </th>
                 </tr>
               </thead>
@@ -204,8 +224,10 @@ export default function AlterationDetail() {
                     <td className="py-2 pr-3 font-semibold">{s.size}</td>
                     <td className="py-2 pr-3 font-mono text-xs text-[var(--color-muted-foreground)]">{s.sku}</td>
                     <td className="py-2 pr-3 text-right">{s.qtyIn}</td>
+                    <td className="py-2 pr-3 text-right">{s.qtyGood ?? '—'}</td>
                     <td className="py-2 pr-3 text-right">{s.qtyOut ?? '—'}</td>
-                    <td className="py-2 text-right">{s.qtyScrapped ?? '—'}</td>
+                    <td className="py-2 pr-3 text-right">{s.qtyScrapped ?? '—'}</td>
+                    <td className="py-2 text-right">{s.qtyDispatched || '—'}</td>
                   </tr>
                 ))}
               </tbody>
@@ -213,6 +235,38 @@ export default function AlterationDetail() {
           </CardContent>
         </Card>
       </div>
+
+      {e.challans.length > 0 && (
+        <Card>
+          <CardHeader>
+            <CardTitle>{t('admin.alteration.challans', { defaultValue: 'Challans' })}</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <ul className="space-y-2 text-sm">
+              {e.challans.map((c) => (
+                <li key={c.id} className="flex flex-wrap items-center gap-2">
+                  <Link
+                    to={`/admin/dispatches?q=${encodeURIComponent(c.challanNo)}`}
+                    className="font-mono text-[var(--color-primary)] hover:underline"
+                  >
+                    {c.challanNo}
+                  </Link>
+                  <Badge variant="outline">
+                    {c.status === 'sent'
+                      ? t('admin.production.dispatch.status.sent', { defaultValue: 'Awaiting' })
+                      : c.status === 'received'
+                        ? t('admin.production.dispatch.status.received', { defaultValue: 'Received' })
+                        : t('admin.production.dispatch.status.cancelled', { defaultValue: 'Cancelled' })}
+                  </Badge>
+                  <span className="text-[var(--color-muted-foreground)]">
+                    {t('admin.alteration.pieces', { defaultValue: '{{n}} pieces', n: c.qty })}
+                  </span>
+                </li>
+              ))}
+            </ul>
+          </CardContent>
+        </Card>
+      )}
 
       <Card>
         <CardHeader>
