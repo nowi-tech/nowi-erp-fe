@@ -9,6 +9,7 @@ import {
   TrendingUp,
   LineChart,
   HeartPulse,
+  Warehouse,
   Factory,
   LogOut,
   Inbox,
@@ -126,6 +127,7 @@ const NAV_SECTIONS: NavSection[] = [
       // ponytail: empty roles = hidden from all (roles.some(...) is false).
       { to: '/admin/production-kpis', icon: <BarChart3 size={18} />, labelKey: 'admin.nav.productionKpis', roles: [] },
       { to: '/admin/sales-kpis', icon: <TrendingUp size={18} />, labelKey: 'admin.nav.salesKpis', roles: ['admin', 'viewer'] },
+      { to: '/admin/inventory-kpis', icon: <Warehouse size={18} />, labelKey: 'admin.nav.inventoryKpis', roles: ['admin', 'viewer'] },
       { to: '/admin/analytics/fulfilment', icon: <LineChart size={18} />, labelKey: 'admin.nav.analyticsFulfilment', roles: ['admin', 'viewer'] },
     ],
   },
