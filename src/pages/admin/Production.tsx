@@ -310,7 +310,7 @@ export default function Production() {
       includeCompleted: true,
       ...entryWindow(f.from, f.to),
     });
-    if (kpiReqRef.current !== my) return; // a newer reply already landed
+    if (kpiReqRef.current !== my) return; // a newer count request was sent since
     setKpis(res.kpis);
     setTabCounts(res.kpis.tabCounts);
   }, []);
@@ -369,6 +369,7 @@ export default function Production() {
     setError(false);
     setLoadMoreError(false);
     const my = ++reqRef.current;
+    const kpiTicket = ++kpiReqRef.current; // numbered when sent, so a later count refresh wins
     try {
       const d = await fetchPage(0);
       if (reqRef.current !== my) return;
@@ -376,8 +377,7 @@ export default function Production() {
       setBatches(d.batches);
       setLoaded(d.raw);
       setTotal(d.total);
-      if (d.kpis) {
-        kpiReqRef.current++; // outdates any KPI-only refresh still in flight
+      if (d.kpis && kpiReqRef.current === kpiTicket) {
         setKpis(d.kpis);
         setTabCounts(d.kpis.tabCounts); // only the LIST response carries filtered counts
       }
