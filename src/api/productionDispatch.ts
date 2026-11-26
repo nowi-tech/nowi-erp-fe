@@ -23,6 +23,8 @@ export interface DispatchItemRow {
   mismatchFlagged: boolean;
   /** Units already GRN'd into EasyEcom; null = line not synced. */
   qtyPushed: number | null;
+  /** Return entry no. when this line ships returned goods. */
+  returnEntryNo: string | null;
 }
 
 export type EasyecomGrnStatus = 'pending' | 'sending' | 'queued' | 'synced' | 'failed' | 'needs_check';
@@ -46,6 +48,8 @@ export interface ProductionDispatch {
   hasMismatch: boolean;
   /** EasyEcom auto-GRN; null = this challan doesn't sync. */
   easyecomGrn: { status: EasyecomGrnStatus; message: string | null } | null;
+  /** Carries returned goods, not production. */
+  isReturn: boolean;
   items: DispatchItemRow[];
 }
 

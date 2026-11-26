@@ -361,7 +361,7 @@
         "returns": "Returns",
         "administration": "Administration"
       },
-      "alteration": "Alteration",
+      "alteration": "Returns",
       "production": "Production",
       "productionPipeline": "Production",
       "grn": "GRN",

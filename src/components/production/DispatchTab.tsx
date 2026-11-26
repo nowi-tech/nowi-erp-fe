@@ -1,9 +1,10 @@
 import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Link } from 'react-router-dom';
+import { Link, useSearchParams } from 'react-router-dom';
 import { Capacitor } from '@capacitor/core';
 import { AlertTriangle, ChevronRight, Printer } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { Badge } from '@/components/ui/badge';
 import { SearchInput } from '@/components/ui/search-input';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useToast } from '@/components/ui/toast';
@@ -107,7 +108,9 @@ export default function DispatchTab({
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);
   const [statusFilter, setStatusFilter] = useState<DispatchStatus | ''>('');
-  const [search, setSearch] = useState('');
+  const [searchParams] = useSearchParams();
+  // ?q= seeds the search, e.g. a challan link from a return.
+  const [search, setSearch] = useState(() => searchParams.get('q') ?? '');
   const debouncedSearch = useDebounced(search.trim(), 300);
   const [expanded, setExpanded] = useState<Record<number, boolean>>({});
   const [acceptTarget, setAcceptTarget] = useState<ProductionDispatch | null>(null);
@@ -318,6 +321,11 @@ export default function DispatchTab({
                   <div className="w-28 shrink-0">
                     <div className="font-mono text-xs font-semibold">{d.challanNo}</div>
                     <div className="text-[11px] text-[var(--color-muted-foreground)]">{fmtDate(d.dispatchedAt)}</div>
+                    {d.isReturn && (
+                      <Badge variant="rework" className="mt-1">
+                        {t('admin.production.dispatch.return', { defaultValue: 'Return' })}
+                      </Badge>
+                    )}
                   </div>
                   <div className="flex shrink-0 -space-x-2">
                     {groups.slice(0, 3).map((g) => (
@@ -423,6 +431,11 @@ export default function DispatchTab({
                             )}
                             <div className="flex flex-wrap gap-x-2 text-[11px] text-[var(--color-muted-foreground)]">
                               {g.head.batchNo && <span className="font-mono">{g.head.batchNo}</span>}
+                              {g.head.returnEntryNo && (
+                                <span className="font-mono font-semibold text-amber-700">
+                                  {t('admin.production.dispatch.returnOf', { defaultValue: 'Return · {{no}}', no: g.head.returnEntryNo })}
+                                </span>
+                              )}
                               {(g.head.styleRef ?? g.head.styleKey) && (
                                 <span className="font-mono">{g.head.styleRef ?? g.head.styleKey}</span>
                               )}

@@ -8,6 +8,8 @@ import type { AlterationEntry } from '@/api/alteration';
 
 type Line = { altered: number; scrapped: number };
 
+const sentOf = (s: AlterationEntry['sizes'][number]) => s.qtyToTailor ?? 0;
+
 /** Per-size pieces altered and scrapped. `scrap` starts with every piece scrapped. */
 export default function CompleteAlterationDialog({
   entry,
@@ -32,7 +34,7 @@ export default function CompleteAlterationDialog({
       Object.fromEntries(
         entry.sizes.map((s) => [
           s.sku,
-          mode === 'scrap' ? { altered: 0, scrapped: s.qtyIn } : { altered: s.qtyIn, scrapped: 0 },
+          mode === 'scrap' ? { altered: 0, scrapped: sentOf(s) } : { altered: sentOf(s), scrapped: 0 },
         ]),
       ),
     );
@@ -42,7 +44,8 @@ export default function CompleteAlterationDialog({
   // Each field is capped by what the other leaves of the pieces sent.
   const set = (sku: string, field: keyof Line, raw: string) =>
     setLines((prev) => {
-      const sent = entry?.sizes.find((s) => s.sku === sku)?.qtyIn ?? 0;
+      const size = entry?.sizes.find((s) => s.sku === sku);
+      const sent = size ? sentOf(size) : 0;
       const cur = prev[sku] ?? { altered: 0, scrapped: 0 };
       const other = field === 'altered' ? cur.scrapped : cur.altered;
       const v = Math.min(sent - other, Math.max(0, Number.parseInt(raw, 10) || 0));
@@ -50,7 +53,8 @@ export default function CompleteAlterationDialog({
     });
 
   const altered = Object.values(lines).reduce((a, l) => a + l.altered, 0);
-  const needsReason = entry != null && altered < entry.qtyIn;
+  const sizes = (entry?.sizes ?? []).filter((s) => sentOf(s) > 0);
+  const needsReason = altered < sizes.reduce((a, s) => a + sentOf(s), 0);
   const valid = !needsReason || reason.trim().length >= 3;
   const qtyInput = (sku: string, field: keyof Line, size: string) => (
     <Input
@@ -120,10 +124,10 @@ export default function CompleteAlterationDialog({
               </tr>
             </thead>
             <tbody>
-              {entry.sizes.map((s) => (
+              {sizes.map((s) => (
                 <tr key={s.sku} className="border-b border-[var(--color-border)]/60">
                   <td className="py-2 pr-6 font-semibold">{s.size}</td>
-                  <td className="py-2 pr-6 text-right">{s.qtyIn}</td>
+                  <td className="py-2 pr-6 text-right">{sentOf(s)}</td>
                   <td className="py-2 pr-4">{qtyInput(s.sku, 'altered', s.size)}</td>
                   <td className="py-2">{qtyInput(s.sku, 'scrapped', s.size)}</td>
                 </tr>

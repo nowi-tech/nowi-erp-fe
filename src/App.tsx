@@ -1,6 +1,6 @@
 import { lazy, Suspense, useEffect, type ReactNode } from 'react';
 import { Skeleton } from '@/components/ui/skeleton';
-import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
+import { BrowserRouter, Routes, Route, Navigate, useLocation, useParams } from 'react-router-dom';
 import { AuthProvider } from './context/auth';
 import { AppToaster, ToastProvider } from './components/ui/toast';
 import ProtectedRoute from './components/ProtectedRouteV2';
@@ -132,6 +132,13 @@ function HomeRoute() {
 //   return <PlaceholderSection title={t(titleKey)} />;
 // }
 
+/** Old /admin/returns/alteration[/:id] links land on the same page, filters kept. */
+function OldReturnRedirect() {
+  const { id } = useParams();
+  const { search } = useLocation();
+  return <Navigate to={`/admin/returns${id ? `/${id}` : ''}${search}`} replace />;
+}
+
 function App() {
   // App mounted = React committed + the initial route's chunks resolved
   // far enough to render *something* (even just the Suspense fallback).
@@ -215,7 +222,7 @@ function App() {
                 // production_editor + warehouse_manager must be here too: this
                 // parent guard runs BEFORE any child's allowedRoles, so a
                 // child-only widening (production, inventory-health) never gets
-                // reached. warehouse_manager reaches the production and returns/alteration children.
+                // reached. warehouse_manager reaches the production and returns children.
                 <ProtectedRoute
                   allowedRoles={[
                     'admin',
@@ -303,8 +310,10 @@ function App() {
                   </ProtectedRoute>
                 }
               />
+              <Route path="returns/alteration" element={<OldReturnRedirect />} />
+              <Route path="returns/alteration/:id" element={<OldReturnRedirect />} />
               <Route
-                path="returns/alteration"
+                path="returns"
                 element={
                   <ProtectedRoute allowedRoles={[...ALTERATION_READ_ROLES]}>
                     <S>
@@ -314,7 +323,7 @@ function App() {
                 }
               />
               <Route
-                path="returns/alteration/:id"
+                path="returns/:id"
                 element={
                   <ProtectedRoute allowedRoles={[...ALTERATION_READ_ROLES]}>
                     <S>
