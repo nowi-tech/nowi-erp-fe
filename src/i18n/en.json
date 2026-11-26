@@ -548,21 +548,13 @@
       "combined": "Combined",
       "failed": "Could not load the summary."
     },
-    "home": {
-      "approvalCta": {
-        "title": "{{count}} styles awaiting your approval",
-        "subtitle": "Approval #1 — review intake checks and mint the Style #.",
-        "action": "Review",
-        "allCaughtUp": "No styles awaiting your approval — all caught up."
-      }
-    },
+    "home": {},
     "styles": {
       "title": "Sampling Old",
       "subtitle": "Every design in flight — submitted, in sampling, parked, or sent to production.",
       "newDesign": "New design submission",
       "newChinaImport": "New China Import intake",
       "attention": {
-        "awaitingApproval1": "{{n}} awaiting Approval #1",
         "awaitingApproval2": "{{n}} awaiting Approval #2",
         "readyForQc": "{{n}} ready for QC",
         "readyToDispatch": "{{n}} ready to dispatch"
@@ -620,8 +612,7 @@
         "genderCategory": "Gender · Category",
         "fabric": "Fabric",
         "reviewer": "Reviewer",
-        "age": "Age",
-        "queueNote": "Approve opens the Approval #1 checks. New designs go to sampling; colour & based-on skip to production."
+        "age": "Age"
       },
       "draft": "Draft",
       "source": {
@@ -786,7 +777,6 @@
         "withdrawConfirmBody": "This style has already passed Approval #1. Withdrawing pulls a committed design out of the pipeline and parks it. You can revive it later. Continue?",
         "sendToPd": "Send to PD",
         "revive": "Revive",
-        "approve": "Approve intake",
         "sampleApprove": "Approve sample",
         "startProduction": "Start production",
         "startCataloguing": "Start cataloguing",
@@ -827,20 +817,6 @@
         "inspiration": "Inspiration & references",
         "lastUpdated": "Updated {{when}}",
         "notFound": "Style not found."
-      },
-      "approval1": {
-        "dialogTitle": "Approve intake",
-        "dialogIntro": "Confirm the intake checks before approving this style.",
-        "priceOk": "Price OK",
-        "collectionFit": "Fits the collection (design fit)",
-        "note": "Note (optional)",
-        "notePlaceholder": "Anything worth recording about this approval…",
-        "confirm": "Approve",
-        "cancel": "Cancel",
-        "recordedTitle": "Intake approval (Approval #1)",
-        "checkYes": "Yes",
-        "checkNo": "No",
-        "checkUnset": "Not recorded"
       },
       "samplingSteps": {
         "in_progress_pattern_dev": "Pattern dev",
@@ -998,7 +974,7 @@
         }
       },
       "park": {
-        "approvedWarning": "This style has already passed Approval #1 — re-parking pulls a committed design out of the pipeline. Only admins and sampling leads can do this."
+        "approvedWarning": "This style is past sampling — parking pulls it out of the pipeline. Only admins can do this."
       }
     },
     "chinaImport": {
@@ -1526,7 +1502,6 @@
       "prevPage": "Previous page",
       "nextPage": "Next page",
       "actions": {
-        "approve": "Approve intake",
         "park": "Park",
         "approveSample": "Approve sample",
         "startCataloguing": "Start cataloguing",
@@ -1544,8 +1519,6 @@
         "other": "Other"
       },
       "toast": {
-        "approved": "Approved.",
-        "approveError": "Could not approve.",
         "parked": "Parked.",
         "parkError": "Could not park.",
         "statusSaved": "Stage updated.",

@@ -125,7 +125,6 @@ export interface StyleOptions {
 
 export interface StylesSummary {
   attention: {
-    awaitingApproval1: number;
     awaitingApproval2: number;
     readyForQc: number;
     readyToDispatch: number;
@@ -267,19 +266,6 @@ export async function hardDeleteStyle(styleId: number): Promise<void> {
 
 // ─── Style actions ────────────────────────────────────────────────────
 /**
- * Optional body for Approval #1 — the merchandiser's intake checks
- * (fabric feasible / price OK / collection fit) plus an optional note.
- * The BE auto-sets `samplingStatus = Pattern dev` on approval, so the
- * dialog no longer asks for an initial status.
- */
-export interface ApproveStyleBody {
-  approval1FabricFeasible?: boolean;
-  approval1PriceOk?: boolean;
-  approval1CollectionFit?: boolean;
-  approval1Note?: string;
-}
-
-/**
  * Optional body for Approval #2 — sample sign-off. Captures the
  * sample-verdict enum. Defaults to `approved_for_production`
  * server-side when omitted.
@@ -296,17 +282,6 @@ export interface SampleApproveStyleBody {
   /** Fabric the sample used and the colour it came from — deducted on sign-off. */
   fabricUsed?: number;
   fabricColourId?: number;
-}
-
-export async function approveStyle(
-  styleId: number,
-  body: ApproveStyleBody = {},
-): Promise<Style> {
-  const res = await apiClient.post<Style>(
-    `/api/styles/${styleId}/actions/approve`,
-    body,
-  );
-  return res.data;
 }
 
 export async function parkStyle(

@@ -145,7 +145,7 @@ export default function ParkDialog({
           <span>
             {t('admin.styles.park.approvedWarning', {
               defaultValue:
-                'This style has already passed Approval #1 — re-parking pulls a committed design out of the pipeline. Only admins and sampling leads can do this.',
+                'This style is past sampling — parking pulls it out of the pipeline. Only admins can do this.',
             })}
           </span>
         </div>

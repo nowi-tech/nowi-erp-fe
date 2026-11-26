@@ -33,7 +33,6 @@ import {
 // lands on the right tab. Anything unrecognised falls back to 'my_work'.
 const VALID_TABS: DashboardStyleTab[] = [
   'all',
-  'draft',
   'sampling',
   'cataloguing',
   'live',

@@ -13,7 +13,6 @@ import {
   ColourCell,
   ApproverOrPanelCell,
   AgeCell,
-  ApproveButton,
   GhostActionButton,
   PrimaryActionButton,
   RowChevron,
@@ -21,7 +20,6 @@ import {
   type QueueColumn,
 } from '@/components/styles/StyleQueueTable';
 import { useSignedUrls } from '@/hooks/useSignedUrls';
-import Approval1Dialog from '@/components/styles/Approval1Dialog';
 import ParkDialog from '@/components/styles/ParkDialog';
 import SampleApproveDialog from '@/components/styles/SampleApproveDialog';
 import { ConfirmDialog } from '@/components/ui/confirm-dialog';
@@ -32,7 +30,6 @@ import {
   CATALOGUER_WRITE_ROLES,
 } from '@/lib/userRoles';
 import {
-  approveStyle,
   listStyles,
   parkStyle,
   reviveStyle,
@@ -125,10 +122,6 @@ export default function StylesRegistry() {
   const [samplingStatus, setSamplingStatus] = useState<string>('');
   const [collections, setCollections] = useState<Collection[]>([]);
   const [collectionId, setCollectionId] = useState<string>('');
-  // Selected row for the Approval #1 modal — clicking the inline ✓
-  // opens the dialog with the row's gender + suggested pattern master.
-  const [approvalTarget, setApprovalTarget] = useState<Style | null>(null);
-  const [approvalBusy, setApprovalBusy] = useState(false);
   const [parkTarget, setParkTarget] = useState<Style | null>(null);
   const [parkBusy, setParkBusy] = useState(false);
   // Sample sign-off (Approval #2) — opens the shared verdict dialog.
@@ -214,13 +207,8 @@ export default function StylesRegistry() {
 
   const openCreateDesign = () => navigate('/styles/new');
 
-  // Inline row actions — Approve now opens the Approval #1 dialog so
-  // the approver explicitly ticks fabric / price / collection checks
-  // before the Style # is minted. Park / Revive remain one-click.
-  const onRowApprove = useCallback((s: Style) => setApprovalTarget(s), []);
   const onRowPark = useCallback((s: Style) => setParkTarget(s), []);
-  // Revive opens a confirmation first — it resets sampling state and re-enters
-  // Approval #1, so it shouldn't be a silent one-click.
+  // Revive opens a confirmation first — it resets sampling state.
   const onRowRevive = useCallback((s: Style) => setReviveTarget(s), []);
   const onRowSampleApprove = useCallback(
     (s: Style) => setSampleApproveTarget(s),
@@ -373,8 +361,6 @@ export default function StylesRegistry() {
   // cluster: Park then Approve. Buttons stop propagation internally.
   const renderActions = useCallback(
     (row: Style) => {
-      const canApprove =
-        row.lifecycle === 'draft' && hasAnyRole(user, APPROVER_ROLES);
       const canRevive =
         row.lifecycle === 'parked' && hasAnyRole(user, WRITE_ROLES);
       // Park only during sampling (draft / in_sampling) — no park once a
@@ -396,7 +382,6 @@ export default function StylesRegistry() {
         hasAnyRole(user, CATALOGUER_WRITE_ROLES);
 
       if (
-        !canApprove &&
         !canRevive &&
         !canPark &&
         !canSampleApprove &&
@@ -433,7 +418,6 @@ export default function StylesRegistry() {
               })}
             </PrimaryActionButton>
           )}
-          {canApprove && <ApproveButton onClick={() => onRowApprove(row)} />}
         </>
       );
     },
@@ -442,7 +426,6 @@ export default function StylesRegistry() {
     [
       user,
       t,
-      onRowApprove,
       onRowPark,
       onRowRevive,
       onRowSampleApprove,
@@ -538,10 +521,6 @@ export default function StylesRegistry() {
           onRowClick={(s) => navigate(`/styles/${s.styleId ?? s.id}`)}
           renderActions={renderActions}
           rowAccent={(row) => row.lifecycle === 'draft'}
-          footerNote={t('admin.styles.table.queueNote', {
-            defaultValue:
-              'Approve opens the Approval #1 checks. New designs go to sampling; colour & based-on skip to production.',
-          })}
         />
       </div>
 
@@ -562,7 +541,7 @@ export default function StylesRegistry() {
             : parkTarget?.workingName) ??
           null
         }
-        approved={parkTarget ? parkTarget.lifecycle !== 'draft' : false}
+        approved={parkTarget ? !['draft', 'in_sampling'].includes(parkTarget.lifecycle) : false}
         onClose={() => setParkTarget(null)}
         onConfirm={async (reason) => {
           if (!parkTarget) return;
@@ -580,32 +559,6 @@ export default function StylesRegistry() {
         }}
       />
 
-      {/* Approval #1 confirmation — same dialog the detail page uses.
-          All three intake checks must be ticked before Confirm enables. */}
-      <Approval1Dialog
-        open={approvalTarget !== null}
-        busy={approvalBusy}
-        gender={approvalTarget?.gender ?? null}
-        styleId={approvalTarget?.id ?? null}
-        onClose={() => setApprovalTarget(null)}
-        onConfirm={async (body) => {
-          if (!approvalTarget) return;
-          setApprovalBusy(true);
-          try {
-            await approveStyle(approvalTarget.id, body);
-            toast.show('Approved.', 'success');
-            setApprovalTarget(null);
-            void load();
-          } catch (e: unknown) {
-            const m =
-              (e as { response?: { data?: { message?: string | string[] } } })
-                ?.response?.data?.message ?? 'Could not approve.';
-            toast.show(Array.isArray(m) ? m.join(', ') : String(m), 'error');
-          } finally {
-            setApprovalBusy(false);
-          }
-        }}
-      />
 
       {/* Approve sample (Approval #2) — the shared verdict dialog (same as the
           dashboard + workspace). */}
