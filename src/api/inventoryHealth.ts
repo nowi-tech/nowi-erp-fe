@@ -41,6 +41,37 @@ export interface InventorySize {
   /** Raw daily units over the response window (aligned to response `trendDates`).
    *  Drives the per-size interactive trend sparkline. */
   trend: number[];
+  returns?: ReturnCounts;
+}
+
+/** Myntra delivered vs customer-returned units over the window; null rate = nothing delivered. */
+export interface ReturnCounts {
+  delivered: number;
+  returned: number;
+  returnRate: number | null;
+}
+
+export interface StyleRemark {
+  id: number;
+  body: string;
+  author: string;
+  createdAt: string;
+}
+
+export interface StyleFabric {
+  fabricName: string;
+  colourName: string;
+  unit: string | null;
+  perPiece: number;
+  /** Null when there is nothing to make. */
+  check: {
+    state: 'enough' | 'low' | 'short';
+    needed: number;
+    stock: number;
+    free: number;
+    onOrder: number;
+    nextExpectedDate: string | null;
+  } | null;
 }
 
 /** A style group — an expandable parent row (summary) over its at-risk `sizes`. */
@@ -97,6 +128,10 @@ export interface InventoryStyle {
    *  tab + badge. False when the style isn't linked to the ERP catalog. */
   isNew: boolean;
   sizes: InventorySize[];
+  returns?: ReturnCounts;
+  /** Page rows only: null = no lot with fabric + estimate on record. */
+  fabric?: StyleFabric | null;
+  latestRemark?: StyleRemark | null;
 }
 
 export interface InventoryKpis {
@@ -197,4 +232,45 @@ export function setStylePaused(styleKey: string, paused: boolean): Promise<void>
 /** Mark / unmark one product (by styleKey) as awaiting Myntra seller approval. */
 export function setStylePendingApproval(styleKey: string, pending: boolean): Promise<void> {
   return apiClient.post('/api/inventory-health/pending-approval', { styleKey, pending }).then(() => undefined);
+}
+
+export interface StyleDetails {
+  from: string;
+  to: string;
+  remarks: StyleRemark[];
+  sizes: { size: string; ordered: number; cancelled: number; rto: number; delivered: number; returned: number; returnRate: number | null }[];
+  reasons: { reason: string; group: 'fit' | 'looks' | 'quality' | 'other'; count: number }[];
+  /** Returns in the uploaded Returns report for this style; reasons cover only these. */
+  returnsReported: number;
+  /** The linked ERP style; null when the card isn't linked. */
+  erp: {
+    id: number;
+    styleId: string | null;
+    costPrice: number | null;
+    fabricName: string | null;
+    primaryColour: string | null;
+    sampleApprovedAt: string | null;
+    wentLiveAt: string | null;
+    family: { id: number; styleId: string | null; primaryColour: string | null; lifecycle: string }[];
+  } | null;
+}
+
+/** GET /api/inventory-health/style-details — the side panel. */
+export function getStyleDetails(
+  styleKey: string,
+  erpId: number | null,
+  from: string,
+  to: string,
+  inventory: InventoryView,
+): Promise<StyleDetails> {
+  return apiClient
+    .get<StyleDetails>('/api/inventory-health/style-details', {
+      params: { styleKey, erpId: erpId ?? undefined, from: from || undefined, to: to || undefined, inventory },
+    })
+    .then((r) => r.data);
+}
+
+/** POST /api/inventory-health/remarks — append-only. */
+export function addStyleRemark(styleKey: string, body: string): Promise<StyleRemark> {
+  return apiClient.post<StyleRemark>('/api/inventory-health/remarks', { styleKey, body }).then((r) => r.data);
 }
