@@ -212,3 +212,20 @@ export function refreshAllEasyEcom(): Promise<{ syncing: boolean }> {
     .post<{ syncing: boolean }>('/api/sales-kpis/refresh-all', {})
     .then((res) => res.data);
 }
+
+export interface ReturnsUploadResult {
+  returnsImported: number;
+  /** RTO rows and incomplete rows. */
+  rowsSkipped: number;
+  fromDay: string;
+  toDay: string;
+}
+
+/** POST /api/sales-kpis/returns-upload — stores each Myntra customer return and its reason. */
+export function uploadReturnsCsv(csv: string): Promise<ReturnsUploadResult> {
+  return apiClient
+    .post<ReturnsUploadResult>('/api/sales-kpis/returns-upload', csv, {
+      headers: { 'Content-Type': 'text/csv' },
+    })
+    .then((res) => res.data);
+}
