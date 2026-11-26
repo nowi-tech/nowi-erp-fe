@@ -286,6 +286,7 @@ export default function Production() {
     to: dateTo,
   };
 
+  const kpiReqRef = useRef(0);
   const loadKpis = useCallback(async () => {
     // Board-level figures live on the batches endpoint; `take: 1` because we
     // only want the KPI block, not another page of rows.
@@ -297,6 +298,7 @@ export default function Production() {
     // and before this carried the filters they left the chips on pre-mutation
     // numbers.
     const f = filtersRef.current;
+    const my = ++kpiReqRef.current;
     const res = await getBatches({
       take: 1,
       tab: f.tab === 'to_start' || f.tab === 'parked' ? undefined : f.tab,
@@ -308,6 +310,7 @@ export default function Production() {
       includeCompleted: true,
       ...entryWindow(f.from, f.to),
     });
+    if (kpiReqRef.current !== my) return; // a newer reply already landed
     setKpis(res.kpis);
     setTabCounts(res.kpis.tabCounts);
   }, []);
@@ -374,6 +377,7 @@ export default function Production() {
       setLoaded(d.raw);
       setTotal(d.total);
       if (d.kpis) {
+        kpiReqRef.current++; // outdates any KPI-only refresh still in flight
         setKpis(d.kpis);
         setTabCounts(d.kpis.tabCounts); // only the LIST response carries filtered counts
       }
