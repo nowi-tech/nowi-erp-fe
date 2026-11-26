@@ -13,7 +13,7 @@ shadcn/Radix primitives, Axios, React Router 7, react-i18next (en + hi). A
   `vite.config.ts` defines the **`@/` → `src/`** alias. `tsc -b` is part of
   `build`; `npm run typecheck` / `lint` (ESLint flat, **single quotes** for TS).
 - **No global state manager, no test runner** (still true). State = `useState`
-  + Axios + one auth context. `api/types.ts` is generated (`gen:api`).
+  + Axios + one auth context. `api/types.ts` is hand-written. A `gen:api` script exists but has not replaced it.
 
 ## Layout
 
