@@ -149,26 +149,15 @@ export interface BatchFabric {
 }
 
 export interface ProductionKpis {
-  /** status=planning — what the "Planning" tab lists. */
-  planningBatches: number;
-  /** Floor stages plus on hold — what the "Production" tab lists. */
-  inProductionBatches: number;
-  unitsInPipeline: number;
-  /** Distinct styles across open batches — the "Styles in flight" card. Two
-   *  batches of one style count once, so it is not the sum of the split below. */
-  stylesInPipeline: number;
-  /** Renders as the card sub-line "12 forecast · 4 style · 2 external". */
-  stylesByOrigin: { forecast: number; style: number; external: number };
-  unitsByOrigin: { forecast: number; style: number; external: number };
-  /** Open, not-yet-completed batches sat 7+ days in their CURRENT status — the
-   *  same threshold the board ambers in its "In status" column. */
-  stalledBatches: number;
-  stalledOldestDays: number | null;
-  /** Completed batches still holding units no challan has shipped. */
-  dueToDispatchBatches: number;
-  dueToDispatchUnits: number;
+  /** Open lots by where they are now; a held lot counts under the stage it paused from. */
+  pipeline: { units: number; lots: number };
+  /** Cutting, stitching and alteration. */
+  sewing: { units: number; lots: number };
+  finishing: { units: number; lots: number };
+  /** Planning lots whose fabric check says short. */
+  fabricShortLots: number;
   /** Net pieces entered per stage, and lots touched, on work dates inside the date window. */
-  entries: { cutting: number; stitching: number; finishing: number; lots: number };
+  entries: { cutting: number; stitching: number; finishing: number; lots: number; dispatched: number };
   /** Row count per board tab — the chips on the tab strip. */
   tabCounts: {
     planning: number;
