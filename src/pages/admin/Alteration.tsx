@@ -228,12 +228,13 @@ export default function Alteration() {
   const onDispatch = (e: AlterationEntry, body: Parameters<typeof dispatchReturn>[1]) => {
     setBusy(true);
     dispatchReturn(e.id, body)
-      .then(async (c) => {
+      .then((c) => {
         setPending(null);
         toast.show(t('admin.alteration.dispatched', { defaultValue: '{{no}} sent to the warehouse.', no: c.challanNo }));
-        // Patch the one row so a long scrolled list keeps its place.
-        const { entry } = await getAlteration(e.id);
-        setRows((prev) => prev.map((r) => (r.id === entry.id ? entry : r)));
+        // Patch the one row so a long scrolled list keeps its place; the challan exists either way.
+        getAlteration(e.id)
+          .then(({ entry }) => setRows((prev) => prev.map((r) => (r.id === entry.id ? entry : r))))
+          .catch(() => load());
       })
       .catch((err) => fail(err, t('admin.alteration.actionFailed', { defaultValue: "Couldn't update it." })))
       .finally(() => setBusy(false));
