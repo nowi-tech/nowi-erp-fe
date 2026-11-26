@@ -39,6 +39,7 @@ import {
   parkStyle,
   reviveStyle,
   sampleApproveStyle,
+  startDraft,
   patchStyle,
   listFabrics,
   colourGroup,
@@ -58,6 +59,7 @@ import type {
 import { useAuth } from '@/context/auth';
 import {
   APPROVER_ROLES,
+  ADMIN_ROLES,
   CATALOGUER_WRITE_ROLES,
   PD_WRITE_ROLES,
   STYLE_EDIT_ROLES,
@@ -372,6 +374,9 @@ export default function StyleWorkspace() {
     style.familyCode != null ||
     style.basedOnStyleId != null ||
     style.oldStyleId != null;
+  // Drafts only exist from before styles were minted on submit; the endpoint is admin-only.
+  const canStartDraft =
+    style.lifecycle === 'draft' && roles.some((r) => ADMIN_ROLES.includes(r));
   // Sample sign-off (Approval #2) is approver-only — the BE endpoint is
   // APPROVE-gated, so don't show the button to writers who would 403.
   const canSampleApprove =
@@ -897,6 +902,15 @@ export default function StyleWorkspace() {
               <span className="ml-1">
                 {t('admin.styles.workspace.addColour', 'Add colour')}
               </span>
+            </Button>
+          )}
+          {canStartDraft && (
+            <Button
+              size="sm"
+              disabled={busy !== null}
+              onClick={() => void doAction('approve', () => startDraft(style.id))}
+            >
+              {t('admin.styles.workspace.startDraft', { defaultValue: 'Start' })}
             </Button>
           )}
           {/* Approve sample (Approval #2) — primary action while in_sampling.

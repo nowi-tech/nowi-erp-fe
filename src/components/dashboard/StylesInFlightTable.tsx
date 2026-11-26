@@ -48,6 +48,7 @@ import {
   setMarketplaceListing,
   sampleApproveStyle,
   startCataloguing,
+  startDraft,
   type SamplingStatus,
   type GoLiveChannel,
   type SampleApproveStyleBody,
@@ -929,6 +930,31 @@ export default function StylesInFlightTable({
     row.source !== 'china_import' &&
     hasAnyRole(user, CATALOGUER_WRITE_ROLES);
 
+  // Drafts only exist from before styles were minted on submit; the endpoint is admin-only.
+  const canStartDraft = (row: DashboardStyleRow) =>
+    row.lifecycle === 'draft' && hasAnyRole(user, ADMIN_ROLES);
+
+  const startingDrafts = useRef(new Set<number>());
+  const doStartDraft = (row: DashboardStyleRow) => {
+    if (startingDrafts.current.has(row.id)) return; // a double-click would be refused as already started
+    startingDrafts.current.add(row.id);
+    startDraft(row.id)
+      .then(() => {
+        toast.show(t('dashboard.table.toast.draftStarted', { defaultValue: 'Style # assigned.' }), 'success');
+        afterAction();
+      })
+      .catch((e: unknown) => {
+        const m =
+          (e as { response?: { data?: { message?: string | string[] } } })
+            ?.response?.data?.message ??
+          t('dashboard.table.toast.actionError', {
+            defaultValue: 'Could not complete the action.',
+          });
+        toast.show(Array.isArray(m) ? m.join(', ') : String(m), 'error');
+      })
+      .finally(() => startingDrafts.current.delete(row.id));
+  };
+
   const doStartCataloguing = (row: DashboardStyleRow) => {
     startCataloguing(row.id)
       .then(() => {
@@ -958,6 +984,7 @@ export default function StylesInFlightTable({
   const renderRowActions = (row: DashboardStyleRow): ReactNode => {
     const park = canPark(row);
     const sampleApprove = canSampleApprove(row);
+    const startDraftRow = canStartDraft(row);
     const startCat = canStartCataloguing(row);
     const markEasyecom = canMarkEasyecom(row);
     const addListings = canAddListings(row);
@@ -974,6 +1001,7 @@ export default function StylesInFlightTable({
     if (
       !park &&
       !sampleApprove &&
+      !startDraftRow &&
       !startCat &&
       !markEasyecom &&
       !addListings &&
@@ -995,6 +1023,11 @@ export default function StylesInFlightTable({
           <GhostActionButton icon="park" onClick={() => setParkTarget(row)}>
             {t('dashboard.table.actions.park')}
           </GhostActionButton>
+        )}
+        {startDraftRow && (
+          <PrimaryActionButton onClick={() => doStartDraft(row)}>
+            {t('dashboard.table.actions.startDraft', { defaultValue: 'Start' })}
+          </PrimaryActionButton>
         )}
         {startCat && (
           <PrimaryActionButton onClick={() => doStartCataloguing(row)}>

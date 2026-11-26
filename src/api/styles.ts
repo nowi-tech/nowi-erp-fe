@@ -284,6 +284,12 @@ export interface SampleApproveStyleBody {
   fabricColourId?: number;
 }
 
+/** Mints the Style # and moves on a draft left from before styles were minted on submit. Admin only. */
+export async function startDraft(styleId: number): Promise<Style> {
+  const res = await apiClient.post<Style>(`/api/styles/${styleId}/actions/approve`);
+  return res.data;
+}
+
 export async function parkStyle(
   styleId: number,
   body: { reason: string },
