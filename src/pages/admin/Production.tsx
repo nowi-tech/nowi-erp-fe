@@ -238,8 +238,8 @@ export default function Production() {
     setTab(next);
     setStatusFilter('');
   };
-  // Start-date window, defaulting to all time (see ALL_TIME_FROM_ISO).
-  const [dateFrom, setDateFrom] = useState<string>(ALL_TIME_FROM_ISO);
+  // Entry-date window, defaulting to the last 30 days (the picker's preset).
+  const [dateFrom, setDateFrom] = useState<string>(() => daysAgoISO(29));
   const [dateTo, setDateTo] = useState<string>(() => daysAgoISO(0));
   // Suggested-tab styles still expand; batch rows don't — the lot page is their
   // detail view.
@@ -1064,97 +1064,57 @@ function KpiRow({
 }) {
   const { t } = useTranslation();
   const dash = '\u2014';
+  const lotsLine = (n: number) => ({
+    label: t('admin.production.kpi.lots', { defaultValue: 'Lots' }),
+    value: n,
+  });
 
   return (
-    // Same card as the dashboard's summary row (shared SummaryCard) — production
-    // numbers, sampling's design.
-    <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-6">
+    // Left to right is a lot's path: planned, sewn, finished, shipped.
+    <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-5">
       <SummaryCard
-        label={t('admin.production.kpi.entries', { defaultValue: 'Finished in window' })}
-        value={kpis?.entries.finishing ?? dash}
+        label={t('admin.production.kpi.pipeline', { defaultValue: 'In pipeline' })}
+        value={kpis?.pipeline.units.toLocaleString() ?? dash}
         breakdown={
           kpis
             ? [
-                {
-                  label: t('admin.production.kpi.entriesStitched', { defaultValue: 'Stitched' }),
-                  value: kpis.entries.stitching,
-                },
-                {
-                  label: t('admin.production.kpi.entriesCut', { defaultValue: 'Cut' }),
-                  value: kpis.entries.cutting,
-                },
-                {
-                  label: t('admin.production.kpi.entriesLots', { defaultValue: 'Lots' }),
-                  value: kpis.entries.lots,
-                },
+                lotsLine(kpis.pipeline.lots),
+                ...(kpis.fabricShortLots > 0
+                  ? [
+                      {
+                        label: t('admin.production.kpi.fabricShort', { defaultValue: 'Short on fabric' }),
+                        value: kpis.fabricShortLots,
+                        tone: 'danger' as const,
+                      },
+                    ]
+                  : []),
               ]
             : undefined
         }
-        // Counts completed lots too, so no single tab lists what it counts.
-        hideView
-      />
-      <SummaryCard
-        label={t('admin.production.kpi.planning', { defaultValue: 'In pipeline' })}
-        value={kpis?.planningBatches ?? dash}
         onClick={() => onTab('planning')}
       />
       <SummaryCard
-        label={t('admin.production.kpi.inProduction', { defaultValue: 'On the floor' })}
-        value={kpis?.inProductionBatches ?? dash}
+        label={t('admin.production.kpi.sewing', { defaultValue: 'In sewing' })}
+        value={kpis?.sewing.units.toLocaleString() ?? dash}
+        breakdown={kpis ? [lotsLine(kpis.sewing.lots)] : undefined}
         onClick={() => onTab('in_production')}
       />
       <SummaryCard
-        label={t('admin.production.kpi.stylesInPipeline', { defaultValue: 'Styles in flight' })}
-        value={kpis?.stylesInPipeline ?? dash}
-        breakdown={
-          kpis
-            ? [
-                {
-                  label: t('admin.production.kpi.originForecast', { defaultValue: 'Forecast' }),
-                  value: kpis.stylesByOrigin.forecast,
-                },
-                {
-                  label: t('admin.production.kpi.originStyle', { defaultValue: 'Style' }),
-                  value: kpis.stylesByOrigin.style,
-                },
-                {
-                  label: t('admin.production.kpi.originExternal', { defaultValue: 'External' }),
-                  value: kpis.stylesByOrigin.external,
-                },
-              ]
-            : undefined
-        }
+        label={t('admin.production.kpi.finishing', { defaultValue: 'In finishing' })}
+        value={kpis?.finishing.units.toLocaleString() ?? dash}
+        breakdown={kpis ? [lotsLine(kpis.finishing.lots)] : undefined}
         onClick={() => onTab('in_production')}
       />
       <SummaryCard
-        label={t('admin.production.kpi.stalled', { defaultValue: 'Stalled 7d+' })}
-        value={kpis?.stalledBatches ?? dash}
-        breakdown={
-          kpis && kpis.stalledOldestDays != null
-            ? [
-                {
-                  label: t('admin.production.kpi.oldest', { defaultValue: 'Oldest' }),
-                  value: `${kpis.stalledOldestDays}d`,
-                },
-              ]
-            : undefined
-        }
-        onClick={() => onTab('in_production')}
+        label={t('admin.production.kpi.finished', { defaultValue: 'Finished' })}
+        value={kpis?.entries.finishing.toLocaleString() ?? dash}
+        // Pieces finished in the window, whichever tab their lot sits in now.
+        hideView
       />
       <SummaryCard
-        label={t('admin.production.kpi.dueToDispatch', { defaultValue: 'Due to dispatch' })}
-        value={kpis?.dueToDispatchBatches ?? dash}
-        breakdown={
-          kpis
-            ? [
-                {
-                  label: t('admin.production.kpi.unitsToShip', { defaultValue: 'Units' }),
-                  value: kpis.dueToDispatchUnits.toLocaleString(),
-                },
-              ]
-            : undefined
-        }
-        onClick={() => onTab('completed')}
+        label={t('admin.production.kpi.dispatched', { defaultValue: 'Dispatched' })}
+        value={kpis?.entries.dispatched.toLocaleString() ?? dash}
+        hideView
       />
     </div>
   );

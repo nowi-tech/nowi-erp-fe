@@ -23,7 +23,7 @@ export interface SummaryCardProps {
   /** Rendered as-is, so a caller can pass "4.2d" as well as a count. */
   value: string | number;
   /** Muted "label · value" rows under the count. Values sit right-aligned. */
-  breakdown?: { label: string; value: string | number }[];
+  breakdown?: { label: string; value: string | number; tone?: 'danger' }[];
   to?: string;
   onClick?: () => void;
   /** Hide the "View →" footer for a card that leads nowhere. */
@@ -77,10 +77,13 @@ export function SummaryCard({
           {breakdown.map((b) => (
             <span
               key={b.label}
-              className="flex items-center justify-between text-[12px] text-[var(--color-muted-foreground)]"
+              className={cn(
+                'flex items-center justify-between text-[12px] text-[var(--color-muted-foreground)]',
+                b.tone && 'font-semibold text-[var(--status-stuck-ink)]',
+              )}
             >
               <span>{b.label}</span>
-              <span className="font-semibold tabular-nums text-[var(--color-foreground)]">
+              <span className={cn('font-semibold tabular-nums', !b.tone && 'text-[var(--color-foreground)]')}>
                 {b.value}
               </span>
             </span>
