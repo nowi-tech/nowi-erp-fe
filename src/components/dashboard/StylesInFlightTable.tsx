@@ -23,7 +23,6 @@ import { SearchInput } from '@/components/ui/search-input';
 import { FloatingPill, TruncText } from '@/components/ui/trunc-text';
 import { FilterChips } from '@/components/ui/filter-rail';
 import { useToast } from '@/components/ui/toast';
-import Approval1Dialog from '@/components/styles/Approval1Dialog';
 import ParkDialog from '@/components/styles/ParkDialog';
 import {
   StyleQueueTable,
@@ -31,7 +30,6 @@ import {
   StyleRefLink,
   ColourCell,
   compactAge,
-  ApproveButton,
   GhostActionButton,
   PrimaryActionButton,
   RowChevron,
@@ -44,7 +42,6 @@ import {
   type DashboardStatusFilter,
 } from '@/api/dashboard';
 import {
-  approveStyle,
   parkStyle,
   patchStyle,
   setEasyecomDone,
@@ -110,18 +107,17 @@ interface Props {
 const TABS: DashboardStyleTab[] = [
   'my_work',
   'all',
-  'draft',
   'sampling',
   'cataloguing',
   'live',
-  // Paused designs (lifecycle = parked). A standing bucket like draft/live —
+  // Paused designs (lifecycle = parked). A standing bucket like live —
   // no STATUS_OPTIONS_BY_TAB entry, so its status-filter control auto-hides.
   'parked',
 ];
 
 // Multi-select status filter options per tab — only the statuses REACHABLE in
 // that tab, so the filter narrows without offering dead choices. Tabs with one
-// (or zero) reachable status (draft / live) omit the control entirely. The two
+// (or zero) reachable status (live) omit the control entirely. The two
 // cataloguing sub-states mirror the Status column ("Ready to publish" once a
 // channel is prepared, else "Listings pending"). The BE AND's these with the
 // tab, so the filter always scopes the current bucket.
@@ -129,7 +125,6 @@ const STATUS_OPTIONS_BY_TAB: Partial<
   Record<DashboardStyleTab, DashboardStatusFilter[]>
 > = {
   all: [
-    'draft',
     'in_sampling',
     'sample_approved',
     'ready_to_publish',
@@ -138,7 +133,7 @@ const STATUS_OPTIONS_BY_TAB: Partial<
   ],
   sampling: ['in_sampling', 'sample_approved'],
   cataloguing: ['ready_to_publish', 'listings_pending'],
-  my_work: ['draft', 'in_sampling', 'ready_to_publish', 'listings_pending'],
+  my_work: ['in_sampling', 'ready_to_publish', 'listings_pending'],
 };
 
 // Rows per page in the in-flight feed. 50 keeps the smaller tabs on a single
@@ -532,9 +527,6 @@ export default function StylesInFlightTable({
   const [total, setTotal] = useState(0);
 
   // Inline action targets — opening either dialog stashes the row.
-  const [approvalTarget, setApprovalTarget] =
-    useState<DashboardStyleRow | null>(null);
-  const [approvalBusy, setApprovalBusy] = useState(false);
   const [parkTarget, setParkTarget] = useState<DashboardStyleRow | null>(null);
   const [parkBusy, setParkBusy] = useState(false);
   // Sample sign-off (Approval #2) — opens the shared verdict dialog.
@@ -635,9 +627,6 @@ export default function StylesInFlightTable({
     params.set('tab', next);
     setSearchParams(params, { replace: true });
   };
-
-  const canApprove = (row: DashboardStyleRow) =>
-    row.lifecycle === 'draft' && hasAnyRole(user, APPROVER_ROLES);
 
   // Park gate (mirrors the BE): an admin may park at ANY stage (a live style is
   // pulled off the market); a non-admin approver (e.g. sampling_lead) may park
@@ -967,7 +956,6 @@ export default function StylesInFlightTable({
   // actionsColumn) rather than the table's trailing slot, so the buttons stay
   // visible without horizontal-scrolling to the far right on the wider tabs.
   const renderRowActions = (row: DashboardStyleRow): ReactNode => {
-    const approve = canApprove(row);
     const park = canPark(row);
     const sampleApprove = canSampleApprove(row);
     const startCat = canStartCataloguing(row);
@@ -984,7 +972,6 @@ export default function StylesInFlightTable({
     const channel = row.lifecycle === 'live';
     const produce = canProduce && row.lifecycle === 'live';
     if (
-      !approve &&
       !park &&
       !sampleApprove &&
       !startCat &&
@@ -1065,7 +1052,6 @@ export default function StylesInFlightTable({
             })}
           </button>
         )}
-        {approve && <ApproveButton onClick={() => setApprovalTarget(row)} />}
       </>
     );
   };
@@ -1720,33 +1706,6 @@ export default function StylesInFlightTable({
         )}
       </section>
 
-      {/* Approval #1 — reuses the same dialog as the Sampling registry. */}
-      <Approval1Dialog
-        open={approvalTarget !== null}
-        busy={approvalBusy}
-        gender={null}
-        styleId={approvalTarget?.id ?? null}
-        onClose={() => setApprovalTarget(null)}
-        onConfirm={async (body) => {
-          if (!approvalTarget) return;
-          setApprovalBusy(true);
-          try {
-            await approveStyle(approvalTarget.id, body);
-            toast.show(t('dashboard.table.toast.approved'), 'success');
-            setApprovalTarget(null);
-            afterAction();
-          } catch (e: unknown) {
-            const m =
-              (e as { response?: { data?: { message?: string | string[] } } })
-                ?.response?.data?.message ??
-              t('dashboard.table.toast.approveError');
-            toast.show(Array.isArray(m) ? m.join(', ') : String(m), 'error');
-          } finally {
-            setApprovalBusy(false);
-          }
-        }}
-      />
-
       {/* Park — captures a reason for the audit log. */}
       <ParkDialog
         open={parkTarget !== null}
@@ -1754,7 +1713,7 @@ export default function StylesInFlightTable({
         styleLabel={
           parkTarget ? formatStyleRef(parkTarget, t('admin.styles.draft')) : null
         }
-        approved={parkTarget ? parkTarget.lifecycle !== 'draft' : false}
+        approved={parkTarget ? !['draft', 'in_sampling'].includes(parkTarget.lifecycle) : false}
         onClose={() => setParkTarget(null)}
         onConfirm={async (reason) => {
           if (!parkTarget) return;

@@ -1,6 +1,6 @@
 import { useState, type ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Check, ChevronRight, ImageOff, Link2, Pause, Play } from 'lucide-react';
+import { ChevronRight, ImageOff, Link2, Pause, Play } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
 import type { Style, StyleLifecycle } from '@/api/types';
@@ -556,30 +556,12 @@ export function LifecycleBadge({ lifecycle }: { lifecycle: StyleLifecycle }) {
   );
 }
 
-/* ── Action buttons (Stitch: ghost Park + filled Approve) ─────────── */
-
-export function ApproveButton({ onClick }: { onClick: () => void }) {
-  const { t } = useTranslation();
-  return (
-    <button
-      type="button"
-      onClick={(e) => {
-        e.stopPropagation();
-        onClick();
-      }}
-      className="inline-flex items-center gap-1 rounded bg-[var(--color-primary)] px-2 py-1 text-[12px] font-medium text-[var(--color-primary-foreground)] transition-colors hover:opacity-90"
-    >
-      <Check size={14} />
-      {t('dashboard.table.actions.approve', { defaultValue: 'Approve' })}
-    </button>
-  );
-}
+/* ── Action buttons ─────────── */
 
 /**
  * Filled-primary row action — the row's "next step" (Approve sample, Mark
- * EasyEcom done, Go live, …). Same weight as {@link ApproveButton} but with a
- * caller-supplied label (and optional icon), so the primary action reads as
- * the action regardless of which lifecycle stage the row is in. Park / Revive
+ * EasyEcom done, Go live, …), with a caller-supplied label and optional icon,
+ * so it reads as the action regardless of which lifecycle stage the row is in. Park / Revive
  * stay on the muted {@link GhostActionButton}.
  */
 export function PrimaryActionButton({

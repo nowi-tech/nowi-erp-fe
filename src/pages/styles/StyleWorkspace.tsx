@@ -33,13 +33,11 @@ import {
   BomEditModal,
   PatternCadEditModal,
 } from '@/components/styles/ScopedStyleEditModals';
-import Approval1Dialog from '@/components/styles/Approval1Dialog';
 import ParkDialog from '@/components/styles/ParkDialog';
 import {
   getStyle,
   parkStyle,
   reviveStyle,
-  approveStyle,
   sampleApproveStyle,
   patchStyle,
   listFabrics,
@@ -258,7 +256,6 @@ export default function StyleWorkspace() {
   const [style, setStyle] = useState<Style | null>(null);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState<string | null>(null);
-  const [approveOpen, setApproveOpen] = useState(false);
   const [sampleApproveOpen, setSampleApproveOpen] = useState(false);
   const [colourModalOpen, setColourModalOpen] = useState(false);
   const [editOpen, setEditOpen] = useState(false);
@@ -375,12 +372,6 @@ export default function StyleWorkspace() {
     style.familyCode != null ||
     style.basedOnStyleId != null ||
     style.oldStyleId != null;
-  // Approval #1 is APPROVE-gated on the BE (`@Post('approve')` → `@Roles(APPROVE)`),
-  // so gate the button to approvers too — matching the dashboard's `canApprove`.
-  // Without this a non-approver writer sees "Approve intake" and 403s on click.
-  const canApproveIntake =
-    style.lifecycle === 'draft' &&
-    roles.some((r) => APPROVER_ROLES.includes(r));
   // Sample sign-off (Approval #2) is approver-only — the BE endpoint is
   // APPROVE-gated, so don't show the button to writers who would 403.
   const canSampleApprove =
@@ -908,24 +899,6 @@ export default function StyleWorkspace() {
               </span>
             </Button>
           )}
-          {/* Approve intake (Approval #1) — drafts only. China Import keeps
-              the lightweight single-click approve; sampling opens the
-              checklist dialog. */}
-          {canApproveIntake && (
-            <Button
-              size="sm"
-              disabled={busy !== null}
-              onClick={() => {
-                if (isChinaImport) {
-                  void doAction('approve', () => approveStyle(style.id));
-                } else {
-                  setApproveOpen(true);
-                }
-              }}
-            >
-              {t('admin.styles.workspace.approve')}
-            </Button>
-          )}
           {/* Approve sample (Approval #2) — primary action while in_sampling.
               Opens the SampleApproveDialog. */}
           {canSampleApproveAction && (
@@ -1097,14 +1070,13 @@ export default function StyleWorkspace() {
         }}
       />
 
-      {/* Revive confirmation — reviving resets sampling state + re-enters
-          Approval #1, so confirm before acting. */}
+      {/* Revive confirmation — reviving resets sampling state. */}
       <ConfirmDialog
         open={reviveConfirmOpen}
         title={t('admin.styles.revive.title', { defaultValue: 'Revive style?' })}
         message={t('admin.styles.revive.body', {
           defaultValue:
-            'This resets sampling state and sends the style back to Approval #1.',
+            'This resets sampling and cataloguing progress and starts the style again.',
         })}
         confirmLabel={t('admin.styles.workspace.revive', {
           defaultValue: 'Revive',
@@ -1134,18 +1106,6 @@ export default function StyleWorkspace() {
         }}
       />
 
-      {/* Approval #1 checklist dialog — sampling flow only */}
-      <Approval1Dialog
-        open={approveOpen}
-        busy={busy !== null}
-        gender={style.gender}
-        styleId={style.id}
-        onClose={() => setApproveOpen(false)}
-        onConfirm={(body) => {
-          setApproveOpen(false);
-          void doAction('approve', () => approveStyle(style.id, body));
-        }}
-      />
 
       {/* Approval #2 (sample sign-off) dialog */}
       <SampleApproveDialog
