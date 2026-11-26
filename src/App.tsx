@@ -1,6 +1,6 @@
 import { lazy, Suspense, useEffect, type ReactNode } from 'react';
 import { Skeleton } from '@/components/ui/skeleton';
-import { BrowserRouter, Routes, Route, Navigate, useParams } from 'react-router-dom';
+import { BrowserRouter, Routes, Route, Navigate, useLocation, useParams } from 'react-router-dom';
 import { AuthProvider } from './context/auth';
 import { AppToaster, ToastProvider } from './components/ui/toast';
 import ProtectedRoute from './components/ProtectedRouteV2';
@@ -132,10 +132,11 @@ function HomeRoute() {
 //   return <PlaceholderSection title={t(titleKey)} />;
 // }
 
-/** Old /admin/returns/alteration/:id links keep landing on the same entry. */
+/** Old /admin/returns/alteration[/:id] links land on the same page, filters kept. */
 function OldReturnRedirect() {
-  const { id = '' } = useParams();
-  return <Navigate to={`/admin/returns/${id}`} replace />;
+  const { id } = useParams();
+  const { search } = useLocation();
+  return <Navigate to={`/admin/returns${id ? `/${id}` : ''}${search}`} replace />;
 }
 
 function App() {
@@ -309,7 +310,7 @@ function App() {
                   </ProtectedRoute>
                 }
               />
-              <Route path="returns/alteration" element={<Navigate to="/admin/returns" replace />} />
+              <Route path="returns/alteration" element={<OldReturnRedirect />} />
               <Route path="returns/alteration/:id" element={<OldReturnRedirect />} />
               <Route
                 path="returns"
