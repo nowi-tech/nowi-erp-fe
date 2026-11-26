@@ -1,179 +1,33 @@
-import { useCallback, useEffect, useState, type FormEvent } from 'react';
+import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Plus, Power } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
-import { Dialog } from '@/components/ui/dialog';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useToast } from '@/components/ui/toast';
-import {
-  createDestinationWarehouse,
-  disableDestinationWarehouse,
-  listDestinationWarehouses,
-  updateDestinationWarehouse,
-} from '@/api/destinationWarehouses';
+import { listDestinationWarehouses } from '@/api/destinationWarehouses';
 import type { DestinationWarehouse } from '@/api/types';
 
-interface DraftState {
-  code: string;
-  name: string;
-  address: string;
-  spocName: string;
-  spocPhone: string;
-  easyecomWarehouseId: string;
-  easyecomEnabled: boolean;
-  easyecomAutoGrn: boolean;
-}
-
-const EMPTY_DRAFT: DraftState = {
-  code: '',
-  name: '',
-  address: '',
-  spocName: '',
-  spocPhone: '',
-  easyecomWarehouseId: '',
-  easyecomEnabled: false,
-  easyecomAutoGrn: false,
-};
-
-interface ApiErrorShape {
-  response?: { data?: { error?: string; message?: string } };
-}
-function errMessage(err: unknown): string | undefined {
-  if (typeof err === 'object' && err !== null && 'response' in err) {
-    const data = (err as ApiErrorShape).response?.data;
-    return data?.error ?? data?.message;
-  }
-  return undefined;
-}
-
+/** Read-only: warehouses are parties with the warehouse role, changed by BE migration only. */
 export default function Warehouses() {
   const { t } = useTranslation();
   const toast = useToast();
-
   const [rows, setRows] = useState<DestinationWarehouse[]>([]);
   const [loading, setLoading] = useState(true);
-  const [draft, setDraft] = useState<DraftState>(EMPTY_DRAFT);
-  const [addOpen, setAddOpen] = useState(false);
-  /** null = creating; a number = editing that warehouse. */
-  const [editId, setEditId] = useState<number | null>(null);
-  const [saving, setSaving] = useState(false);
-  // Per-row "busy" flag so the toggle button doesn't get pressed twice.
-  const [togglingId, setTogglingId] = useState<number | null>(null);
-
-  const refresh = useCallback(async () => {
-    try {
-      const data = await listDestinationWarehouses();
-      setRows(data);
-    } catch {
-      toast.show(t('common.error'), 'error');
-    } finally {
-      setLoading(false);
-    }
-  }, [t, toast]);
 
   useEffect(() => {
-    void refresh();
-  }, [refresh]);
-
-  function openEdit(row: DestinationWarehouse) {
-    setEditId(row.id);
-    setDraft({
-      code: row.code,
-      name: row.name,
-      address: row.address ?? '',
-      spocName: row.spocName ?? '',
-      spocPhone: row.spocPhone ?? '',
-      easyecomWarehouseId: row.easyecomWarehouseId ?? '',
-      easyecomEnabled: row.easyecomEnabled,
-      easyecomAutoGrn: row.easyecomAutoGrn,
-    });
-    setAddOpen(true);
-  }
-
-  function closeDialog() {
-    if (saving) return;
-    setAddOpen(false);
-    setEditId(null);
-    setDraft(EMPTY_DRAFT);
-  }
-
-  async function submitAdd(e?: FormEvent) {
-    e?.preventDefault();
-    const code = draft.code.trim();
-    const name = draft.name.trim();
-    if (!code || !name) return;
-    setSaving(true);
-    // On EDIT a blanked field must send '' so the PATCH actually clears it; on
-    // CREATE an empty field is simply omitted (undefined). The service PATCHes
-    // only the keys it receives, so `undefined` would leave a stale value.
-    const optional = (v: string) => v.trim() || (editId != null ? '' : undefined);
-    const payload = {
-      code,
-      name,
-      address: optional(draft.address),
-      spocName: optional(draft.spocName),
-      spocPhone: optional(draft.spocPhone),
-      easyecomWarehouseId: optional(draft.easyecomWarehouseId),
-      easyecomEnabled: draft.easyecomEnabled,
-      easyecomAutoGrn: draft.easyecomAutoGrn,
-    };
-    try {
-      if (editId != null) {
-        await updateDestinationWarehouse(editId, payload);
-        toast.show(t('admin.warehouses.updatedToast', { defaultValue: 'Warehouse updated' }), 'success');
-      } else {
-        await createDestinationWarehouse(payload);
-        toast.show(t('admin.warehouses.createdToast', { defaultValue: 'Warehouse added' }), 'success');
-      }
-      setDraft(EMPTY_DRAFT);
-      setEditId(null);
-      setAddOpen(false);
-      await refresh();
-    } catch (err) {
-      toast.show(errMessage(err) ?? t('common.error'), 'error');
-    } finally {
-      setSaving(false);
-    }
-  }
-
-  async function toggleActive(row: DestinationWarehouse) {
-    setTogglingId(row.id);
-    try {
-      if (row.isActive) {
-        await disableDestinationWarehouse(row.id);
-      } else {
-        await updateDestinationWarehouse(row.id, { isActive: true });
-      }
-      await refresh();
-    } catch (err) {
-      toast.show(errMessage(err) ?? t('common.error'), 'error');
-    } finally {
-      setTogglingId(null);
-    }
-  }
+    listDestinationWarehouses()
+      .then(setRows)
+      .catch(() => toast.show(t('common.error'), 'error'))
+      .finally(() => setLoading(false));
+  }, [t, toast]);
 
   return (
     <div className="space-y-4">
       <Card>
-        <CardHeader className="flex flex-row items-center justify-between gap-2">
+        <CardHeader>
           <CardTitle>
             {t('admin.warehouses.title', { defaultValue: 'Destination warehouses' })}
           </CardTitle>
-          <Button
-            size="sm"
-            onClick={() => {
-              setEditId(null);
-              setDraft(EMPTY_DRAFT);
-              setAddOpen(true);
-            }}
-          >
-            <Plus size={14} />
-            {t('admin.warehouses.add', { defaultValue: 'Add warehouse' })}
-          </Button>
         </CardHeader>
         <CardContent>
           {loading && rows.length === 0 ? (
@@ -205,7 +59,6 @@ export default function Warehouses() {
                     <th className="text-left px-3 py-2">
                       {t('admin.warehouses.status', { defaultValue: 'Status' })}
                     </th>
-                    <th className="px-3 py-2" />
                   </tr>
                 </thead>
                 <tbody>
@@ -261,28 +114,6 @@ export default function Warehouses() {
                           </Badge>
                         )}
                       </td>
-                      <td className="px-3 py-2 text-right">
-                        <div className="flex items-center justify-end gap-2">
-                          <Button size="sm" variant="outline" onClick={() => openEdit(r)}>
-                            {t('common.edit', { defaultValue: 'Edit' })}
-                          </Button>
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            onClick={() => void toggleActive(r)}
-                            disabled={togglingId === r.id}
-                          >
-                            <Power size={14} />
-                            {r.isActive
-                              ? t('admin.warehouses.deactivate', {
-                                  defaultValue: 'Deactivate',
-                                })
-                              : t('admin.warehouses.activate', {
-                                  defaultValue: 'Activate',
-                                })}
-                          </Button>
-                        </div>
-                      </td>
                     </tr>
                   ))}
                 </tbody>
@@ -291,131 +122,6 @@ export default function Warehouses() {
           )}
         </CardContent>
       </Card>
-
-      <Dialog
-        open={addOpen}
-        onClose={closeDialog}
-        title={
-          editId != null
-            ? t('admin.warehouses.editTitle', { defaultValue: 'Edit destination warehouse' })
-            : t('admin.warehouses.addTitle', { defaultValue: 'Add destination warehouse' })
-        }
-        footer={
-          <>
-            <Button variant="outline" onClick={closeDialog} disabled={saving}>
-              {t('common.cancel')}
-            </Button>
-            <Button
-              onClick={() => void submitAdd()}
-              disabled={saving || !draft.code.trim() || !draft.name.trim()}
-            >
-              {saving ? t('common.saving') : t('common.save')}
-            </Button>
-          </>
-        }
-      >
-        <form onSubmit={submitAdd} className="space-y-3">
-          <div>
-            <Label required htmlFor="wh-code">
-              {t('admin.warehouses.code', { defaultValue: 'Code' })}
-            </Label>
-            <Input
-              id="wh-code"
-              value={draft.code}
-              onChange={(e) =>
-                setDraft((s) => ({ ...s, code: e.target.value.toUpperCase() }))
-              }
-              maxLength={50}
-              autoFocus
-            />
-          </div>
-          <div>
-            <Label required htmlFor="wh-name">
-              {t('admin.warehouses.name', { defaultValue: 'Name' })}
-            </Label>
-            <Input
-              id="wh-name"
-              value={draft.name}
-              onChange={(e) => setDraft((s) => ({ ...s, name: e.target.value }))}
-            />
-          </div>
-          <div>
-            <Label htmlFor="wh-address">
-              {t('admin.warehouses.address', { defaultValue: 'Address' })}
-            </Label>
-            <Input
-              id="wh-address"
-              value={draft.address}
-              onChange={(e) => setDraft((s) => ({ ...s, address: e.target.value }))}
-              maxLength={500}
-            />
-          </div>
-          <div className="grid grid-cols-2 gap-2">
-            <div>
-              <Label htmlFor="wh-spoc-name">
-                {t('admin.warehouses.spocName', { defaultValue: 'SPOC name' })}
-              </Label>
-              <Input
-                id="wh-spoc-name"
-                value={draft.spocName}
-                onChange={(e) => setDraft((s) => ({ ...s, spocName: e.target.value }))}
-                maxLength={120}
-              />
-            </div>
-            <div>
-              <Label htmlFor="wh-spoc-phone">
-                {t('admin.warehouses.spocPhone', { defaultValue: 'SPOC phone' })}
-              </Label>
-              <Input
-                id="wh-spoc-phone"
-                value={draft.spocPhone}
-                onChange={(e) => setDraft((s) => ({ ...s, spocPhone: e.target.value }))}
-                maxLength={20}
-              />
-            </div>
-          </div>
-          <div>
-            <Label htmlFor="wh-eee-id">
-              {t('admin.warehouses.easyecomId', {
-                defaultValue: 'EasyEcom warehouse id (optional)',
-              })}
-            </Label>
-            <Input
-              id="wh-eee-id"
-              value={draft.easyecomWarehouseId}
-              onChange={(e) =>
-                setDraft((s) => ({ ...s, easyecomWarehouseId: e.target.value }))
-              }
-              maxLength={100}
-              placeholder=""
-            />
-          </div>
-          <label className="flex items-center gap-2 text-sm">
-            <input
-              type="checkbox"
-              checked={draft.easyecomEnabled}
-              onChange={(e) =>
-                setDraft((s) => ({ ...s, easyecomEnabled: e.target.checked }))
-              }
-            />
-            {t('admin.warehouses.easyecomEnabled', {
-              defaultValue: 'Sync dispatches to EasyEcom for this warehouse',
-            })}
-          </label>
-          <label className="flex items-center gap-2 text-sm">
-            <input
-              type="checkbox"
-              checked={draft.easyecomAutoGrn}
-              onChange={(e) =>
-                setDraft((s) => ({ ...s, easyecomAutoGrn: e.target.checked }))
-              }
-            />
-            {t('admin.warehouses.easyecomAutoGrn', {
-              defaultValue: 'Auto GRN received challans into EasyEcom (India)',
-            })}
-          </label>
-        </form>
-      </Dialog>
     </div>
   );
 }

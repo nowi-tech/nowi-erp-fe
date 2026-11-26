@@ -823,23 +823,7 @@ export interface DestinationWarehouse {
   /** GRN received production challans into EasyEcom; also the default destination. */
   easyecomAutoGrn: boolean;
   isActive: boolean;
-  createdAt?: string;
 }
-
-export interface CreateDestinationWarehousePayload {
-  code: string;
-  name: string;
-  address?: string;
-  spocName?: string;
-  spocPhone?: string;
-  easyecomWarehouseId?: string;
-  easyecomEnabled?: boolean;
-  easyecomAutoGrn?: boolean;
-  isActive?: boolean;
-}
-
-export type UpdateDestinationWarehousePayload =
-  Partial<CreateDestinationWarehousePayload>;
 
 /** Map of requested objectPath → signed read URL. */
 export interface ReadUrlsResponse {
