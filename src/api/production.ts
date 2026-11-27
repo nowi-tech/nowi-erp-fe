@@ -301,6 +301,11 @@ export function updateBatch(
   body: {
     items?: CreateBatchItem[];
     notes?: string;
+    /** Brand-lot identity — Pipeline brand lots only. */
+    brandId?: number;
+    colourId?: number;
+    externalSku?: string;
+    imagePath?: string;
     /** The stage and plan the dialog opened with; a mismatch is refused (409). */
     expectedStatus?: BatchStatus;
     expected?: { sku: string; qtyPlanned: number }[];

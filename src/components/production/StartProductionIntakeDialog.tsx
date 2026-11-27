@@ -9,7 +9,6 @@ import { Combobox, type ComboboxOption } from '@/components/ui/combobox';
 import QtyTable from '@/components/production/QtyTable';
 import { useToast } from '@/components/ui/toast';
 import { useDebounced } from '@/lib/useDebounced';
-import { listColourMaster, createColourMaster } from '@/api/styles';
 import {
   getFabricDefaults,
   searchCatalog,
@@ -17,15 +16,12 @@ import {
   type CreateBatchBody,
   type ProductionType,
 } from '@/api/production';
-import { getBrands, type Brand } from '@/api/brands';
-import { useQuickAddParty } from '@/components/shared/useQuickAddParty';
 import TailorPicker from '@/components/production/TailorPicker';
 import FabricPicker from '@/components/styles/intake/FabricPicker';
 import { listFabrics } from '@/api/styles';
-import { uploadPhoto } from '@/api/storage';
-import ImageUploadTile from '@/components/shared/ImageUploadTile';
+import BrandLotFields, { EMPTY_BRAND_LOT, type BrandLotValue } from '@/components/production/BrandLotFields';
 import ProductionTypeToggle from '@/components/production/ProductionTypeToggle';
-import type { Colour, Fabric } from '@/api/types';
+import type { Fabric } from '@/api/types';
 
 type Mode = 'existing' | 'external';
 
@@ -85,23 +81,17 @@ export default function StartProductionIntakeDialog({
   const [sel, setSel] = useState<ExistingSel | null>(null);
 
   // ── external brand ───────────────────────────────────────────────
-  const [brands, setBrands] = useState<Brand[]>([]);
-  const [brandId, setBrandId] = useState<number | ''>('');
-  const [colours, setColours] = useState<Colour[]>([]);
-  const [colourId, setColourId] = useState<number | ''>('');
+  const [brandLot, setBrandLot] = useState<BrandLotValue>(EMPTY_BRAND_LOT);
+  const { brandId, colourId, imagePath } = brandLot;
   const [externalSku, setExternalSku] = useState('');
   const [extSizes, setExtSizes] = useState<Record<string, boolean>>({});
-  // Uploaded image for the brand batch (optional): GCS object path + preview.
-  const [imagePath, setImagePath] = useState('');
-  const [imagePreview, setImagePreview] = useState('');
   const [uploading, setUploading] = useState(false);
-  // Bumped on every reset, so an upload finishing after it can't land on the next lot.
-  const uploadSeq = useRef(0);
-  const clearImage = () => {
-    uploadSeq.current += 1;
+  // Bumped on every reset; remounting the fields drops the old image preview and any upload in flight.
+  const [brandLotKey, setBrandLotKey] = useState(0);
+  const clearBrandLot = () => {
+    setBrandLot(EMPTY_BRAND_LOT);
     setUploading(false);
-    setImagePath('');
-    setImagePreview('');
+    setBrandLotKey((k) => k + 1);
   };
 
   // ── shared qty map (keyed by item sku) ───────────────────────────
@@ -127,11 +117,9 @@ export default function StartProductionIntakeDialog({
     if (!open) return;
     setMode('existing');
     setSel(null);
-    setBrandId('');
-    setColourId('');
     setExternalSku('');
     setExtSizes({});
-    clearImage();
+    clearBrandLot();
     setQty({});
     setQuery('');
     setTailorId('');
@@ -143,8 +131,6 @@ export default function StartProductionIntakeDialog({
         .catch(() =>
           toast.show(t('admin.production.fabricPlan.loadError', { defaultValue: 'Could not load fabrics.' }), 'error'),
         );
-    void getBrands().then(setBrands).catch(() => undefined);
-    void listColourMaster().then(setColours).catch(() => undefined);
   }, [open]);
 
   // Server-side search over the EasyEcom catalog — everything Nowi sells is
@@ -231,68 +217,9 @@ export default function StartProductionIntakeDialog({
     setMode('existing');
     setExternalSku('');
     setExtSizes({});
-    setBrandId('');
-    setColourId('');
-    clearImage();
+    clearBrandLot();
     setQty({});
   };
-
-  // "+ Add" inside the colour dropdown creates the typed colour and selects it.
-  const addColour = (typed: string) => {
-    const name = typed.trim();
-    if (!name) return;
-    void createColourMaster({ name })
-      .then((c) => {
-        setColours((prev) =>
-          [...prev.filter((x) => x.id !== c.id), c].sort((a, z) => a.name.localeCompare(z.name)),
-        );
-        setColourId(c.id);
-      })
-      .catch(() =>
-        toast.show(
-          t('admin.production.intake.colourFailed', { defaultValue: "Couldn't add that colour." }),
-          'error',
-        ),
-      );
-  };
-
-  const onImageFile = (file: File | undefined) => {
-    if (!file) return;
-    const seq = ++uploadSeq.current;
-    // A failed re-upload falls back to the last good image, which imagePath still holds.
-    const previous = imagePreview;
-    setUploading(true);
-    setImagePreview(URL.createObjectURL(file));
-    void uploadPhoto('production_batch', 'new', file)
-      .then(({ objectPath }) => {
-        if (seq === uploadSeq.current) setImagePath(objectPath);
-      })
-      .catch(() => {
-        if (seq !== uploadSeq.current) return;
-        setImagePreview(previous);
-        toast.show(
-          t('admin.production.intake.imageFailed', { defaultValue: "Couldn't upload that image." }),
-          'error',
-        );
-      })
-      .finally(() => {
-        if (seq === uploadSeq.current) setUploading(false);
-      });
-  };
-
-  // "+ Add" inside the brand dropdown creates the typed brand (or reuses that party) and selects it.
-  const addBrand = useQuickAddParty(
-    'brand',
-    (b) => {
-      setBrands((prev) =>
-        [...prev.filter((x) => x.id !== b.id), { ...b, code: null, isActive: true }].sort((a, z) =>
-          a.name.localeCompare(z.name),
-        ),
-      );
-      setBrandId(b.id);
-    },
-    brandId,
-  );
 
   const qtyLabel = isAlt ? t('admin.alteration.qtyIn', { defaultValue: 'Pieces' }) : undefined;
 
@@ -586,48 +513,13 @@ export default function StartProductionIntakeDialog({
             {t('admin.production.intake.backToStyles', { defaultValue: 'Back to styles' })}
           </button>
 
-          <div>
-            <Label>{t('admin.production.intake.brand', { defaultValue: 'Brand' })}</Label>
-            <Combobox<number>
-              value={brandId === '' ? null : brandId}
-              options={brands.map((b) => ({ value: b.id, label: b.name }))}
-              onChange={(id) => setBrandId(id ?? '')}
-              onAddNew={(typed) => void addBrand(typed)}
-              addOnEnter={false}
-              addNewLabel={t('admin.production.intake.addBrand', { defaultValue: 'Add a new brand' })}
-              placeholder={t('admin.production.intake.pickBrand', { defaultValue: 'Choose a brand…' })}
-              ariaLabel={t('admin.production.intake.brand', { defaultValue: 'Brand' })}
-            />
-          </div>
-
-          <div>
-            <Label required>{t('admin.production.intake.colour', { defaultValue: 'Colour' })}</Label>
-            <Combobox<number>
-              value={colourId === '' ? null : colourId}
-              options={colours.map((c) => ({
-                value: c.id,
-                label: c.name,
-                leading: (
-                  <span
-                    className="h-4 w-4 shrink-0 rounded-full border border-[var(--color-border)]"
-                    style={{ background: c.hex ?? c.name.toLowerCase() }}
-                  />
-                ),
-              }))}
-              onChange={(id) => setColourId(id ?? '')}
-              onAddNew={addColour}
-              addNewLabel={t('admin.production.intake.addColour', { defaultValue: 'Add a new colour' })}
-              placeholder={t('admin.production.intake.pickColour', { defaultValue: 'Choose a colour…' })}
-              ariaLabel={t('admin.production.intake.colour', { defaultValue: 'Colour' })}
-            />
-          </div>
-
-          {!isAlt && (
-            <div>
-              <Label>{t('admin.production.intake.imageRequired', { defaultValue: 'Image *' })}</Label>
-              <ImageUploadTile preview={imagePreview} uploading={uploading} onFile={onImageFile} />
-            </div>
-          )}
+          <BrandLotFields
+            key={brandLotKey}
+            value={brandLot}
+            onChange={(patch) => setBrandLot((v) => ({ ...v, ...patch }))}
+            showImage={!isAlt}
+            onUploading={setUploading}
+          />
 
           <div>
             <Label>{t('admin.production.intake.sku', { defaultValue: 'SKU code' })}</Label>
