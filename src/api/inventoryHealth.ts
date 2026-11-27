@@ -258,14 +258,13 @@ export interface StyleDetails {
 /** GET /api/inventory-health/style-details — the side panel. */
 export function getStyleDetails(
   styleKey: string,
-  erpId: number | null,
   from: string,
   to: string,
   inventory: InventoryView,
 ): Promise<StyleDetails> {
   return apiClient
     .get<StyleDetails>('/api/inventory-health/style-details', {
-      params: { styleKey, erpId: erpId ?? undefined, from: from || undefined, to: to || undefined, inventory },
+      params: { styleKey, from: from || undefined, to: to || undefined, inventory },
     })
     .then((r) => r.data);
 }

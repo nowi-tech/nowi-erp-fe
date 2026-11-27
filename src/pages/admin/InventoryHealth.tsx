@@ -1051,6 +1051,7 @@ export default function InventoryHealth(): ReactNode {
         onClose={() => setDetailFor(null)}
         onOpenStylePage={(id) => openStyle(id)}
         onOpenFamily={(m) => void openFamilyMember(m)}
+        canRemark={canProduce}
         onRemarkAdded={(key, remark) =>
           setStyles((prev) => prev.map((x) => (baseKey(x.styleKey) === baseKey(key) ? { ...x, latestRemark: remark } : x)))
         }

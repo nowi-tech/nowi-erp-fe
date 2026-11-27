@@ -29,6 +29,7 @@ export function StyleDetailPanel({
   onRemarkAdded,
   onOpenStylePage,
   onOpenFamily,
+  canRemark,
 }: {
   style: InventoryStyle | null;
   from: string;
@@ -39,6 +40,8 @@ export function StyleDetailPanel({
   onOpenStylePage: (erpId: number) => void;
   /** Opens another colour of the same design in this panel. */
   onOpenFamily: (member: { id: number; styleId: string | null }) => void;
+  /** Viewers read remarks; the production team writes them. */
+  canRemark: boolean;
 }): ReactNode {
   const { t } = useTranslation();
   const toast = useToast();
@@ -62,13 +65,13 @@ export function StyleDetailPanel({
     let stale = false;
     setDetails(null);
     setFailed(false);
-    getStyleDetails(styleKey, erpId, from, to, inventory)
+    getStyleDetails(styleKey, from, to, inventory)
       .then((d) => !stale && setDetails(d))
       .catch(() => !stale && setFailed(true));
     return () => {
       stale = true;
     };
-  }, [styleKey, erpId, from, to, inventory, tick]);
+  }, [styleKey, from, to, inventory, tick]);
 
   const save = async (): Promise<void> => {
     if (!style || !draft.trim()) return;
@@ -346,6 +349,8 @@ export function StyleDetailPanel({
           )}
 
           <Section title={t('admin.inventoryHealth.panel.remarks', { defaultValue: 'Remarks' })}>
+            {canRemark && (
+              <>
             <Textarea
               value={draft}
               onChange={(e) => setDraft(e.target.value)}
@@ -358,6 +363,8 @@ export function StyleDetailPanel({
                 {saving ? t('admin.inventoryHealth.panel.saving', { defaultValue: 'Saving…' }) : t('admin.inventoryHealth.panel.save', { defaultValue: 'Save remark' })}
               </Button>
             </div>
+              </>
+            )}
             <ul className="mt-3 space-y-3">
               {(details?.remarks ?? []).map((r) => (
                 <li key={r.id} className="border-l-2 border-neutral-200 pl-3">
