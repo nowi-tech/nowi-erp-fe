@@ -2,6 +2,7 @@ import { useEffect, useState, type ReactNode } from 'react';
 import { ArrowRight, ArrowUpRight } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { Drawer } from '@/components/ui/drawer';
+import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 import { Textarea } from '@/components/ui/textarea';
 import { Button } from '@/components/ui/button';
 import { useToast } from '@/components/ui/toast';
@@ -50,6 +51,13 @@ export function StyleDetailPanel({
   const [tick, setTick] = useState(0);
   const [draft, setDraft] = useState('');
   const [saving, setSaving] = useState(false);
+  // Every way out (X, Escape, backdrop, Open style page) asks first when a remark is typed.
+  const [pendingLeave, setPendingLeave] = useState<(() => void) | null>(null);
+  const leave = (action: () => void): void => {
+    if (saving) return;
+    if (draft.trim()) setPendingLeave(() => action);
+    else action();
+  };
   const [hoverGroup, setHoverGroup] = useState<Group | null>(null);
   const [openGroup, setOpenGroup] = useState<Group | null>(null);
   const styleKey = style?.styleKey ?? null;
@@ -102,16 +110,16 @@ export function StyleDetailPanel({
   return (
     <Drawer
       open={style != null}
-      onClose={() => !saving && onClose()}
+      onClose={() => leave(onClose)}
       title={style?.displayKey}
       subtitle={style?.name ?? undefined}
       width="640px"
-      confirmOnClose={draft.trim() !== ''}
+      confirmOnClose={false}
       headerAction={
         erpId != null && (
           <button
             type="button"
-            onClick={() => onOpenStylePage(erpId)}
+            onClick={() => leave(() => onOpenStylePage(erpId))}
             className="inline-flex items-center gap-1 rounded-md border border-neutral-300 px-2 py-1 text-xs font-semibold text-neutral-700 hover:bg-neutral-50"
           >
             {t('admin.inventoryHealth.panel.openStylePage', { defaultValue: 'Open style page' })}
@@ -353,6 +361,7 @@ export function StyleDetailPanel({
               <>
             <Textarea
               value={draft}
+              disabled={saving}
               onChange={(e) => setDraft(e.target.value)}
               maxLength={1000}
               placeholder={t('admin.inventoryHealth.panel.remarkPlaceholder', { defaultValue: 'Add a remark' })}
@@ -378,6 +387,21 @@ export function StyleDetailPanel({
           </Section>
         </div>
       )}
+      <ConfirmDialog
+        open={pendingLeave != null}
+        title={t('admin.inventoryHealth.panel.discardTitle', { defaultValue: 'Discard changes?' })}
+        message={t('admin.inventoryHealth.panel.discardMessage', { defaultValue: 'The remark you typed will be lost.' })}
+        confirmLabel={t('admin.inventoryHealth.panel.discard', { defaultValue: 'Discard' })}
+        cancelLabel={t('admin.inventoryHealth.panel.keepEditing', { defaultValue: 'Keep editing' })}
+        destructive
+        onConfirm={() => {
+          const action = pendingLeave;
+          setPendingLeave(null);
+          setDraft('');
+          action?.();
+        }}
+        onCancel={() => setPendingLeave(null)}
+      />
     </Drawer>
   );
 }

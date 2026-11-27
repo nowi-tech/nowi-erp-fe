@@ -258,15 +258,24 @@ export default function InventoryHealth(): ReactNode {
   const canUpload = hasAnyRole(user, ['admin']);
   const [detailFor, setDetailFor] = useState<InventoryStyle | null>(null);
   /** Another colour of the same design: find its Inventory Health card and show it in the panel. */
+  // A colour lookup that lands after the panel closed or another style opened is dropped.
+  const detailReq = useRef(0);
+  const showDetail = (s: InventoryStyle | null): void => {
+    detailReq.current++;
+    setDetailFor(s);
+  };
   const openFamilyMember = async (m: { id: number; styleId: string | null }): Promise<void> => {
     if (!m.styleId) return;
+    const ticket = ++detailReq.current;
     try {
       // ERP writes a relive as `X-2`, EasyEcom as `X(2)`; search every warehouse so the card can't be filtered out.
       const d = await getInventoryHealth({ search: m.styleId.replace(/-(\d+)$/, '($1)'), includeHidden: true, limit: 10, inventory: 'all' });
       const row = d.styles.find((s) => s.linkedStyleId === m.id);
+      if (ticket !== detailReq.current) return;
       if (row) setDetailFor(row);
       else toast.show(t('admin.inventoryHealth.panel.notTracked', { defaultValue: '{{code}} isn’t in Inventory Health yet.', code: m.styleId }), 'info');
     } catch (e) {
+      if (ticket !== detailReq.current) return;
       toast.show(apiErrorMessage(e) ?? t('admin.inventoryHealth.panel.openFailed', { defaultValue: 'Couldn’t open that colour.' }), 'error');
     }
   };
@@ -974,7 +983,7 @@ export default function InventoryHealth(): ReactNode {
                         onRequestDiscontinue={(styleKey, next) => setConfirmDisc({ styleKey, next })}
                         onRequestHold={(styleKey, next) => setConfirmHold({ styleKey, next })}
                         onProduce={() => openProduce(style, img)}
-                        onOpenDetails={() => setDetailFor(style)}
+                        onOpenDetails={() => showDetail(style)}
                         onOpenPipeline={
                           canSeePipeline
                             ? (tab) =>
@@ -1048,7 +1057,7 @@ export default function InventoryHealth(): ReactNode {
         from={dateFrom}
         to={dateTo}
         inventory={inventory}
-        onClose={() => setDetailFor(null)}
+        onClose={() => showDetail(null)}
         onOpenStylePage={(id) => openStyle(id)}
         onOpenFamily={(m) => void openFamilyMember(m)}
         canRemark={canProduce}
