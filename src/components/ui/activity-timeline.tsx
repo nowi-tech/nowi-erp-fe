@@ -17,11 +17,12 @@ export interface TimelineItem {
 /**
  * Dotted "actor — action" timeline in a box that scrolls inside a capped
  * height, so a long history never pushes the page. Newest dot is highlighted.
+ * `uncapped` drops the cap inside an already-scrolling drawer.
  */
-export function ActivityTimeline({ items }: { items: TimelineItem[] }) {
+export function ActivityTimeline({ items, uncapped }: { items: TimelineItem[]; uncapped?: boolean }) {
   return (
     <div className="relative">
-      <div className="overflow-y-auto p-5 max-h-[480px] [scrollbar-width:thin] [scrollbar-color:var(--color-muted-foreground-2)_transparent] [&::-webkit-scrollbar]:w-2 [&::-webkit-scrollbar-track]:bg-transparent [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-[var(--color-muted-foreground-2)]">
+      <div className={cn('p-5', !uncapped && 'overflow-y-auto max-h-[480px] [scrollbar-width:thin] [scrollbar-color:var(--color-muted-foreground-2)_transparent] [&::-webkit-scrollbar]:w-2 [&::-webkit-scrollbar-track]:bg-transparent [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-[var(--color-muted-foreground-2)]')}>
         <ol className="relative ml-1.5 border-l border-[var(--color-border)] space-y-5">
           {items.map((item, i) => (
             <li key={item.id} className="relative pl-5">

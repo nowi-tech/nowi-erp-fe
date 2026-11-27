@@ -100,6 +100,7 @@ export function ActivityList({
   links,
   onReturn,
   onSendBack,
+  uncapped,
 }: {
   feed: ReturnType<typeof useFabricActivity>;
   fabric: Fabric;
@@ -107,6 +108,7 @@ export function ActivityList({
   links: ActivityLinks;
   onReturn: (a: FabricStockActivity) => void;
   onSendBack: (a: FabricStockActivity) => void;
+  uncapped?: boolean;
 }) {
   const { t } = useTranslation();
   const unit = fabric.unitOfMeasure ?? null;
@@ -131,6 +133,7 @@ export function ActivityList({
         <p className="px-5 py-4 text-sm text-[var(--color-muted-foreground)]">{t('admin.fabricLibrary.detail.noHistory')}</p>
       ) : (
         <ActivityTimeline
+          uncapped={uncapped}
           items={feed.activity.map((a) => toTimelineItem(a, unit, colourName, canEdit, links, onReturn, onSendBack, t))}
         />
       )}
@@ -325,7 +328,7 @@ export default function FabricColourPanel({
           <div className="border-b border-[var(--color-border)] bg-[var(--color-surface-2)] px-4 py-2">
             <h3 className="text-sm font-semibold">{t('admin.styles.workspace.activity', { defaultValue: 'Activity log' })}</h3>
           </div>
-          <ActivityList feed={feed} fabric={fabric} canEdit={canEdit} links={links} onReturn={onReturn} onSendBack={onSendBack} />
+          <ActivityList feed={feed} fabric={fabric} canEdit={canEdit} links={links} onReturn={onReturn} onSendBack={onSendBack} uncapped />
         </section>
       </div>
     </Drawer>

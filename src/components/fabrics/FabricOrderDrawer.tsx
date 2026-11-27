@@ -219,7 +219,7 @@ export default function FabricOrderDrawer({
           <h3 className="text-sm font-semibold">{t('admin.fabricOrders.history', { defaultValue: 'History' })}</h3>
           {timeline.length > 0 ? (
             <div className="-mx-5">
-              <ActivityTimeline items={timeline} />
+              <ActivityTimeline items={timeline} uncapped />
             </div>
           ) : (
             <p className="text-[13px] text-[var(--color-muted-foreground)]">—</p>
