@@ -1,12 +1,12 @@
 import { lazy, Suspense, useEffect, useRef, useState, type ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Link } from 'react-router-dom';
-import { ArrowUpRight, HeartPulse, Info, Upload } from 'lucide-react';
+import { ArrowUpRight, HeartPulse, Info } from 'lucide-react';
 import { Skeleton } from '@/components/ui/skeleton';
 import { DateRangePicker } from '@/components/ui/DateRangePicker';
 import { FilterRail, FilterRailDivider, FilterRailSegments } from '@/components/ui/filter-rail';
-import { useToast } from '@/components/ui/toast';
-import { todayISO } from '@/lib/date';
+import { dayLabel, todayISO } from '@/lib/date';
+import { MyntraUploadButton } from '@/components/admin/MyntraUploadButton';
 import { CARD_SHELL, DISPLAY, SANS, Sparkline } from '@/components/admin/kpiPrimitives';
 import { useAuth } from '@/context/auth';
 import { useSignedUrls } from '@/hooks/useSignedUrls';
@@ -18,7 +18,6 @@ import {
   getFulfilmentActivity,
   getSalesKpis,
   getTopItems,
-  uploadSalesCsv,
   type CancellationSection as CancellationData,
   type SalesChannel,
   type SalesInventoryView,
@@ -48,13 +47,6 @@ function formatValue(v: number | null, format: SalesFormat): string {
   if (format === 'currency') return `₹${v.toLocaleString('en-IN', { maximumFractionDigits: 0 })}`;
   if (format === 'percent') return `${v.toLocaleString('en-IN', { maximumFractionDigits: 1 })}%`;
   return v.toLocaleString('en-IN', { maximumFractionDigits: 0 });
-}
-
-/** Format a YYYY-MM-DD as "29 Jun" for the headline label of a back-dated view. */
-function dayLabel(iso: string): string {
-  const [y, m, d] = iso.split('-').map(Number);
-  if (!y || !m || !d) return iso;
-  return new Date(y, m - 1, d).toLocaleDateString('en-GB', { day: '2-digit', month: 'short' });
 }
 
 /** "3 Sept" for one day, "17 Aug – 15 Sept" for a range. */
@@ -117,14 +109,11 @@ export default function SalesKpis({
   subtitleDefault?: string;
 } = {}): ReactNode {
   const { t } = useTranslation();
-  const toast = useToast();
   const [data, setData] = useState<SalesKpisResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [failed, setFailed] = useState(false);
   const { user } = useAuth();
   const canUpload = hasAnyRole(user, ['admin']); // the upload endpoint is admin-only; viewers share this page
-  const [uploading, setUploading] = useState(false);
-  const fileRef = useRef<HTMLInputElement>(null);
   // Cancellations before dispatch: totals, whose fault, and why.
   const [cancellations, setCancellations] = useState<CancellationData | null>(null);
   const [cancellationsFailed, setCancellationsFailed] = useState(false);
@@ -204,65 +193,6 @@ export default function SalesKpis({
     };
   }, [showsFulfilment, byActivity, from, to, inventory, channel, tick]);
 
-  /** Sends the picked CSV; the dashboard is rebuilt before the upload returns. */
-  const onUpload = async (file: File): Promise<void> => {
-    setUploading(true);
-    try {
-      const res = await uploadSalesCsv(await file.text());
-      setTick((x) => x + 1);
-      toast.show(
-        t('admin.salesKpis.uploaded', {
-          defaultValue: '{{count, number}} order lines imported, {{from}} to {{to}}.',
-          count: res.linesImported,
-          from: dayLabel(res.fromDay),
-          to: dayLabel(res.toDay),
-        }),
-        'success',
-      );
-      if (res.linesKeptNewer > 0) {
-        toast.show(
-          t('admin.salesKpis.uploadKeptNewer', {
-            defaultValue:
-              '{{count, number}} lines already had a newer status from an earlier report and were left as they were.',
-            count: res.linesKeptNewer,
-          }),
-          'info',
-        );
-      }
-      if (res.rowsSkipped > 0) {
-        toast.show(
-          t('admin.salesKpis.uploadSkipped', {
-            defaultValue: '{{count, number}} rows were skipped — no order line id or order date.',
-            count: res.rowsSkipped,
-          }),
-          'info',
-        );
-      }
-      if (res.unmappedLines > 0) {
-        toast.show(
-          t('admin.salesKpis.uploadUnmapped', {
-            defaultValue:
-              "{{count, number}} lines aren't mapped to Real or Virtual (warehouse {{codes}}) — they only count under All.",
-            count: res.unmappedLines,
-            codes: res.unmappedWarehouses.join(', '),
-          }),
-          'info',
-        );
-      }
-    } catch (err: unknown) {
-      const res = (err as { response?: { data?: { message?: string } } }).response;
-      toast.show(
-        res?.data?.message ??
-          t('admin.salesKpis.uploadFailed', { defaultValue: 'Could not import that file.' }),
-        'error',
-      );
-    } finally {
-      setUploading(false);
-      // Lets the same file be picked again after a failure.
-      if (fileRef.current) fileRef.current.value = '';
-    }
-  };
-
   const live = data?.isLive ?? false;
   const stale = data?.stale ?? false;
   // How far the data reaches, not when the file was uploaded.
@@ -292,32 +222,7 @@ export default function SalesKpis({
                 {t(subtitleKey, { defaultValue: subtitleDefault })}
               </p>
             </div>
-            {canUpload && (
-              <div>
-                <input
-                  ref={fileRef}
-                  type="file"
-                  accept=".csv,text/csv"
-                  className="hidden"
-                  onChange={(e) => {
-                    const file = e.target.files?.[0];
-                    if (file) void onUpload(file);
-                  }}
-                />
-                <button
-                  type="button"
-                  onClick={() => fileRef.current?.click()}
-                  disabled={uploading}
-                  aria-busy={uploading}
-                  className="inline-flex items-center gap-1.5 rounded-lg border border-neutral-200 bg-white px-3 py-2 text-sm font-medium text-neutral-700 shadow-sm transition hover:bg-neutral-50 disabled:opacity-60"
-                >
-                  <Upload size={15} className={uploading ? 'animate-pulse' : ''} />
-                  {uploading
-                    ? t('admin.salesKpis.uploading', { defaultValue: 'Importing…' })
-                    : t('admin.salesKpis.upload', { defaultValue: 'Upload report' })}
-                </button>
-              </div>
-            )}
+            {canUpload && <MyntraUploadButton kind="orders" onDone={() => setTick((x) => x + 1)} />}
           </div>
 
           {/* Same rail, same control, same labels as Inventory Health — the keys

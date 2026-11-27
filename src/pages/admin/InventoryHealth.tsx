@@ -2,7 +2,10 @@ import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } fro
 import { SortHeader } from '@/components/ui/sort-header';
 import { useTranslation } from 'react-i18next';
 import { useLocation, useNavigate, useSearchParams } from 'react-router-dom';
-import { RefreshCw, ArrowUp, ArrowDown, ArrowUpRight, Minus, Ban, RotateCcw, X, Sparkles, Copy, Check, Factory, Clock, CheckCircle2, Plus, Pause, Play } from 'lucide-react';
+import { RefreshCw, ArrowUp, ArrowDown, ArrowUpRight, Minus, Ban, RotateCcw, X, Sparkles, Copy, Check, Factory, Clock, CheckCircle2, Plus, Pause, Play, MessageSquare } from 'lucide-react';
+import { apiErrorMessage } from '@/api/apiClient';
+import { MyntraUploadButton } from '@/components/admin/MyntraUploadButton';
+import { FabricPill, StyleDetailPanel, returnTone, TONE_CHIP, TONE_TEXT } from '@/components/admin/StyleDetailPanel';
 import { SearchInput } from '@/components/ui/search-input';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useToast } from '@/components/ui/toast';
@@ -66,7 +69,7 @@ const PRIMARY = 'var(--color-primary)';
 
 // Child (size) grid — the sub-header + every size row align to it.
 // SIZE (thumb + size) · COVER · DRR · TREND · STOCK
-const GRID = 'minmax(0,1.5fr) 0.8fr 0.6fr 1.05fr 0.6fr';
+const GRID = 'minmax(0,1.5fr) 0.8fr 0.6fr 1.05fr 0.6fr 0.7fr';
 
 /** Per-urgency: label + the meaning-colour (red/amber/neutral) for text + dot. */
 const URG: Record<Urgency, { label: string; color: string; dot: string }> = {
@@ -118,14 +121,24 @@ function fmtN(n: number): string {
 
 /** A money fact chip on the style header — same shape as a channel chip, no link.
  *  `tail` (the window) is lightened so the pair reads as one fact. */
-function StatChip({ label, tail }: { label: string; tail: string }): ReactNode {
+function StatChip({ label, tail, tone = TONE_CHIP.good }: { label: string; tail: string; tone?: string }): ReactNode {
   return (
-    <span className="inline-flex shrink-0 items-center rounded border border-emerald-200 bg-emerald-50 px-1.5 py-0.5 text-[10px] font-semibold tabular-nums text-emerald-700">
+    <span className={`inline-flex shrink-0 items-center rounded border px-1.5 py-0.5 text-[10px] font-semibold tabular-nums ${tone}`}>
       {label}
-      <span className="ml-1 font-normal text-emerald-500">· {tail}</span>
+      <span className="ml-1 font-normal opacity-75">· {tail}</span>
     </span>
   );
 }
+
+/** A click on a button or link inside a clickable card does its own thing, not open the panel. */
+function isControl(target: EventTarget): boolean {
+  // A drag to select text (a SKU to copy) also ends in a click.
+  if (window.getSelection()?.toString()) return true;
+  return target instanceof Element && target.closest('button, a, input, select, textarea, label, [role="button"]') != null;
+}
+
+/** `X(2)` and `X` share remarks: the server keys them by the base code. */
+const baseKey = (k: string): string => k.replace(/\(\d+\)$/, '');
 
 /** Whole rupees, Indian grouping. */
 function fmtMoney(n: number): string {
@@ -241,6 +254,31 @@ export default function InventoryHealth(): ReactNode {
   const canDisable = hasAnyRole(user, STYLE_DISABLE_ROLES);
   const canCreateErp = hasAnyRole(user, APPROVER_ROLES);
   const canPause = hasAnyRole(user, ADMIN_ROLES);
+  // The Myntra upload endpoints are admin-only.
+  const canUpload = hasAnyRole(user, ['admin']);
+  const [detailFor, setDetailFor] = useState<InventoryStyle | null>(null);
+  /** Another colour of the same design: find its Inventory Health card and show it in the panel. */
+  // A colour lookup that lands after the panel closed or another style opened is dropped.
+  const detailReq = useRef(0);
+  const showDetail = (s: InventoryStyle | null): void => {
+    detailReq.current++;
+    setDetailFor(s);
+  };
+  const openFamilyMember = async (m: { id: number; styleId: string | null }): Promise<void> => {
+    if (!m.styleId) return;
+    const ticket = ++detailReq.current;
+    try {
+      // ERP writes a relive as `X-2`, EasyEcom as `X(2)`; search every warehouse so the card can't be filtered out.
+      const d = await getInventoryHealth({ search: m.styleId.replace(/-(\d+)$/, '($1)'), includeHidden: true, limit: 10, inventory: 'all' });
+      const row = d.styles.find((s) => s.linkedStyleId === m.id);
+      if (ticket !== detailReq.current) return;
+      if (row) setDetailFor(row);
+      else toast.show(t('admin.inventoryHealth.panel.notTracked', { defaultValue: '{{code}} isn’t in Inventory Health yet.', code: m.styleId }), 'info');
+    } catch (e) {
+      if (ticket !== detailReq.current) return;
+      toast.show(apiErrorMessage(e) ?? t('admin.inventoryHealth.panel.openFailed', { defaultValue: 'Couldn’t open that colour.' }), 'error');
+    }
+  };
   const canSeePipeline = hasAnyRole(user, PRODUCTION_BOARD_READ_ROLES);
   const [createFor, setCreateFor] = useState<InventoryStyle | null>(null);
   // Sending a style to the pipeline is a production action — a different set
@@ -736,6 +774,12 @@ export default function InventoryHealth(): ReactNode {
                 </button>
               </span>
             )}
+            {canUpload && (
+              <>
+                <MyntraUploadButton kind="orders" onDone={() => setReloadTick((x) => x + 1)} />
+                <MyntraUploadButton kind="returns" onDone={() => setReloadTick((x) => x + 1)} />
+              </>
+            )}
             <button
               type="button"
               onClick={onRefresh}
@@ -917,6 +961,7 @@ export default function InventoryHealth(): ReactNode {
                     <SortHeader label={t('admin.inventoryHealth.col.drr', { defaultValue: 'DRR · /d' })} col="drr" sortKey={sortKey} sortDir={sortDir} onSort={onSort} />
                     <span className="flex justify-end">{t('admin.inventoryHealth.col.trend', { defaultValue: 'Trend · /d' })}</span>
                     <SortHeader label={t('admin.inventoryHealth.col.stock', { defaultValue: 'Stock' })} col="stock" sortKey={sortKey} sortDir={sortDir} onSort={onSort} align="right" />
+                    <span className="flex justify-end">{t('admin.inventoryHealth.col.returns', { defaultValue: 'Returns' })}</span>
                   </div>
                   {styles.map((style) => {
                     const img = (style.imageUrl && signed[style.imageUrl]) || null;
@@ -926,7 +971,6 @@ export default function InventoryHealth(): ReactNode {
                         style={style}
                         imageUrl={img}
                         dates={trendDates}
-                        onOpen={() => openStyle(style.linkedStyleId)}
                         canManage={canManage}
                         canDisable={canDisable}
                         canProduce={canProduce}
@@ -939,6 +983,7 @@ export default function InventoryHealth(): ReactNode {
                         onRequestDiscontinue={(styleKey, next) => setConfirmDisc({ styleKey, next })}
                         onRequestHold={(styleKey, next) => setConfirmHold({ styleKey, next })}
                         onProduce={() => openProduce(style, img)}
+                        onOpenDetails={() => showDetail(style)}
                         onOpenPipeline={
                           canSeePipeline
                             ? (tab) =>
@@ -1006,6 +1051,19 @@ export default function InventoryHealth(): ReactNode {
           toast.show(t('admin.inventoryHealth.createErp.done', { defaultValue: '{{code}} created in ERP', code }), 'success');
           setReloadTick((n) => n + 1);
         }}
+      />
+      <StyleDetailPanel
+        style={detailFor}
+        from={dateFrom}
+        to={dateTo}
+        inventory={inventory}
+        onClose={() => showDetail(null)}
+        onOpenStylePage={(id) => openStyle(id)}
+        onOpenFamily={(m) => void openFamilyMember(m)}
+        canRemark={canProduce}
+        onRemarkAdded={(key, remark) =>
+          setStyles((prev) => prev.map((x) => (baseKey(x.styleKey) === baseKey(key) ? { ...x, latestRemark: remark } : x)))
+        }
       />
       <ConfirmDialog
         open={confirmDisc != null}
@@ -1134,7 +1192,6 @@ function StyleGroup({
   style,
   imageUrl,
   dates,
-  onOpen,
   canManage,
   canDisable,
   canProduce,
@@ -1147,13 +1204,13 @@ function StyleGroup({
   onRequestDiscontinue,
   onRequestHold,
   onProduce,
+  onOpenDetails,
   onOpenPipeline,
   t,
 }: {
   style: InventoryStyle;
   imageUrl: string | null;
   dates: string[];
-  onOpen: () => void;
   canManage: boolean;
   canDisable: boolean;
   canProduce: boolean;
@@ -1168,6 +1225,7 @@ function StyleGroup({
   onRequestDiscontinue: (styleKey: string, next: boolean) => void;
   onRequestHold: (styleKey: string, next: boolean) => void;
   onProduce: () => void;
+  onOpenDetails: () => void;
   /** Opens the Production page on that tab for this style; absent without pipeline access. */
   onOpenPipeline?: (tab: 'planning' | 'in_production') => void;
   t: ReturnType<typeof useTranslation>['t'];
@@ -1191,23 +1249,20 @@ function StyleGroup({
     >
       {/* Style header — product image + code + status pills, over its (always
           visible) size rows. Reads as a product card. */}
-      <div className="flex items-center gap-3 border-b border-neutral-100 bg-white px-4 py-3.5">
+      <div
+        onClick={(e) => !isControl(e.target) && onOpenDetails()}
+        className="flex cursor-pointer items-center gap-3 border-b border-neutral-100 bg-white px-4 py-3.5 hover:bg-neutral-50/60"
+      >
         <HoverThumbnail src={imageUrl} alt={style.displayKey} size={48} radius="10px" />
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
-            {linked ? (
-              <button
-                type="button"
-                onClick={onOpen}
-                title={t('admin.inventoryHealth.openStyle', { defaultValue: 'Open style workspace' })}
-                className="inline-flex min-w-0 items-center gap-1 text-[15px] font-semibold text-[var(--color-primary)] underline decoration-dotted underline-offset-4 hover:decoration-solid"
-              >
-                <span className="truncate">{style.displayKey}</span>
-                <ArrowUpRight size={14} className="shrink-0" style={{ color: PRIMARY }} />
-              </button>
-            ) : (
-              <span className="truncate text-[15px] font-semibold text-neutral-900">{style.displayKey}</span>
-            )}
+            <button
+              type="button"
+              onClick={onOpenDetails}
+              className="truncate text-[15px] font-semibold text-neutral-900 hover:text-[var(--color-primary)]"
+            >
+              {style.displayKey}
+            </button>
             <UrgencyPill urgency={style.worstUrgency} stockout={style.stockout} />
             {style.isNew && (
               <span className="inline-flex items-center gap-1 rounded-full border border-[var(--color-primary)]/30 bg-[var(--color-primary)]/[0.08] px-1.5 py-0.5 text-[10px] font-semibold text-[var(--color-primary)]">
@@ -1273,9 +1328,24 @@ function StyleGroup({
               );
             })()}
           </div>
-          {(style.marketplaceLinks.length > 0 || style.cancelRate != null) && (
+          {(style.marketplaceLinks.length > 0 || style.cancelRate != null || style.returns?.returnRate != null || style.fabric?.check) && (
             <div className="mt-0.5 flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1">
               <ChannelChips links={style.marketplaceLinks} />
+              {style.returns?.returnRate != null && (
+                <StatChip
+                  tone={TONE_CHIP[returnTone(style.returns.returnRate)]}
+                  label={t('admin.inventoryHealth.returnsStat', {
+                    defaultValue: 'Returns {{pct}}%',
+                    pct: style.returns.returnRate,
+                  })}
+                  tail={t('admin.inventoryHealth.returnsOf', {
+                    defaultValue: '{{returned}} of {{delivered}}',
+                    returned: style.returns.returned,
+                    delivered: style.returns.delivered,
+                  })}
+                />
+              )}
+              {style.fabric?.check && <FabricPill state={style.fabric.check.state} />}
               {/* Hidden when nothing was ordered in the window (cancelRate is null then). */}
               {style.cancelRate != null && (
                 <StatChip
@@ -1286,6 +1356,15 @@ function StyleGroup({
                   tail={t('admin.inventoryHealth.windowDays', { defaultValue: '{{n}}d', n: dates.length })}
                 />
               )}
+            </div>
+          )}
+          {style.latestRemark && (
+            <div className="mt-1 flex min-w-0 max-w-full items-center gap-1.5 text-xs text-neutral-600">
+              <MessageSquare size={12} className="shrink-0 text-neutral-400" />
+              <span className="truncate">{style.latestRemark.body}</span>
+              <span className="shrink-0 text-neutral-400">
+                · {style.latestRemark.author} · {relativeTime(style.latestRemark.createdAt)}
+              </span>
             </div>
           )}
         </div>
@@ -1383,7 +1462,7 @@ function StyleGroup({
       {/* Size rows — always visible; columns align to the single top header. */}
       <div>
         {sizes.map((sz) => (
-          <SizeRow key={sz.sku} size={sz} dates={dates} t={t} />
+          <SizeRow key={sz.sku} size={sz} dates={dates} onOpen={onOpenDetails} t={t} />
         ))}
       </div>
     </div>
@@ -1395,17 +1474,20 @@ function StyleGroup({
 function SizeRow({
   size,
   dates,
+  onOpen,
   t,
 }: {
   size: InventorySize;
   dates: string[];
+  onOpen: () => void;
   t: ReturnType<typeof useTranslation>['t'];
 }): ReactNode {
   const u = URG[size.urgency];
   const low = size.confidence === 'low';
   return (
     <div
-      className="grid grid-cols-2 items-center gap-y-1 gap-x-3 border-t border-neutral-100 px-4 py-3 text-sm transition first:border-t-0 hover:bg-neutral-50/60 lg:grid-cols-[var(--ih-grid)]"
+      onClick={(e) => !isControl(e.target) && onOpen()}
+      className="grid cursor-pointer grid-cols-2 items-center gap-y-1 gap-x-3 border-t border-neutral-100 px-4 py-3 text-sm transition first:border-t-0 hover:bg-neutral-50/60 lg:grid-cols-[var(--ih-grid)]"
       style={{ ['--ih-grid' as string]: GRID }}
     >
       {/* Size: urgency dot + size + SKU + aging pill */}
@@ -1446,6 +1528,23 @@ function SizeRow({
 
       <Cell label={t('admin.inventoryHealth.col.stock', { defaultValue: 'Stock' })} align="right">
         <span className="tabular-nums text-neutral-700">{fmtN(size.currentStock)}</span>
+      </Cell>
+
+      <Cell label={t('admin.inventoryHealth.col.returns', { defaultValue: 'Returns' })} align="right">
+        {size.returns?.returnRate == null ? (
+          <span style={{ color: MUTED }}>—</span>
+        ) : (
+          <span
+            className={`font-semibold tabular-nums ${TONE_TEXT[returnTone(size.returns.returnRate)]}`}
+            title={t('admin.inventoryHealth.returnsOf', {
+              defaultValue: '{{returned}} of {{delivered}}',
+              returned: size.returns.returned,
+              delivered: size.returns.delivered,
+            })}
+          >
+            {size.returns.returnRate}%
+          </span>
+        )}
       </Cell>
     </div>
   );
